@@ -14,6 +14,7 @@
 include "mlir/IR/OpBase.td"
 include "mlir/IR/AttrTypeBase.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 def Tessera_Tile_Dialect : Dialect {
   let name = "tile";
@@ -817,13 +818,57 @@ def Tile_FragmentScaledAccumulateOp
                        AnyMemRef:$lhs_scale, AnyMemRef:$rhs_scale,
                        Index:$row_origin, Index:$col_origin, Index:$group,
                        Index:$groups, Index:$rows, Index:$cols,
-                       I64Attr:$scale_n);
+                       I64Attr:$scale_n,
+                       DefaultValuedAttr<StrAttr, "\"fp32\"">:$scale_format);
+  let description = [{
+    fp32 consumes rank-1 f32 scales. e8m0 consumes rank-1 signless i8
+    codes: 0 is 2^-127, 1..254 are 2^(code-127), and 255 is NaN.
+    Unlike the folded row-reference ABI, code 0 is not zero. For e8m0,
+    the scaled partial must equal multiplying the isolated f32 partial by
+    both decoded scales in f64 and rounding once to f32, then adding the f32
+    accumulator. An equivalent native power-of-two scaling implementation
+    is permitted. Intermediate f32 scale-product underflow/overflow must not
+    change the result.
+    Scale buffers use row-major [rows, groups] and [groups, ceil(cols/scale_n)].
+    Out-of-bounds fragment elements use row or column zero's scale.
+  }];
   let results = (outs Tile_FragmentType:$result);
   let assemblyFormat = [{
     $acc `,` $partial `scales` `(` $lhs_scale `,` $rhs_scale `)`
     `at` `(` $row_origin `,` $col_origin `)` `group` `(` $group `,` $groups `)`
     `bounds` `(` $rows `,` $cols `)` attr-dict `:` type($acc) `,`
     type($lhs_scale) `,` type($rhs_scale)
+  }];
+  let hasVerifier = 1;
+}
+
+// Full-K folded numerical epilogue. The producer must retain explicit
+// approximate admission; this operation never authorizes load-time folding.
+def Tile_FragmentFoldedScaleOp
+    : Tile_Op<"fragment_folded_scale",
+              [MemoryEffects<[MemRead]>, AllTypesMatch<["acc", "result"]>]> {
+  let summary = "Scale a full-K f32 fragment with token f32 and column E8M0 references";
+  let description = [{
+    Requires positive logical bounds and a payload with reserved E8M0 code
+    255 excluded by the checked loader. Code zero is positive zero; other
+    codes decode as float32 exponent bits. Compute partial*(reference*token)
+    in fp32. For a zero or nonfinite scale product, compute
+    float32((float64(partial)*float64(reference))*float64(token)), except
+    a zero partial with finite token scale yields positive zero. The final
+    bf16 rounding belongs to tile.store. This operation does not authorize
+    approximate weight conversion or replace per-K32 exact scaling.
+  }];
+
+  let arguments = (ins Tile_FragmentType:$acc,
+                       AnyMemRef:$lhs_scale, AnyMemRef:$rhs_reference,
+                       Index:$row_origin, Index:$col_origin,
+                       Index:$rows, Index:$cols, DefaultValuedAttr<BoolAttr, "false">:$vector_scales);
+  let results = (outs Tile_FragmentType:$result);
+  let assemblyFormat = [{
+    $acc `scales` `(` $lhs_scale `,` $rhs_reference `)`
+    `at` `(` $row_origin `,` $col_origin `)`
+    `bounds` `(` $rows `,` $cols `)` attr-dict `:` type($acc) `,`
+    type($lhs_scale) `,` type($rhs_reference)
   }];
   let hasVerifier = 1;
 }
@@ -843,7 +888,10 @@ def Tile_FragmentUnpackOp : Tile_Op<"fragment_unpack"> {
 // inputs are (tile, base pointer, row origin, column origin) and `tile.memory`
 // supplies address space/order/leading dimension. A zero attribute leading
 // dimension means the final SSA operand supplies it at runtime. Conservatively
-// side-effecting.
+// side-effecting. Optional tile.epilogue applies fp32 bias/activation before
+// output conversion; tile.residual=true adds one trailing fp32 residual after
+// activation and requires tile.epilogue_order=matmul_bias_activation_residual.
+// Extra buffer order is bias then residual, after the address/bounds operands.
 def Tile_StoreOp : Tile_Op<"store"> {
   let summary = "Store a logical tile through a physical memory layout";
   let arguments = (ins Variadic<AnyType>:$inputs);
@@ -1075,7 +1123,13 @@ def Tile_CoalitionButterflyKernelOp : Tile_Op<"coalition_butterfly_kernel"> {
 // loops but do not redefine their ownership or ordering.
 def Tile_AttentionBackwardKernelOp : Tile_Op<"attention_backward_kernel"> {
   let summary = "Launch-level deterministic scaled dot-product attention VJP";
-  let arguments = (ins Variadic<AnyType>:$inputs);
+  let description = [{
+    With lse_cotangent=true, saved f32 output/LSE are required and a f32
+    [B,Hq,Sq] cotangent pointer follows row_lse before gradient outputs.
+    Q/K/bias gradients include P*dLSE; the V gradient is unchanged.
+  }];
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       OptionalAttr<BoolAttr>:$lse_cotangent);
   let results = (outs);
   let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
   let hasVerifier = 1;
@@ -1545,4 +1599,41 @@ def Tile_SparseMMAOp : Tile_Op<"sparse_mma"> {
   let results = (outs AnyType:$res);
   let hasVerifier = 1;
   let assemblyFormat = "$a `,` $b `,` $acc `,` $indices attr-dict `:` type($a) `,` type($b) `,` type($acc) `->` type($res)";
+}
+
+
+def Tile_NVFP4IngestContractAttr
+    : DictionaryAttrBase<CPred<"::llvm::isa<::mlir::DictionaryAttr>($_self)">,
+                         "checkpoint conversion contract dictionary">;
+def Tile_NVFP4RequantizeKernelOp : Tile_Op<"nvfp4_requantize_kernel",
+    [MemoryEffects<[MemRead, MemWrite]>]> {
+  let summary = "Six-buffer checkpoint conversion with measured loss and isolated ownership";
+  let arguments = (ins Variadic<AnyType>:$inputs, Tile_NVFP4IngestContractAttr:$contract,
+      StrAttr:$artifact_hash);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+def Tile_MXFP4FoldedStorageKernelOp : Tile_Op<"mxfp4_folded_storage_kernel",
+    [MemoryEffects<[MemRead, MemWrite]>]> {
+  let summary = "Four-buffer lossless MXFP4 storage bridge with isolated ownership";
+  let arguments = (ins Variadic<AnyType>:$inputs, Tile_NVFP4IngestContractAttr:$contract,
+      StrAttr:$artifact_hash);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}
+
+// Region retains the actual native scalar reduction, including its reads and
+// output store. No target reconstructs a numerical formula from an op label.
+def Tile_StructuredReductionKernelOp : Tile_Op<"structured_reduction_kernel",
+    [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
+  let summary = "Sealed native structured scale-adjoint kernel";
+  let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$count,
+      I64Attr:$input_count, I64Attr:$workgroup_size,
+      StrAttr:$algorithm, StrAttr:$artifact_hash, StrAttr:$body_hash);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = "attr-dict-with-keyword $body";
+  let hasVerifier = 1;
 }

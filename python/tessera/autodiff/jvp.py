@@ -642,9 +642,47 @@ def jvp_linear_general(primals, tangents, *, axis=-1, **_):
 @_jvp("flash_attn")
 def jvp_flash_attn(primals, tangents, **kwargs):
     from tessera import ops as _ops
-
+    if len(primals) not in (3, 4) or len(tangents) != len(primals):
+        raise ValueError("attention JVP requires Q/K/V and optional bias")
+    q,k,v = (np.asarray(x, dtype=np.float64) for x in primals[:3])
+    dq,dk,dv = (np.asarray(x, dtype=np.float64) for x in tangents[:3])
+    forward_kwargs = dict(kwargs)
+    if len(primals) == 4:
+        forward_kwargs["attn_bias"] = primals[3]
+    dropout = float(kwargs.get("dropout_p", 0.0))
+    if dropout > 0.0 and kwargs.get("seed") is None:
+        from .tape import TesseraAutodiffError
+        raise TesseraAutodiffError("attention JVP dropout requires a replayable seed")
     fn = getattr(_ops.flash_attn, "__wrapped__", _ops.flash_attn)
-    return _numeric_jvp_rule(lambda q, k, v: fn(q, k, v, **kwargs), primals, tangents)
+    primal = fn(*primals[:3], **forward_kwargs)
+    if q.ndim == k.ndim == v.ndim == 4:
+        groups = q.shape[1] // k.shape[1]
+        if groups > 1:
+            k,v,dk,dv = (np.repeat(x, groups, axis=1) for x in (k,v,dk,dv))
+    scale = kwargs.get("scale")
+    scale = 1.0 / math.sqrt(q.shape[-1]) if scale is None else float(scale)
+    scores = (q @ np.swapaxes(k,-1,-2)) * scale
+    dscores = (dq @ np.swapaxes(k,-1,-2) + q @ np.swapaxes(dk,-1,-2)) * scale
+    bias = forward_kwargs.get("attn_bias")
+    if bias is not None:
+        scores += np.asarray(bias, dtype=np.float64)
+        if len(primals) == 4: dscores += np.asarray(tangents[3], dtype=np.float64)
+    if kwargs.get("causal", False):
+        sq,sk = scores.shape[-2:]
+        mask = np.arange(sk)[None,:] <= np.arange(sq)[:,None] + max(sk-sq,0)
+        scores = np.where(mask, scores, -np.inf)
+        dscores = np.where(mask, dscores, 0.0)
+    exp = np.exp(scores - scores.max(axis=-1, keepdims=True))
+    probabilities = exp / exp.sum(axis=-1, keepdims=True)
+    dlse = (probabilities * dscores).sum(axis=-1)
+    dprobabilities = probabilities * (dscores - dlse[...,None])
+    weights = probabilities
+    if dropout > 0.0:
+        rng = np.random.default_rng(kwargs["seed"])
+        drop = rng.binomial(1, 1.0-dropout, probabilities.shape) / (1.0-dropout)
+        weights, dprobabilities = probabilities * drop, dprobabilities * drop
+    tangent = dprobabilities @ v + weights @ dv
+    return (primal, (tangent, dlse)) if kwargs.get("lse_checkpoint") == "saved" else (primal, tangent)
 
 
 @_jvp("linear_attn")
@@ -879,8 +917,13 @@ def jvp_moe(primals, tangents, **kwargs):
 
 
 @_jvp("moe_dispatch")
-def jvp_moe_dispatch(primals, tangents, **_):
-    return primals[0], tangents[0]
+def jvp_moe_dispatch(primals, tangents, *, transport=None, **_):
+    from tessera import ops
+    forward = getattr(ops.moe_dispatch, "__wrapped__", ops.moe_dispatch)
+    out = forward(*primals, transport=transport)
+    tangent = (np.zeros_like(out) if tangents[0] is None else
+               forward(tangents[0], primals[1], transport=transport))
+    return out, tangent
 
 
 @_jvp("moe_combine")

@@ -1,3 +1,5 @@
+#include "Tessera/IR/ScaledBatchContract.h"
+#include "Tessera/IR/NVFP4IngestContract.h"
 #include "Tessera/IR/TesseraOps.h"
 #include "Tessera/IR/TransposeUtils.h"
 
@@ -517,11 +519,107 @@ LogicalResult ScaledMatmulOp::verify() {
   auto aType = dyn_cast<RankedTensorType>(getLhs().getType());
   auto bType = dyn_cast<RankedTensorType>(getRhs().getType());
   auto rType = dyn_cast<RankedTensorType>(getResult().getType());
-  if (aType && aType.getRank() != 2)
-    return emitOpError("lhs must be a rank-2 (M, K) tensor");
-  if (bType && bType.getRank() != 2)
+  auto physicalProfile = getOperation()->getAttrOfType<StringAttr>("physical_contract");
+  auto batching = getOperation()->getAttrOfType<StringAttr>("batching");
+  // Typed FP8 batches preserve matrix/scale ranks. Shared RHS flattens B*M;
+  // independent RHS and shared LHS retain per-batch rows and use grid z.
+  const bool typedBroadcast = batching && batching.getValue() == "broadcast" && !physicalProfile;
+  const bool typedSharedRows = batching &&
+      (batching.getValue() == "shared_rhs_rows" ||
+       batching.getValue() == "independent_rhs" || batching.getValue() == "shared_lhs") &&
+      !physicalProfile;
+  const bool typedSharedLhs = typedSharedRows && batching.getValue() == "shared_lhs";
+  const bool typedRhsBatched = typedSharedRows && batching.getValue() != "shared_rhs_rows";
+  if (typedSharedRows || typedBroadcast) {
+    auto sa = dyn_cast<RankedTensorType>(getLhsScale().getType());
+    auto sb = dyn_cast<RankedTensorType>(getRhsScale().getType());
+    auto layout = getScaleLayoutAttr();
+    auto block = layout ? layout.getAs<ArrayAttr>("block") : ArrayAttr{};
+    auto format = layout ? layout.getAs<StringAttr>("format") : StringAttr{};
+    auto granularity = layout ? layout.getAs<StringAttr>("granularity") : StringAttr{};
+    auto policy = getNumericPolicyAttr();
+    auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr{};
+    auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr{};
+    if (!aType || !bType || !rType || !sa || !sb ||
+        (typedBroadcast ? !hasExactScaledBroadcastPrefix({aType, bType, sa, sb}, rType)
+                        : (rType.getRank() < 3 ||
+                           aType.getRank() != (typedSharedLhs ? 2 : rType.getRank()) ||
+                           bType.getRank() != (typedRhsBatched ? rType.getRank() : 2) ||
+                           sa.getRank() != aType.getRank() || sb.getRank() != bType.getRank())) ||
+        !aType.hasStaticShape() || !bType.hasStaticShape() ||
+        !rType.hasStaticShape() || !sa.hasStaticShape() || !sb.hasStaticShape() ||
+        (!typedBroadcast && getTransposeA()) || !isa<Float8E4M3FNType>(aType.getElementType()) ||
+        !isa<Float8E4M3FNType>(bType.getElementType()) ||
+        !rType.getElementType().isF32() || !layout || layout.size() != 3 ||
+        !granularity || granularity.getValue() != "block" ||
+        !block || block.size() != 2 || !isa<IntegerAttr>(block[0]) ||
+        !isa<IntegerAttr>(block[1]) || !format || !policy || policy.size() != 2 ||
+        !accum || accum.getValue() != "fp32" || !mode ||
+        mode.getValue() != "exact_per_block")
+      return emitOpError("typed shared-RHS batches require static E4M3 A[B,M,K], B matrices, f32 output and exact block scales");
+    auto batchShape = rType.getShape().drop_back(2);
+    int64_t batches = 1;
+    for (int64_t extent : batchShape) {
+      if (extent <= 0 || batches > INT64_MAX / extent)
+        return emitOpError("typed batch extents must be positive and not overflow");
+      batches *= extent;
+    }
+    if (!typedBroadcast && ((!typedSharedLhs && aType.getShape().drop_back(2) != batchShape) ||
+        (typedRhsBatched && bType.getShape().drop_back(2) != batchShape)))
+      return emitOpError("typed batch leading extents differ");
+    int64_t rows = aType.getDimSize(aType.getRank() - (getTransposeA() ? 1 : 2));
+    int64_t k = aType.getDimSize(aType.getRank() - (getTransposeA() ? 2 : 1));
+    int64_t rhsAxis = bType.getRank() - 2;
+    int64_t n = bType.getDimSize(rhsAxis + (getTransposeB() ? 0 : 1));
+    int64_t scaleN = cast<IntegerAttr>(block[0]).getInt();
+    int64_t scaleK = cast<IntegerAttr>(block[1]).getInt();
+    if (batches <= 0 || rows <= 0 || k <= 0 || n <= 0 ||
+        batches > INT64_MAX / rows || scaleN <= 0 || scaleK <= 0 ||
+        bType.getDimSize(rhsAxis + (getTransposeB() ? 1 : 0)) != k ||
+        rType.getDimSize(rType.getRank() - 2) != rows ||
+        rType.getDimSize(rType.getRank() - 1) != n)
+      return emitOpError("typed shared-RHS batch matrix/result extents differ or overflow");
+    int64_t groups = k / scaleK + (k % scaleK != 0);
+    int64_t columns = n / scaleN + (n % scaleN != 0);
+    bool encoded = format.getValue() == "e8m0";
+    auto scaleStorage = [&](Type type) {
+      return encoded ? (type.isSignlessInteger(8) || type.isUnsignedInteger(8))
+                     : type.isF32();
+    };
+    SmallVector<int64_t> expectedSA, expectedSB;
+    if (typedBroadcast) {
+      llvm::append_range(expectedSA, sa.getShape().drop_back(2));
+      llvm::append_range(expectedSB, sb.getShape().drop_back(2));
+    } else {
+      if (!typedSharedLhs) expectedSA.append(batchShape.begin(), batchShape.end());
+      if (typedRhsBatched) expectedSB.append(batchShape.begin(), batchShape.end());
+    }
+    expectedSA.append({rows, groups});
+    expectedSB.append({groups, columns});
+    if ((!encoded && format.getValue() != "fp32") ||
+        (encoded && (scaleN != 1 || scaleK != 32)) ||
+        !scaleStorage(sa.getElementType()) || !scaleStorage(sb.getElementType()) ||
+        sa.getShape() != ArrayRef<int64_t>(expectedSA) ||
+        sb.getShape() != ArrayRef<int64_t>(expectedSB))
+      return emitOpError("typed shared-RHS batch scale storage/extents differ");
+    return success();
+  }
+  const bool independentRhs = batching && batching.getValue() == "independent_rhs";
+  const bool sharedLhs = batching && batching.getValue() == "shared_lhs";
+  const bool rhsBatched = independentRhs || sharedLhs;
+  const bool rankThreeBatch = batching && (batching.getValue() == "shared_rhs_rows" || rhsBatched) &&
+      physicalProfile && physicalProfile.getValue() == "nvidia_sm120_nvfp4_blockscale_v1";
+  const bool lhsBatched = rankThreeBatch && !sharedLhs;
+  const int64_t batchRank = rankThreeBatch && rType ? rType.getRank() - 2 : 0;
+  if (rankThreeBatch && (!rType || batchRank < 1))
+    return emitOpError("NVIDIA NVFP4 contract requires positive logical batch prefixes");
+  if (batching && !rankThreeBatch)
+    return emitOpError("batching requires the named NVFP4 shared_rhs_rows/independent_rhs/shared_lhs profile");
+  if (aType && aType.getRank() != (lhsBatched ? batchRank + 2 : 2))
+    return emitOpError("lhs rank must match the declared rank-two or shared-RHS batch profile");
+  if (bType && bType.getRank() != (rhsBatched ? batchRank + 2 : 2))
     return emitOpError("rhs must be a rank-2 (K, N) tensor");
-  if (rType && rType.getRank() != 2)
+  if (rType && rType.getRank() != (rankThreeBatch ? batchRank + 2 : 2))
     return emitOpError("result must be a rank-2 (M, N) tensor");
   auto agree = [](int64_t a, int64_t b) {
     return ShapedType::isDynamic(a) || ShapedType::isDynamic(b) || a == b;
@@ -547,21 +645,42 @@ LogicalResult ScaledMatmulOp::verify() {
                          : StringAttr();
       if (!aType || !bType || !rType || !aType.hasStaticShape() ||
           !bType.hasStaticShape() || !rType.hasStaticShape() ||
-          getTransposeA() || getTransposeB() ||
           !nvfp4Type(aType.getElementType()) ||
           !nvfp4Type(bType.getElementType()) || !rType.getElementType().isF32())
-        return emitOpError("NVIDIA NVFP4 contract requires static logical NVFP4 A/B, f32 output, and no transpose");
-      const int64_t m = aType.getDimSize(0), k = aType.getDimSize(1);
-      const int64_t n = bType.getDimSize(1), scaleK = (k + 15) / 16;
-      if (k <= 0 || bType.getDimSize(0) != k || rType.getDimSize(0) != m ||
-          rType.getDimSize(1) != n || !lhsScale || !rhsScale ||
-          lhsScale.getRank() != 2 || rhsScale.getRank() != 2 ||
+        return emitOpError("NVIDIA NVFP4 contract requires static logical NVFP4 A/B and f32 output");
+      ArrayRef<int64_t> batchPrefix = rType.getShape().drop_back(2);
+      int64_t batch = 1;
+      for (int64_t extent : batchPrefix) {
+        if (extent <= 0 || batch > INT64_MAX / extent)
+          return emitOpError("NVIDIA NVFP4 contract requires nonoverflowing positive batch extents");
+        batch *= extent;
+      }
+      const int64_t aOffset = lhsBatched ? batchRank : 0;
+      const int64_t bOffset = rhsBatched ? batchRank : 0;
+      const int64_t m = aType.getDimSize(aOffset + (getTransposeA() ? 1 : 0));
+      const int64_t k = aType.getDimSize(aOffset + (getTransposeA() ? 0 : 1));
+      const int64_t n = bType.getDimSize(bOffset + (getTransposeB() ? 0 : 1));
+      // Avoid signed overflow for directly authored static Graph dimensions.
+      const int64_t scaleK = k / 16 + (k % 16 != 0);
+      if (batch <= 0 || m <= 0 || n <= 0 || k <= 0 ||
+          (rankThreeBatch && batch > INT64_MAX / m) ||
+          (lhsBatched && aType.getShape().drop_back(2) != batchPrefix) ||
+          (rhsBatched && bType.getShape().drop_back(2) != batchPrefix) ||
+          bType.getDimSize(bOffset + (getTransposeB() ? 1 : 0)) != k ||
+          rType.getDimSize(batchRank) != m ||
+          rType.getDimSize(batchRank + 1) != n || !lhsScale || !rhsScale ||
+          lhsScale.getRank() != (lhsBatched ? batchRank + 2 : 2) || rhsScale.getRank() != (rhsBatched ? batchRank + 2 : 2) ||
           !(lhsScale.getElementType().isUnsignedInteger(8) ||
             lhsScale.getElementType().isSignlessInteger(8)) ||
           !(rhsScale.getElementType().isUnsignedInteger(8) ||
             rhsScale.getElementType().isSignlessInteger(8)) ||
-          lhsScale.getDimSize(0) != m || lhsScale.getDimSize(1) != scaleK ||
-          rhsScale.getDimSize(0) != scaleK || rhsScale.getDimSize(1) != n ||
+          (lhsBatched && lhsScale.getShape().drop_back(2) != batchPrefix) ||
+          lhsScale.getDimSize(aOffset + (getTransposeA() ? 1 : 0)) != m ||
+          lhsScale.getDimSize(aOffset + (getTransposeA() ? 0 : 1)) != scaleK ||
+          (rhsBatched && rhsScale.getShape().drop_back(2) != batchPrefix) ||
+          rhsScale.getDimSize(bOffset + (getTransposeB() ? 1 : 0)) != scaleK ||
+          rhsScale.getDimSize(bOffset + (getTransposeB() ? 0 : 1)) != n ||
+          !layout || layout.size() != 3 || !policy || policy.size() != 2 ||
           !granularity || granularity.getValue() != "block" ||
           !block || block.size() != 2 ||
           !isa<IntegerAttr>(block[0]) || cast<IntegerAttr>(block[0]).getInt() != 1 ||
@@ -603,7 +722,9 @@ LogicalResult ScaledMatmulOp::verify() {
                          "or packed B[N,K/2], D[M,N], and K divisible by 64"
                  : "rocm_mxfp4_w4a8_exact_v1 requires A[M,K], packed "
                    "B[K/2,N], D[M,N], and K divisible by 32");
-    if (foldedFamily && m <= 64)
+    if (packedFolded && m <= 0)
+      return emitOpError("packed folded requires positive M");
+    if (folded && m <= 64)
       return emitOpError("folded prefill requires M > 64");
     if (!lhsScaleType || lhsScaleType.getRank() != 1 ||
         !lhsScaleType.getElementType().isF32() ||
@@ -651,6 +772,15 @@ LogicalResult ScaledMatmulOp::verify() {
   if (!agree(kA, kB))
     return emitOpError("lhs K (") << kA << ") and rhs K (" << kB
                                   << ") must agree";
+
+  // Free dimensions follow the declared logical transpose, independently of
+  // the physical scale layout. Check them before any optional-scale early exit.
+  if (aType && rType &&
+      !agree(rType.getDimSize(0), aType.getDimSize(getTransposeA() ? 1 : 0)))
+    return emitOpError("result M must equal the logical lhs M");
+  if (bType && rType &&
+      !agree(rType.getDimSize(1), bType.getDimSize(getTransposeB() ? 0 : 1)))
+    return emitOpError("result N must equal the logical rhs N");
 
   // The scale operands are the point of this op, so their extent along the
   // contraction is checked against the declared block size rather than taken
@@ -2423,6 +2553,23 @@ LogicalResult DepthAttnJVPOp::verify() {
 }
 
 LogicalResult FlashAttnOp::verify() {
+  auto saved = (*this)->getAttrOfType<StringAttr>("lse_checkpoint");
+  if (getRowLse()) {
+    if (!saved || saved.getValue() != "saved")
+      return emitOpError("row LSE requires the saved checkpoint policy");
+    auto q = dyn_cast<RankedTensorType>(getQ().getType());
+    auto lse = dyn_cast<RankedTensorType>(getRowLse().getType());
+    if (!q || q.getRank() != 4 || !lse || lse.getRank() != 3 ||
+        !lse.getElementType().isF32())
+      return emitOpError("row LSE requires f32 [B,Hq,Sq]");
+    for (unsigned i = 0; i < 3; ++i)
+      if (!ShapedType::isDynamic(q.getDimSize(i)) &&
+          !ShapedType::isDynamic(lse.getDimSize(i)) &&
+          q.getDimSize(i) != lse.getDimSize(i))
+        return emitOpError("row LSE dimensions must match query");
+  } else if (saved && saved.getValue() == "saved") {
+    return emitOpError("saved checkpoint requires row LSE result");
+  }
   const int64_t headDim = getHeadDimAttr().getInt();
   if (headDim <= 0)
     return emitOpError("head_dim must be positive");
@@ -2489,6 +2636,52 @@ LogicalResult FlashAttnOp::verify() {
             "rank-4 attn_bias head dim must be 1 or match q heads");
     }
   }
+  return success();
+}
+
+LogicalResult FlashAttnBwdOp::verify() {
+  auto checkpoint = (*this)->getAttrOfType<StringAttr>("lse_checkpoint");
+  bool saved = checkpoint && checkpoint.getValue() == "saved";
+  if (checkpoint && !saved && checkpoint.getValue() != "recompute")
+    return emitOpError("checkpoint policy must be saved or recompute");
+  auto seedAttr = (*this)->getAttrOfType<BoolAttr>("lse_cotangent");
+  bool seeded = seedAttr && seedAttr.getValue();
+  if ((*this)->hasAttr("lse_cotangent") && !seedAttr)
+    return emitOpError("lse_cotangent must be boolean");
+  if (seeded && !saved)
+    return emitOpError("LSE cotangent requires a saved checkpoint");
+  unsigned physicalCount = getNumOperands() - unsigned(seeded);
+  if ((!saved && physicalCount != 4 && physicalCount != 5) ||
+      (saved && physicalCount != 6 && physicalCount != 7))
+    return emitOpError("requires dO,Q,K,V,[bias] or dO,Q,K,V,O,[bias],LSE");
+  for (unsigned i = 0; i < 3; ++i)
+    if (getOperation()->getResult(i).getType() != getOperand(i + 1).getType())
+      return emitOpError("gradient result types must match Q,K,V");
+  auto q = dyn_cast<RankedTensorType>(getOperand(1).getType());
+  auto v = dyn_cast<RankedTensorType>(getOperand(3).getType());
+  auto dout = dyn_cast<RankedTensorType>(getOperand(0).getType());
+  if (!q || q.getRank() != 4 || !v || v.getRank() != 4 ||
+      !dout || dout.getRank() != 4)
+    return emitOpError("requires rank-four query, value and dO");
+  for (unsigned i = 0; i < 4; ++i) {
+    int64_t expected = i == 3 ? v.getDimSize(3) : q.getDimSize(i);
+    if (!ShapedType::isDynamic(expected) &&
+        !ShapedType::isDynamic(dout.getDimSize(i)) && expected != dout.getDimSize(i))
+      return emitOpError("dO dimensions must match attention output");
+  }
+  if (!saved) return success();
+  if (getOperand(0).getType() != getOperand(4).getType())
+    return emitOpError("dO and saved O types must match");
+  auto lse = dyn_cast<RankedTensorType>(getOperand(getNumOperands()-1-unsigned(seeded)).getType());
+  if (!lse || lse.getRank() != 3 || !lse.getElementType().isF32())
+    return emitOpError("saved row LSE requires f32 [B,Hq,Sq]");
+  for (unsigned i = 0; i < 3; ++i)
+    if (!ShapedType::isDynamic(q.getDimSize(i)) &&
+        !ShapedType::isDynamic(lse.getDimSize(i)) &&
+        q.getDimSize(i) != lse.getDimSize(i))
+      return emitOpError("saved row LSE dimensions must match query");
+  if (seeded && getOperand(getNumOperands()-1).getType() != lse)
+    return emitOpError("LSE cotangent must match saved f32 row LSE");
   return success();
 }
 
@@ -6021,3 +6214,68 @@ LogicalResult LogCoshLossOp::verify() {
 
 #define GET_OP_CLASSES
 #include "TesseraOps.cpp.inc"
+
+
+LogicalResult tessera::NVFP4RequantizeOp::verify() {
+  if (failed(mlir::tessera_contract::verifyNVFP4Policy(
+          getOperation(), getNumericPolicy())))
+    return failure();
+  SmallVector<RankedTensorType> inputs, outputs;
+  for (Value value : getOperands()) {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || !type.hasStaticShape() || type.getEncoding())
+      return emitOpError("requires plain static checkpoint tensor operands");
+    inputs.push_back(type);
+  }
+  for (Value value : getResults()) {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || !type.hasStaticShape() || type.getEncoding())
+      return emitOpError("requires plain static checkpoint tensor results");
+    outputs.push_back(type);
+  }
+  if (inputs[0].getRank() != 2 || !inputs[0].getElementType().isInteger(8) ||
+      inputs[1].getRank() != 2 ||
+      !isa<Float8E4M3FNType>(inputs[1].getElementType()) ||
+      inputs[2].getRank() != 1 || !inputs[2].getElementType().isF64())
+    return emitOpError("requires packed byte [N,K/2], E4M3 [N,K/16], f64 projection globals");
+  int64_t n = inputs[0].getDimSize(0), packedK = inputs[0].getDimSize(1);
+  if (packedK <= 0 || packedK > std::numeric_limits<int64_t>::max()/2)
+    return emitOpError("packed K is outside representable extents");
+  int64_t k = packedK * 2;
+  if (failed(mlir::tessera_contract::verifyNVFP4Extents(
+          getOperation(), n, k, getRowOffsets())))
+    return failure();
+  auto matches = [](RankedTensorType type, ArrayRef<int64_t> shape) {
+    return type.getShape() == shape;
+  };
+  if (!matches(inputs[1], {n,k/16}) ||
+      inputs[2].getDimSize(0) != static_cast<int64_t>(getRowOffsets().size()-1) ||
+      !matches(outputs[0], {n,k/2}) || !outputs[0].getElementType().isInteger(8) ||
+      !matches(outputs[1], {k/32,n}) || !outputs[1].getElementType().isInteger(8) ||
+      !matches(outputs[2], {n,k/32,2}) || !outputs[2].getElementType().isF64())
+    return emitOpError("checkpoint conversion operand/result shapes or storage disagree");
+  return success();
+}
+
+LogicalResult tessera::MXFP4FoldedStorageOp::verify() {
+  SmallVector<RankedTensorType> types;
+  for (Value value : llvm::concat<Value>(getOperands(), getResults())) {
+    auto type = dyn_cast<RankedTensorType>(value.getType());
+    if (!type || type.getRank() != 2 || !type.hasStaticShape() ||
+        type.getEncoding() || !type.getElementType().isInteger(8))
+      return emitOpError("storage bridge requires plain static rank-two byte containers");
+    types.push_back(type);
+  }
+  int64_t n = types[0].getDimSize(0), halfK = types[0].getDimSize(1);
+  if (halfK <= 0 || halfK > std::numeric_limits<int64_t>::max()/2)
+    return emitOpError("storage bridge packed K is outside representable extents");
+  int64_t k = halfK * 2;
+  if (failed(mlir::tessera_contract::verifyMXFP4StorageExtents(
+          getOperation(), n, k, getStorageContractAttr())))
+    return failure();
+  if (types[1].getShape() != ArrayRef<int64_t>{k/32,n} ||
+      types[2].getShape() != ArrayRef<int64_t>{n,k/2} ||
+      types[3].getShape() != ArrayRef<int64_t>{k/32+1,n})
+    return emitOpError("storage bridge requires packed [N,K/2], scales [K32,N], fragment [N,K/2], plane [K32+1,N]");
+  return success();
+}

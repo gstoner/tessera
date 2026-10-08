@@ -1,14 +1,2051 @@
 ---
-last_updated: 2026-10-01
+last_updated: 2026-10-08
 audit_role: plan
-plan_state: open
+plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+
+## Current actions — five-slice integration
+
+Current as of 2026-10-08. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
+
+ROCM-NVFP4-INGEST-1: model-quality acceptance and wider dynamic/layout/AD envelopes. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151 version-query reuse needs owning-host proof.
+
+Named gfx1201 leading/scalar primal, scale JVP/VJP, transposed A and partial K32 groups are proved. Actual-image packaging and bounded version-query reuse are proved in recorded envelopes; they are not pending builds.
+
+General dynamic/nonleading/composed maps, other scale widths/layouts, storage derivatives and generic closure remain open. Delivery requires reviewable PRs, final generated-doc/Graphify gates and a fresh full-suite result. The last full suite still has two generic batching/transpose closure failures.
+
+Evidence ledger: ../../compiler/FIVE_SLICE_STATUS_20261007.md. Superseded active notes: archive/compiler_slice_integration_checkpoints_20261007.md.
+
+
+
+## Composed scaled-product public JVP — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync GFX1201-COMPOSED-SCALED-JVP-2026-10-08.
+
+Two frontend scaled products plus add now execute through public native_jvp
+and the existing verified native AD/Schedule/Tile/HIP program. The full Graph
+participates in cache identity. Five focused host tests, 357 contract/registry
+gates and 29 gfx1201 owning tests pass, including selected/reordered scale
+seeds, changed-input warm reuse and retained outputs. Two correctness-gated
+profiles record separate ten-member native event medians 0.057127/0.087523 ms
+and public host medians 2.748519/2.978129 ms; no speedup claim.
+Composed reverse AD, generic batching/transpose, dynamic/nonleading/storage
+derivatives and focused delivery remain open.
+Evidence: benchmarks/baselines/gfx1201_composed_scaled_jvp_20261008/README.md.
+
+Owning RX 9070 XT execution is proved for this named composed scale-JVP envelope; gfx1151 parity remains follow-up required.
+
+
+## Composed native scale reverse integration — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync GFX1201-COMPOSED-SCALED-VJP-2026-10-08.
+
+Role-aware native export and checked ABI bind the complete frontend product/sum
+Graph to scale adjoints. Shared LHS scales preserve both contributions through
+native reduction and sum members, including private/returned lifetimes.
+Matching compiler build, 419 host gates, 86 gfx1201 owning checks, eight wave
+owning checks and seven recorder guard tests pass. Four serial and four wave
+profiles pass independent float64 numerics; native-program and public host
+timings are recorded separately. Long native medians are 7.67–7.70 ms serial
+and 0.264–0.271 ms wave. This is characterization, not counterbalanced A/B or
+default promotion; serial remains the default.
+General batching/transpose, dynamic/nonleading/storage AD, wider format/shape
+performance, model quality and focused publication remain open.
+Evidence: benchmarks/baselines/gfx1201_composed_scaled_vjp_20261008/README.md.
+
+Owning gfx1201 numerical/ABI/lifetime proof exists for this named independent/shared scale reverse envelope. gfx1151 parity is follow-up required.
+
+## Linked compiler-library identity — validated
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync ROCM-LINKED-TOOL-IDENTITY-2026-10-07.
+ELF dependency content now participates in compiler image-cache identity;
+version metadata invalidates on dependency/search-path changes. 95 WSL host
+checks, 307 shared drift gates and 40 gfx1201 scalar numerical cases pass.
+All 16 package A/B profiles retain matching fingerprints and 7-to-5
+subprocess reuse. Actual warm compiler identity binds eight loaded libraries
+without subprocesses. These are package metadata results, not kernel gains.
+Evidence: benchmarks/baselines/rocm_linked_tool_identity_20261007/README.md.
+
+gfx1151 and broader cache families remain follow-up required.
+
+
+## Focused cache delivery — PR #894 ready
+
+ROCM-LINKED-TOOL-IDENTITY-2026-10-07 is published separately at
+https://github.com/gstoner/tessera/pull/894, branch
+codex/rocm-linked-tool-identity, head a73212f5820850a3e9842374f6b2fecfc06394ca.
+Live status checked 2026-10-08: open, ready, mergeable; all required CI
+checks are green. The matching-source x86-enabled isolated full WSL unit
+lane passes 20,419 tests, with 7,387 skips and 874 deselections.
+This focused PR publishes compiler cache identity work, not the accumulated
+native five-slice branch. Its green result does not establish aggregate
+batching/transpose closure or later generator/device proof.
+Remaining native five-slice delivery is open.
+
+## NVFP4 native whole-Graph public integration — owning proof
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync NVFP4-NATIVE-PROGRAM-2026-10-08.
+Public packaging now consumes compiler-authored actual member Graphs and
+portable v2 replay checks eleven buffer capacities/read-write lifetimes.
+No Python Graph constructors or legacy author helpers are used in the proved
+public route. Final gfx1201 lane: 68 mixed checks; six JIT/portable benchmark
+profiles pass independent numerics with separate stage device-event, graph
+dispatch and end-to-end timing. Shared native lane: 97 passes/three skips;
+RTX 5070 producer/saved-LSE sibling lane: 72 passes.
+Model-quality acceptance, broader dynamic/layout/storage-AD envelopes,
+performance optimization and focused native PR delivery remain open.
+Evidence: benchmarks/baselines/rocm_nvfp4_whole_graph_partition_20261007/README.md.
+
+gfx1201 named public execution parity validated; gfx1151 remains outside this physical contract.
+
+## Dated synchronization receipts
+
+Sections below record their source snapshots. Earlier pending statements may be superseded by later proof and the current actions above.
+
+## INDEPENDENT-SCALED-PRIMAL-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / ROCM-FP8-BLOCKSCALE-1.
+Synchronization key INDEPENDENT-SCALE-BATCH-2026-10-07.
+Native Schedule identity, Tile/Target metadata, independent GPU plane views
+and checked member ABI now retain all four operand prefixes. Static plane
+types remain in image identity. 465 native/registry regressions and 82 shared
+gates pass. 69 gfx1201 primal/scale-JVP programs pass independent numerics,
+changed-input replay, stale generation refusal and separate event/host timing.
+The final policy guard passes 74 native tests and all 69 corrected owning
+replays. Native event timings use the ABI-provided per-invocation average.
+Public independent primal/JVP, transposed A, partial K scale groups, dynamic/
+nonleading/composed/storage AD, larger regimes and generic/delivery closure
+remain open. No speedup or sibling scale-execution claim is made.
+gfx1201 native primal/JVP parity is validated in the named static WMMA profile. gfx1151 has no RDNA4 FP8 WMMA route and inherits no physical proof.
+Evidence: benchmarks/baselines/rocm_independent_scaled_primal_20261007/README.md.
+
+
+## PUBLIC-INDEPENDENT-SCALE-REVERSE-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Synchronization key INDEPENDENT-SCALE-BATCH-2026-10-07.
+Public leading maps now project independent matrix/scale prefixes into native
+Graph paired AD, Schedule/Tile structured reductions and checked gfx1201 HIP
+programs. 584 integrated host gates and 261 owning gfx1201 cases pass.
+All 180 public/native baseline rows pass changed-input compiler-free replay
+and independent gradient comparison (maximum error 9.1122e-8). Public wall time,
+prepared host time and native launch windows remain separate; no speedup claim.
+Independent-map primal/JVP, dynamic/nonleading/composed and storage AD, wider
+regimes, generic batching/transpose/full-unit closure and delivery remain open.
+gfx1201 reverse parity is validated for this static FP32-scale profile. gfx1151 inherits no RDNA4 FP8 physical route; its scale execution is follow-up required.
+Evidence: benchmarks/baselines/rocm_public_independent_scale_reverse_20261007/README.md.
+
+
+## INDEPENDENT-SCALE-BATCH-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Independent numerical broadcast conformance passes 417 host checks.
+Native Graph verification and scale transpose now retain each operand's
+right-aligned prefix, including shared/singleton scale reduction axes.
+131 candidate native export/Schedule/Tile/image tests and 382 shared registry/
+SM120 owning regressions pass. All 68 gfx1201 serialized reverse packages
+pass independent numerics, changed-input replay and separate native/host
+timings. Matching aggregate CMake rebuild, 589 focused gates and a fresh
+68-case gfx1201 canonical rerun pass; all final source/image identities bind.
+gfx1201 has 68 native reverse numerical/replay/timing cases; gfx1151 inherits
+no RDNA4 FP8 physical route.
+Public static leading-map reverse integration is now proved in the newer
+public packet above. Independent-map primal/JVP, dynamic/nonleading/composed
+integration, wider performance, generic closure and publication remain open.
+Evidence: benchmarks/baselines/scaled_independent_batch_native_reverse_20261007/README.md.
+
+
+## NATIVE-PADDED-RHS-2026-10-07
+
+Owner W1.1 / E2E-REAL-6.
+Native resident submission now projects RHS pitch into the existing dynamic
+strided consumer ABI and validates the full physical allocation span.
+The matching aggregate CMake runtime passes 581 focused tests, including
+padded/compact resident ownership, changed-value/shape replay, and registry
+gates. All 48 canonical same-image A/B rows pass pre/post independent
+numerics; median control/native wall ratio is 2.440, with a worst 3.62%
+regression. No kernel-only or selector
+claim. Not applicable to the rocm physical ABI; no sibling execution evidence is inherited.
+Padded source/output/residual, general AD/composition, asynchronous lifetime,
+generic closure and delivery remain open. Generated documents are in sync
+and the post-integration Graphify refresh completed successfully.
+Evidence: benchmarks/baselines/nvidia_padded_resident_owner_20261007/README.md.
+
+
+
+## NATIVE-RESIDENT-NVIDIA-2026-10-07
+
+Owner W1.1 / E2E-REAL-6.
+Compiler-owned producer/matmul images now share native C++ submission for
+host-staged and resident execution. The resident ABI checks device allocation
+capacity, active shape/pitch/type, stream/context and output/edge aliasing;
+synchronous completion retires live uses before caller buffers may be released.
+Immutable receipt hashes move to preparation; each invocation retains the
+semantic package snapshot check and returns independent receipt copies.
+57 new owning RTX 5070 cases and 137 existing native-owner regressions pass.
+48 alternating same-image timing rows pass pre/post independent numerics.
+Median control/native resident wall ratio is 2.518; one row is 2.4% slower.
+The measurements include ABI/submission/completion and concurrent full-unit
+activity, not isolated-kernel gains. Initial regressions and profile are retained.
+Not applicable to gfx1151/gfx1201 HIP launch ABIs; their native owners and physical receipts remain independent.
+Generic scaled-matmul batching/transpose closure and delivery remain open.
+Evidence: benchmarks/baselines/nvidia_native_resident_owner_20261007/README.md.
+
+
+
+## DEEP-LEADING-MAPS-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Static typed gfx1201 map prefixes retain arbitrary positive matching depth;
+minimum-rank capability and native adjoint construction are aligned. Reverse
+source bounds precede capture on all targets. 15 host ordering controls,
+474 shared registry/policy checks and 89 native transpose regressions pass.
+gfx1201: 60 deeper primal/JVP/VJP owning cases pass. gfx1151 source-bound ordering is host validated; no RDNA4 scale-map execution is inherited.
+18 paired public/native timing rows pass independent numerics; serial remains
+default. Generic/dynamic/mixed/nonleading/storage-AD and delivery remain open.
+Evidence: benchmarks/baselines/rocm_deep_leading_map_20261007/README.md.
+
+
+## NVFP4-SHORT-M-2026-10-07
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Compiler-owned packed folded admission now supports positive M through the
+Graph/Schedule/Tile/Target/native image and checked native owner contract.
+24 host package and 26 owning gfx1201 short/ragged cases pass; 12 timing
+shapes pass pre/post numerical checks. Existing device gates pass 35 cases
+and the fresh-process replay passes after an explicit environment repair.
+gfx1201 packed native ownership is validated; gfx1151 has no inherited RDNA4 FP8 WMMA support.
+General layout/AD/model-quality/performance and full-unit/publication closure
+remain open. Evidence: benchmarks/baselines/rocm_nvfp4_short_m_20261007/README.md.
+
+
+## COMPILER-INTEGRATION-DRIFT-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native adjoint and two structured-reduction inventory rows now match source;
+family-specific evidence prevents architecture alias inheritance. 780 focused
+tests pass. Two generic batching/transpose full-unit failures remain open.
+gfx1201 named scale-transpose proof is registered; generic ROCm and gfx1151 reverse coverage remain open.
+Evidence: benchmarks/baselines/compiler_drift_repair_20261007/README.md.
+
+
+## SCALED-REVERSE-RAGGED-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Logical FP32 scale-adjoint admission now preserves ragged final K groups
+without broadening primal WMMA scheduling. 73 frontend/contract tests and
+361 shared/native gates pass; missing tail scales reject before capture.
+96 gfx1201 ragged/long public A/B rows pass numerics and warm replay with
+median paired wall-time ratios 4.043/10.321. Serial remains default.
+gfx1201 owning reverse proof passes; gfx1151 native reverse remains follow-up required.
+General AD, dynamic/mixed maps, generic closure and publication remain open.
+Evidence: benchmarks/baselines/rocm_public_scaled_vjp_regimes_20261007/README.md.
+
+
+## SCALED-TRANSPOSE-COMPENSATED-2026-10-07
+
+Public experimental schedule selection now binds cache identity and receipts.
+Both schedules pass 72 gfx1201 public tests; 48 alternating public timing rows
+pass numerics and compiler-free warm reuse (median paired ratio 3.934).
+362 focused shared/native gates pass. These are named gfx1201 results, not
+sibling physical proof or generic AD closure. Serial remains default.
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native compensated FP32 outer reductions repair six long-shape failures per
+serial/wave arm without relaxing bounds. 72 tiny/ragged/long gfx1201 paired
+cases pass; serial remains default. Native lowering gates pass 23 tests and
+shared metadata/diagnostic/audit gates pass 307. Wider public regimes,
+selector policy and generic/full-unit/publication closure remain open.
+gfx1201 exact-device replay passes; gfx1151 has no inherited RDNA4 physical reverse proof.
+Evidence: benchmarks/baselines/rocm_scaled_vjp_compensated_20261007/README.md.
+
+
+## SCALED-TRANSPOSE-WAVE-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native Schedule/Tile carries an opt-in 32-lane additive outer reduction,
+retaining K-group arithmetic and binding algorithm/width to image ABI.
+372 shared/native gates and 24 paired gfx1201 numerical/timing rows pass.
+Serial remains default; wider/public/selector closure remains open.
+gfx1201 experimental image/ABI numerics and paired timings pass; gfx1151 has no inherited proof.
+Evidence: benchmarks/baselines/rocm_scaled_vjp_wave_20261007/README.md.
+
+## SCALED-PUBLIC-TRANSPOSE-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Public scale-only reverse @jit now uses compiler-owned native packages.
+72 gfx1201 scalar/one-map/two-map cases pass numerics and compiler-free reuse.
+397 shared drift gates pass; 48 public timing rows retain separate wall-time
+labels. Dynamic/composed/storage AD and serial-reduction optimization remain open.
+gfx1201 public scale reverse is proved for this static profile; gfx1151 receives no inherited reverse proof.
+Evidence: benchmarks/baselines/rocm_public_scaled_vjp_20261007/README.md.
+
+## SCALED-TRANSPOSE-PROGRAM-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native paired AD outlines actual scale-adjoint regions with faithful captures,
+requested output order, frontend permutations and SSA buffer lifetimes.
+55 native export/package tests and 75 native AD fixtures pass.
+gfx1201 native reverse member Schedule/Tile/image/ABI and owning execution remain open. This is program export; earlier native JVP duality is not VJP execution. gfx1151 has no RDNA4 FP8 WMMA inheritance.
+Evidence: benchmarks/baselines/scaled_transpose_program_export_20261007/README.md.
+
+
+Ongoing native reduction integration: sealed Tile/ROCm region carriers now
+provide MLIR symbol-table ownership, and GPU ABI verification uses typed
+function properties after serialization. Matching image/package validation
+and gfx1201 physical reverse proof are pending; this supplies no sibling
+execution evidence. See the five-slice ledger's Schedule/Tile integration entry.
+
+The subsequent native carrier repair passes 15 lowering/image checks and
+55 export regressions. 24 gfx1201 reverse packages pass numerical and lifetime
+checks with separate native/host timing. Public JIT reverse remains open.
+gfx1201 physical baseline is proved; gfx1151 receives no inherited proof.
+Evidence: benchmarks/baselines/rocm_native_scaled_vjp_20261007/README.md.
+
+## SCALED-PRODUCT-TRANSPOSE-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native structured scale-adjoint construction preserves original K/N groups
+and reduces shared batch axes. Twelve independent finite-difference cases
+and 12 owning gfx1201 native-JVP duality cases establish the numerical contract.
+gfx1201 native JVP duality passes 12 cases. Reverse Schedule/Tile/image/ABI execution remains open. gfx1151 does not inherit RDNA4 FP8 WMMA.
+Evidence: benchmarks/baselines/scaled_product_transpose_foundation_20261007/README.md.
+
+
+## ROCM-NESTED-TYPED-VMAP-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Two matching public leading maps now descend through one compiler-owned typed
+batch primal. Source bounds, distinct batch symbols, independent owners and
+gated storage metadata survive projection; native FP32 scale-JVP also executes.
+415 shared tests pass with 16 gated skips. Evidence:
+benchmarks/baselines/rocm_nested_typed_vmap_20261007/README.md.
+gfx1201: 102 nested/existing mapped primal/JVP cases and 24 primal timing rows pass. gfx1151 lacks RDNA4 FP8 WMMA and receives no physical promotion. Mixed/dynamic/nonleading/deeper maps and linear transpose remain open.
+
+
+## ROCM-MULTIDIMENSIONAL-SCALED-BATCH-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Native static typed two-axis batch prefixes survive Graph/Schedule/Tile/Target/
+LLVM and checked lifetime/ABI projection. Equal products do not authorize
+different prefix tuples. 381 focused and 48 target/ABI tests pass; native
+fixtures pass 649 with 66 unsupported. Evidence:
+benchmarks/baselines/rocm_multidimensional_scaled_batch_20261007/README.md.
+gfx1201: 102 owning primal/JVP tests and 24 separate-domain timing rows pass. gfx1151 does not inherit RDNA4 FP8 WMMA. Generic batching/transpose and sibling hardware follow-ups remain open.
+
+
+## ROCM-NATIVE-CHECKPOINT-2026-10-07
+
+Owner ROCM-NVFP4-INGEST-1.
+The real-checkpoint recorder now executes native Graph/Schedule/Tile/Target/
+LLVM ingest before the native consumer. gfx1201 q_proj and merged gate/up
+codes/exponents match the reference bitwise, independent f64 block statistics
+pass before/after timing, and consumer decoded-weight outputs are exact.
+359 focused host WSL tests pass with seven gated skips.
+Evidence: benchmarks/baselines/rocm_native_checkpoint_20261007/README.md.
+gfx1201 physical proof is recorded; gfx1151 has no RDNA4 ingest inheritance. Model quality, general resident composition and dynamic/layout/AD remain open.
+
+
+## COMPILER-UNIT-CONTRACT-REPAIR-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Native scaled tangent forward/proof registration and named recorder consumers
+are reconciled. ROCm optional metadata no longer precedes its intended family
+refusal. 110 focused checks pass with 90 gated skips.
+gfx1201 early architecture/family refusal is restored; 72 public primal/JVP cases pass, followed by 36 primal cases with explicit image target/architecture admission. gfx1151 does not inherit FP8 WMMA proof.
+Generic batching/transpose closure and final full-suite/PR delivery remain open.
+Evidence: benchmarks/baselines/compiler_unit_contract_repairs_20261007/README.md.
+
+
+## ROCM-PUBLIC-MAPPED-JVP-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Mapped owners retain admitted FP32 scale-JVP intent. Signature-cached eager
+map/reference certificates remain diagnostic; native AD and packages own
+execution. 72 gfx1201 primal/JVP tests, 503 shared gates and 12 timing rows pass.
+Explicit planned-gated uint8 candidate storage is preserved without inferring
+byte opt-in from arrays.
+Public native JVP now checks source shape constraints before capture/compile.
+44 focused and 72 shared native-JVP/attention checks pass (16 gated skips);
+59 owning gfx1201 JVP cases pass. Sibling device constraint parity requires
+its own follow-up evidence.
+gfx1201 numerical parity validated for the named mapped FP32 scale-JVP. gfx1151 has no FP8 WMMA and is not admitted.
+General dynamic/nested/composed AD, transpose closure and PR delivery remain open.
+Evidence: benchmarks/baselines/rocm_public_mapped_jvp_20261007/README.md.
+
+
+## ROCM-PUBLIC-TYPED-VMAP-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Shared frontend map intent projects direct typed scalar products into native
+leading batches; scalar owners remain independent. 25 host frontend tests and
+36 gfx1201 numerical/warm-call tests and 36 timing rows pass, including ragged M=200 and wider LDS execution.
+gfx1201 native parity validated for 36 cases. gfx1151 has no FP8 WMMA; this route is not admitted there.
+Dynamic/nested/composed AD, generic closure and aggregate PR delivery remain open.
+Evidence: benchmarks/baselines/rocm_public_typed_vmap_20261007/README.md.
+
+## ROCM-NATIVE-PLAN-BINDING-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Complete immutable manifests/packages key bounded checked decoding and readonly
+native ABI bindings. Native capacities/lifetimes/context checks and execution
+ownership remain in C++; mutable metadata and active owners stay independent.
+68 gfx1201 default tests and 386 shared checks pass. Six image-identical paired
+rows show 7-13% lower primal and 15-20% lower scale-JVP public host cost.
+gfx1201 parity validated for the named FP8/MXFP8 class. MXFP4/NVFP4 owners need separate attribution; gfx1151 typed FP8 is unsupported.
+Dynamic/nested/composed AD, broader performance and aggregate closure remain open.
+Evidence: benchmarks/baselines/rocm_native_plan_binding_20261007/README.md.
+
+## ROCM-INDEPENDENT-SCALED-BATCH-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Shared contract: typed independent-RHS/shared-LHS Graph ranks, per-batch
+Schedule rows, Tile/Target z-plane policy and native program capacities.
+67 gfx1201 primal/JVP cases pass, including wider LDS numerics and changed
+single-batch scales; 24 primal rows retain separate host/native event windows.
+gfx1201 parity validated in the named envelopes. gfx1151 has no FP8 WMMA; no transfer of physical proof.
+Dynamic/nested batching, transpose/composed AD, generic closure and PR delivery remain open.
+Evidence: benchmarks/baselines/rocm_independent_scaled_batch_20261007/README.md.
+
+## ROCM-BATCH-OFFSET-FOUNDATION-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Native gfx1201 compiler fixture proves dynamic memref offsets survive
+unbounded vector and ragged guarded scalar E4M3 fragment loads and stores
+through Target-to-ROCDL. No shared semantic/ABI or selector changes.
+gfx1201 compiler parity validated; exact-device execution follow-up required. gfx1151 has no FP8 WMMA and is not covered.
+Independent-RHS/shared-LHS integration and owning numerical/timing proof remain open.
+Evidence: benchmarks/baselines/rocm_batch_offset_foundation_20261007/README.md.
+
+## ROCM-SHARED-SCALED-BATCH-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Shared contract: static typed E4M3 shared-RHS Graph ranks, native B*M Schedule
+projection, pointer-backed Tile binding and native program policy/lifetime ABI.
+541 shared and 222 target registry checks pass; one target case skips.
+gfx1201 parity validated: 39 public primal/JVP device tests and 12 separate timing rows pass. gfx1151 has no FP8 WMMA and receives no execution claim; its dtype/capability gate remains.
+Generic batching/linear transpose, broader programs and full-suite/PR closure remain open.
+Evidence: benchmarks/baselines/rocm_shared_scaled_batch_20261007/README.md.
+
+
+## E8M0-EAGER-PARITY-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared explicit E8M0 byte decoding now matches the declared [1,32] semantic
+contract in the typed eager reference. Code 0 and NaN code 255 are preserved;
+no production lowering, native ABI or selector changes. 474 shared gates pass.
+gfx1201 parity validated: 25 primal/JVP device tests include four eager/native MXFP8 comparisons and smallest/reserved-code native proof. gfx1151 FP8 WMMA remains unsupported.
+Generic batching/linear transpose and aggregate/full-suite closure remain open.
+Evidence: benchmarks/baselines/rocm_e8m0_eager_parity_20261007/README.md.
+
+
+## ROCM-PRIMAL-TRANSFER-EVICTION-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Native bounded idle LRU eviction waits for completion, preserves quarantine
+and keeps active owners untouched. Automatic gfx1201 moderate-size pinned
+staging is bound to cache identity; explicit overrides remain.
+gfx1201 parity validated: 24 public primal/JVP tests and eight paired public timing rows pass; gfx1151 automatic staging and eviction require independent owning-host validation.
+Public wall-clock improvement does not establish isolated kernel speedup.
+Generic closure and aggregate publication remain open.
+Evidence: benchmarks/baselines/rocm_primal_transfer_attribution_20261007/README.md.
+
+
+
+## PRIMAL-PROFILE-POLICY-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+gfx1201 sixteen-row native policy parity/timing validated; public staging/validation overhead, broader shapes, cache families and MXFP4 attribution remain follow-ups.
+Evidence: benchmarks/baselines/rocm_primal_profile_policy_20261007/README.md.
+
+
+## PRIMAL-IMAGE-PROJECTION-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+gfx1201 projection ABI/image parity validated; controlled timings require profile-specific policy (MXFP8 NK improves, FP8 KN regresses).
+Evidence: benchmarks/baselines/rocm_primal_image_projection_20261007/README.md.
+
+
+## NATIVE-PRIMAL-OWNER-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+gfx1201 native primal ownership numerical parity validated; physical image projection/timing regression needs follow-up.
+Evidence: benchmarks/baselines/rocm_native_primal_owner_20261007/README.md.
+
+
+## MXFP8-PUBLIC-PRIMAL-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+gfx1201 parity validated for four ordinary MXFP8 primal cases; generic closure and native primal owner integration remain follow-ups.
+Evidence: benchmarks/baselines/rocm_mxfp8_public_primal_20261007/README.md.
+
+
+## ROCM-TYPED-SCALED-PRIMAL-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+gfx1201 ordinary FP8 primal parity validated; KN/NK native packaging and compiler-free changed-input reuse pass. MXFP8 primal integration and broader closure remain follow-ups.
+Evidence: benchmarks/baselines/rocm_typed_scaled_primal_20261007/README.md.
+
+## THREE-FORMAT-NATIVE-STAGING-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+gfx1201 diagnostic native staging parity validated for six FP8/MXFP8/folded-MXFP4 rows. Wider public JIT/AD integration and promotion remain open.
+Evidence: benchmarks/baselines/scaled_program_three_format_staging_20261007/README.md.
+
+## SCALED-MATMUL-NATIVE-PINNED-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Shared runtime contract: completion-before-staging-reuse/free, bounded memory accounting and transfer-mode cache identity. gfx1201 opt-in FP8 scale-JVP pinned staging parity and timing validated; MXFP8/MXFP4 and wider runtime envelopes remain follow-ups before promotion.
+Evidence: benchmarks/baselines/scaled_matmul_native_pinned_20261007/README.md.
+
+## SCALED-MATMUL-PUBLIC-ORIENTATION-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Shared Graph transpose and scale-JVP contracts assessed. gfx1201 public scale-JVP RHS-orientation parity validated for three wider envelopes; transpose-left, batching and general linear-transpose remain open.
+Evidence: benchmarks/baselines/scaled_matmul_public_orientation_20261007/README.md.
+
+## SCALED-MATMUL-NATIVE-REUSE-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared runtime contract: bounded idle ownership keyed by exact images and ABI, fresh handles, preserved generations and process/context/device identity; poison quarantine and explicit cache cleanup.
+Owning gfx1201 cache/numerical proof and off/on timing recorded; generic batching/transpose and wider families remain open.
+Evidence: benchmarks/baselines/scaled_matmul_native_reuse_20261007/README.md.
+
+## SCALED-MATMUL-PUBLIC-JVP-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared frontend contract: explicit differential reference evaluation, typed FP8 capture and native paired program packaging.
+gfx1201 public scale-JVP parity validated for nine static cases; broader envelopes and benchmarking remain open.
+Evidence: benchmarks/baselines/scaled_matmul_public_jvp_20261007/README.md.
+
+## SCALED-MATMUL-NATIVE-PACKAGE-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Native compiler exports machine-readable program/member ABI bound to actual
+Graph/SSA witnesses, typed buffers/lifetimes and backend launch geometry.
+Package/registry corruption gates pass 305 tests.
+Named gfx1201 compiler-projected package replay passes on RX 9070 XT without compiler access, including changed-input numerics and separate native device/host timing windows. Ordinary JIT AD capture and general batching/transpose remain open. No gfx1151 FP8 WMMA claim.
+Evidence: benchmarks/baselines/scaled_matmul_native_package_20261007/README.md.
+
+
+## SCALED-MATMUL-NATIVE-OWNER-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Native HIP C ABI checks SSA prefix bindings, exact lifetimes, buffer sizes,
+private scratch and returned generation ownership. Images and allocations
+remain owned through stream completion; repeated sequence launch runs in C++.
+The named four-image scale-only program executes numerically on RX 9070 XT through one native C++ owner, with separate device launch-window and host timings. Automatic compiler/package plan projection and general AD closure remain open; no gfx1151 FP8 WMMA evidence.
+Evidence: benchmarks/baselines/scaled_matmul_native_owner_20261007/README.md.
+
+
+## SCALED-MATMUL-NATIVE-MEMBERS-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: native selected-member projection retains the full SSA
+program witness, typed buffer roles and semantic/argument attributes.
+Combined native lanes pass 644, with 66 unsupported; focused AD/registry
+tests pass 347, with 16 skips. The three products and sum compile as
+gfx1201 native HSACO members, without Python IR reconstruction.
+ROCm follow-up: all four named gfx1201 members compile to HSACO and pass an owning RX 9070 XT M17/N19/K256 numerical diagnostic, including scale finite differences. Native HIP whole-program ownership and timing remain open; diagnostic launches are not a production program route. No gfx1151 FP8 WMMA claim.
+Generic batching/transpose and full-unit closure remain open.
+Evidence: benchmarks/baselines/scaled_matmul_native_members_20261007/README.md.
+
+## SCALED-MATMUL-NATIVE-PROGRAM-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: native paired SSA export outlines actual products/sum and
+records typed buffer IDs, logical sizes, argument metadata and read/write
+lifetimes. Native forward AD preserves primal argument attributes and tangent
+layout/shard/dimension metadata. Combined native fixtures pass 643 cases,
+with 66 unsupported; focused AD/registry tests pass 347, with 16 skips.
+Follow-up required: native member image/program projection, sum execution,
+physical allocations, stream/completion ownership and owning numerical/timing
+proof. This shared artifact evidence does not establish physical parity for
+this backend. ROCm follow-up: HIP ingest ownership exists for its separate named program; scaled AD member compilation and sum ownership are not yet integrated or proved on gfx1201/gfx1151. Generic batching/transpose and full unit closure remain open.
+Evidence: benchmarks/baselines/scaled_matmul_native_program_20261007/README.md.
+
+## SCALED-MATMUL-ARTIFACT-BINDING-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: per-instance Graph/Schedule/artifact binding keeps content
+hash reuse distinct from SSA product ownership. Forged binding checks pass.
+The native core lane passes 489 fixtures; 66 feature cases are unsupported.
+Follow-up required: scale-seed JVP reaches gfx1201 Tile/Target IR; native sum/program ABI, allocation lifetime and AMD execution remain open.
+No AD device timing, general batching/transpose or full-unit closure claim.
+Evidence: benchmarks/baselines/scaled_matmul_artifact_binding_20261007/README.md.
+
+## SCALED-MATMUL-NATIVE-JVP-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Shared contract: native Graph TangentInterface for exact_per_block f32
+scaled products preserves block policy and transpose flags; active encoded
+storage remains refused. Four focused native fixtures pass on Super-Bear WSL.
+Graph/Schedule artifact evidence only; no new owning-device execution proof.
+Follow-up required: repeated Schedule artifact identity/lifetime, transposed
+FP8 Schedule admission, native sum/program integration and numerical/timing
+proof. Generic batching/transpose closure and the full unit gate stay open.
+Sibling physical parity is not established for this backend.
+Evidence: benchmarks/baselines/scaled_matmul_native_jvp_20261007/README.md.
+
+## COMPILER-NATIVE-LANES-2026-10-07
+
+Owner W1.1 / E2E-REAL-6 / ROCM-FP8-BLOCKSCALE-1.
+Shared contracts: native fixture admission, SDK environment propagation and
+high-level kernel metadata ownership. No dtype, ABI, scale policy or physical
+schedule changes. Shared SDK/scale-fixture test contracts assessed. Native ROCm Target/HSACO fixtures pass on Super-Bear, but this is artifact evidence; gfx1151/gfx1201 physical execution remains bound to their independent packets.
+
+Core native fixtures pass 485 cases with 66 unsupported feature cases.
+All 153 NVIDIA/ROCm backend fixtures and 374 registry/inventory checks pass.
+Generic scaled_matmul batching/transpose and broader five-slice scopes
+remain open; no full-unit, fleet-union or universal compiler closure claim.
+Additional 84 SM120 dynamic producer cases are sibling evidence only;
+they do not establish owning physical parity here.
+Evidence: benchmarks/baselines/compiler_native_lane_repair_20261007/README.md.
+
+
+
+## ROCM-PAGED-KV-FLAT-INDEX-2026-10-07
+
+Owner ROCM-E2E-2 / E2E-REAL-6.
+Shared contract: compact f32/i32 storage, checked seven-scalar ABI and
+256-thread geometry remain unchanged. Flat-token indexing eliminates redundant
+head/feature division. gfx1151/gfx1201 parity validated for six compact paged-KV cases.
+
+Focused owning gates pass 339 cases on gfx1151 and 336 on gfx1201.
+Same-allocation HIP-event launch-window A/B and identical-image controls
+remain distinct from isolated kernel/public timing. General layouts,
+dynamic/composed consumers and wider performance obligations remain open.
+No selector promotion or sibling proof transfer.
+Recorder: benchmarks/rocm/record_paged_kv_index_ab.py.
+Evidence: benchmarks/baselines/rocm_paged_kv_flat_index_20261007/README.md.
+
+
+## COMPILER-FULL-UNIT-2026-10-07
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contract assessment: fresh unchanged non-slow unit gate on Super-Bear
+WSL with matching native tools. Result: 21,694 passed, 7,503 skipped, 874
+deselected, three failed. The two implementation gates are generic
+scaled_matmul batching and linear-transpose closure. Their assertions and
+partial/planned coverage states remain unchanged. The third failure was this
+unit packet's missing tracked-document citation, now recorded here.
+Host/unit coverage and foreign skipped lanes do not prove physical execution
+for this backend; architecture-specific receipts remain separate.
+Evidence: benchmarks/baselines/compiler_full_unit_20261007/README.md.
+
+
+## GFX1151-CURRENT-SOURCE-2026-10-07
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / ROCM-E2E-2.
+Shared contract: current source synchronization and matching LLVM/MLIR 23.1.1
+core/ROCm build; existing typed Graph/Schedule/Tile/Target, checked native
+image ABI and C++ prepared/resident ownership contracts are unchanged.
+Receipt scope is compact static math/movement, not all compiler families.
+
+gfx1151 parity validated on Princess-Luna / Radeon 8060S: 237 tests pass,
+one foreign gfx1201 movement case skips. Seventy-two f32/f16/bf16 native math
+rows verify ordinary JIT, portable replay and shape-independent images.
+Five native C++ resident movement rows verify 180 bit-exact warm windows,
+90 native single-kernel events, stale-generation/index rejection and native
+compiler ancestry. Full paged read uses 32 physical pages and 64 logical
+entries with repeated mappings. Source/driver/compiler/runtime hashes match.
+
+Paired paged-KV resident launch-window timing remains outside the 10%
+non-regression gate (2.887 vs 2.528 us). This metric includes enqueue gaps
+and differs from the native single-kernel profiler; no selector promotion.
+General strides/layouts, dynamic/composed routes, broader cache families,
+W8A8/MXFP4 closure and full-unit/publication gates remain open.
+
+Recorders: benchmarks/rocm/benchmark_native_math_package.py,
+benchmarks/rocm/benchmark_rocm_e2e_movement.py,
+benchmarks/rocm/benchmark_resident_movement.py.
+Evidence: benchmarks/baselines/gfx1151_current_source_revalidation_20261007/README.md.
+
+
+
+## NVIDIA-NVFP4-SHARED-LHS-2026-10-07
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: named static NVFP4 shared-LHS batch policy, Graph scale and
+orientation verification, sealed Schedule intent, Tile batch policy, checked
+ten-argument rows/batches ABI. Public vmap maps RHS/scales with
+in_axes=(None,0,None,0), reusing A/scales without Python replication or launch
+loops. Existing scalar/shared-RHS/independent modes retain their contracts.
+
+Not applicable to gfx1151/gfx1201 physical admission: the new named
+contract and vmap entry point are SM120-only. Shared typed Graph verification
+is assessed; ROCm has no owning shared-LHS NVFP4 batch package or numerical
+proof from this receipt. Follow-up required for independent ROCm batch/layout
+consumers; existing gfx1201 ingest proof does not transfer.
+Recorder: benchmarks/nvidia/record_nvfp4_transpose.py.
+Evidence: benchmarks/baselines/nvidia_shared_lhs_batch_20261007/README.md.
+Parent synchronization key: NVIDIA-NVFP4-NATIVE-ORIENTATION-2026-10-06.
+
+
+## GFX1201-PROJECTION-ATTRIBUTION-2026-10-07
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6. Native K128 projected
+register lowering preserves checked positive dimensions and whole scale-group
+K facts through LLVM assumptions. K32 FP8/MXFP8 retain byte-identical original
+images. No dtype, numerical policy, scale semantics or runtime ABI change.
+The MXFP8 descriptor error message is clarified; the identity fixture now
+covers admitted K64 slabs with distinct keys and partial-slab refusal.
+
+gfx1201 candidate evidence: 669 passed with one stale K64 fixture failure;
+the corrected identity/K64 follow-up passed 88 tests. Matched allocation
+benchmarks verify numerical outputs and exact images. Approximately 6-8%
+ragged K128 improvements are observed, but identical-image MXFP8 controls show
+timing instability. No promotion or W8A8/MXFP4 closure claim. Follow-up required:
+stable controls, projected/static image cost, broader reference coverage and
+gfx1151 synchronization.
+Recorder: benchmarks/rocm/record_gfx1201_interleaved_compiler_formats.py.
+Evidence: benchmarks/baselines/gfx1201_m200_k1536_attribution_20261007/README.md.
+
+
+## GFX1201-CURRENT-SOURCE-2026-10-07
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6. Current shared compiler/Python
+source is synchronized; matching core and ROCm compiler builds are pinned.
+Existing semantic, numeric-policy and physical ABI contracts are unchanged.
+
+RX 9070 XT / gfx1201 parity validated against rebuilt current core/ROCm compilers: 425 passed, eight gfx1151-only skips; six NVFP4 JIT/portable and three paged-KV timing rows. Packed-format follow-through: 209 passed without skips; four three-format shapes/20 numerical arms. M200/K1536 global register scheduling remains an attribution/retuning obligation. General layouts/dynamic/composed AD, cache/W8A8/MXFP4 closure and gfx1151 current-source rerun remain open.
+Evidence: benchmarks/baselines/gfx1201_current_source_revalidation_20261007/README.md.
+
+
+
+## NVIDIA-JIT-MULTIRESULT-OWNER-2026-10-07
+
+Owner NVIDIA-LSE-1 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: saved O/LSE result tuple, two seeds, read-only private residual
+views, complete/compact seeded physical roles, synchronous seed lifetime.
+
+Follow-up required for rocm-owned exact-device multi-result residual consumers. The shared semantic AD and owner contracts are assessed; CUDA context/allocation checks and SM120 images/timings do not prove sibling physical execution.
+Dynamic/composed AD and asynchronous ownership remain open.
+Recorder: benchmarks/nvidia/record_jit_multiresult_owner.py.
+Evidence: benchmarks/baselines/nvidia_jit_multiresult_owner_20261007/README.md.
+
+
+
+## NVIDIA-MULTIRESULT-ATTENTION-AD-2026-10-07
+
+Owner NVIDIA-LSE-1 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1 /
+E2E-REAL-6. Native reverse AD maps semantic O/LSE results and both seeds
+through saved paired checkpoints into checked native packages. Physical
+metadata checks exclude embedded sibling lineage.
+
+Follow-up required: shared semantic adjoint and paired pass now carry O/LSE seeds, but rocm has no owning seeded checkpoint/native execution proof. Reverse Graph derivation is not sibling physical admission or parity.
+Recorder: benchmarks/nvidia/record_multiresult_attention_ad.py.
+Evidence: benchmarks/baselines/nvidia_multiresult_attention_ad_20261007/README.md.
+
+
+## NVIDIA-LSE-COTANGENT-GRADIENT-ROLES-2026-10-07
+
+Owner NVIDIA-LSE-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6. Native seeded
+checkpoint packages carry compact physical outputs or complete bias
+gradients with sealed role/launch symbols and numerical identity checks.
+
+Not applicable to rocm physical execution: native Schedule checkpoint target is explicitly SM120, and the ABI bridge is CUDA-specific. Shared Graph/Schedule carrier assessment supplies no sibling admission or exact-device proof.
+Recorder: benchmarks/nvidia/record_lse_cotangent_gradient_roles.py.
+Evidence: benchmarks/baselines/nvidia_lse_cotangent_gradient_roles_20261007/README.md.
+
+
+## NVIDIA-LSE-COTANGENT-PACKAGE-2026-10-07
+
+Owner NVIDIA-LSE-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6. Native seeded
+Graph/Schedule/Tile packages project checked row-seed buffer roles and
+serialized replay. The shared runtime ABI is registered with validated
+shapes, strides, scalars, aliasing and producer-stream ordering.
+
+Not applicable to rocm physical execution: the shared runtime registration targets SM120 only. No sibling ABI or native admission changes; exact-device parity is not inferred.
+Recorder: benchmarks/nvidia/record_lse_cotangent_package.py.
+Evidence: benchmarks/baselines/nvidia_lse_cotangent_package_20261007/README.md.
+
+
+## NVIDIA-LSE-COTANGENT-BRIDGE-2026-10-07
+
+Owner NVIDIA-LSE-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6. Native bridge
+indexes the explicit saved-LSE seed before outputs.
+
+Not applicable to rocm physical execution: NVIDIA C++ bridge only; no new backend admission or exact-device parity.
+Evidence: benchmarks/baselines/nvidia_lse_cotangent_bridge_20261007/README.md.
+
+## NVIDIA-LSE-COTANGENT-SCHEDULE-2026-10-07
+
+Owner NVIDIA-LSE-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6. Explicit typed
+Graph dLSE operands are verified, sealed in native Schedule, replay checked
+and lowered to the SM120 Tile consumer. Caller Graphs are preserved. The
+legacy bridge rejects new symbols until a checked seeded ABI is integrated.
+
+Follow-up required: shared semantic Graph/dialect and Schedule decoder assessed. ROCm physical Tile consumer explicitly refuses enabled dLSE; no owning native derivative/device proof.
+Recorder: benchmarks/nvidia/record_lse_cotangent_leaf.py --scheduled.
+Evidence: benchmarks/baselines/nvidia_lse_cotangent_schedule_20261007/README.md.
+
+
+## NVIDIA-LSE-COTANGENT-LEAF-2026-10-07
+
+Owner NVIDIA-LSE-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6. Shared Tile
+attention backward declares an optional LSE cotangent pointer and verifies
+its saved f32 deterministic-direct contract. Native SM120 materialization
+includes P*dLSE in Q/K/bias derivatives; V derivatives remain unchanged.
+
+Follow-up required: shared Tile verifier assessed; ROCm explicitly rejects enabled LSE cotangents before emission. No owning ROCm consumer or device parity is inferred.
+Recorder: benchmarks/nvidia/record_lse_cotangent_leaf.py.
+Evidence: benchmarks/baselines/nvidia_lse_cotangent_leaf_20261007/README.md.
+
+
+## NVIDIA-MATCHED-PAIR-2026-10-07
+
+Owner NVIDIA-LSE-1 / E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Matched
+saved/recompute two-package calls alternate lane order and validate poisoned
+outputs after each forward/backward window. Native paired AD already retains
+O/LSE; the standalone recorder now describes this accurately. No production
+policy, ABI or numerical algorithm changes.
+
+Not applicable to rocm physical lowering: NVIDIA comparator recorder and policy metadata only; no sibling native schedule or device proof changes.
+Evidence: benchmarks/baselines/nvidia_matched_checkpoint_pair_20261007/README.md.
+
+
+## NVIDIA-PAIRED-COST-2026-10-07
+
+Owner NVIDIA-LSE-1 / E2E-REAL-6 / AD-RESIDUAL-EVAL-1. The existing
+JIT paired attention recorder measures capture plus backward and validates
+borrowed results before frame release. Native gradient activity is respected.
+No production numerical policy, ABI or physical schedule changes.
+
+Not applicable to rocm physical lowering: NVIDIA benchmark-only cost and ownership evidence; no sibling device proof or production contract change.
+Evidence: benchmarks/baselines/nvidia_paired_attention_cost_20261007/README.md.
+
+
+## NVIDIA-CHECKPOINT-GRAPH-LINEAGE-2026-10-07
+
+Owner NVIDIA-LSE-1 / E2E-REAL-6. Saved-checkpoint packaging verifies
+retained Graph-to-Schedule ancestry before Schedule-to-Tile replay. Four-stage
+digests include the matching native Target; no Python Graph reconstruction,
+numerical algorithms, buffer roles, native ABI or schedules change.
+
+Not applicable to rocm physical lowering: this validates the NVIDIA checkpoint artifact, ancestry metadata and calibrated benchmark schema only. Existing sibling attention compiler/runtime contracts remain separate; no new owning-device evidence.
+Evidence: benchmarks/baselines/nvidia_checkpoint_graph_lineage_20261007/README.md.
+
+
+## GFX1201-PACKED-VECTOR-SCALES-2026-10-06
+
+Owner ROCM-MXFP4-W4A8-1 / ROCM-NVFP4-INGEST-1. Native packed
+materialization selects guarded vector activation-scale loads for static
+M256/N>=1024/K>=1024; runtime/short/ragged seeds retain their images.
+Numerical policy, packed decode, full-K scaling and checked ABI are unchanged.
+
+RX 9070 XT parity validated: 72 numerical/contract checks, 344 selector/registry/pass gates and 60 three-format packet arms. Reverse N1024/K1024 gains 1.75%; N4096/K5120 gains 2.0–2.4% across orders. Forward control drift prevents attributing its larger raw change. Intermediate shapes and Radiance attribution remain open.
+Evidence: benchmarks/baselines/gfx1201_packed_vector_scales_20261006/README.md.
+
+
+## NVIDIA-FORWARD-LINEAGE-2026-10-06
+
+Owner NVIDIA-LSE-1 / E2E-REAL-6. Forward descriptors export Graph,
+Schedule and Target digests after native Graph/Schedule/Tile replay.
+Not applicable to rocm physical lowering: the digest export and native
+replay gate are NVIDIA-package-specific. Existing shared attention consumer
+checks remain separate; no sibling execution proof is inferred.
+General composed/dynamic routes, explicit LSE cotangents and publication remain open.
+Evidence: benchmarks/baselines/nvidia_checkpoint_event_readback_20261006/README.md.
+
+
+## NVIDIA-EVENT-READBACK-2026-10-06
+
+Owner NVIDIA-LSE-1 / E2E-REAL-6. Native profiler readback follows the
+stop event; the recorder poisons outputs and validates every timed window.
+Not applicable to rocm physical lowering: this changes the NVIDIA
+CUDA profiler and its checkpoint packet schema. Existing owning timing
+contracts remain separate; no physical schedule or device proof is transferred.
+Explicit LSE cotangents, wider AD and publication remain open.
+Evidence: benchmarks/baselines/nvidia_checkpoint_event_readback_20261006/README.md.
+
+
+## NVIDIA-SAVED-TUPLE-SSA-2026-10-06
+
+Owner NVIDIA-LSE-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Tuple assignment/copy/destructuring preserves all SSA results; rebinding
+clears only the local binding. Native Graph/Schedule/Tile arithmetic and
+checked runtime ABI are unchanged.
+Shared frontend contract assessed for rocm; physical saved-LSE tuple
+consumers require follow-up on the owning architecture. No new device proof.
+Nested/dynamic tuples, composed attention and native LSE gradients remain open.
+Evidence: benchmarks/baselines/nvidia_ordinary_attention_20261006/README.md.
+
+
+## NVIDIA-PUBLIC-SAVED-LSE-2026-10-06
+
+Owner NVIDIA-LSE-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Public saved-LSE tuples retain f32 auxiliary types; production attention
+tracing uses catalog shapes. Native checkpoint import preserves caller Graph
+SSA roles and broadcast-bias extents.
+Physical follow-up required on rocm: shared frontend shape/tuple and
+reference AD contracts are assessed, but this SM120 packet supplies no owning
+physical saved-LSE execution evidence for this backend.
+General dynamic/composed attention, closure gates and publication remain open.
+Evidence: benchmarks/baselines/nvidia_ordinary_attention_20261006/README.md.
+
+
+
+## NVIDIA-NVFP4-NATIVE-ORIENTATION-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6. Logical transpose intent
+flows through native Graph verification, sealed Schedule identity, Tile code
+and K16 scale accessors, PTX and checked packed-buffer shape guards. No
+Python transpose/expansion in the production path; existing eight/ten-argument
+launch contracts remain unchanged. Standalone native Schedule/Tile verifiers check boolean orientation types and require the named NVFP4 contract for enabled flags before target lowering.
+Not applicable to this backend physical lowering: the new accessors and orientation profile are SM120 NVFP4-specific. Shared Schedule digests retain prior identities when orientation flags are absent; no new owning-device or transpose support claim.
+Static transposed shared-batch A is integrated on RTX 5070 under
+NVIDIA-NVFP4-SHARED-TRANSPOSE-2026-10-06 (see entry below); sibling physical
+support is not inferred. General/dynamic batching, linear-transpose AD and
+publication remain open. Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+
+
+## NVIDIA-NVFP4-VMAP-SYMBOLIC-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6. Symbolic dtype-unresolved
+Graph annotations defer byte-layout inference until concrete tracing. Vmap
+lifts scalar constraint dimension names onto mapped logical axes with a fresh
+batch symbol, preserving scalar-owner metadata and no-map API semantics.
+Shared symbolic frontend follow-up assessed; no native vmap physical consumer or new exact-device proof on this backend. Existing owning profiles remain separate.
+General/dynamic batching, transpose/AD and publication remain open. Evidence:
+benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+
+
+## NVIDIA-NVFP4-NATIVE-VMAP-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6. Shared contract: leading
+batch axes project logical Graph operand/result types and existing named
+shared/independent RHS batching intent. Native Schedule/Tile owns geometry
+and arithmetic; no Python member slicing, stacking or production launch loop.
+Physical follow-up required: native vmap packaging is SM120-only. Shared frontend intent introduces no owning physical consumer or device evidence on this backend.
+General vmap/compositions/dynamic batches, transpose/AD and publication remain
+open. Primitive closure gates remain enforced. Evidence:
+benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+
+
+## NVIDIA-NVFP4-LOGICAL-JIT-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6. Shared contract: explicit
+logical NVFP4 dimensions over checked caller-owned compact byte storage.
+Existing Graph/Schedule/Tile and runtime ABIs remain unchanged. Follow-up required for an owning physical logical-storage binding before admission on this backend. The new synchronous JIT dispatch is SM120-only; shared tracing reads explicit logical metadata without numerical conversion. No sibling execution or timing evidence transfers.
+General batching/transpose/AD and publication remain open; no physical selector
+promotion. Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+
+
+
+## COMPILER-HOST-SEPARATION-2026-10-06
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. The full non-slow unit replay
+reported 25 failures and three errors. The relocated AMD compiler lacks host
+compiler-rt builtins; complete host LLVM now handles unqualified oracle C/C++
+builds, while AMD device generation remains explicitly pinned. Two new NVFP4
+recorders are named in the benchmark inventory. All repaired lanes replayed:
+340 passed. General scaled batching and linear-transpose closure remain open;
+no gate or coverage status changed. No new owning physical evidence is claimed
+for this backend by host-oracle repairs. Evidence:
+benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+
+## COMPILER-INTEGRATION-DIAGNOSIS-2026-10-06
+
+Owner E2E-REAL-6 / W1.1 / ROCM-FP8-BLOCKSCALE-1. Full host integration
+completed with 21524 passes, 5862 skips and five failures. Three diagnosed
+fixture/tool setup failures now pass within a 72-test focused replay (seven
+skips). Generic scaled batching/transpose closure remains open; no closure
+gate was weakened. Owning ROCm host compiler fixtures validated; no new gfx1151/gfx1201 numerical or timing claim.
+Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+
+
+
+## NVFP4-NAMED-POLICY-PARITY-2026-10-06
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Shared contract: native
+Graph/Schedule validates the exact NVFP4 numeric and scale-layout fields
+already required by Python packaging. Three direct-MLIR positive-control
+reproductions exposed extra fields being dropped by native import.
+Not applicable to rocm physical policy: the stricter dictionaries apply
+only to the named SM120 NVFP4 profile. The shared all-target compiler rebuild
+passed; no new sibling device or numerical claim is inferred.
+Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+Generic batching/transpose/AD and publication remain open.
+Sync NVFP4-NAMED-POLICY-PARITY-2026-10-06.
+
+## ROCM-FP16-SOFTMAX-PARITY-2026-10-06
+
+Owner E2E-REAL-6 / ROCM-E2E-1. Restore existing FP16 softmax Graph admission
+with native Schedule/Tile and f32 accumulation. No BF16/layout/AD promotion.
+GFX1151 parity validated: 67 host/device checks and eight correct benchmark
+rows. Device-time speedup 0.991-1.029x; wall speedup 1.730-4.194x. GFX1201
+FP16 softmax physical follow-up required; no sibling proof transfer.
+Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+Sync ROCM-FP16-SOFTMAX-PARITY-2026-10-06.
+
+## COMPILER-SHARED-REPLAY-2026-10-06: owning parity and source types
+
+Owner E2E-REAL-6 / W1.1 / FRONTEND-IR-MEDIUM-1.
+Shared contract: source comparison projection keeps structured result types
+consistent with native i1 emission and the public f32 mask conversion.
+Native source/checkpoint regression replay: 75 passed, two skipped.
+Owning existing-envelope parity validated: GFX1201 217 tests and GFX1151
+169 tests passed after matching core rebuilds. Native ingest/math replay
+only; no independent-RHS NVIDIA ABI admission or new timing claim.
+Broad integration, generic scaled batching/transpose and publication remain
+open. Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+Sync COMPILER-SHARED-REPLAY-2026-10-06.
+
+## NVIDIA-NVFP4-INDEPENDENT-RHS-2026-10-06: checked native batch package
+
+Owner W1.1; related E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contracts: scaled Graph batching policy, native batch-sensitive Schedule
+digest, rank-three RHS/scales/output, batch-owned Tile row geometry, and a
+ten-argument NVIDIA package ABI. Exact compiled batch scalars are checked in
+launch and event timing. No Python production batch loop or default promotion.
+
+Sibling physical follow-up required: only SM120 admits this named batch
+profile. Shared host gates pass; no new physical batch ABI for this backend.
+
+General vmap/dynamic batches, wider storage, transpose/AD, final integration
+and publication remain open. Benchmark event/wall domains stay separate.
+Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+Sync NVIDIA-NVFP4-INDEPENDENT-RHS-2026-10-06.
+
+
+## NVIDIA-NVFP4-SHARED-RHS-BATCH-2026-10-06: native row batching
+
+Owner W1.1; related E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contract: optional scaled Graph batching policy, logical rank-three
+A/scales/output, native static row flattening, rank-preserving ABI guards,
+and reuse of the driver-produced Schedule. No Python production batch loop,
+new diagnostic, operation, pass, kernel ABI, or default selector.
+
+Sibling physical follow-up required: only SM120 logical NVFP4 admits this named rank-three policy. No new physical execution, batch ABI or performance claim for this backend. Existing owning ROCm/Apple/x86 envelopes remain independently gated.
+
+Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+Sync NVIDIA-NVFP4-SHARED-RHS-BATCH-2026-10-06.
+
+Independent-RHS native layer: explicit batch scalars, batch-owned M16 tiles
+and per-batch offsets compile and pass RTX 5070 numerical replay (12 tests).
+Tile/LLVM/PTX proof only; Graph/Schedule/package integration and benchmark
+remain pending. Sibling physical follow-up required, with no ABI/selector
+activation for this backend beyond the owning NVIDIA native test path.
+
+Typed Python-source follow-through: unsigned MLIR annotations round-trip via
+canonical dtype names. Public scaled source reaches native Schedule/Tile/PTX;
+174 source/device/dtype checks pass, with three oracle-exact RTX 5070 benchmark
+rows and separate event/wall timing. Sibling physical proof remains follow-up
+required; unsigned spelling repair changes no target dtype admission.
+
+Public keyword follow-through: scaled_matmul accepts the declared transpose
+and batching keywords; the packed-folded eager reference checks its supported
+profile explicitly. Frontend/dashboard gates pass. General native transforms
+and sibling physical execution remain open; no coverage promotion.
+
+Native verification follow-through: Graph and Schedule NVFP4 scale ceiling
+division avoids signed overflow at INT64_MAX K. Direct MLIR boundary tests
+cover maximum K, overflowing batch-row products and zero dimensions. Matching
+WSL core/NVIDIA rebuilds pass; 16 native/host checks and 297 NVIDIA device/registry
+checks pass. No physical schedule, ABI or sibling execution claim changes.
+
+## COMPILER-CONTRACT-REVALIDATION-2026-10-06: owning replay and drift repair
+
+Owner E2E-REAL-6 / W1.1 / FRONTEND-IR-MEDIUM-1.
+Shared contracts: strict native metadata, frontend signature/lifetime guards,
+packed-operation keyword classification and canonical plan/log ownership.
+No new kernel, ABI or physical schedule in this follow-through.
+
+Parity validated within the existing owning envelopes: gfx1201 ingest/storage
+50 pass; gfx1201 math/widening/movement 106 pass, two sibling skips; gfx1151
+107 pass, one sibling skip. Broader layouts/composition/AD remain open.
+
+Portable integration remains failing pending remaining source/documentation
+repairs. Zero-error mypy, full Python Ruff and focused registry gates pass.
+Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md.
+
+NVIDIA device-test placement follow-through: six hardware-marked functions
+moved to the owning device root, retaining all numerical assertions. RTX 5070
+replay and placement guards pass 62 checks; no kernel, ABI or schedule change.
+Not applicable to this backend physical execution: the relocation only organizes CUDA tests; no sibling device or performance claim.
+
+
+
+
+Shared scaled-matmul follow-through: generic logical transpose shape inference
+and MLIR free-result dimensions now agree. Native batching/AD remain open.
+SM120 normalized NVFP4 admission is repaired without changing sibling dtype
+admission or physical schedules. Matching compiler rebuild, 540 focused gates,
+34 capability gates and three oracle-exact scheduled NVFP4 benchmark rows pass.
+Sibling physical follow-up required: shared semantic checks have WSL proof, but this change adds no new exact-device execution evidence for this backend.
+
+## NATIVE-CONTRACT-TYPE-GATES-2026-10-06: checked native metadata
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / W1.1.
+No new operation, dtype, pass, diagnostic code or image ABI. Missing packed
+metadata fields produce a contract ValueError; admitted Graph contracts and
+attention sequence metadata are checked before projection.
+
+Follow-up required: rerun ingest/storage package validation on gfx1201 and
+paged-KV/MoE compiler gates on their owning chips. These shared host tests
+do not establish ROCm physical parity.
+
+Validation: WSL focused suite 49 passed, 25 owning skips; module lint passes.
+Mypy now passes all 625 source files at zero errors with baseline zero;
+full Python Ruff passes. Follow-through frontend/portable/attention/movement/
+MXFP8/dynamic projection tests: 125 passed in WSL. Publication and broader
+integration gates remain open.
+
+
+
+## ROCM-MATH-NATIVE-STAGING-2026-10-06: checked capacity reuse
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. A native synchronous service
+launches the existing compiler-owned unary/binary/scan images. It shares the
+movement runtime's capacity arena and image leases; no kernels or numerical
+algorithms are added. Original descriptors still check typed aliases, shapes,
+roles and policy. Native validation checks source widths, exact byte products,
+output/input overlap, alignment, dimensions, grid capacity, live chip,
+device/context and PID before use. Every invocation uploads all inputs.
+A failed completion retains a quarantined arena and lease until explicit
+successful clear. Successful completion makes a pre-launch global sync
+redundant. Retention is capped at 128 MiB per device/context arena; clear
+before context teardown remains required. Older libraries retain the existing
+launcher. TESSERA_ROCM_NATIVE_MATH=0 selects its baseline, and
+TESSERA_ROCM_MATH_STAGING_REUSE=0 controls native allocation reuse alone.
+
+Parity validated independently: 99 numerical/staging tests per ROCm GPU, plus nine ownership tests per GPU after removing redundant presync. Native fault/lifetime harness passes; shared runtime/ABI/diagnostic/pass gates 356 pass, 12 owning-device skips; op/dtype/movement binding gates 36 pass. Matched three-arm packets have 18 cases per chip with all input contents updated and allocation counters checked. All 18 images match the prior resident-event packet. Small-shape warm host walls improve; large transfers remain dominant. General resident composed Graph edges remain open.
+
+Evidence: benchmarks/baselines/rocm_native_math_20261006/README.md.
+
+
+
+## ROCM-MATH-LAUNCH-ATTRIBUTION-2026-10-06: measured host costs
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. A checked portable-package
+recorder attributes warm HIP calls separately from uninstrumented host walls.
+All inputs change at the same addresses on every call; output is compared
+with an independent promoted-f32 oracle before and after timing. Three input
+storages, unary/binary/scan and two shapes give 18 cases per owning GPU.
+Image acquisition/release and allocation/copy/launch call counts are checked.
+Wrapper timings include instrumentation overhead and are diagnostic only.
+
+Parity validated independently on gfx1151 and gfx1201: 18 numerical and call-count cases each. Small-shape allocation/free medians are about 0.083/0.099 ms per call; large-shape copies are about 2.553/2.694 ms. Next: checked native allocation reuse, then compiler-owned resident producer/consumer edges to avoid repeated large transfers. Neither optimization is implemented or promoted by this attribution packet.
+
+Evidence: benchmarks/baselines/rocm_native_math_20261006/README.md.
+
+
+
+## ROCM-MATH-WIDENING-2026-10-06: exact widening and math recorder migration
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / EVIDENCE-PACKET-1.
+Explicit original Graph casts widen same-storage f16/bf16 entry tensors to
+f32 before sqrt/exp/add/div/cumsum/cummax. Replay-sealed native Schedule
+preserves those casts; native Tile folds exact widening into input loads
+without an intermediate tensor allocation. Graph math type-preservation
+verifiers are unchanged. Narrow Tile storage requires the ROCm ownership
+contract; sibling Tile consumers retain f32 admission. Native Target
+output_dtype is optional for legacy same-storage directives and explicit f32
+for these checked math products. Six added image ABIs distinguish narrow
+input storage from f32 output. Typed descriptors retain byte widths, aliases,
+shape guards and roles; native image identity retains both storage types.
+The tracer binds positional cast dtype as a static attribute. Capabilities,
+manifest fixtures, execution metadata and pass summaries assess this envelope.
+
+Parity validated independently on gfx1151 and gfx1201: matching builds
+and 212 checks per host, including 24 narrow IEEE cases and numerical
+ordinary-JIT/portable changed-input, reversed-role and image-reuse cases.
+Each architecture has a 72-row independent-oracle packet covering three
+input storages, three shapes and reversed binary roles. Device kernel,
+warm JIT and portable host times are separate; no speedup/promotion claim.
+
+EVIDENCE-PACKET-1 math consumer closure: gfx1151 physical recorder reloads
+21 serialized native Graph/Schedule/Tile/Target packages and validates output
+before timing. Zero metadata probes remain in this recorder; the legacy
+metadata constructor is removed. All packaged f32 rows are excluded from
+the legacy cache comparison. Owning recorder tests: 36 pass, seven x86 skips.
+Broader composition, broadcasting, standalone narrow-output math, dynamic
+layouts, AD, host launch overhead and quantized performance remain open.
+
+Evidence: benchmarks/baselines/rocm_native_math_20261006/README.md.
+
+
+
+## ROCM-MATH-NATIVE-PACKAGE-2026-10-06: ordinary JIT and portable native math
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Original isolated static f32
+Graph -> verified native Schedule/Tile -> ROCm Target -> ROCDL/LLVM -> HSACO
+now reaches ordinary @jit and portable checked packages. Python binds the
+frontend/native contract; it does not construct physical kernels. Three
+explicit f32 image ABIs cover unary, binary and inclusive last-axis scans.
+Native identity removes validated static shape/SSA metadata while preserving
+physical kind, storage, architecture and pipeline identity. Descriptor roles
+preserve noncommutative reversed operands; each invocation checks exact
+dimensions, complete aliases, compact storage and independent output.
+Capabilities, numerical fixtures and a math-specific execution row are updated.
+
+Parity validated independently on gfx1151 and gfx1201: 48 package/JIT
+checks per owning host, including changed inputs, reordered kwargs, portable
+replay, matrix adapter execution and six image-reuse checks across shapes.
+Separate 24-row packets record independent numerical oracles, live device,
+compiler/source/stage/image hashes, resident HIP events, warm JIT walls and
+portable launch walls. These characterize timing; no matched speedup claimed.
+18 physical-math metadata rows still require recorder retirement and f16/bf16
+input-to-f32-output contracts. General composition/dynamic/layout/AD remain open.
+
+Evidence: benchmarks/baselines/rocm_native_math_20261006/README.md.
+
+
+
+## ROCM-MATH-NATIVE-SCHEDULE-2026-10-06: native math consumers — bounded proof
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Original Graph sqrt/exp/add/div/
+cumsum/cummax -> replay-sealed native Schedule -> typed Tile -> ROCm
+Target generators. SSA roles, policy, shape and architecture are checked.
+No new operation/dtype/pass/image ABI; existing pass metadata updated.
+
+Parity validated independently on gfx1151 and gfx1201: matching builds,
+65 checks per host (53 compiler/Target + 12 IEEE device checks), and
+24-row numerical/event/allocating-wall packets per architecture.
+Shared host gates: 358 pass, 17 ROCm Target skips.
+The 18 physical-math metadata rows remain pending portable/JIT
+package integration and f16/bf16-to-f32 storage contracts. Broader
+composition/layout/dynamic/AD and performance programs remain open.
+
+Evidence: benchmarks/baselines/rocm_native_math_20261006/README.md.
+
+
+## ROCM-NVFP4-STATIC-PROGRAM-2026-10-06: checked warm contract retention
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared runtime change: retain at most 24 fully validated compiled NVFP4 program
+contracts, keyed by detached exact typed metadata plus parent Graph/arguments.
+List/tuple, bool/int and signed-zero distinctions are preserved; changed
+contracts revalidate. Parsing uses the same detached snapshot as the key,
+preventing caller mutation from changing an admitted product. Process guard
+precedes the cache lock. No new op/dtype/target/pass/diagnostic/image ABI;
+native input validation, all five uploads and native lifetime checks remain.
+
+Parity validated on gfx1201: 47 ownership/JIT/portable/cache checks
+on the owning host, including 37 hardware cases plus metadata and native
+fault-injection cases. Warm JIT/portable calls forbid reparsing; invalid changed
+role types are rejected before HIP. Shared diagnostic/pass/ABI/frontend gates:
+332 pass. Two fresh-process eleven-sample A/B packets retain identical images,
+native allocation reuse and alternating five-input values in both arms.
+Ordinary JIT retained/reconstructed wall ratios are approximately 0.51–0.61
+(first packet), reproduced in the fresh process. Only static parsing retention
+differs; no kernel schedule or numerical policy change is claimed.
+General composed/dynamic/layout/AD routes and remaining math metadata probes,
+W8A8/MXFP4 performance programs and broader cache closure remain open.
+
+Evidence: benchmarks/baselines/rocm_nvfp4_allocation_reuse_20261006/README.md.
+
+
+## ROCM-NVFP4-ALLOCATION-REUSE-2026-10-06: native checked idle ownership
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contracts: additive native full-input update, checked prepare/release and
+cache-clear C ABI; ordinary JIT/portable receipts include native allocation
+cache hit metadata. Kernel image ABIs, numerical policy, Graph/Schedule/Tile
+recipes, operations, dtypes, targets and passes are unchanged. The runtime ABI
+audit generator records the additive exports.
+
+Parity validated on RX9070XT/gfx1201: matching runtime build; 35 native
+ownership/JIT/portable checks, including three full-input mutation/reordered
+frontend cases, changed-value snapshotting, concurrent leases, stale-token
+refusal, graph-owner retirement and byte/entry bounds. C++ fault injection
+covers context mismatch, failed copy/completion/cleanup and ownership retry.
+Host ABI/frontend gates: 37 passed, 22 owning-device skips.
+
+Ordinary JIT/portable execution uses native reuse. Complete images, entries,
+dimensions, geometry and live HIP context/device determine identity. Checkout
+gets a fresh token and uploads all five inputs; pointer equality never implies
+unchanged weights. Four idle owners and 64 MiB of accounted device/staging/
+image/readback bytes bound retention. Graph-owning or poisoned sessions use
+normal cleanup. Explicit uncached sessions remain the matched control.
+
+Three-shape eleven-sample A/B packet: ordinary public warm JIT cached/control
+wall ratios 0.546, 0.577, 0.552; explicit native allocating walls 0.268,
+0.383, 0.255. The same images and alternating values at the same addresses
+pass independent numerical oracles after every timed call. HIP event windows
+are recorded separately and remain diagnostic; no kernel speedup is claimed.
+General packing/layout/dynamic/AD and other ROCm performance programs remain
+open. gfx1151 requires its own route and physical proof.
+
+Evidence: benchmarks/baselines/rocm_nvfp4_allocation_reuse_20261006/README.md.
+
+
+## NVIDIA-RECOMPUTE-GRAPH-2026-10-06: native recompute backward construction
+
+Owner NVIDIA-LSE-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6. Shared contract:
+original recompute backward Graph -> replay-sealed native Schedule -> native
+Tile launch, with SSA role bindings, f16/bf16/f32 storage and complete supported
+window/softcap/dropout policy. Canonical packaging no longer calls the Python
+Tile constructor. The legacy emitter remains an explicit diagnostic/control.
+No new operation, dtype, pass or ABI; existing pass metadata is updated.
+Benchmark metadata adds a separate recompute timing domain; NVIDIA seeded
+dropout lowering avoids signed overflow under the existing modulo-32 policy.
+
+Follow-up required for rocm: assess shared Graph/Schedule admission and
+serialization in the owning architecture lane. The new recipe is explicitly
+SM120 scoped; no rocm physical schedule, image, execution or timing parity
+is inferred from RTX5070 evidence. Existing backend obligations remain open.
+
+Evidence: benchmarks/baselines/nvidia_ordinary_attention_20261006/README.md.
+
+
+## NVIDIA-SAVED-GRAPH-2026-10-06: original checkpoint Graph admission — bounded proof
+
+Owner NVIDIA-LSE-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6. Shared contract:
+saved-LSE forward and backward Graphs retain authored SSA operands and policy
+through native Graph-to-Schedule import; Python only copies frontend metadata
+and decodes the native physical contract. The caller-owned Graph is not mutated.
+The Graph dialect now declares optional forward row LSE and the existing
+backward Graph spelling; native verification checks checkpoint shape relations.
+This changes dialect/serialization surfaces and requires focused registry,
+dialect and generated-dashboard gates before publishing.
+
+Metadata/diagnostics/dialect gates pass (330 checks). Follow-up required for rocm: assess shared Graph serialization and
+dialect compatibility with owning tests. No rocm physical lowering,
+execution or timing parity is supplied by the NVIDIA import. Optional row-LSE
+consumers require target-specific admission; no schedule transfers.
+
+
+
+Policy compatibility follow-through: 164 host Graph/checkpoint/registry checks
+(one environment skip),
+57 verifier/dialect checks and 22 route/benchmark/generated-coverage regressions
+pass. Qualified NVFP4/storage verifier definitions are now counted by the
+coverage scanner. Backward ODS verification preserves recompute admission;
+neutral numerical attributes retain their meaning.
+No rocm physical parity follows from the 27 RTX5070 cases. Owning
+Graph/ODS admission and dtype proof need architecture-specific follow-up.
+
+## NVIDIA-ORDINARY-ATTENTION-2026-10-06: ordinary primal frontend execution
+
+Owner E2E-REAL-6 / NVIDIA-LSE-1 / FRONTEND-IR-MEDIUM-1. Shared contracts:
+retained Graph SSA operand-role projection, native distinct-argument admission
+and ordinary checked-descriptor JIT dispatch. No new operation, dtype, ABI,
+target, pass or stable diagnostic. Existing saved-LSE/JVP/VJP contracts remain.
+
+Shared host attention/backward projection gates pass within 53 checks
+(18 environment skips); ordered backward wrappers retain their ABI. No rocm
+physical schedule or image changes. Architecture-specific argument-role and
+ordinary native execution parity require owning exact-device follow-up;
+RTX5070 timing and physical execution do not establish rocm parity.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_ordinary_attention_20261006/README.md).
+
+
+## NVIDIA-W11-CENSUS-2026-10-06: current positive producer reconciliation
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1. No shared operation, dtype, ABI, target,
+pass or physical schedule changes.
+
+Not applicable to rocm physical proof: this census and twelve current
+benchmark rows validate SM120 producer recovery and CUDA packages. No schedule
+or timing transfers; architecture-owned tensor consumers require separate proof.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_w11_census_20261006/README.md).
+
+
+## ROCM-NVFP4-ARTIFACT-CACHE-2026-10-06: ordinary warm manifest retention
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: bounded 24-entry compiler-product retention keyed by verified
+Graph specialization; common-runtime manifest and native ABI validation remain.
+Inspection artifacts and per-call input values are independent. No new ABI,
+operation, dtype, target or pass.
+
+Exact gfx1201: 58 regressions pass; 10 frontend device checks include inspection
+mutation and changed-value isolation. Six matched cases retain identical images
+and pass independent numerics after every call. Allocating wall ratios 0.727-0.777
+against reconstructed-manifest control do not establish GPU algorithm gains.
+Native preparation/cleanup, generalized packing/layout/AD and full closure remain open.
+
+[Evidence](../../../../benchmarks/baselines/rocm_packed_image_identity_20261006/README.md).
+
+
+## ROCM-NVFP4-NATIVE-GRAPH-JIT-2026-10-06: native ordinary execution and graph replay
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contracts: sixth native graph C ABI export; ordinary traced JIT and
+common-runtime portable replay now bind the native C++ NVFP4 owner. Runtime
+library discovery tolerates an absent compiler; portable deployment supplies
+the matching native runtime independently. Existing compiler-owned Graph,
+Schedule, Tile, Target and HSACO images retain their numerical semantics.
+
+Exact RX 9070 XT/gfx1201 validation: 58 compiler/device/frontend/resident
+and controlled-HIP lifetime regressions pass, including compiler-free fresh
+process replay with the legacy Python owner forbidden. Earlier focused graph
+checks: 13 passed. Native graph caching is bounded to eight stage/repetition
+keys; combined capture has three nodes per repetition. Ordinary single graph
+replay submits once. Capture, completion and destruction failures retain
+ownership for safe close retry. Shared ABI/audit gates: 32 passed, one skip.
+
+Six matched JIT/portable benchmark cases pass independent numerics before and
+after timing. Warm allocating JIT walls span 15.34-22.03 ms; separate device
+graph windows are retained. No speedup claim follows from these absolute walls.
+
+Follow-up required: matched ownership A/B attribution, warm-call retuning,
+general dynamic semantic Graph and native packing, additional layouts,
+broader AD consumers and full five-slice closure. The explicit Python session
+remains a control. No default performance promotion is established.
+
+[Evidence](../../../../benchmarks/baselines/rocm_packed_image_identity_20261006/README.md).
+
+
+
+## ROCM-NVFP4-NATIVE-OWNER-2026-10-06: native resident lifecycle
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contracts: five registered C ABI exports prepare/update/invoke/read/close;
+an explicit native_session adapter consumes existing compiler-owned stages.
+No kernel, physical schedule, dtype, operation, target or pass is introduced.
+
+Parity validated on RX 9070 XT/gfx1201: 47 native/device/frontend/resident
+and controlled-HIP failure regressions pass. Native C++ owns one private stream,
+11 distinct allocations, three image leases, flattened argument binding,
+snapshots, readiness/generation, repeated submission, timing events and close.
+Readback completes through native staging before exposing borrowed host output.
+Failed completion/event/free retains ownership; failed partial close blocks
+invocation and permits cleanup retry. Context/fork and stale generation refuse.
+
+Three matched exact-device cases preserve identical compiler images and
+independent conversion/storage/output oracles. Seven alternating checked-wall
+trials characterize allocating call ratios 0.507-0.566 against Python ownership.
+Warm combined and weight-reuse results are mixed; no default/GPU promotion.
+Native ABI audit gates: 21 pass, one environment skip.
+
+Follow-up required: ordinary session/runtime admission, native graph replay,
+warm-call attribution/retuning, generalized dynamic packing and full five-slice
+closure. The Python owner remains the explicitly measured control.
+FP8/MXFP8/MXFP4 gates remain independent.
+
+[Evidence](../../../../benchmarks/baselines/rocm_packed_image_identity_20261006/README.md).
+
+
+
+## ROCM-PACKED-IMAGE-IDENTITY-2026-10-06: packed-consumer image reuse
+
+Owner ROCM-NVFP4-INGEST-1 / ROCM-MXFP4-W4A8-1.
+Shared contracts: optional packed runtime-M/N image projection, fixed-K
+whole/partial tile-class admission and separate authored/image Target digests.
+Per-shape Graph/Schedule/Tile certificates and checked ABI guards remain static.
+No new operation, dtype, pass, diagnostic or ABI identifier.
+
+Parity validated on RX 9070 XT/gfx1201 with matching LLVM/MLIR 23.1.1:
+52 compiler/device/frontend/resident regressions pass. Two distinct static shape pairs
+share image bytes and entry symbols while retaining different shape guards.
+Six matched static/projected benchmark cases pass independent BF16 oracles
+before and after alternating timing windows. Device and allocating host
+timings are reported separately; no performance/default promotion follows.
+
+Projected consumer lineage now integrates into the three-stage resident and
+portable v1 program without requiring a compiler at replay. Complete retained
+Target attributes and module pipeline metadata are checked against the authored
+static carrier. Authored-contract mutations with recomputed hashes are rejected.
+Static-image compatibility remains tested. Three exact-device benchmark shapes
+execute ordinary JIT and native ingest/storage/consumer with per-stage event,
+graph and checked wall timings.
+
+Follow-up required: general dynamic semantic Graph, native dynamic packing,
+additional layout envelopes, native runtime ownership below Python and full
+five-slice closure. Independent FP8/MXFP8/MXFP4 quality/performance gates remain
+mandatory.
+
+[Evidence](../../../../benchmarks/baselines/rocm_packed_image_identity_20261006/README.md).
+
+
+
+## NVIDIA-DYNAMIC-ROW-RHS-2026-10-06: bounded physical RHS integration
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1. Shared contracts: explicit bounded
+rhs_storage_order, conflict-preserving Graph projection, two row-major
+strided ABI identifiers, native symbol/storage matching and resident
+shape/pitch validation. No new dtype/op/target/pass/stable diagnostic
+or C ABI export. The bounded default remains column-major.
+
+Shared target-scoped frontend/storage/ABI contracts assessed by WSL
+host gates. SM120 typed gather images and CUDA resident pitch/ownership
+are not applicable to rocm physical proof. Architecture-owned native
+layout consumers and exact-device parity remain follow-up required.
+No NVIDIA physical schedule or timing is transferred.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_dynamic_row_lhs_20261006/README.md).
+
+
+
+## NVIDIA-BOUNDED-LHS-JIT-2026-10-06: ordinary bounded tensor reuse
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1. Shared contracts: public immutable
+shape_bounds, source/live-code certification, original Graph verification
+before capacity projection, bounded role specialization and context-owned
+24-entry lifecycle. No new dtype/op/target/pass/stable diagnostic or C ABI.
+
+Shared frontend/lifecycle contracts assessed by WSL host gates.
+SM120 images and CUDA ownership are not applicable to rocm physical
+execution. Architecture-owned bounded native consumers and exact-device
+parity remain follow-up required; no NVIDIA schedule or timing is transferred.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_bounded_lhs_jit_20261006/README.md).
+
+
+
+## NVIDIA-BIAS-JVP-2026-10-06: native bias tangent integration
+
+Owner AD-RESIDUAL-EVAL-1; siblings E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared internal checkpoint JVP, native AD export, Schedule sealing,
+saved-generation identity, portable validation and one declared C ABI export
+carry full/broadcast score bias and explicit dbias.
+Shared Graph/AD/portable/ABI contracts assessed. Existing rocm routes
+are retained. SM120 images, arena/context ownership and physical scheduling
+are not applicable rocm device proof. Backend-owned bias-JVP consumers
+and exact-device parity remain follow-up required.
+General composed/dynamic/layout/async/higher AD and wider dtypes remain open.
+[Evidence](../../../../benchmarks/baselines/nvidia_bias_jvp_20261006/README.md).
+
+
+## NVIDIA-PREPARED-ATTENTION-VJP-2026-10-06: native reverse runtime ownership
+
+Owner AD-RESIDUAL-EVAL-1; siblings E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contracts: four registered C ABI exports, immutable reverse pin import,
+bounded thread/process registrations, native requested-gradient binding and
+saved-generation completion. No new operation/dtype/pass/diagnostic.
+Shared ABI/registry changes assessed; existing rocm consumers are retained. NVIDIA CUDA image/arena/context ownership is not applicable rocm physical proof. Backend-owned prepared reverse consumers and exact-device parity remain follow-up required.
+General composed/dynamic/layout/resident/async/higher AD remains open.
+[Evidence](../../../../benchmarks/baselines/nvidia_prepared_attention_vjp_20261006/README.md).
+
+
+
+## NVIDIA-PUBLIC-ATTENTION-VJP-2026-10-06: public native reverse integration
+
+Owner AD-RESIDUAL-EVAL-1; siblings E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared contracts: target-scoped Graph/Schedule family declarations, optional
+persisted reverse runtime product, pinned checkpoint identity and checked ABI.
+Shared target-scoped family/result/runtime-product contracts assessed. rocm existing consumers are retained; SM120 saved-LSE images and device measurements are not applicable rocm physical proof. Backend-owned generic reverse integration and exact-device parity remain follow-up required.
+No new operation, dtype, pass, diagnostic or C ABI is introduced.
+[Evidence](../../../../benchmarks/baselines/nvidia_public_attention_vjp_20261006/README.md).
+
+
+
+## ROCM-PAGED-SOFTMAX-EDGE-2026-10-06: native intermediate consumer
+
+Owner E2E-REAL-6; sibling FRONTEND-IR-MEDIUM-1. Shared contracts changed:
+public canonical f32 softmax descriptor dispatch, explicit per-op dtype
+admission, static paired package binding, two registered C ABI exports and
+generation/completion lifetime. 512 WSL tests pass, 13 environment skips.
+Parity validated on gfx1151 and gfx1201: six rank-1/2/3 public softmax rows,
+six paged-read → softmax edges and eight movement regressions. Native C++
+retains both images and the intermediate through one completion. Maximum
+float64 oracle error is below 4e-8. Common resident + download wall ratios
+0.2834–0.3698 exclude repeat upload. Generic composed/dynamic/layout/async
+edges, softmax AD and remaining metadata consumers require follow-up.
+[Evidence](../../../../benchmarks/baselines/rocm_paged_softmax_edge_20261006/README.md).
+
+
+## ROCM-RESIDENT-MOVEMENT-OWNER-2026-10-06: native movement lifecycle
+
+Owner E2E-REAL-6; sibling FRONTEND-IR-MEDIUM-1. Shared contracts: sealed package
+matching, public preparation, common launch binding, five registered C ABI
+exports and generation/completion ownership. Focused WSL gates: 394 pass,
+13 hardware/environment skips.
+Parity validated for five gfx1151 and three gfx1201 static paged-read/token-gather
+cases through public JIT preparation and common runtime. Native C++ retains
+storage, image and launch binding; compiler-owned images are unchanged. Warm
+common resident + download wall ratios are 0.4423–0.7905 versus host-input JIT,
+excluding repeated upload. General resident edges/layouts, async streams,
+movement AD and full five-slice closure require follow-up.
+[Evidence](../../../../benchmarks/baselines/rocm_resident_owner_20261006/README.md).
+
+
+## ROCM-CAPTURED-MOVEMENT-2026-10-06: resident dispatch attribution
+
+Owner E2E-REAL-6; sibling FRONTEND-IR-MEDIUM-1. Native Graph/Schedule/Tile/Target/LLVM images and checked descriptor symbols drive resident HIP graph replay; adjacent compiler lineage is verified. The benchmark stream helper retains default behavior.
+
+Parity validated: five gfx1151 and three gfx1201 cases prove native JIT lineage, bitwise nonfinite movement, resident input/index rebind and 256-node capture. Nine alternating event trials per case separate device windows from host wall time. Small-case capture gains differ by architecture; full reads are unchanged within 1%.
+
+Shared WSL gates: 30 pass, 13 hardware/environment skips. Benchmark capture is not ordinary runtime admission. Native resident ownership, general layouts, asynchronous movement, AD and full five-slice closure remain follow-up required.
+[Evidence](../../../../benchmarks/baselines/rocm_captured_movement_20261006/README.md).
+
+## NVIDIA-FORWARD-ATTENTION-JVP-2026-10-06: forward-only native product
+
+Owner AD-RESIDUAL-EVAL-1; siblings FRONTEND-IR-MEDIUM-1 / W1.1. Public JVP packages a native forward checkpoint plus tangent, omitting reverse executable compilation/serialization. Pinned v2 carries no backward image; historical v1 and VJP paired products remain valid. Native Graph/AD/Schedule/Tile/NVVM/LLVM owns the images. Resident forward frames gate reverse calls before buffer access.
+
+Shared host product/schema/lifetime contracts are validated in WSL. CUDA forward checkpoint images and ownership are not applicable to rocm physical execution. Architecture-owned native tangent consumers and exact-device proof remain follow-up required.
+
+532 host tests pass. Generic VJP dispatch, composed/dynamic/higher AD, reverse intermediate construction and full five-slice closure remain open.
+[Evidence](../../../../benchmarks/baselines/nvidia_forward_attention_jvp_20261006/README.md).
+
+## NVIDIA-PREPARED-ATTENTION-JVP-2026-10-06: native runtime ownership
+
+Owner AD-RESIDUAL-EVAL-1; siblings FRONTEND-IR-MEDIUM-1 / W1.1. Four private native C ABI exports retain CUDA modules, compiler sizing, aligned storage, role binding and timing events below the Python frontend. Graph/paired AD/Schedule/Tile/NVVM/LLVM images remain authoritative.
+
+Shared host contract/ABI gates validated on WSL. CUDA owner, module lifecycle and physical schedule are not applicable to rocm; no new owning-device parity is claimed. Architecture-owned native tangent consumers remain follow-up required.
+
+443 focused host tests pass. Unused reverse compilation, generic VJP/composed/dynamic/higher AD and full five-slice closure remain follow-up required.
+[Evidence](../../../../benchmarks/baselines/nvidia_prepared_attention_jvp_20261006/README.md).
+
+## NVIDIA-PUBLIC-ATTENTION-JVP-2026-10-06: canonical family/runtime route
+
+Owner AD-RESIDUAL-EVAL-1; siblings FRONTEND-IR-MEDIUM-1 / W1.1; synchronization key NVIDIA-PUBLIC-ATTENTION-JVP-2026-10-06.
+Public native_jvp consumes the actual specialized tracer Graph and native paired AD through the canonical family registry. The content-addressed parent carries the pinned native saved-LSE program; its registered runtime consumer owns uploads/capture/download lifetime. No Python GPU body or derivative recipe is added. Shared cache identity now includes captured literal environments, fixing causal/noncausal closure collisions; the frontend differential gate remains mandatory. Target declarations name implemented consumers rather than requiring fictional sibling routes.
+
+Shared cache/registry/runtime guard contracts are parity validated by 444 WSL host tests. CUDA image execution is not applicable to rocm; architecture-owned attention tangent consumers and exact-device proof remain follow-up required. No NVIDIA physical schedule or timing is transferred.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_public_attention_jvp_20261006/README.md). Full five-slice closure remains open.
+
+
+## NVIDIA-JVP-PORTABLE-2026-10-06: pinned native product replay
+
+Owner AD-RESIDUAL-EVAL-1; siblings FRONTEND-IR-MEDIUM-1 / W1.1; synchronization key NVIDIA-JVP-PORTABLE-2026-10-06.
+Canonical program JSON pins the native checkpoint pair, tangent image/sizer, role mapping, frontend parameter names and manifests. Capture binds positional and keyword inputs to the recorded frontend signature, then projects native Q/K/V roles. Mapping/activity/generation and pointer/scalar/shape/grid contracts are validated before CUDA allocation. No Graph reconstruction, GPU body constructor, new op/dtype/target/pass/stable diagnostic or physical ABI is introduced.
+
+Shared contract parity validated by 77 host tests in the matching gfx1201 compiler checkout. The portable product carries SM120 images; physical replay is not applicable to HIP. ROCm tangent packaging/runtime integration and exact-device proof remain follow-up required; no schedule or timing transfer.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_jvp_portable_20261006/README.md). Full five-slice closure remains open.
+
+## NVIDIA-JVP-ARGUMENT-ORDER-2026-10-06: native frontend permutation integration
+
+Owner AD-RESIDUAL-EVAL-1; siblings FRONTEND-IR-MEDIUM-1 / W1.1; synchronization key NVIDIA-JVP-ARGUMENT-ORDER-2026-10-06.
+Native forward AD verifies distinct direct Q/K/V argument permutations and retains the paired O/LSE product and sealed activity/role contract. Automatic capture and requested tangent submission follow independently verified native frontend roles; native JVP activity must agree. Repeated/aliased roles remain outside this envelope. No new GPU body, op/dtype/target/pass/stable diagnostic or physical ABI is introduced.
+
+Shared native compiler parity validated on matching gfx1201 build: 91 contract tests and 18 owning norm/epilogue regressions pass. Physical JVP Schedule remains explicitly SM120; HIP tangent execution is not applicable to this change and architecture-owned integration remains follow-up required. No NVIDIA schedule or timing transfer.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_jvp_argument_order_20261006/README.md). Full five-slice closure remains open.
+
+## NVIDIA-COMPACT-GRADIENTS-2026-10-06: native requested-output ABI
+
+Owner AD-RESIDUAL-EVAL-1; siblings FRONTEND-IR-MEDIUM-1 / W1.1 / E2E-REAL-6; synchronization key NVIDIA-COMPACT-GRADIENTS-2026-10-06.
+Native paired AD retains the complete logical Graph result product and seals requested physical output roles, launch layout and 64/128-thread geometry into Schedule/Tile. Target lowering removes inactive stores; the checked compact ABI allocates only requested gradients. Host/resident C++ submission validates the projected roles and symbol. No Python GPU body, new op/dtype/target/pass or stable diagnostic is introduced.
+
+Shared compiler parity validated with a matching gfx1201 build and 121 native contract tests; 18 existing RX 9070 XT norm/epilogue device regressions also pass. Compact physical attention-gradient execution is SM120-specific and not applicable to the current HIP ABI. General HIP requested-output consumers and exact-device numerical/performance proof remain follow-up required. No NVIDIA schedule or timing is transferred to gfx1151/gfx1201.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_compact_gradients_20261005/README.md). The full five-slice compiler objective remains open.
+
+## ROCM-PREPARED-MOVEMENT-2026-10-05: prepared native call binding
+
+Owner E2E-REAL-6; sibling FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization key ROCM-PREPARED-MOVEMENT-2026-10-05.
+The canonical Graph/Schedule/Tile/Target/native image and checked ABI precede native preparation. C++ owns copied image/static ABI and validates host storage metadata, index bounds and context on invocation. Warm typed JIT calls compare a sealed Graph snapshot without serializing Graph IR. Close during invocation preserves image/ABI lifetime; explicit close/rebind and stale-handle/fork/context refusal are proved. Execution receipts are cleared at call entry and emitted after native completion. Three host C ABI exports are regenerated; no new op/dtype/target/pass/diagnostic or Python GPU body.
+
+Reference MoE AD is reconciled with gather semantics: gather tangents, repeated-slot scatter-add cotangents and preserved opaque DispatchPlan tape slots. Independent finite differences, adjoint laws and public eager AD prove those reference contracts; compiled movement AD remains follow-up required.
+
+Parity validated on AMD Radeon 8060S/gfx1151 (paged reads and local MoE) and RX 9070 XT/gfx1201 (paged reads). All ten prepared ordinary-JIT rows are bit-exact, retain identical compiler images and pass the retained-route 10% host non-regression gate. Balanced A/B records ordinary binding, prepared binding, descriptor and retained call windows separately, with zero warm native allocations. The preceding named public-call overhead gap is closed for these envelopes. General layouts, asynchronous/resident movement, native AD, kernel-only timing and distributed transport retirement remain follow-up required.
+
+[Prepared call evidence](../../../../benchmarks/baselines/rocm_prepared_movement_20261005/README.md).
+
+
+## ROCM-PUBLIC-MOVEMENT-2026-10-05: public tensor movement
+
+Owner E2E-REAL-6; sibling FRONTEND-IR-MEDIUM-1; synchronization key ROCM-PUBLIC-MOVEMENT-2026-10-05.
+Public physical-page reads and explicit token-of-slot MoE now have concrete eager and catalog shape contracts. Tracing retains static cache bounds and i32 indices without running the movement reference. Native Schedule accepts both distinct entry arguments in either order; semantic operand/binding roles remain sealed. The ordinary static ROCm JIT uses canonical compiler packages and checked descriptor scalars/outputs, with one runtime artifact per compiled specialization. Cache handles retain their two-result interface. No new op/dtype/target/pass/diagnostic or Python GPU body.
+
+Parity validated through ordinary JIT on gfx1151 (paged KV and local token-gather MoE) and gfx1201 (paged KV), including two shapes, repeated/reordered indices/arguments and nonfinite bit patterns. Native Graph/Schedule/Tile/Target/backend digests are adjacent. MoE JIT beats retained calls by 2.51–2.89x in the measured envelopes. Follow-up required for gfx1151 paged public-call overhead: roughly 10–13% slower than retained, with three rows outside the 10% gate; gfx1201 is roughly 6–10.5% slower, with one row narrowly outside the gate. Prebound descriptor performance remains a separate certificate. General layouts, asynchronous/resident APIs, kernel-only timing and transport retirement remain open.
+
+[Public JIT evidence](../../../../benchmarks/baselines/rocm_public_movement_20261005/README.md).
+
+
+## ROCM-MOVEMENT-SPINE-2026-10-05: canonical native movement
+
+Owner E2E-REAL-6; sibling FRONTEND-IR-MEDIUM-1; synchronization key ROCM-MOVEMENT-SPINE-2026-10-05.
+The main compiler now retains the native movement Schedule artifact and binds packaging to the exact typed caller Graph/target. Adjacent Graph/Schedule/Tile/Target/backend digests and native producer metadata replace the previous bundle gap. Canonical primary/component gate names use the existing op catalog's dotted-cache normalization. Exact movement capabilities, manifest/numerical fixtures and checked descriptor execution rows agree; gfx1151 is no longer wholly unimplemented. Default gfx1201 static paged-read admission respects explicit opt-out. No new op/dtype/target/pass/diagnostic or Python GPU body.
+
+Parity validated through the canonical compiler and checked runtime on gfx1151 (paged KV and explicit token-gather MoE) and gfx1201 (paged KV). Nine balanced retained-route comparisons are bit-exact and satisfy the existing 10% host non-regression gate; source/tool/library hashes and adjacent native artifact chains are retained. Resident event ratios remain diagnostic because submission loops differ. General layouts, public Python tensor shape/eager contracts, asynchronous/resident APIs and retained transport retirement remain follow-up required.
+
+[Canonical movement evidence](../../../../benchmarks/baselines/rocm_movement_admission_20261005/README.md).
+
+
+## ROCM-NATIVE-MOVEMENT-2026-10-05: native host staging
+
+Owner E2E-REAL-6; sibling FRONTEND-IR-MEDIUM-1; synchronization key ROCM-NATIVE-MOVEMENT-2026-10-05.
+The checked Graph/Schedule/Tile/Target/LLVM movement images and f32/i32 kernel ABI are unchanged. A C++ HIP host service replaces per-launch Python allocation/copy/launch orchestration for synchronous default-stream packaged paged KV and MoE gathers. Context/device/architecture-owned buffers reuse capacity with a 128 MiB retention cap; completion precedes release, failures quarantine buffers and image leases, and explicit clear precedes context teardown. New host runtime exports are recorded by the owning runtime ABI generator. No new op, dtype, target, pass or diagnostic.
+
+Parity validated on AMD Radeon 8060S / gfx1151 (three paged-KV and three MoE rows) and RX 9070 XT / gfx1201 (three paged-KV rows). All are bit-exact before/after balanced host timing, with zero warm pooled allocations. Pooled host wall reductions are 5–34% on gfx1151 and 5–22% on gfx1201 against the existing checked compiled host launcher. Separate resident event dispatch windows and exact source/tool/library hashes are retained. General layouts, asynchronous/resident movement and comparisons against retained production routes remain follow-up required; this does not retire those routes.
+
+[Native movement evidence](../../../../benchmarks/baselines/rocm_native_movement_20261005/README.md).
+
+
+## NVIDIA-VJP-ACTIVITY-2026-10-05: native requested-gradient pruning
+
+Owner AD-RESIDUAL-EVAL-1; sibling FRONTEND-IR-MEDIUM-1; synchronization key NVIDIA-VJP-ACTIVITY-2026-10-05.
+The optional native paired-AD checkpoint export validates the frontend wrt indices and maps them through verified Q/K/V/bias SSA argument roles. Schedule hashes seal gradient activity and zero_fill_v1 semantics; native Tile verification and SM120 Target lowering omit inactive gradient arithmetic and deterministically zero-fill those complete physical ABI outputs. The public isolated reverse program enables this native option and checks its requested result mapping. The default complete checkpoint export remains unchanged. No new operation, dtype, target, pass or diagnostic; Python carries the typed request and reads native package metadata.
+
+Shared native compiler parity validated after a matching RX 9070 XT / gfx1201 rebuild: 39 AD/request/argument-role tests pass; three CUDA-only tests skip. Eighteen existing gfx1201 norm/epilogue device regressions pass. The initial run lacked imported benchmark fixtures; the matched retry is retained separately. HIP physical pruning is not applicable to this SM120 checkpoint change: its existing backward carrier does not accept the saved-output ABI used here. Architecture-owned HIP gradient pruning and gfx1151 validation remain follow-up required; no CUDA timings transfer.
+
+[Gradient activity evidence](../../../../benchmarks/baselines/nvidia_vjp_activity_20261005/README.md).
+
+
+## NVIDIA-VALUE-JVP-2026-10-05: saved-LSE value-only AD integration
+
+Owner AD-RESIDUAL-EVAL-1; sibling FRONTEND-IR-MEDIUM-1; synchronization key NVIDIA-VALUE-JVP-2026-10-05.
+The native isolated attention JVP export binds the general linear checkpoint_forward(Q,K,dV) product to the primal Q/K/V O/LSE generation. General TangentInterface output remains unchanged. Native Schedule seals the value-only active roles and linear algorithm; native Tile lowering omits primal V/O reads and the unused shared moment reduction. The nine-pointer ABI is unchanged; its native sizing companion returns 512 shared bytes for this algorithm. Public compile_native_attention_jvp now accepts V-only activity. No new operation/dtype/target/pass/diagnostic and no Python GPU semantics.
+
+The general native TangentInterface linear recipe is unchanged. The resident value-only physical algorithm is SM120-only; architecture-owned HIP saved-LSE JVP execution remains follow-up required. Initial shared tests exposed stale Python JVP and paired-AD sources in the scratch checkout. After full compiler source synchronization and a matching rebuild, 40 shared native AD/JVP tests and 18 existing norm/epilogue exact-device regressions pass on RX 9070 XT / gfx1201. This validates shared compiler behavior and those HIP envelopes; it does not implement HIP saved-LSE JVP. No CUDA timings are ROCm evidence.
+
+[Value-only JVP evidence](../../../../benchmarks/baselines/nvidia_value_only_jvp_20261005/README.md).
+
+
+## NATIVE-COMPILE-ORCHESTRATION-2026-10-05: measured compiler overhead reduction
+
+Owner FRONTEND-IR-MEDIUM-1; sibling E2E-REAL-6; synchronization key NATIVE-COMPILE-ORCHESTRATION-2026-10-05.
+SM120 saved-LSE JVP Graph-to-Schedule-to-Tile runs in one native MLIR pass manager, retaining typed SSA between verified passes instead of Python launching two processes and reparsing Schedule text. Native GPU packaging reuses exact binary SHA-256 only for the same stable file identity (device, inode, size, mtime and ctime), with bounded process memory and read-time rebuild checks. Hash bytes and image/arena/ABI content are unchanged. Python remains the frontend and thin process/package wrapper; native image validation still runs on every package. No new operation, dtype, target, pass or diagnostic.
+
+Parity validated on RX 9070 XT / gfx1201: 30 stable-identity and native ingest/package/JIT tests pass with matching tools. The tool-identity helper applies to HIP packaging; the native JVP pipeline selection remains SM120-only. gfx1151 execution and ROCm compiler-performance measurements remain follow-up required; no CUDA timing transfer.
+
+[Compiler overhead evidence](../../../../benchmarks/baselines/native_compile_orchestration_20261005/README.md).
+
+
+## NVIDIA-JVP-NATIVE-SCHEDULE-2026-10-05: native saved-LSE tangent product
+
+Owner FRONTEND-IR-MEDIUM-1 / AD residual integration; sibling W1.1; synchronization key NVIDIA-JVP-NATIVE-SCHEDULE-2026-10-05.
+The registered paired checkpoint JVP now passes through native C++ Graph-to-Schedule and Schedule-to-Tile. The replay hash seals static f32 shapes, scale, causal policy, active tangent slots, primal/tangent argument roles and the SM120 cooperative algorithm. Native MLIR builds the arithmetic, shared buffers, barriers and tensor ABI; Python supplies only a typed Graph frontend or the actual native AD export. The nine-pointer ABI and checked arena/sizing companion remain unchanged. Unrelated functions and differing residual generations cannot be discarded during this isolated export.
+
+Not applicable to HIP physical execution: the JVP product is gated to SM120. Follow-up required for architecture-owned gfx1151/gfx1201 paired JVP schedules and exact-device evidence, while a matching shared-pass rebuild on RX 9070 XT passes 18 existing norm/epilogue regressions. No CUDA timing is ROCm proof.
+
+[Native JVP evidence](../../../../benchmarks/baselines/nvidia_jvp_native_schedule_20261005/README.md).
+
+
+## NVIDIA-NORM-ACCURACY-2026-10-05: native FP32 numerical closure
+
+Owner W1.1; sibling FRONTEND-IR-MEDIUM-1; sync NVIDIA-NORM-ACCURACY-2026-10-05.
+The SM120 native Target materializer uses MLIR square-root/division and compensated serial FP32 sums, guarded for IEEE Inf/NaN propagation. Graph/Schedule/Tile snapshots and the pointer/scalar ABI are unchanged; no dtype/op/pass/diagnostic registration changes.
+
+Not applicable to HIP physical execution: the source edit is confined to the SM120 NVIDIA materializer; ROCm IR, schedules and ABI are unchanged. Follow-up required for architecture-owned normalization IEEE/accuracy assessment on gfx1151/gfx1201. Previous gfx1201 serial regressions remain historical evidence; no fresh ROCm execution or NVIDIA timing transfer is claimed.
+
+[Accuracy evidence](../../../../benchmarks/baselines/nvidia_norm_accuracy_20261005/README.md).
+
+
+## NVIDIA-NORM-NATIVE-SELECTION-2026-10-05: native selection under evaluation
+
+Owner W1.1; sibling FRONTEND-IR-MEDIUM-1; sync NVIDIA-NORM-NATIVE-SELECTION-2026-10-05.
+C++ Graph-to-Schedule selects cooperative_128 for SM120 norm columns >= 256 and serial for shorter rows; explicit policies override selection. Python reads the native decision. Shared Schedule/Tile hashes and portable producer provenance retain the policy. No dtype, op, pass, diagnostic or quantized-format policy changes.
+
+Parity validated for unchanged serial gfx1201 behavior: 18 norm/epilogue tests pass after matching shared rebuild. Not applicable to ROCm physical scheduling: the new automatic decision is SM120-specific. gfx1151 proof and a separately designed HIP cooperative norm remain follow-up required.
+
+[Selection evidence](../../../../benchmarks/baselines/nvidia_norm_native_selection_20261005/README.md).
+
+
+## NVIDIA-COOPERATIVE-NORM-2026-10-05: native row schedule candidate
+
+Owner W1.1; sibling FRONTEND-IR-MEDIUM-1; sync NVIDIA-COOPERATIVE-NORM-2026-10-05.
+Native Schedule/Tile carries an explicit serial|cooperative_128 norm decision, included in the content hash. The SM120 cooperative materializer uses one 128-thread CTA per row, coalesced strided-column loads, shared partial reductions, centered LayerNorm variance and a scratch-reuse barrier. The pointer/scalar ABI is unchanged; host, resident and benchmark launch geometry recognizes the cooperative entry. Tile verification requires a string schedule and the owning sm_120 architecture. Packaging detects a selected NVIDIA tool that fails to materialize the cooperative schedule.
+The explicit candidate preserves serial as the default. FP8, MXFP8 and MXFP4 remain independent correctness/quality/performance gates before any final strategy/default decision.
+
+Parity validated for the unchanged serial envelope on RX 9070 XT / gfx1201: 18 native RMSNorm and fused-epilogue regression tests pass after rebuilding the shared dialect/pass changes. The cooperative physical schedule is gated to SM120; gfx1151 exact-device evidence and a separately designed ROCm cooperative norm remain follow-up required.
+
+[Matched native schedule evidence](../../../../benchmarks/baselines/nvidia_cooperative_norm_20261005/README.md).
+
+
+
+## NVIDIA-LHS-JIT-PROGRAM-2026-10-05: ordinary frontend producer-to-matmul execution
+
+Owner W1.1; sibling FRONTEND-IR-MEDIUM-1; sync NVIDIA-LHS-JIT-PROGRAM-2026-10-05.
+Ordinary primal @jit verifies the complete typed Graph, retains caller semantics, and partitions static fp16/BF16 RMSNorm, LayerNorm or last-axis softmax LHS edges into existing native Graph/Schedule/Tile/Target/PTX packages. Native tile.view/fragments, private intermediate allocation, checked producer/consumer ABIs, one owned CUDA stream and completion govern execution. Bias, activation, residual and final output dtype remain native consumer contracts; serialized replay validates Graph, argument roles and image lineage before allocation.
+The shared Schedule helper resolves unbound tracer bias/residual role markers from typed SSA operand positions, preserving explicit named bindings and existing target gates. No new GPU semantic source templates, dtype, operation, pass or diagnostic.
+
+Shared role binding validated with the matching gfx1201 compiler (16 tests); 15 existing native bias/activation epilogue regression tests pass on RX 9070 XT / gfx1201. ROCm residual remains gated. Follow-up required for an equivalent composed HIP frontend producer edge and gfx1151 exact-device proof; SM120 timing is not ROCm evidence.
+FP8, MXFP8 and MXFP4 retain independent correctness/quality/performance gates; no default-format promotion.
+
+[Frontend program evidence](../../../../benchmarks/baselines/nvidia_lhs_jit_program_20261005/README.md).
+
+
+
+## ROCM-INGEST-RECIPROCAL-2026-10-05: exact native candidate normalization
+
+Owner ROCM-NVFP4-INGEST-1; sibling ROCM-MXFP4-W4A8-1; sync ROCM-INGEST-RECIPROCAL-2026-10-05.
+The native gfx1201 converter replaces FP64 candidate normalization by power-of-two division with multiplication by the exact reciprocal. Both factors are normal f64 powers of two; reduction order, midpoint rules, candidate search and tie-breaking are preserved. No Graph/Schedule/Tile, ABI, diagnostic, dtype or format policy changes.
+Parity validated on RX 9070 XT / gfx1201: 47 converter/resident tests include accepted exponent-limit cases. Paired native Graph packages give identical bytes, selected exponents, f64 stats and final output. Pinned M256/N24576/K4096 converter improves 40.217 -> 18.521 ms (2.171x); combined resident graph 40.859 -> 18.955 ms (2.156x). Balanced checked host wall improves 168.012 -> 145.158 ms. Native f64 divides fall 289 -> 1; scratch bytes per work-item fall 920 -> 180. Remaining spills, general AD/dynamic/layout/model quality and broader ROCm route/performance work remain open.
+FP8, MXFP8 and MXFP4 remain independent correctness/quality/performance gates; no selector/default promotion.
+
+[Paired converter packet](../../../../benchmarks/baselines/rocm_ingest_reciprocal_20261005/README.md).
+
+
+## ROCM-INGEST-JIT-PROGRAM-2026-10-05: ordinary composed frontend execution
+
+Owner ROCM-NVFP4-INGEST-1; sibling ROCM-MXFP4-W4A8-1; sync ROCM-INGEST-JIT-PROGRAM-2026-10-05.
+Ordinary Python @jit now traces the named conversion/storage/scaled-matmul chain without eager arithmetic. Catalog inference supplies the BF16 MxN result. The complete typed Graph is verified before native Graph/Schedule/Tile/Target/LLVM stage packaging; SSA, numerical policy, argument roles and private buffer lifetime remain checked. Common runtime execution and fresh-process serialized replay retain all three native packages.
+The contract is static and primal: M>64, N16/K64, gfx1201 packed folded storage. Unsupported argument effect/layout/sharding/model and function metadata require an explicit native contract. General AD, dynamic/layout envelopes and model-quality acceptance remain follow-up required. FP8, MXFP8 and MXFP4 remain independent evaluation gates; no default or general uint8 promotion.
+Parity validated on RX 9070 XT / gfx1201: 30 focused tests include ordinary calls, reordered arguments, cached image reuse, fresh-process common-runtime replay, numerical/bitwise checks and semantic refusal before native compilation/GPU access. Exact target Schedule/Tile/Target checks pass. gfx1151 requires a different consumer because RDNA4 FP8 WMMA is used.
+
+[Frontend native program packet](../../../../benchmarks/baselines/rocm_ingest_jit_program_20261005/README.md).
+
+
+## ROCM-INGEST-PORTABLE-2026-10-05: portable resident native program
+
+Owner ROCM-NVFP4-INGEST-1; sibling ROCM-MXFP4-W4A8-1; sync ROCM-INGEST-PORTABLE-2026-10-05.
+Versioned JSON retains each native stage's Graph/Schedule/Tile/Target IR, HSACO and checked descriptor. Restore validates stage order, shape, semantic policy and ownership before GPU allocation; fresh-process replay needs no compiler. Nested metadata has independent ownership. Content digests check integrity, not origin authentication.
+Parity validated on RX 9070 XT / gfx1201 for the named static resident program: 21 focused tests include fresh-process replay with no compiler, numerical and bitwise checks, altered metadata refusal and private lifetime. gfx1151 is follow-up required because the consumer uses RDNA4 FP8 WMMA.
+Ordinary composed JIT, general frontend/AD, dynamic/layout envelopes and model-quality acceptance remain follow-up required. FP8, MXFP8 and MXFP4 remain independent evaluation gates; no selector/default or general uint8 promotion.
+
+[Portable resident packet](../../../../benchmarks/baselines/rocm_ingest_portable_20261005/README.md).
+
+## ROCM-INGEST-RESIDENT-2026-10-05: owned converter/storage/matmul chain
+
+Owner ROCM-NVFP4-INGEST-1; sibling ROCM-MXFP4-W4A8-1; sync ROCM-INGEST-RESIDENT-2026-10-05.
+Parity validated on RX 9070 XT / gfx1201 for the named static resident NVFP4 -> lossless storage -> packed matmul program. Three synthetic envelopes and pinned M256/N24576/K4096 gate/up pass. One stream/eleven private allocations keep converted weights resident; new activations reuse those weights. Graph conversion/storage/consumer medians are 40.724/0.340/0.344 ms; combined 41.475 ms, with separate full and reuse wall scopes. gfx1151 needs another consumer: its ISA lacks RDNA4 FP8 WMMA.
+Shape-only consumer packaging preserves typed Graph/Schedule/Tile/native ownership without fabricated host weight hashes. Host-payload ancestry/content checks remain enforced per producer.
+Composed JIT/portable program/general frontend-AD/dynamic-layout integration and model quality remain follow-up required. Matched-source FP8, MXFP8 and MXFP4 controls pass arithmetic checks; ingested folded output error is 15.177% relative RMS. No default/dtype/selector promotion.
+
+[Resident native packet](../../../../benchmarks/baselines/rocm_ingest_resident_20261005/README.md).
+
+
+
+## ROCM-INGEST-STORAGE-2026-10-05: lossless compiler storage bridge
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-INGEST-STORAGE-2026-10-05.
+Parity validated on RX 9070 XT / gfx1201: ordinary storage @jit, canonical Graph/Schedule/Tile/Target/LLVM ownership, lossless byte parity, image reuse, checked runtime and portable replay. N16/K64 static storage is proved. gfx1151 physical lowering remains follow-up required.
+The named checkpoint-to-fragment byte operation adds no quantization. General uint8 stays planned/gated and sibling capabilities explicitly remain unsupported.
+Resident converter/bridge/consumer lifetime, combined timing and model quality remain follow-up required. FP8, MXFP8 and MXFP4 remain independent mandatory correctness/quality/performance gates; no default promotion.
+
+[Storage bridge packet](../../../../benchmarks/baselines/rocm_ingest_storage_bridge_20261005/README.md).
+
+
+
+## ROCM-INGEST-RUNTIME-2026-10-05: canonical JIT conversion
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-INGEST-RUNTIME-2026-10-05.
+Parity validated on RX 9070 XT: ordinary static converter @jit, canonical Graph/Schedule/Tile/native lowering, checked common runtime and portable replay. Three synthetic timing rows pass. Resident consumer integration/combined timing and model quality remain follow-up required.
+The exact gfx1201 manifest/capability describes only the named static checkpoint operation; general uint8 remains planned/gated and sibling conversion states remain unsupported.
+FP8, MXFP8 and MXFP4 remain mandatory independent correctness/quality/performance gates; no default promotion.
+
+[Canonical JIT/runtime packet](../../../../benchmarks/baselines/rocm_ingest_runtime_20261005/README.md).
+
+
+
+## ROCM-CHECKPOINT-NATIVE-INGEST-2026-10-05: native pinned conversion
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-CHECKPOINT-NATIVE-INGEST-2026-10-05.
+Parity validated: pinned gate/up native Graph/Schedule/Tile conversion, checked package outputs and eighteen format/shape arms pass on gfx1201. Resident conversion median is 41.391 ms; checked conversion wall is 157.385 ms. Consumers currently use a host readback/upload edge. Ordinary JIT is proved by the runtime follow-on above; resident storage/lifetime integration, combined timing and model-quality acceptance remain follow-up required.
+FP8, MXFP8 and MXFP4 remain mandatory independent correctness/quality/performance gates; no default promotion.
+
+[Checkpoint native conversion packet](../../../../benchmarks/baselines/rocm_checkpoint_native_ingest_20261005/README.md).
+
+
+
+## ROCM-GRAPH-INGEST-2026-10-05: semantic conversion ownership
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-GRAPH-INGEST-2026-10-05.
+Parity validated for the bounded gfx1201 Graph-originated converter and explicit checked six-buffer host package. Twelve package tests and three synthetic timing rows pass on RX 9070 XT. Ordinary JIT dispatch, pinned checkpoint native conversion and consumer integration/timing remain follow-up required.
+The shared three-result Graph contract retains explicit lossy policy and projection globals; Schedule replay binds policy, layout and private output ownership.
+FP8, MXFP8 and MXFP4 remain mandatory independent evaluation gates.
+
+[Graph ownership checkpoint](../../../../benchmarks/baselines/rocm_graph_ingest_20261003/README.md).
+
+
+
+## ROCM-NATIVE-INGEST-LEAF-2026-10-03: native joint-SSE conversion leaf
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-NATIVE-INGEST-LEAF-2026-10-03.
+Native gfx1201 physical conversion leaf is implemented and device-proven: joint-SSE packed codes/exponents match the oracle, including raw E4M3 scales and unequal projection globals. Seven numerical cases and three synthetic timing rows are proved. Graph/Schedule/Tile ownership, checked package ABI and pinned checkpoint conversion still require integration; the public ingest function remains host conversion. No selector promotion.
+FP8, MXFP8 and MXFP4 remain independent mandatory evaluation gates.
+
+[Native ingest leaf packet](../../../../benchmarks/baselines/rocm_native_ingest_20261003/README.md).
+
+
+## ROCM-PACKED-NATIVE-2026-10-03: compiler-owned packed MXFP4
+
+Owner ROCM-MXFP4-W4A8-1; sibling ROCM-NVFP4-INGEST-1. Sync ROCM-PACKED-NATIVE-2026-10-03.
+Parity validated on RX 9070 XT / gfx1201 for the named static packed-folded profile. The public packager now uses the native MLIR/LLVM materializer and checked expanded-memref ABI. Native nearest-even table hoisting improves packed device time 10–25%, with independent FP8/MXFP8/MXFP4 controls. Packed remains 8–16% behind expanded device time on the three synthetic rows; eighteen pinned gate/up format arms also pass, with M256 packed within about 1% of expanded device time. NVFP4-ingested checked wall time is 57.197 ms versus 98.138 ms expanded; synthetic activations and quantization quality remain explicit. No selector promotion. Native ingest conversion and wider route/performance obligations remain follow-up required.
+FP8, MXFP8 and MXFP4 remain mandatory independent evaluation gates before final/default decisions.
+
+[Native packed packet](../../../../benchmarks/baselines/rocm_packed_native_20261003/README.md).
+
+
+## ROCM-CHECKPOINT-FORMAT-GATE-2026-10-03: pinned format evaluation
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-CHECKPOINT-FORMAT-GATE-2026-10-03.
+Parity validated on exact RX 9070 XT for twelve pinned gate/up format/shape arms (M=128/256,N=24576,K=4096). FP8, MXFP8 and three folded MXFP4 preparations pass independent arithmetic checks; weight/source-output quality, resident device windows and checked end-to-end times are separate. Bounded FP4 preparation and contiguous scale-plane materialization fix model-sized/transposed input preparation. Native packed consumer and MLIR ingest conversion remain follow-up required.
+No format default is promoted. The folded MXFP4 arm has expanded E4M3 physical weights and a named legacy zero-block scale policy; it is not packed native compiler closure.
+
+[Format packet](../../../../benchmarks/baselines/rocm_checkpoint_format_gate_20261003/README.md).
+
+
+## NVIDIA-LAYERNORM-RHS-2026-10-03: second normalization producer
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-LAYERNORM-RHS-2026-10-03.
+Follow-up required for rocm normalization RHS physical consumer parity. Shared JIT composition now admits LayerNorm and the portable normalization manifest binds kind/epsilon/shape. This new package envelope is exact sm_120 only; no rocm execution claim follows.
+Affine/dynamic/general producer and AD integration remain open. FP8, MXFP8 and MXFP4 are mandatory correctness/performance gates before final/default strategy selection.
+
+[LayerNorm RHS packet](../../../../benchmarks/baselines/nvidia_layernorm_rhs_20261003/README.md).
+
+
+## NVIDIA-RHS-JIT-DISPATCH-2026-10-03: ordinary calls and portable execution
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-RHS-JIT-DISPATCH-2026-10-03.
+Follow-up required for rocm composed producer execution. Shared runtime executor results now carry component receipts and stream ownership; existing rows retain their behavior. The new physical package program is CUDA sm_120 only. No rocm exact-device parity is claimed.
+FP8, MXFP8 and MXFP4 remain mandatory correctness/performance gates before a final or default strategy decision.
+
+[Runtime packet](../../../../benchmarks/baselines/nvidia_rhs_jit_dispatch_20261003/README.md).
+
+
+## NVIDIA-RHS-JIT-2026-10-03: traced producer graph integration
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-RHS-JIT-2026-10-03.
+Not applicable to this backend's execution: the explicit JIT API requires exact nvidia_sm120 and uses CUDA checked packages. Shared frontend tracing remains unchanged. Follow-up required for an architecture-owned composed producer API and exact-device proof. FP8, MXFP8 and MXFP4 remain mandatory before any default strategy decision.
+
+[Frontend packet](../../../../benchmarks/baselines/nvidia_row_major_b_schedule_20261003/README.md).
+
+
+## NVIDIA-ROW-MAJOR-B-SCHEDULE-2026-10-03: checked RHS storage selection
+
+Owner W1.1; sync NVIDIA-ROW-MAJOR-B-SCHEDULE-2026-10-03.
+Follow-up required for rocm physical producer parity. Shared Schedule selection/replay and checked static RMSNorm RHS composition now represent the SM120 half row-major RHS envelope; explicit requests outside it are refused. Existing rocm profiles retain their default layouts. No sibling execution or performance claim follows from CUDA proof. FP8, MXFP8 and MXFP4 are required evaluation gates before any strategy/default promotion.
+
+[Checked package packet](../../../../benchmarks/baselines/nvidia_row_major_b_schedule_20261003/README.md).
+
+
+## NVIDIA-ROW-MAJOR-B-CORE-2026-10-03: RHS tensor storage materialization
+
+Owner W1.1; sync NVIDIA-ROW-MAJOR-B-CORE-2026-10-03.
+Not applicable to HIP physical lowering: only the NVIDIA fragment materializer changes, using the existing shared transpose intent and view contract. ROCm needs an architecture-owned RHS producer route and exact-device stride/lifetime tests if this envelope is widened; NVIDIA gather layouts and timings do not establish gfx1151/gfx1201 parity.
+
+[Physical loader packet](../../../../benchmarks/baselines/nvidia_row_major_b_core_20261003/README.md).
+
+
+## NVIDIA-BROADCAST-CHECKPOINT-PACKAGE-2026-10-03: checked saved-state integration
+
+Owner E2E-REAL-6 / AD-HIGHER-1; sync NVIDIA-BROADCAST-CHECKPOINT-PACKAGE-2026-10-03.
+Follow-up required: shared Graph/AD broadcast semantics remain available, but this implementation admits only SM120 checkpoint packages. New ABI IDs, host copy sizing and resident tape state are CUDA-owned; no HIP ABI or gfx1151/gfx1201 physical consumer is added. Assess saved-state allocation, deterministic bias reduction and exact-device parity on each owning AMD host. NVIDIA timings do not establish ROCm support.
+
+[Package and public JIT packet](../../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md).
+
+
+## NVIDIA-BROADCAST-CHECKPOINT-CORE-2026-10-03: physical bias derivative
+
+Owner E2E-REAL-6 / AD-HIGHER-1; sync NVIDIA-BROADCAST-CHECKPOINT-CORE-2026-10-03.
+Follow-up required: the shared checkpoint Graph/AD verifier admits rank-four broadcast bias and physical-shaped dBias, and Tile validates its saved bias-gradient pointer. Native checkpoint Schedule selection remains SM120-only; no HIP broadcast checkpoint consumer or ABI is added. Assess gfx1151/gfx1201 shape reduction, numerical policy, saved-state lifetime and exact-device execution separately. RTX 5070 results do not establish ROCm parity.
+
+[Native core packet](../../../../benchmarks/baselines/nvidia_broadcast_checkpoint_core_20261003/README.md).
+
+
+## ROCM-NVFP4-INGEST-1-QWEN3-GATE-UP-2026-10-03: real merged source proof
+
+Owner ROCM-NVFP4-INGEST-1; sync ROCM-NVFP4-INGEST-1-QWEN3-GATE-UP-2026-10-03.
+Exact gfx1201 real layer-0 Qwen3 gate/up weights now merge into a 16x24576x4096 native Graph/Schedule/Tile/Target package. Both ingested and direct-BF16 MXFP4 outputs have zero error against decoded references. Shipped NVFP4, ingested MXFP4 and direct MXFP4 weight errors versus BF16 are 9.50%, 14.97% and 11.30%. Real globals are equal; the existing synthetic device case retains unequal 0.5/2.0 globals. Conversion remains explicitly measured host preprocessing, not a native conversion op. Wider model quality, source-activation and FP8/MXFP8 comparisons, packing variants and movement overhead remain open. gfx1151 cannot inherit RDNA4 FP8 WMMA evidence.
+
+[Packet](../../../../benchmarks/baselines/rocm_nvfp4_gate_up_20261003/README.md).
+
+
+## ROCM-MXFP8-LDS-2026-10-03: native wide-grid schedule and guarded image reuse
+
+Owner ROCM-FP8-BLOCKSCALE-1; sibling ROCM-MXFP4-W4A8-1; sync ROCM-MXFP8-LDS-2026-10-03.
+Exact gfx1201 proof admits eight-wave NK E8M0 LDS profiles with K32 semantic joins and native image reuse. Two matched-input FP8/MXFP8/folded-MXFP4 pairs show 1.94–3.00x MXFP8 improvement on five wide grids. Automatic K < 1024 and small-grid routes retain the seed after a short-K negative experiment. Graph-specific shape guards are preserved, including smaller-K rejection and separately rebound same-image packages. 496 focused/regression tests and native IR FileCheck pass. Broader shapes, K64 multi-group staging, the M256 Radiance slope, model quality and persistent scheduling remain open. gfx1151 cannot inherit this RDNA4 FP8 WMMA recipe.
+
+[Exact-device packet](../../../../benchmarks/baselines/rocm_mxfp8_lds_20261003/README.md).
+
+
+## ROCM-THREE-FORMATS-2026-10-03: required format evaluation and partial LDS copies
+
+Owner ROCM-FP8-BLOCKSCALE-1 and ROCM-MXFP4-W4A8-1; sync ROCM-THREE-FORMATS-2026-10-03.
+Exact gfx1201 evaluation now compares FP8, standard MXFP8 and explicitly approximate folded MXFP4 from matched floating-point source operands, through checked native Graph/Schedule/Tile packages. Seven shapes include K1536 ragged M, both M200 regression shapes and M256 long K. Native LDS copying now masks incomplete thread rounds instead of refusing K32 narrow slabs; barriers and scale-group semantics remain unchanged. MXFP8's one-wave seed is fast on small grids but slow on wide grids; an E8M0 LDS consumer remains follow-up required. K16 auto panel defaults, the M256 Radiance slope, source-model quality and persistence are still open. No physical selector or format promotion. Gfx1151 does not support this RDNA4 FP8 WMMA path.
+
+[Exact-device packet](../../../../benchmarks/baselines/rocm_three_formats_20261003/README.md).
+
+
+
+## ROCM-MXFP8-EXPONENT-SCALE-2026-10-03: standard E8M0 scale consumer
+
+Owner ROCM-FP8-BLOCKSCALE-1; sync ROCM-MXFP8-EXPONENT-SCALE-2026-10-03.
+The gfx1201 E8M0 consumer now composes signed exponents and uses upstream
+LLVM ldexp.f32 plus explicit code-255 NaN propagation. Its result equals the
+wide reference with one f32 rounding; code zero remains 2^-127. The existing
+K32 descriptor/ABI, native Schedule geometry and buffer lifetime are unchanged.
+All 65,536 scale-code pairs and 116 arbitrary f32 partial bit patterns are
+covered on RX 9070 XT, including NaNs/infinities/subnormals/signed zero.
+The two-process A/B removes f64 scale instructions and improves the measured
+long-K seed by 3.5-4.6x; short-K rows improve too. FP8 images are byte-identical
+and folded MXFP4 numerical regressions pass. This retains a semantic-preserving
+consumer improvement, not a new physical schedule or global selector rule.
+Gfx1151 E8M0 consumer parity, broader shapes and matched MXFP4 evaluation remain
+follow-up required before short/long/persistent scheduling decisions.
+
+[Exact-device A/B packet](../../../../benchmarks/baselines/rocm_mxfp8_exponent_scale_20261003/README.md).
+
+
+## ROCM-MXFP8-PACKAGE-2026-10-03: checked runtime and image identity
+
+Owner ROCM-FP8-BLOCKSCALE-1; sync ROCM-MXFP8-PACKAGE-2026-10-03.
+Native MXFP8 Graph/Schedule/Tile packages now bind the distinct E8M0 K32
+wide-scale ABI to runtime.launch on gfx1201. Scale buffers are raw uint8 bytes,
+not promoted canonical MXFP8 storage. The native identity pass projects M/N/K
+only for the verified 16x16 one-wave seed, retains K32/per-column scale semantics
+and keeps FP8/MXFP8 image keys distinct. Device tests cover KN/NK, f32/BF16,
+ragged M/N, multiple groups, reciprocal extreme scales, NaNs/subnormals and
+image reuse across shapes. Invalid scale/numerical/geometry policies are refused
+before HIP access. FP8, MXFP8 and MXFP4 remain separate evaluation gates.
+Performance promotion, larger physical schedules and a matched MXFP4 comparison
+remain open.
+
+[Checked package packet](../../../../benchmarks/baselines/rocm_mxfp8_checked_package_20261003/README.md).
+
+
+## ROCM-MXFP8-SCHEDULE-2026-10-03: native compiler integration
+
+Owner ROCM-FP8-BLOCKSCALE-1; sync ROCM-MXFP8-SCHEDULE-2026-10-03.
+The typed textual frontend carries E4M3 operands and raw E8M0 scale bytes
+through native Graph/Schedule/Tile/Target/LLVM into HSACO. Twelve exact gfx1201
+cases cover two/four K32 groups, KN/NK storage, f32/bf16 output, ragged M/N and
+a result width equal to the scale-group count. Native WMMA disassembly is
+required. The integrated suite passed 608 tests with one legacy runtime test
+skipped for an unavailable libtessera_rocm_gemm.so. Remaining: production
+descriptor/runtime admission, image cache identity and separate kernel/E2E
+timing. No bundled MXFP8 dtype or physical performance schedule is promoted.
+
+
+## ROCM-E8M0-TILE-2026-10-03: standard E8M0 consumer foundation
+
+Owner ROCM-FP8-BLOCKSCALE-1; sync ROCM-E8M0-TILE-2026-10-03.
+The shared typed fragment scale operation now distinguishes fp32 scales from
+raw signless-i8 standard E8M0 scales. gfx1201 Tile -> ROCm -> HSACO numerical
+checks cover all 256 codes, signed/zero K32 partials, reciprocal extreme scales,
+NaNs, and ragged M/N. This is a Tile-level consumer proof. Graph/Schedule
+derivation, named physical package ABI, checked runtime admission and MXFP8
+benchmark coverage remain follow-up required. No canonical MXFP8 storage
+capability is promoted. gfx1151 has no owning-device proof for this extension.
+FP8, MXFP8 and MXFP4 remain separate decision gates; see the format packet.
+
+
+## ROCM-FOLDED-RETUNES-2026-10-02: pressure, fragment buffering and C transposition
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-RETUNES-2026-10-02.
+
+Tajasaurus RX 9070 XT/gfx1201: column-first consumption, row-first delayed
+A/B/half-A prefetch, two-panel typed fragment lookahead, and reused-LDS C
+transposition were built and measured through native MLIR packages. Each
+consumption/prefetch/deep-buffer candidate passed 89 focused checks.
+The C byte-slab repair passed all 38 device checks; three existing structural
+tests require an explicit LDS/global-store contract before that prototype can
+land. No tests were weakened. All candidate changes are preserved as patches;
+the active implementation is restored.
+
+Two-panel lookahead spreads LDS reads: six paired and twelve single b64 loads
+versus twelve paired loads in the reference. It keeps three static split-
+barrier pairs and improves N8192/K5120 by 3.6%, with 2-3% short-K regressions.
+Wave-private C transposition uses the existing 25,600 bytes of LDS and reduces
+physical allocation from 177 to 145 VGPRs without spills. Workgroup barrier
+pairs fall from twelve in the collective prototype to four, versus three in
+the reference. It improves N8192/K5120 by 1.3% but short K remains 3.8-5.3%
+slower. These seven-trial graph-window measurements include GPU graph
+dispatch/markers, exclude capture/instantiation, and are not isolated kernel
+profiling or selector promotion. Public launch timings remain separate.
+
+Next: BF16 LDS staging after scale recovery, overlapped first-slab A/B
+prologue, and a separately verified persistent worker/tile assignment in
+Schedule/Tile. Persistence is not yet implemented for this folded route.
+Exact-per-K32 migration, broader K/layout, model quality and performance
+closure remain open. gfx1151 has no FP8 WMMA parity under RDNA3.5.
+
+[Deep fragment packet](../../../../benchmarks/baselines/rocm_folded_deep_fragments_20261002/README.md).
+[C transpose packet](../../../../benchmarks/baselines/rocm_folded_c_lds_transpose_20261002/README.md).
+[Prefetch retunes](../../../../benchmarks/baselines/rocm_folded_row_first_prefetch_20261002/README.md).
+[Column-first control](../../../../benchmarks/baselines/rocm_folded_column_first_20261002/README.md).
+
 
 ## ROCM-NVFP4-INGEST-1-2026-10-01: first gfx1201 ingest slice
 
 Owner ROCM-NVFP4-INGEST-1; sync ROCM-NVFP4-INGEST-1-2026-10-01.
-The host converter preserves packed NVFP4 E2M1 values and combines each
+The initial converter preserved packed NVFP4 E2M1 values and combined each
 pair of E4M3 K16 scales with its projection's global scale, then chooses one
 E8M0 K32 exponent by decoded-value SSE. It records the single lossy
 requantization with relative RMS and SQNR, and retains gate/up scales and row
@@ -19,10 +2056,25 @@ The 17x19x64 diagnostic packet reports 4.33 us resident HIP-event median and
 2.48 ms runtime.launch median; compile/package construction was 234.2 ms.
 Synthetic conversion quality was 0.368/0.422 relative RMS (8.69/7.48 dB),
 so this proves route correctness, not model-quality adequacy or performance.
-Raw [gfx1201 packet](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/gfx1201_nvfp4_ingest_schedule.json).
+A fresh exact-device recheck on Tajasarus from source revision
+`58b848ccbc7682db03d3b1e350a5421ded56984d` produced the same HSACO image
+digest, with 4.704 us HIP-event median and 2.553 ms end-to-end median. A further
+recheck using the build configured from the current tracked checkout passed the
+same synthetic numerical checks: 127.52 ms package construction, 4.361 us
+HIP-event median, and 2.448 ms `runtime.launch` median. Its packet captures the
+host, compiler/image digests, and exact gfx1201 device. The real-checkpoint
+quality comparison remains open because no usable checkpoint weights were
+found in the Tajasaurus scratch stores. A selector follow-up uses the
+code-energy-weighted mean scale to select the nearest representable E8M0
+exponent; the gfx1201 image digest is unchanged and synthetic up-projection
+relative RMS improves only from 0.42246 to 0.42102, while gate is unchanged.
+This is an error-minimization experiment, not a quality closure. The packets,
+timing limits, and synthetic conversion error are summarized in the
+[packet report](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/README.md).
 Open: execute a real NVFP4 checkpoint and compare with source BF16 and direct
-BF16-to-MXFP4. NVIDIA has no affected ABI or lowering; Apple and x86 have no
-corresponding ROCm scale conversion. No sibling backend proof is transferred.
+BF16-to-MXFP4. The joint code/scale requantization follow-up is recorded below.
+NVIDIA has no affected ABI or lowering; Apple and x86 have no corresponding
+ROCm scale conversion. No sibling backend proof is transferred.
 
 ## `NVIDIA-NVFP4-SCHEDULE-2026-09`: sibling assessment
 
@@ -222,10 +2274,11 @@ shape guards (2/2 focused tests; full gfx1151 E2E spine 67/67). These two
 families do not have the
 shape-per-image recompile reported for scheduled attention/matmul. Their
 Graph-owned Tile constructors still need the E2E-REAL-6 Schedule migration;
-cache reuse alone does not close that route. Scheduled attention/matmul remain
-on Tile-text keys until an MLIR-owned image identity proves which shape
-fields are runtime-only and which affect generated instructions. No ROCm
-Target IR, ABI, or sibling-backend contract changed in this audit/test slice.
+cache reuse alone does not close that route. At the date of this entry, scheduled
+attention/matmul remained on Tile-text keys pending an MLIR-owned image identity.
+The 2026-10-01 entry below validates shape-free attention image reuse on gfx1151
+and gfx1201; scheduled matmul remains separately open. No ROCm Target IR, ABI,
+or sibling-backend contract changed in this 2026-09-28 audit/test slice.
 
 ## `GFX1201-MXFP4-M256-SLOPE-2026-09-28`: per-column schedule decomposition — diagnostic
 
@@ -264,6 +2317,26 @@ so the paired candidate/incumbent sweeps are the selector evidence.
 Large-M short-K, ragged K=1536 and the separate 200x2048x2048 gap remain
 open. gfx1151 has no FP8 WMMA; sibling outcomes are recorded under this
 sync key in the other backend plans.
+
+## GFX1201-W8A8-M200-RAGGED-2026-10-01: current exact-device remeasurement — landing
+
+Owner ROCM-FP8-BLOCKSCALE-1; sync GFX1201-W8A8-M200-RAGGED-2026-10-01. A clean
+source-matched Tajasaurus gfx1201 run rebuilt tessera-opt from commit
+58b848ccbc7682db03d3b1e350a5421ded56984d and paired the production NK route
+with AITER over seven device-clock windows (each at least 6 ms), with HIP-event
+cross-checks and numerical validation before timing. M=200,N=8192,K=1024 measured
+38.82 us vs 42.67 us AITER (0.910x); M=200,N=2048,K=2048 measured 20.46 us vs
+23.70 us (0.863x). These two previously regressed rows now beat AITER. The
+ragged K=1536 row, M=1024,N=3072,K=1536, measured 71.40 us vs 69.97 us
+(1.020x), so it remains slightly slower. A follow-up eight-shape exact-device sweep now covers M=127/200/255/1024,
+N=2048–8192, and K=1024/1536/2048. The fp64 oracle passed on both Tessera
+layouts before seven device-clock windows. The production NK layout beat the
+KN attribution arm on all eight rows (16.64–70.80 us versus 173.03–380.61 us).
+This broader packet has no AITER arm because the Tajasaurus Python environment
+has no Triton; AITER-relative closure outside the existing three paired shapes
+remains open. No selector promotion follows. gfx1151 has no FP8 WMMA, and no
+sibling physical schedule changed. [Paired AITER packet and wider layout
+sweep](../../../../benchmarks/baselines/gfx1201_w8a8_next_five_20261001/README.md).
 
 ## `GFX1201-W8A8-RAGGED97-2026-09-28`: bounded M=97–127 Schedule panel — landing
 
@@ -12573,3 +14646,1524 @@ active M/N/K of (3,7,13), (5,15,21), and (8,24,32), with padded host views,
 numerical checks, and package/allocation reuse. The 100-sample fp16 and bf16 packets cover (64,128,128), (96,192,192), and
 (128,256,256) under bound (128,256,256). Several event CVs are high, especially
 for bf16; these measurements support attribution only. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+
+
+## W11-SM120-SOFTMAX-MATMUL-EDGE-2026-10-01 sibling assessment
+
+Not applicable to ROCm code generation/runtime: the resident softmax launch uses the NVIDIA PTX driver bridge and SM120 CUDA buffers. No shared Graph/Schedule contract or HIP ABI changed, and no gfx1151/gfx1201 execution claim follows.
+
+## NVIDIA-ATTENTION-LSE-BACKWARD-2026-10-01 sibling assessment
+
+Not applicable to ROCm runtime/codegen: the new caller-buffer dispatch uses the
+NVIDIA PTX driver bridge and CUDA stream. It changes no shared attention IR or
+HIP ABI; gfx1151 and gfx1201 attention-backward routes require their own native
+consumers and exact-device proof.
+
+
+
+## W1.1-SM120-GRAPH-SCHEDULE-TILE-PIPELINE-2026-10-01 sibling assessment
+
+Not applicable to ROCm code generation/runtime: this named pipeline change
+selects NVIDIA sm_120 and emits NVIDIA typed-fragment carriers. The shared
+metadata verifier correction adds no HIP ABI or ROCm schedule, and gfx1151 /
+gfx1201 parity is not inferred from RTX 5070 evidence.
+
+
+## E2E-REAL-6-GFX1201-SCHEDULED-ATTENTION-IMAGE-CACHE-2026-10-01
+
+Owner E2E-REAL-6 / ROCm cache-key follow-up; sync
+`E2E-REAL-6-GFX1201-SCHEDULED-ATTENTION-IMAGE-CACHE-2026-10-01`.
+
+Parity and image reuse validated on Tajasaurus RX 9070 XT (gfx1201). Four
+scheduled attention packages with query lengths 17, 23, 31, and 65 compiled
+one HSACO image; all native launches matched the independent oracle with max
+absolute error at most 6.51e-5. The same image digest served each shape while
+schedule digests and descriptor guards remained shape-specific. A changed
+bias contract misses the cache in the exact-device gated test. The recorder
+measured 316 ms cold package time, 50.5–52.8 ms first-use warm packages, and
+37.1–38.3 ms repeated package medians; these are host compiler costs, not GPU
+kernel times. [Packet](../../../../benchmarks/baselines/rocm_scheduled_attention_cache_20261001/README.md).
+
+The gfx1201 scheduled-attention cache result has an exact gfx1151 counterpart
+in the next entry. At the time of this entry, scheduled matmul remained open;
+its gfx1201 static register-route result is recorded in the dedicated follow-up
+below. Scaled matmul identities and broader codegen-field audits remain open.
+
+A Tajasaurus experiment forced the same Directive-input route for static gfx1201
+f16 matmul. Serialization aborted in LLVM 23.1.1 with
+`Cannot select: llvm.amdgcn.wmma.f32.16x16x16.f16`; the normal Tile-input
+scheduled package passed all three existing gfx1201 numerical shapes. The
+gfx1201 cache extension therefore remains open at the Target-to-binary
+code-generation boundary; no shape-independent gfx1201 matmul image is claimed.
+
+## `E2E-REAL-6-GFX1201-SCHEDULED-MATMUL-IMAGE-CACHE-2026-10-01`
+
+Owner: E2E-REAL-6 / ROCm cache-key follow-up; sync
+`E2E-REAL-6-GFX1201-SCHEDULED-MATMUL-IMAGE-CACHE-2026-10-01`.
+
+Parity validated on Tajasaurus RX 9070 XT for static fp16 and bf16 register
+matmuls with `k_unroll=1`, `split_k=1`, no fused epilogue, dynamic extents, or
+LDS staging. The exact-device test compiles three shape variants to one image
+and entry symbol while preserving per-shape Schedule digests and descriptor
+guards. Native launches matched the independent NumPy oracle; f16 packet max
+absolute errors were at most `3.58e-7`. Package and HIP-event samples are
+recorded separately. Timings are diagnostic only: micro-shapes are launch
+bound, and the cold package sample contains a large outlier. Wider shapes,
+scale/layout/codegen-key audits, dynamic and split-K contracts, and gfx1151
+parity remain open.
+
+[Packet and method](../../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261001/README.md).
+
+### 2026-10-01 gfx1201 scheduled matmul cache-key recheck
+
+Tajasaurus exact-device tests passed 31 cases, including both gfx1201 fp16 and
+bf16 shape-reuse cases; one gfx1151-only row skipped. Three gfx1201 shapes
+again shared one HSACO digest and symbol, retained shape guards, and matched
+independent NumPy references (max errors 1.19e-7, 3.58e-7, 1.79e-7). Separate
+Schedule, package, HIP-event, and end-to-end timings are in the packet. The
+micro-shape measurements are diagnostic only. Dynamic/split-K/fused/LDS and
+larger representative cases remain open.
+[Packet](../../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261001/gfx1201_recheck_20261001.json).
+
+### 2026-10-01 NVFP4 ingest exact-device recheck
+
+Tajasaurus reran the deterministic synthetic 17x19x64 gate/up case using the
+branch-built gfx1201 compiler. Numerical error and HSACO identity were stable;
+new ingest, package, persistent HIP-event, and runtime.launch measurements are
+in the packet. The end-to-end distribution contains two ~10 ms outliers, so
+this remains diagnostic. Source-BF16 checkpoint comparison is still open.
+[Packet](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/gfx1201_nvfp4_joint_recheck_20261001.json).
+
+## ROCM-NVFP4-INGEST-1 — fresh current-build check
+
+Tajasaurus gfx1201 reran the synthetic 17x19x64 gate/up ingest through
+Graph/Schedule/Tile and a native package. Ten focused tests passed; outputs
+matched exactly, with 2.96 ms ingest, 236.59 ms package construction, and
+4.31 us HIP-event median. Host launch median was 2.47 ms with initial
+outliers. This confirms only the existing small synthetic envelope; original
+checkpoint and larger-shape validation remain follow-up required. No selector
+change.
+
+[Packet](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/README.md).
+
+## E2E-REAL-6-ROCM-MATMUL-CACHE — fresh gfx1201 bounded envelope
+
+Tajasaurus passed 31 focused cache-key cases (one gfx1151-only skip). Three
+static f16 register matmuls shared one HSACO and entry while retaining
+shape-specific guards and schedule digests; max absolute error stayed below
+3.6e-7. HIP-event medians were 8.56/14.52/16.20 us. This is a bounded
+k_unroll=1, split_k=1, unfused envelope. Other shapes and dynamic, split-K,
+fused, and LDS routes remain open; no general ROCm cache closure is claimed.
+
+[Packet](../../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261001/README.md).
+
+## ROCM-NVFP4-INGEST-1 — larger shape-matched package
+
+The exact-device recorder now generates shape-matched Graph IR rather than
+hardcoding 17x19x64. Tajasaurus gfx1201 passed M/N/K=64/96/128 with 48 gate
+and 48 up rows, a 6x4 launch grid, exact output equality, and the same HSACO
+digest as the small case. Synthetic relative RMS improved over the
+preserve-code baseline from 0.3568/0.4186 to 0.0930/0.0717. Ingest measured
+26.50 ms and package construction 240.36 ms; HIP-event kernel median was
+4.71 us. Host runtime.launch remained noisy at 2.44 ms median with first-call
+outliers. This broadens the synthetic shape proof, not the model-quality
+claim: source-BF16 checkpoint comparison and model-sized data remain open.
+No selector change.
+
+[Packets and limits](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/README.md).
+
+
+## ROCM-NVFP4-INGEST-1 — ragged-K synthetic exact-device extension
+
+Tajasaurus gfx1201 passed M/N/K=200/2048/1536 through native
+Graph/Schedule/Tile packaging with exact output checks before and after timing.
+The 256-thread package measured 54.10 us median HIP-event time; host
+`runtime.launch` median was 6.17 ms. CPU ingest took 6.70 s and package
+construction 217.69 ms. Synthetic relative RMS was 0.09396/0.07200 versus
+0.35583/0.41749 for the source-code-preserving scale baseline. This adds a
+larger ragged-K execution envelope; it does not close source-BF16/model quality
+or model-ingest throughput. No selector change.
+
+[Packet](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/gfx1201_nvfp4_m200n2048k1536_20261001.json).
+
+
+## ROCM-NVFP4-INGEST-1 — vectorized ragged-K host conversion
+
+The converter now evaluates K32 blocks in bounded vectorized row batches.
+On Tajasaurus gfx1201, the synthetic 200x2048x1536 case preserved the scalar
+converter's packed output and exponents exactly, with unchanged numeric
+errors and identical Target/Tile/HSACO digests. CPU ingest fell from 6.70 s to
+487.31 ms (13.76x); packaging was 238.30 ms, HIP-event median 53.51 us, and
+runtime.launch median 6.13 ms. The 11-test owning ingest suite passes. This
+improves host ingestion time only; source-BF16/model-checkpoint quality and
+GPU selector/performance promotion remain open.
+
+[Before/after packets](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/README.md).
+
+
+## NVIDIA-ATTENTION-LSE-ORACLE-PACKET-2026-10-02 sibling assessment
+
+Not applicable to ROCm execution: this change adds NVIDIA-specific
+float64 oracle checks and exact-device metadata to the saved-LSE benchmark
+recorder. It changes no shared Graph/Schedule/ABI contract or ROCm
+physical schedule; no ROCm execution evidence is inferred.
+
+## ROCM-SCHEDULED-ATTENTION-CACHE-RECHECK-2026-10-01: exact gfx1201 source-fingerprinted recheck
+
+Owner E2E-REAL-6; sync ROCM-SCHEDULED-ATTENTION-CACHE-RECHECK-2026-10-01. On Tajasaurus, the exact gfx1201 test suite
+passed 31 tests with one expected gfx1151-only skip. The scheduled-attention
+recorder then reused one native image across query lengths 17, 23, 31, and 65;
+all four outputs matched the streaming-attention reference (maximum absolute
+error 6.51e-5). The packet records compiler revision and five source hashes.
+Cold host package time was 368.34 ms, later shape package times 49.78–52.05 ms,
+and repeated package medians 36.81–37.86 ms. These are host compile/package
+costs, not GPU kernel timings. The runtime source hash is Tajasaurus-specific;
+no source parity with the Super-Bear snapshot is claimed. Scheduled matmul
+image identity remains a separate open envelope.
+[Packet](../../../../benchmarks/baselines/rocm_scheduled_attention_cache_20261001/gfx1201_recheck_20261001.json).
+
+## NVIDIA-W1.1-TYPED-MATMUL-EDGE-2026-10-02 sibling assessment
+
+Not applicable to ROCm execution: the change adds provenance fields to
+the NVIDIA scheduled-matmul descriptor and collects an existing SM120 test.
+It changes no shared Graph/Schedule operation, ABI, or ROCm physical
+schedule; no ROCm execution evidence is inferred.
+
+
+## E2E-REAL-6-ROCM-MATMUL-CACHE — 2026-10-02 exact-device recheck
+
+Tajasaurus gfx1201 again compiled three static f16 shapes to one HSACO image
+and entry, with distinct schedule digests and descriptor shape guards. Every
+launch matched the fp32 NumPy oracle (maximum absolute error below 3.6e-7).
+HIP-event medians were 8.64/14.60/15.36 us; end-to-end medians were
+2.20/2.37/2.45 ms. A cold-launch outlier reached 39.6 ms, so these numbers
+remain attribution only. The source-fingerprinted packet records Schedule and
+package construction independently. Dynamic, split-K, fused, LDS-staged, and
+larger representative routes remain follow-up required.
+
+[Packet and limits](../../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/README.md).
+
+
+## E2E-REAL-6-ROCM-MATMUL-CACHE — representative gfx1201 extension
+
+The correctness-gated Tajasaurus recheck now covers six static f16 shapes from
+16^3 through 512^3. All shapes reused the same HSACO and entry with one cold
+compile followed by five warm packages. Maximum absolute error against the
+fp32 NumPy oracle was 1.10e-5. HIP-event medians ranged from 8.60 to 28.76 us;
+end-to-end medians ranged from 2.20 to 6.51 ms. These measurements include
+micro- and representative-size attribution but do not close dynamic, split-K,
+fused-epilogue, LDS-staged, or other dtype/layout cache keys.
+
+[Packet and source identity](../../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/README.md).
+
+## ROCM-NVFP4-INGEST-1: exhaustive destination-scale regression — 2026-10-02
+
+A deterministic host audit compared joint E2M1/E8M0 requantization against all
+254 representable E8M0 exponents for 16,384 randomized K32 blocks with positive
+E4M3 source scales and broad shared global-scale variation; no candidate missed
+the global SSE minimum. `tests/unit/test_rocm_nvfp4_ingest.py` now retains a
+smaller 128-block exhaustive regression, passing with the focused ROCm ingest
+and shape-cache tests. This strengthens the synthetic conversion oracle only:
+real checkpoint/source-BF16 quality and exact gfx1201 rerun for this added test
+remain open. See
+[ingest evidence](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/README.md).
+
+
+## ROCM-NVFP4-INGEST-1 — exact gfx1201 compiler refresh — 2026-10-02
+
+Tajasaurus WSL2 (RX 9070 XT, gfx1201) rebuilt `tessera-opt` after the
+Schedule/Tile compiler source was synchronized from the active slice. The
+11-test focused ingest suite passed. The refreshed native packages passed
+correctness before timing and each E2E sample for both 17x19x64 and
+200x2048x1536. Their Tile/Target IR digests match the prior package outputs.
+At 200x2048x1536, ingest was 485.93 ms, package construction 193.68 ms,
+resident HIP event median 52.98 us, and E2E median 6.15 ms. Gate/up relative
+RMS was 0.09396/0.07200; preserve-code baseline was 0.35583/0.41749. This
+closes exact-device synthetic execution on the refreshed compiler, but source
+checkpoint quality and ingest cost attribution remain open. No selector or
+route promotion follows. Apple, NVIDIA, and x86 sibling assessments remain
+not applicable as recorded in their plans.
+
+[Refreshed gfx1201 packets](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/README.md).
+
+The recorder follow-up now retains the actual intermediate Schedule IR digest;
+the previous compiler-refresh packets had a null descriptor-provided digest.
+Regenerated exact-device packets include nonempty Schedule, Tile, Target, and
+image identities, and retain correctness-before-timing checks. HIP medians
+were 54.83 us for the 200x2048x1536 synthetic envelope and 4.55 us for
+64x96x128; end-to-end medians were 6.27 ms and 2.41 ms. These are fresh
+measurements with visible run-to-run spread, not a promotion claim. The
+checkpoint/source-BF16 comparison remains open.
+
+
+## NVIDIA-ATTENTION-LSE-SAVED-OUTPUT-DELTA-2026-10-02 sibling assessment
+
+Follow-up required for ROCm before claiming parity: this change extends the
+internal checkpoint_backward role list with saved O and row LSE, while the new
+physical launch ABI and pointer-order implementation are NVIDIA SM120 only.
+ROCm saved-checkpoint attention needs its own Schedule/Tile projection,
+HIP marshalling, exact gfx1151/gfx1201 numerical proof, and timing. No ROCm
+support or performance conclusion is inferred from the RTX 5070 packets.
+
+
+## W1.1-SM120-FOUR-PANEL-BENCHMARK-2026-10-02 sibling assessment
+
+Follow-up required: the benchmark-schema addition is NVIDIA-specific and does not alter ROCm IR or ABI. ROCm Schedule/Tile producer routes and gfx1151/gfx1201 physical schedules require independent tests and timings; no sm_120 measurements transfer.
+
+
+## E2E-REAL-6-ROCM-MATMUL-CACHE — warmed gfx1201 timing refresh
+
+The six-shape gfx1201 static f16 cache packet was rerun with five
+correctness-checked warmup launches per shape before timing. One HSACO and
+entry served all shapes; fp32-oracle maximum absolute error was 1.10e-5.
+Seven-sample HIP-event medians ranged from 8.64 to 24.96 us with 0.74–1.45%
+CV; end-to-end medians ranged from 2.14 to 5.85 ms. This replaces cold-launch
+outlier-sensitive timings for attribution. It keeps the item open for dynamic,
+split-K, fused, LDS-staged, dtype/layout, and gfx1151 exact-device coverage.
+[Warmed packet and protocol](../../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/README.md).
+
+
+
+## E2E-REAL-6-ROCM-CACHE-KEYS — exact gfx1151 parity recheck
+
+Princess-Luna (gfx1151) passed the three exact-device cases for shape-free
+cache identity: softmax, reduction, and scheduled attention. Each case changes
+runtime shape and caller symbol while retaining one image/entry and distinct
+shape guards, then validates native output against its independent reference.
+The result packet fingerprints the active Python cache implementation, test
+helpers, and compiler executable. gfx1151 cache parity is now proved for these
+three envelopes; other families/layouts and stable separate kernel/E2E timings
+remain open.
+[Packet and transcript](../../../../benchmarks/baselines/rocm_gfx1151_cache_20261002/README.md).
+
+<!-- entry-fields:end -->
+
+
+## `ROCM-NVFP4-INGEST-1-QWEN3-QPROJ-2026-10-02`: real tensor quality gate
+
+Owner ROCM-NVFP4-INGEST-1; sync `ROCM-NVFP4-INGEST-1-QWEN3-QPROJ-2026-10-02`.
+Tajasaurus gfx1201 ran the pinned Qwen3-8B q_proj through NVFP4-to-MXFP4 ingest
+and native Graph/Schedule/Tile/Target execution. Both ingested and direct
+BF16-to-MXFP4 weights ran through the same native package and matched their
+independent decoded-weight references exactly. Relative RMS against source BF16 was 9.50%
+for shipped NVFP4, 11.22% for direct BF16-to-MXFP4, and 14.99% after ingest.
+Converted MXFP4 is 11.29% from shipped NVFP4 and 18.03% from direct BF16-to-
+MXFP4, exposing extra ingest error on this tensor. Persistent HIP-event median
+was 31.29 us; end-to-end median was 6.281 ms (0.61% CV). This is one projection with
+synthetic FP8 activations, so quality closure and route promotion remain open.
+See the [packet report](../../../../benchmarks/baselines/rocm_nvfp4_ingest_20261001/README.md)
+and [integrated compiler log](../../compiler/INTEGRATED_COMPILER_LOG.md#2026-10-02--qwen3-8b-q-projection-exact-gfx1201-comparison).
+Apple, NVIDIA, and x86 use different or absent scale/instruction contracts; no
+sibling execution evidence is inferred.
+
+## NVIDIA-W1.1-STATIC-MNK-TAILS-2026-10-02 sibling assessment
+
+Owner W1.1; shared contract changed: checked launch binding equivalence for
+contiguous row/column layouts with at most one varying axis. ROCm gfx1151/gfx1201 retain their separate bounded-view/store and HIP schedules. The shared binding tests cover contiguous singleton address equivalence; native singleton package execution on each AMD architecture remains follow-up required. NVIDIA-owned dtype normalization changes no HIP storage contract.
+No RTX 5070 execution or performance evidence transfers to this backend.
+<!-- entry-fields:end -->
+
+## ROCM-NATIVE-IDENTITY-2026-10-02 owning slice
+
+Owner E2E-REAL-6-ROCM-MATMUL-CACHE / E2E-REAL-6-ROCM-CACHE-KEYS.
+Production shape-independent kernel projection now executes as a verified MLIR
+pass. Dynamic entry-owned dimension scaffolding is audited natively. The Target
+directive explicitly retains portable bias ABI and output storage; the generator
+consumes them. Exact gfx1201 fp16/bf16 static/dynamic bias+ReLU numerical cases
+pass, including smaller ragged runtime shapes. Four six-shape fp16 timing packets
+each prove one cold plus five image-cache hits, separate HIP-event and instrumented
+end-to-end samples, and actual queried RX 9070 XT identity. Native projection and
+registry/device regressions: 338 passed, three gfx1151-owned skips.
+[Packet and limitations](../../../../benchmarks/baselines/rocm_gfx1201_native_identity_20261002/README.md).
+gfx1151 dynamic/fused hardware proof, runtime module loading overhead, LDS,
+split-K, wider storage/layouts and unroll schedules remain follow-up required.
+Standalone pass registration and metadata are updated; no named canonical
+pipeline order, target capability, public operation or checked ABI ID changes.
+<!-- entry-fields:end -->
+
+## ROCM-NATIVE-MODULE-CACHE-2026-10-02 owning slice
+
+Owner E2E-REAL-6-ROCM-MATMUL-CACHE / E2E-REAL-6-ROCM-CACHE-KEYS.
+gfx1151 now has its own rebuilt full LLVM/MLIR 23 compiler and exact dynamic/
+fused package proof. A native C++ image service owns bounded per-context
+modules/functions through completion-held leases. Every checked invocation
+still validates ABI, dtype/layout and capacities; a hot-cache over-capacity
+call is rejected before acquisition. Both owning devices passed 61 focused
+checks (three sibling skips each). gfx1201 split-K regression: 59 passed,
+including actual secondary entry execution. Device/context lifetime,
+concurrency, eviction and inherited-process ownership also pass the controlled
+HIP-ABI test; these are not multi-GPU hardware claims.
+Matched fp16 packets on each architecture keep image, inputs and physical
+schedule identical and record one native load plus 95 hits versus 96
+per-call loads. Sampled instrumented E2E control/cached ratios range
+1.16–3.93x on gfx1151 and 1.39–4.54x on gfx1201; no kernel-throughput
+speedup or selector promotion is claimed.
+[gfx1151 evidence](../../../../benchmarks/baselines/rocm_gfx1151_native_module_cache_20261002/README.md);
+[gfx1201 evidence](../../../../benchmarks/baselines/rocm_gfx1201_native_module_cache_20261002/README.md).
+Remaining: native storage/allocation/transfer overhead and wider image-key
+storage/layout/LDS/unroll/split envelopes. The private lifecycle ABI changes
+no checked kernel ABI ID or native image schema. External resets/context
+destruction require explicit clear after completion; no automatic reset claim.
+<!-- entry-fields:end -->
+
+
+## NVIDIA-BIAS-SAVED-CHECKPOINT-2026-10-02 sibling assessment
+
+Owner E2E-REAL-6 / NVIDIA attention forward and backward. Shared internal Graph
+checkpoint operations now accept an optional exact f32 [B,Hq,Sq,Sk] bias operand.
+Their verifiers preserve Q/K/V, saved output, and row-LSE shapes. The native
+Schedule/Tile checkpoint projection remains restricted to nvidia_sm120; no
+sibling physical schedule or checked kernel ABI changes. Follow-up required for
+a sibling checkpoint bias consumer and its own exact-device proof; RTX 5070
+numerics and timings do not establish that parity. Automatic AD bias derivatives
+and the bias checkpoint JVP remain open.
+<!-- entry-fields:end -->
+
+
+## W1.1-SM120-LEGACY-SCHEDULE-2026-10-02 sibling assessment
+
+Owner W1.1; sync W1.1-SM120-LEGACY-SCHEDULE-2026-10-02. The shared legacy Tile pass
+delegates standalone SM120 matmul to native Graph-to-Schedule/Schedule-to-Tile
+and normalizes its original frontend symbol with MLIR SymbolTable. This branch
+requires explicit nvidia_sm120/sm_120 and does not run for rocm targets.
+Sibling physical parity is not applicable: no rocm Schedule, Target, kernel
+ABI or native loader changed. Pass registry and shared dtype/op gates run;
+RTX 5070 evidence does not transfer. The older SM80/SM90 fixture recheck is
+compiler artifact evidence only.
+<!-- entry-fields:end -->
+
+
+## W1.1-SM120-NATIVE-K-SCHEDULE-2026-10-02 sibling assessment
+
+Owner W1.1; sync W1.1-SM120-NATIVE-K-SCHEDULE-2026-10-02. The shared tiling pass selects native
+Schedule only for explicit nvidia_sm120 Graph matmul and leaves rocm
+value/generic routes unchanged. Physical parity is not applicable: no rocm
+Schedule profile, Target lowering or kernel ABI changed. Shared tiling and
+registry regressions are assessed; RTX 5070 execution does not transfer to
+this backend. A corresponding producer migration requires its own plan and
+exact-device evidence.
+<!-- entry-fields:end -->
+
+
+## W1.1-SM120-RESIDENT-EPILOGUE-2026-10-02 sibling assessment
+
+Owner W1.1; sync W1.1-SM120-RESIDENT-EPILOGUE-2026-10-02. Shared Python bounded-axis Graph
+projection now preserves named fp32 bias/residual operands. The resident kernel
+ABI extension is SM120-specific; no rocm physical schedule, Target or
+loader changed. Follow-up required to assess any rocm caller of the shared
+projection on its native route. Residual fusion remains NVIDIA-owned; this
+does not admit it on ROCm. RTX 5070 numerics/timing do not establish sibling
+parity. No new operation, dtype or pass registration is introduced.
+
+<!-- entry-fields:end -->
+
+
+## W1.1-SM120-TYPED-EPILOGUE-2026-10-02 sibling assessment
+
+Owner W1.1; sync W1.1-SM120-TYPED-EPILOGUE-2026-10-02. The shared tile.store contract
+adds a trailing fp32 residual after optional bias with explicit epilogue order.
+The native producer and physical implementation are restricted to SM120
+f16/bf16 typed fragments. Follow-up required for a rocm physical consumer.
+ROCm's existing bias/activation stores remain supported; the residual form
+is explicitly gated by its registered fragment-store epilogue diagnostic.
+The existing gfx1151 composed-layout store fixture verifies with the shared
+dialect; this is artifact evidence, not new owning-device proof.
+RTX 5070 numerics and timings do not establish sibling parity.
+
+<!-- entry-fields:end -->
+
+## ROCM-K-UNROLL-IMAGE-CACHE-2026-10-02
+
+Owner E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-K-UNROLL-IMAGE-CACHE-2026-10-02.
+Parity validated separately on gfx1151 and gfx1201: native MLIR image identity
+preserves K-unroll through both compilation phases; fp16/bf16 register-staged
+split-K=1 K-unroll=2 reuses one image across three shapes, including ragged K.
+Changing to K-unroll=1 produces a distinct cold image. Static and bias+ReLU
+six-shape packets record separate HIP-event and end-to-end timings and live
+device/compiler/source identities. No speedup claim. LDS, split-K, scaled
+matmul and wider storage/layout image keys remain follow-up required.
+See [packet](../../../../benchmarks/baselines/rocm_k_unroll_image_cache_20261002/README.md).
+
+## ROCM-LDS-IMAGE-CACHE-2026-10-02
+
+Owner E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-LDS-IMAGE-CACHE-2026-10-02.
+Parity validated separately on gfx1151 and gfx1201: unscaled fp16/bf16
+split-K=1 LDS matmul now enters native MLIR identity projection and retains
+staging and wave geometry through both cache phases. Three shapes including
+ragged M/N/K reuse one image; changing from 2x2 to 1x2 waves creates a distinct
+cold image and passes numerical execution. Nonportable LDS Target directives
+are rejected by the existing typed generator. Independent static and bounded
+dynamic bias+ReLU packets record kernel and end-to-end time, with absolute
+tolerance 2e-4 and live device/compiler/source identity. LDS performance is
+diagnostic; no selector promotion or speedup claim. Split-K and scaled keys
+remain follow-up required.
+[Packet](../../../../benchmarks/baselines/rocm_lds_image_cache_20261002/README.md).
+
+## ROCM-SPLIT-PARTITION-IMAGE-2026-10-02
+
+Owner ROCM-SPLIT-K-1 / E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-SPLIT-PARTITION-IMAGE-2026-10-02.
+Parity validated on gfx1201: Target IR now preserves Schedule k_blocks and
+positive static problem_k for split-K. Native MLIR identity retains both;
+fp16/bf16 plain and bias+ReLU M/N siblings reuse one eight-slice image, while
+K=4096 creates a distinct cold image and remains correct. Ordered/GELU replay
+coverage passed. Independent partial/reduction HIP-event samples and
+uninstrumented end-to-end timing are recorded. No speedup claim. Shared unsplit
+Target/cache checks passed on gfx1151; no gfx1151 split execution claim.
+Earlier cache packets that dropped macro-K are historical and superseded by
+fixed-recipe identity validation. Scaled image keys remain follow-up required.
+[Packet](../../../../benchmarks/baselines/rocm_split_partition_cache_20261002/README.md).
+
+## ROCM-W8A8-TARGET-CONSUMER-2026-10-02
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-W8A8-TARGET-CONSUMER-2026-10-02.
+Parity validated on gfx1201: production W8A8 packaging now compiles checked
+ROCm Target IR through the native typed WMMA consumer. KN/NK, fp32/bf16 output,
+ragged shapes and K=1536 pass independent Tile-vs-Target and fp64 checks;
+conflicting Target numerical/scale semantics are rejected. Exact-device
+suite: 199 passed. Host package/registry gates: 415 passed. Three diagnostic
+rows record live RX 9070 XT identity, matching source hashes, kernel windows
+and separate public-launch timing. No AITER comparison or promotion.
+Shape-independent scaled image keys remain follow-up required; static LDS
+grid and K-group dependencies require native contract work before projection.
+gfx1151 FP8 WMMA is not applicable under the RDNA3.5 ISA contract.
+
+[Packet](../../../../benchmarks/baselines/rocm_w8a8_target_consumer_20261002/README.md).
+
+## ROCM-W8A8-REGISTER-IMAGE-CACHE-2026-10-02
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-W8A8-REGISTER-IMAGE-CACHE-2026-10-02.
+Parity validated on gfx1201: verified global one-wave W8A8 Target directives
+now project to an explicit runtime-shape image contract. Native typed lowering
+uses runtime M/N/K while descriptors keep their shape guards and ancestry.
+KN/NK and fp32/bf16 each reuse one image across three M/N/K shapes; changing
+scale_n misses and remains correct. Capacity/scalar mismatches are rejected.
+Target lowering and its consumer now retain raster order/group; diagnostic
+grouped-M/grouped-N/column-major checks match independent Tile execution.
+Current owning-device suite: 240 passed. Host package/registry gates: 415 passed.
+Twelve correctness-gated benchmark arms separate frontend, package, kernel
+and public-launch timings. No AITER speedup or promotion. LDS dimensions and
+MXFP4/folded scaled keys remain open; gfx1151 FP8 WMMA is not applicable.
+
+[Packet](../../../../benchmarks/baselines/rocm_w8a8_register_cache_20261002/README.md).
+
+## ROCM-W8A8-LDS-MN-IMAGE-CACHE-2026-10-02
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-W8A8-LDS-MN-IMAGE-CACHE-2026-10-02.
+Parity validated on gfx1201: native MLIR now projects LDS W8A8 M/N to
+runtime inputs while retaining static K and whole/partial panel edge classes.
+Native raster geometry uses runtime M/N; checked descriptors preserve their
+shape guards and the runtime validates K/class before launch. fp32/bf16
+each reuse one eight-wave 128x128 image across three M/N shapes; changing K
+or either edge class misses and remains correct. Default row-major .text
+is byte-identical to the matched static control. Diagnostic grouped/column
+rasters pass independent numerical checks. Current device/native/package suite:
+249 passed; host registry/package checks: 415 passed; shared cache/lifetime:
+31 passed, 33 capability/hardware skips. Twelve benchmark arms separate
+frontend, package, kernel and public-launch costs. Kernel median ratios stay
+within 0.3% of unity; no AITER speedup or promotion. Runtime-K LDS reuse,
+MXFP4/folded keys and broader performance closure remain open. gfx1151 FP8
+WMMA is not applicable under RDNA3.5.
+
+[Packet](../../../../benchmarks/baselines/rocm_w8a8_lds_mn_cache_20261002/README.md).
+
+## ROCM-W8A8-LDS-RUNTIME-K-2026-10-02
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-W8A8-LDS-RUNTIME-K-2026-10-02.
+Native MLIR projects LDS W8A8 K to a checked runtime value alongside M/N,
+retaining whole/partial panel classes, scale semantics, staging and raster
+keys. The scale-group loop bound and final-prefetch clamp use runtime K.
+The positive whole-group ABI contract is exposed to LLVM with an assumption;
+without it the fictitious zero-trip loop edge caused 15 spilled VGPRs in
+ragged kernels. The corrected implementation passes existing no-spill gates.
+Exact gfx1201 native/device/package: 253 passed plus six prefetch boundary
+checks; host registry/cache/package: 441 passed, 22 hardware skips.
+K128/384/1536/2048/3072 reuse one image per f32/bf16 contract. Twelve
+matched timing arms measure 0.16–2.59% kernel overhead; no AITER speedup.
+Runtime-K overhead, MXFP4/folded keys and broader performance remain open.
+gfx1151 FP8 WMMA is not applicable.
+
+[Packet](../../../../benchmarks/baselines/rocm_w8a8_lds_runtime_k_cache_20261002/README.md).
+
+## ROCM-FOLDED-NATIVE-EPILOGUE-2026-10-02
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-NATIVE-EPILOGUE-2026-10-02.
+Parity validated for the native Tile epilogue on gfx1201: full-K typed
+MMA/scale/bf16 store passes normal, overflow, underflow, zero and ragged
+numerical cases. Combined verifier/new-device/W8A8 gate: 110 passed.
+At this prerequisite checkpoint, folded Graph/Target packages used the HIP materializer. Follow-up:
+connect the native LDS producer and checked ABI, preserve selected schedule,
+then prove package numerics, image keys and production timings. gfx1151
+FP8 WMMA producer is not applicable under RDNA3.5.
+
+[Native epilogue proof](../../../../benchmarks/baselines/rocm_folded_native_epilogue_20261002/README.md).
+
+
+## ROCM-FOLDED-NATIVE-PACKAGE-2026-10-02
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-NATIVE-PACKAGE-2026-10-02.
+Parity validated on gfx1201 for authored Graph -> Schedule -> Tile ->
+native LDS/typed-fragment/ROCDL/LLVM package and checked expanded-memref ABI.
+Five randomized/ragged cases match fp64 and matched HIP control bitwise;
+production M256/K5120 N4096/8192/16384 outputs pass independent sampled
+reference and full HIP parity. Seven-trial device-clock/event timing measures
+2.8–8.2% native overhead, 177 versus 123 VGPRs, no spills. Public launch cost
+is separate. Follow-up required: register/staging/barrier optimization,
+shape-independent folded keys, broader scale and model-quality proof.
+gfx1151 FP8 WMMA is not applicable under RDNA3.5.
+
+[Native package proof and paired timing](../../../../benchmarks/baselines/rocm_folded_native_package_20261002/README.md).
+
+
+## ROCM-FOLDED-NATIVE-OPT-2026-10-02
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-NATIVE-OPT-2026-10-02.
+Follow-up required: native folded resource/column-cost attribution and image
+keys remain open. Complete-panel setup was redundant with the existing emitter
+and removed. K16 issue boundaries retained 177 VGPRs; fragment retirement gave
+176 versus HIP 123, with no spills. Neither candidate resolved the resource
+gap or established a meaningful gain; both were removed. Stronger production
+package tests prove finite overflow and nonzero underflow recovery and zero
+partials. Recorder adapts marker duration without weakening clock witnesses.
+gfx1151 FP8 WMMA remains not applicable under RDNA3.5.
+
+[Attribution experiments](../../../../benchmarks/baselines/rocm_folded_native_fragment_retirement_20261002/README.md).
+
+
+## ROCM-FOLDED-RUNTIME-MN-2026-10-02
+
+Owner ROCM-MXFP4-W4A8-1 / E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-FOLDED-RUNTIME-MN-2026-10-02.
+Parity validated on gfx1201 for folded runtime M/N image identity. Native
+generator and projection share strict Target admission. Launch-owned Schedule
+and payload hashes/shape guards survive projection; K, whole/partial classes
+and all physical keys remain image-owned. Three random/ragged shapes and three
+production N values reuse one image. Combined gate: 84 passed; key/frontend:
+42; malformed geometry/static dimension: 3. Existing native cache families:
+130 passed, 9 skipped. Cold frontend/package cost 324 ms, later cross-N image
+hits 90–123 ms. Paired runtime/static device ratios 0.9920–1.0314, no spills.
+Follow-up required: runtime K, exact per-K32 migration, register/column-cost
+attribution and wider layout/model proof. gfx1151 FP8 WMMA is not applicable.
+
+[Native image reuse and paired timing](../../../../benchmarks/baselines/rocm_folded_native_runtime_mn_20261002/README.md).
+
+
+## ROCM-FOLDED-RUNTIME-K-2026-10-02
+
+Owner ROCM-MXFP4-W4A8-1 / E2E-REAL-6-ROCM-MATMUL-CACHE; sync ROCM-FOLDED-RUNTIME-K-2026-10-02.
+Parity validated on gfx1201 for native folded runtime M/N/K image reuse.
+Positive K64 multiples and whole/partial panel classes retain their checked
+launch-owned buffers, payload hashes and geometry. Full-K scale semantics are
+preserved by the native LDS loop; projection, generation and runtime share the
+explicit full-extent contract. Native folded frontend defaults to runtime K;
+fixed-K/static controls remain explicit. Device numerical/ABI/cache gate: 91
+passed; host folded/registry gates: 329; existing shared identity/cache gates:
+72 passed, 9 skipped. Physical-key isolation: 10 passed; final audit/registry gates: 311 passed. Four production M/N/K cases reuse one HSACO image with
+runtime/static device ratios 0.9957–1.0185. Native/HIP remains 1.0224–1.2148,
+with 177 versus 123 VGPRs and no spills. Runtime K closes this folded image-key
+boundary, not performance, exact per-K32 native migration or model quality.
+Follow-up required: native register/column-cost attribution, exact per-K32
+migration and wider layout/model proof. gfx1151 FP8 WMMA is not applicable.
+
+[Native runtime-K image reuse and paired timing](../../../../benchmarks/baselines/rocm_folded_native_runtime_k_20261002/README.md).
+
+
+## ROCM-FOLDED-LIVENESS-2026-10-02
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-LIVENESS-2026-10-02.
+Parity validated on gfx1201 for compiler liveness attribution: diagnostic
+LLVM objects match native selected instructions and resources. Restored native
+virtual peak is 165 VGPRs in the K-loop WMMA; listed live tuples are 64 accumulator,
+48 LDS fragment, 20 prefetch and 25 address/state VGPRs, plus an 8-register
+instruction-point difference. Physical allocation is 177/29. Terminal-prefetch
+peeling raised the virtual peak to 187, physical VGPRs to 180, and established no
+consistent timing improvement. The candidate was removed; reconstructed patch
+and timing/report receipts remain. Candidate and restored numerical gates each
+passed 96 overlapping tests. Follow-up required: reduce LDS-fragment/address
+overlap, exact per-K32 native migration, layout/model-quality proof. No hardware
+counter attribution or gfx1151 FP8 WMMA parity is claimed.
+
+[Instruction-bound liveness and rejected candidate](../../../../benchmarks/baselines/rocm_folded_terminal_prefetch_20261002/README.md).
+
+
+## ROCM-FOLDED-COLD-BRANCH-2026-10-02
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-COLD-BRANCH-2026-10-02.
+Parity validated on gfx1201: native folded regular-scale branch gets an
+LLVM likelihood hint while retaining FP64 recovery and the checked ABI.
+Compiler/device/verifier gate: 101 passed; native hint-survival gate: 1 passed.
+Instruction-bound pressure receipt proves surviving 2000:1 weights and actual
+native stream identity, with unchanged 177 VGPRs/no spills. Nine-trial
+interleaved repeat: short-K native/reference ratios 0.9112/0.9424; long-K
+0.9940–1.0051. Native/HIP remains 1.0232–1.1134. Individual windows remain
+noisy and include dispatch gaps; isolated GPU phase time is not proved.
+K16 read grouping lowered virtual pressure to 154 but regressed two N4096
+rows by 3.4–4.4%; it was removed and its paired evidence retained.
+Follow-up required: pure device/dispatch timing separation, wider/ragged
+envelopes, exact per-K32 native migration and model quality. gfx1151 FP8 WMMA
+is not applicable; the internal folded-op consumer needs owning-device
+follow-up if used on another architecture.
+
+[Retained native branch hint](../../../../benchmarks/baselines/rocm_folded_cold_branch_20261002/README.md), [removed K16 group candidate](../../../../benchmarks/baselines/rocm_folded_panel_group_20261002/README.md).
+
+
+## ROCM-FOLDED-GRAPH-WINDOWS-2026-10-02: checked package timing
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-GRAPH-WINDOWS-2026-10-02.
+Parity validated on RX 9070 XT gfx1201 for marked and unmarked checked
+package graph replay. Seven alternating trials leave a 2.2–10.4% native/HIP
+gap; repeated host dispatch is not dominant in this four-shape M256 packet.
+Follow-up required: native instruction scheduling/epilogue, exact per-K32 and
+wider short/ragged-K/layout proof. No public runtime graph ABI changed.
+Evidence: benchmarks/baselines/rocm_folded_graph_windows_20261002/README.md.
+
+
+## ROCM-FOLDED-READ-BARRIER-2026-10-02: measured rejection
+
+Owner ROCM-MXFP4-W4A8-1; sync ROCM-FOLDED-READ-BARRIER-2026-10-02.
+Parity validated for candidate numerical semantics on RX 9070 XT gfx1201;
+performance candidate removed after near-flat/regressing graph measurements.
+Follow-up required: native live-range/code generation and wider route coverage.
+Evidence: benchmarks/baselines/rocm_folded_read_barrier_20261002/README.md.
+
+
+## NVIDIA-W1.1-CANONICAL-TENSOR-REPLAY-2026-10-02: producer migration
+
+Owner W1.1; sync NVIDIA-W1.1-CANONICAL-TENSOR-REPLAY-2026-10-02.
+Not applicable: recovery is guarded by explicit SM120 target/architecture
+and runs only in the NVIDIA Tile entry. No rocm op/dtype/Schedule/ABI or
+runtime implementation changes. Its architecture-owned pipelines and device
+obligations remain open; RTX 5070 evidence does not establish sibling parity.
+Evidence: benchmarks/baselines/nvidia_sm120_canonical_tensor_replay_20261002/README.md.
+
+
+## NVIDIA-W1.1-REGISTERED-TENSOR-2026-10-02: complete contraction boundary
+
+Owner W1.1; sync NVIDIA-W1.1-REGISTERED-TENSOR-2026-10-02.
+Follow-up required: shared Graph-to-Schedule now refuses isolated canonical K-step scheduling rather than discarding its enclosing accumulator/epilogue. rocm needs an architecture-owned whole-function recovery or scheduled producer before admitting such generic tensor loops. No sibling pipeline, physical schedule or device parity is inferred from RTX 5070 evidence.
+Evidence: benchmarks/baselines/nvidia_sm120_registered_tensor_pipeline_20261002/README.md.
+
+
+## NVIDIA-JIT-ATTENTION-VJP-2026-10-02: frontend reverse integration
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1; sync NVIDIA-JIT-ATTENTION-VJP-2026-10-02.
+Follow-up required: shared flash_attn Graph inference now preserves query axes with V's independent value width, and eager grouped-query/dtype semantics agree with that contract. Native AD checkpoint export also retains selected/reordered cotangent lineage. No rocm native compiler/runtime parity follows; verify independent Dv and grouped-query envelopes on its own device before admitting them. The new JIT VJP package API is SM120-only.
+Evidence: benchmarks/baselines/nvidia_jit_attention_vjp_20261002/README.md.
+
+
+## NVIDIA-ATTENTION-BIAS-GRADIENT-2026-10-02: optional checkpoint bias gradient foundation
+
+Owner E2E-REAL-6 / AD-HIGHER-1; sync NVIDIA-ATTENTION-BIAS-GRADIENT-2026-10-02.
+Follow-up required: the shared internal checkpoint dialect permits an optional
+exact-shaped f32 bias-gradient result. Native Schedule admission remains
+nvidia_sm120-only; rocm has no corresponding native checkpoint lowering,
+runtime ABI or exact-device bias-gradient proof. No NVIDIA schedule or
+device evidence transfers to this backend.
+
+The NVIDIA follow-up proves its checked eleven-buffer ABI on RTX 5070 only;
+rocm has no corresponding runtime admission or exact-device proof.
+
+Evidence: [checked bias-gradient packet](../../../../benchmarks/baselines/nvidia_checkpoint_bias_gradient_20261002/README.md).
+
+The shared native reverse rule now admits exact-shaped static f32 score bias
+and retains its fourth gradient. rocm requires its own native checkpoint
+consumer and exact-device AD parity; RTX 5070 ownership/numerics do not
+establish those consumers. Broadcast bias and bias JVP remain separate.
+
+Evidence: [public JIT bias VJP packet](../../../../benchmarks/baselines/nvidia_jit_attention_bias_vjp_20261002/README.md).
+
+
+## NVIDIA-ATTENTION-ARGUMENT-ORDER-2026-10-02: native frontend role mapping
+
+Owner E2E-REAL-6 / AD-HIGHER-1; sync NVIDIA-ATTENTION-ARGUMENT-ORDER-2026-10-02.
+Follow-up required: native AD export and shared Schedule contracts now retain
+a checked frontend argument permutation. rocm needs an architecture-owned
+checkpoint consumer and exact-device frontend/gradient-order parity; no
+NVIDIA image, physical schedule or numerical proof transfers. This does not
+admit a rocm native attention checkpoint route.
+
+Evidence: [argument-order packet](../../../../benchmarks/baselines/nvidia_attention_argument_order_20261002/README.md).
+
+
+## ROCM-MXFP8-K64-2026-10-06: native staging candidate
+
+Owner ROCM-FP8-BLOCKSCALE-1; sync ROCM-MXFP8-K64-2026-10-06.
+Exact gfx1201 numerical/independent-order timing parity validated. Native automatic K64 staging applies only to the existing 128x64 LDS envelope at whole-slab K1024–2048; 128x128, long-K and global profiles retain K32. 125 current checks pass. General performance/cache/layout closure remains open.
+
+Evidence: [K64 candidate packet](../../../../benchmarks/baselines/rocm_mxfp8_k64_20261006/README.md).
+
+
+## NVIDIA-W11-OPERAND-LINEAGE-2026-10-06
+
+Owner W1.1; sibling FRONTEND-IR-MEDIUM-1.
+Not applicable to rocm physical lowering: recovery is gated to SM120 and package role projection to nvidia_sm120. Existing sibling input validation and physical routes are retained; no NVIDIA proof transfers.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_operand_lineage_20261006/README.md).
+
+
+## NVIDIA-W11-PUBLIC-PACKAGE-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-W11-PUBLIC-PACKAGE-2026-10-06.
+Not applicable to physical execution: the new storage/epilogue ABI variants are SM120-only. The shared JIT descriptor entry retains explicit ROCm target gates for movement, softmax and NVFP4 ingest; focused host contract regressions pass. No gfx1151/gfx1201 execution or timing evidence transfers.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_operand_lineage_20261006/README.md).
+
+
+## NVIDIA-PREPARED-MATMUL-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-PREPARED-MATMUL-2026-10-06.
+Not applicable to physical execution: gfx1151/gfx1201 HIP images, movement and ingest owners are distinct. Shared JIT cache hooks are explicitly SM120-only and retain call-time constraint/stochastic checks; sibling target routing is unchanged. Native/ABI/registry host regressions pass, with no rocm exact-device or performance claim. A corresponding backend-specific owner remains follow-up required if repeat host binding is measured there.
+
+[Evidence](../../../../benchmarks/baselines/nvidia_prepared_matmul_20261006/README.md).
+
+## NVIDIA-LHS-RHS-LAYOUT-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-LHS-RHS-LAYOUT-2026-10-06.
+The frontend records compact RHS storage facts on a copied semantic Graph.
+Native Schedule/Tile remains the physical recipe authority. The named static
+RMSNorm/LayerNorm/softmax producer edge now preserves row/column RHS bindings,
+ABI identity, epilogue and portable replay rather than forcing column storage.
+Follow-up required for backend-owned producer/layout consumers and exact-device parity on rocm. This SM120 native row-RHS recipe and CUDA lifetime evidence do not prove sibling physical execution.
+General producer graphs, dynamic row-RHS, A layouts, composed AD and
+resident/asynchronous native ownership remain open. No new dtype/op/pass or
+physical strategy promotion is claimed.
+Evidence: benchmarks/baselines/nvidia_lhs_rhs_layout_20261006/README.md
+
+## NVIDIA-PREPARED-LHS-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-PREPARED-LHS-2026-10-06.
+Shared contracts: native two-package ownership, one-time producer attachment,
+context-shared pinned/device staging, failure retirement, public close/rebind,
+and truthful ordered-product CompileReport fingerprints.
+Native Graph/Schedule/Tile/Target/LLVM component images remain authoritative.
+Follow-up required for rocm-owned native product lifetimes and exact-device parity. Shared close_native_storage and CompileReport product fingerprints are assessed; existing routes are retained. CUDA pinned staging, modules and stream order do not prove sibling physical execution.
+General composition/AD, dynamic layouts, asynchronous/resident ownership,
+wider formats and common portable native ownership remain open.
+No physical kernel/dtype strategy is promoted.
+Evidence: benchmarks/baselines/nvidia_prepared_lhs_20261006/README.md
+
+## NVIDIA-PORTABLE-LHS-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-PORTABLE-LHS-2026-10-06.
+Shared contracts: type-strict portable admission witnesses, parent Graph/ABI
+guards, bounded per-context native replay ownership, serialized invocation/
+retirement and pre-lock fork refusal. Native component images remain authoritative.
+Follow-up required for rocm-owned product lifetimes and exact-device parity. CUDA context identities, pinned staging and module ownership provide no sibling physical proof; existing target routes remain gated.
+General composition/AD, dynamic layouts, asynchronous/resident ownership and
+wider formats remain open. No kernel or dtype strategy is promoted.
+Evidence: benchmarks/baselines/nvidia_portable_lhs_owner_20261006/README.md
+
+## NVIDIA-DYNAMIC-LHS-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-DYNAMIC-LHS-2026-10-06.
+Shared contracts: copied full dynamic Graph certificates, explicit traced
+capacities, frontend epilogue role mapping, portable identity admission and
+pre-allocation bound guards. Native Graph/Schedule/Tile/Target/LLVM packages
+remain execution authority. Producer images are capacity specializations;
+the consumer retains its existing checked dynamic strided ABI.
+Follow-up required for rocm-owned bounded producer/consumer certificates and exact-device parity. The shared projection uses existing semantic Graph types; the changed physical Schedule storage gate is explicitly SM120-only. No CUDA image, dynamic stride ABI or timing proof transfers.
+Ordinary JIT bounded-shape selection, dynamic row-RHS/native prepared owners,
+general composed AD, asynchronous ownership and wider formats remain open.
+Evidence: benchmarks/baselines/nvidia_dynamic_lhs_frontend_20261006/README.md
+
+## NVIDIA-DYNAMIC-LHS-OWNER-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1; sync NVIDIA-DYNAMIC-LHS-OWNER-2026-10-06.
+Shared contracts: immutable bounded/exact axes, dynamic native frame projection,
+private C-ABI parameter validation, synchronous grow-only scratch leasing and
+portable typed/context ownership. Existing native component images and runtime
+launch descriptor ABIs remain authoritative.
+Follow-up required for rocm-owned native bounded-frame lifetime and exact-device parity. Shared host binding/certificate projections are assessed; physical CUDA parameter reflection, stream/pinned staging and per-frame leading dimensions do not prove sibling execution.
+Ordinary JIT bounded selection, dynamic row-RHS, general composition/AD,
+asynchronous/resident owners and wider formats remain open.
+Evidence: benchmarks/baselines/nvidia_dynamic_lhs_owner_20261006/README.md
+
+## ROCM-MXFP8-LONG-K-2026-10-06 — native selector trial
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6. Native Schedule selection carries existing K32 scale semantics into an LDS K64 recipe within the measured occupancy envelope.
+
+Owning gfx1201 parity validated for the bounded trial: 31 exact-device tests and 84 paired benchmark arm validations. Broader W8A8/MXFP4 performance closure remains open.
+
+Evidence: benchmarks/baselines/rocm_mxfp8_long_k_20261006/README.md. WSL contract gates: 115 passed; registry/audit gates: 333 passed.
+
+## NVIDIA-NVFP4-SHARED-TRANSPOSE-2026-10-06
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6. Native batch-aware shared-RHS transposed-A integration retains the existing ten-argument NVFP4 ABI, seals policy/dimensions in Schedule, and independently offsets A/scales/output while preserving shared B/scales.
+
+Not applicable to rocm physical execution: batching is gated to the named SM120 NVFP4 profile. Shared frontend shape inference and Graph verification are assessed; no CUDA layout, batch schedule, ABI execution or device timing transfers.
+
+Evidence: benchmarks/baselines/compiler_contract_revalidation_20261006/README.md. Registry/audit gates: 333 passed.
+
+## Public independent-prefix primal/JVP integration
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / ROCM-FP8-BLOCKSCALE-1;
+sync INDEPENDENT-SCALE-BATCH-2026-10-07. Public leading maps preserve independent
+matrix/scale prefixes. The primal descriptor binds its actual native member
+image and geometry. 487 focused WSL host checks pass.
+Exact gfx1201 parity validated: 90 public primal/JVP device cases and 90 correctness-gated separate public/native timing rows pass.
+Transposed A, partial groups, general/dynamic/composed/storage AD, generic closure and publication remain open.
+Evidence: benchmarks/baselines/rocm_public_independent_scaled_primal_20261007/README.md.
+
+## Independent-prefix transposed-A — named profile proved
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / ROCM-FP8-BLOCKSCALE-1;
+sync INDEPENDENT-SCALE-BATCH-2026-10-07. Native Schedule/Tile/Target orientation,
+column-major A tile.view and serialized orientation now execute through public
+leading maps. 855 focused host checks and 80 final native package/corruption
+checks pass. The initial owning-device lane-address error was repaired and
+the final compiler rerun; failed-build timings are not evidence.
+Exact gfx1201 parity validated: 180 public primal/JVP cases, 12 interior/multiple/ragged tile cases and 180 correctness-gated public/prepared/event timing rows pass.
+Partial groups, dynamic/nonleading/composed/storage AD, optimized LDS A storage, generic closure, full-suite and publication remain open.
+Evidence: benchmarks/baselines/rocm_independent_transposed_a_20261007/README.md.
+
+## Independent-prefix partial K32 groups — named profile proved
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / ROCM-FP8-BLOCKSCALE-1;
+sync INDEPENDENT-SCALE-BATCH-2026-10-07. Native Schedule/Tile/Target derives
+ceiling scale counts and bounds the last WMMA group, preserving isolated
+partial accumulation and static plane/image identities. Direct Tile JVP
+admission was repaired and the final compiler rerun. 120 projection, 76 native
+partial/corruption and 308 final registry/event/audit checks pass.
+Exact gfx1201 parity validated: 260 public primal/JVP/boundary/interior cases and 180 correctness-gated separate timing rows pass.
+Scalar JIT, other group widths, LDS tails, general/dynamic/nonleading/composed/storage AD, generic closure, full-suite and publication remain open.
+Evidence: benchmarks/baselines/rocm_independent_partial_groups_20261007/README.md.
+
+
+## Typed primal single-image — named profiles proved
+Owner FRONTEND-IR-MEDIUM-1 / ROCM-FP8-BLOCKSCALE-1;
+sync TYPED-PRIMAL-SINGLE-IMAGE-2026-10-07. The descriptor and native owner now
+bind the same actual Graph-derived image for scalar and coupled FP8/MXFP8.
+388 focused host checks, 365 artifact/registry/audit checks and 309 exact
+gfx1201 device regressions pass. Empty-cache packaging uses 7 rather than
+11 subprocesses, median control/candidate ratio 1.759. Reused-cache median
+ratio 0.901 retains remaining fingerprint/metadata overhead; no universal
+performance or execution speedup is claimed. Scalar transposed-A/partial
+groups, general AD/batching, full-suite and publication remain open.
+Evidence: benchmarks/baselines/rocm_typed_primal_single_image_20261007/README.md.
+Exact gfx1201 parity validated.
+
+
+## Scalar typed bounded planes — named profile proved
+Owner FRONTEND-IR-MEDIUM-1 / ROCM-FP8-BLOCKSCALE-1;
+sync SCALAR-SCALED-PLANE-2026-10-07. Native Schedule/export derives empty-prefix
+physical planes while the rank-two semantic Graph remains unmodified.
+95 matching native checks and 40 exact gfx1201 primal/JVP cases pass.
+All 48 benchmark rows pass independent numerics, compiler-free changed-input
+replay and stale-generation refusal; maximum error is 7.2621e-8.
+Scalar transposed-A and partial K32 groups are now proved. Other widths/layouts,
+dynamic/nonleading/composed/storage AD, generic closure and delivery remain open.
+Evidence: benchmarks/baselines/rocm_scalar_scaled_plane_20261007/README.md.
+Exact gfx1201 parity validated.
+
+
+## Scalar scale reverse — named profile proved
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1;
+sync SCALAR-SCALED-PLANE-2026-10-07. Scalar transposed A/B and ragged K4
+scale reverse now have 12 exact gfx1201 role-order/changed-input checks and
+four separate public/native timing profiles; maximum error is 3.43592e-8.
+Matching existing SM120 NVFP4 regression passes 83 cases with two unsupported
+skips. General composed/dynamic/nonleading/storage AD, sibling scale execution,
+generic closure, fresh full-suite and publication remain open.
+Evidence: benchmarks/baselines/rocm_scalar_scaled_plane_20261007/README.md.
+Exact gfx1201 scale reverse parity validated.
+
+
+## ROCm version-query metadata reuse — gfx1201 measured
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6;
+sync ROCM-VERSION-METADATA-2026-10-07. 49 host checks and 40 owning gfx1201
+scalar regressions pass. 16 actual package A/B profiles preserve compiler/
+toolchain fingerprints, reduce subprocesses from 7 to 5 and measure median
+uncached/cached ratio 1.1205. This is package metadata work, not kernel speed.
+gfx1151/other-family proof, broader integration, full-suite and delivery remain open.
+Evidence: benchmarks/baselines/rocm_version_query_cache_20261007/README.md.
+Exact gfx1201 package metadata/numerical parity validated; gfx1151 follow-up required.
+
+
+## Current five-slice native snapshot revalidation
+Owner ROCM-NVFP4-INGEST-1 / W1.1 / E2E-REAL-6;
+sync FIVE-SLICE-CURRENT-SNAPSHOT-2026-10-07. Matching compiler revalidation
+passes 171 combined NVIDIA host/device tensor and saved-LSE attention tests.
+gfx1201 ingest/public resident gates pass 47 cases; the missing native-image
+library binding is repaired and the fresh-process compiler-free replay passes.
+Original failure and repair receipts remain separate. Wider integration,
+performance closure, full-suite and reviewable publication remain open.
+Evidence: benchmarks/baselines/five_slice_current_snapshot_20261007/README.md.
+Owning architecture evidence is limited to the named cases above; sibling physical proof does not transfer.
+
+
+## SM120 actual-Graph native partition — owning execution proof
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SM120-NATIVE-TENSOR-PROGRAM-2026-10-08.
+Native outlining preserves the actual producer-to-matmul SSA edge, reordered
+external roles and compiler-authored buffer capacities/read-write lifetimes.
+The raw Schedule adapter does not reconstruct Python Graph operations.
+32 host/device checks pass on RTX 5070 SM120, including 12 resident numerical
+cases with Python Graph constructors forbidden after frontend serialization.
+24 benchmark profiles cover RMSNorm/LayerNorm/last-axis softmax, FP16/BF16,
+row/column-major RHS and small/larger static shapes. Independent float64
+oracles round the producer result to its storage type before matmul.
+Separate producer/consumer CUDA-event dispatch windows and end-to-end timings
+are recorded; maximum output error is 0.00107674. No speedup or kernel-only claim.
+Compiler SHA256: 08165455e4bf6a5babce1680cabf0fdabe006a767ace49ebce6ef12a6b9f620d.
+Public JIT wiring, portable native witness validation, dynamic capacities,
+broader composition/asynchronous lifetimes and focused PR delivery remain open.
+Evidence: benchmarks/baselines/nvidia_native_tensor_partition_20261008/README.md.
+
+Follow-up required: generic producer partition parity needs independent gfx1151/gfx1201 evidence. Existing gfx1201 NVFP4 proof is a separate contract.
+
+
+## SM120 native whole-Graph public integration — owning proof
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SM120-NATIVE-TENSOR-PROGRAM-2026-10-08.
+Static public JIT now packages the actual frontend Graph through native member
+outlining and raw native Schedule/Tile artifacts. Prepared C++ execution reads
+checked descriptor bindings without reconstructing a consumer Graph.
+Portable v2 replay binds both member Graph digests and the native program digest
+to its packages, validates buffer byte capacities/ownership/read-write lifetimes,
+and uses no compiler subprocess or Python Graph constructor in the proved route.
+The existing public/device/resident compatibility lane passes 155 checks;
+the independent native/portable/audit/registry lane passes 358 checks, including
+seven portable Graph/lifetime corruption cases refused before compiler/CUDA.
+48 public JIT/replay benchmark profiles cover RMSNorm/LayerNorm/softmax,
+FP16/BF16, both RHS storage orders, fused epilogues and two static shapes.
+Each profile checks independent numerical results before and after timing;
+producer/consumer event-dispatch and cold/warm/portable wall time are separate.
+No performance promotion or kernel-only claim is made.
+Bounded dynamic projection still uses the prior Python path. Native dynamic
+integration, wider composition/asynchronous lifetimes and focused delivery
+remain open. The raw-adapter snapshot remains historical evidence.
+Evidence: benchmarks/baselines/nvidia_native_tensor_partition_20261008/README.md.
+
+Follow-up required for gfx1151/gfx1201 producer contracts; existing NVFP4 public proof is separate.
+
+
+## SM120 native bounded whole-Graph projection — owning checks
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SM120-NATIVE-BOUNDED-TENSOR-PROGRAM-2026-10-08.
+C++ MLIR outlining now projects bounded M/N/K from the actual frontend Graph;
+the public bounded path no longer constructs replacement Python Graphs.
+Original caller IR is preserved. Native v2 witnesses bind active shapes,
+capacities, member Graphs and private buffer read/write lifetimes.
+All seven nonempty dynamic-axis subsets are covered for RMSNorm/LayerNorm/
+softmax and FP16/BF16, including compiler-free portable replay and stable
+scratch ownership: 130 focused native/host checks pass on Super-Bear.
+The wider device lane reports 291 passes and one legacy-name fixture failure.
+After replacing that fixture's reconstructed Graph with actual descriptor
+bindings, the entire prepared-owner file passes 100 checks. The static-kernel
+dynamic-ABI refusal and numerical checks are retained.
+Both RHS layouts complete 48 correctness-gated profiles each (96 total).
+Maximum absolute output error is 0.015625. Warm public-call medians span
+0.420867–0.837734 ms for column RHS and 0.411667–0.838203 ms for row RHS. Producer/consumer CUDA-event dispatch and
+public wall timing are separate; no speedup or kernel-only claim is made.
+Compiler SHA256:
+65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2.
+Evidence: benchmarks/baselines/nvidia_native_bounded_tensor_partition_20261008/README.md.
+Broader composition/asynchronous ownership, sibling owning-device proof,
+broader performance evaluation and focused native publication remain open.
+
+Follow-up required for gfx1151/gfx1201 native capacity projection; prior NVFP4 proof remains bound to its earlier compiler.
+
+
+## Shared native compiler gfx1201 parity — 2026-10-08
+
+Owner ROCM-NVFP4-INGEST-1 / W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SHARED-NATIVE-PROGRAM-PARITY-2026-10-08.
+The latest Super-Bear-built LLVM/MLIR 23.1.1 compiler and matching layout
+library were transferred with current source into a new Tajasaurus scratch
+checkout, preserving the prior proof. Live hardware is RX 9070 XT/gfx1201,
+UUID GPU-28d9e7efbf2ef716. Compiler SHA256:
+65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2.
+Native whole-Graph partition plus public NVFP4 resident JIT checks pass:
+27 passed, one timeout-plugin configuration warning. The first collection
+attempt lacked a shared benchmark helper; the unchanged selection passes
+after transferring that source dependency. No test was weakened or skipped.
+Six JIT/portable profiles pass independent conversion/storage/folded float64
+numerics before and after timing; maximum absolute output error 0.0.
+Converter/storage/consumer event windows, graph-dispatch and cold/warm/portable
+wall times are separate. No kernel speedup or selector promotion is claimed.
+This checks gfx1201 NVFP4 parity after the shared native SM120 dynamic changes;
+it does not establish ROCm dynamic producer capacity, wider layouts,
+model-quality acceptance, general AD or complete five-slice closure.
+Evidence: benchmarks/baselines/gfx1201_shared_native_revalidation_20261008/README.md.
+
+Owning gfx1201 named NVFP4 route parity validated; gfx1151 latest-build follow-up remains required.
+
+
+## Independent matrix/scale broadcast foundation — evidence reference
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync INDEPENDENT-SCALE-BATCH-2026-10-07.
+benchmarks/baselines/scaled_independent_broadcast_foundation_20261007/README.md
+records independent matrix/scale prefix and transpose oracle checks.
+This is reference semantic conformance only. Production Graph verification,
+four independent Schedule/Tile address maps, scale-gradient reductions and
+owning-device ABI/numerical/timing proof remain required; generic batching
+and transpose closure states remain unchanged.
+
+Follow-up required: gfx1201 typed FP8/MXFP8 native maps; gfx1151 needs its own physical route and cannot inherit RDNA4 FP8 WMMA.
+
+
+## Direct broadcast scaled frontend — owning gfx1201 integration
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync DIRECT-SCALED-BROADCAST-2026-10-08.
+Ordinary traced scaled_matmul with batching="broadcast" now infers its result
+from all four right-aligned matrix/scale prefixes. Known incompatible or zero
+extents are rejected; named packed physical contracts cannot be reinterpreted.
+No replacement Python Graph, Tile constructor or numerical backend is added.
+Native existing independent address maps consume the actual frontend Graph.
+The named source prefixes (2,1), (3), (), (1,3) join to output (2,3).
+FP8/MXFP8 primal plus FP32-scale JVP/VJP cover all four matrix transpose flags
+at M=3,N=5,K=35 (ragged K32 groups). Scale adjoints reduce to each scale's own
+prefix, including singleton and absent axes. Warm compiler-free calls pass.
+Owning RX 9070 XT/gfx1201 lane: 16 passed; focused frontend/dtype/op/diagnostic/
+pass gates: 988 passed. Sixteen benchmark profiles check independent float64
+primal/JVP and finite-difference VJP before/after timing; maximum output error
+1.01959069e-07. Public cold/warm wall and prepared HIP program-event windows
+are separate. No isolated kernel speedup or default-selector promotion.
+Compiler SHA256: 65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2.
+All recorder source hashes match the sealed source. Encoded scale byte
+annotations retain their existing explicit planned/gated token.
+Generic dynamic/composed batching, other group widths/storage types,
+matrix derivatives and sibling owning-device proof remain open.
+Evidence: benchmarks/baselines/gfx1201_direct_broadcast_scaled_20261008/README.md.
+Recorder: benchmarks/rocm/benchmark_direct_broadcast_scaled.py.
+
+Owning gfx1201 named direct-broadcast parity validated. Gfx1151 does not inherit RDNA4 FP8 WMMA; an independent physical route remains required.
+
+
+## Native slice recorder entrypoints
+
+These existing recorder paths locate the qualified packets above. This list does not change their execution, architecture or performance status.
+
+| Recorder | Purpose |
+| --- | --- |
+| benchmarks/baselines/scaled_independent_batch_native_reverse_20261007/record_device.py | Historical packet-local compiler-free reverse runner; retained for reproducing that snapshot. |
+| benchmarks/rocm/record_independent_batch_reverse_device.py | Compiler-free native scale reverse and separate event/wall timings. |
+| benchmarks/rocm/record_independent_batch_reverse_packages.py | Native independent-prefix reverse package census. |
+| benchmarks/rocm/record_independent_scaled_primal.py | Native independent-prefix primal/JVP package and device recorder. |
+| benchmarks/rocm/record_public_independent_scale_reverse.py | Public independent-scale reverse and native program timing. |
+| benchmarks/rocm/record_public_independent_scaled_primal.py | Public independent primal/JVP and averaged native event windows. |
+| benchmarks/rocm/record_public_partial_scaled_groups.py | Static trailing K32 group numerical/timing checks. |
+| benchmarks/rocm/record_rocm_version_query_cache.py | Package wall-time A/B for cold versus reused version metadata. |
+| benchmarks/rocm/record_scalar_scale_reverse.py | Scalar scale reverse with public and native timing. |
+| benchmarks/rocm/record_scalar_scaled_plane.py | Scalar bounded-plane public/native numerical and timing checks. |
+| benchmarks/rocm/record_typed_primal_single_image.py | Cold package work comparison; device execution has a separate gate. |
+
+
+## Attention owner producer-stream ordering — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync ATTENTION-OWNED-STREAM-2026-10-08.
+Saved-O/LSE capture and reverse now use a private CUDA stream with declared
+producer event dependencies and private copies; synchronous returns remain.
+114 unit/public VJP checks, 2 pending-producer device checks and 28 native JVP
+checks pass on RTX 5070. Matched identical-package counterbalanced A/B reports
+capture/backward/pair control-over-candidate medians 0.968099/0.938151/0.966780.
+This is a wall-time regression, not a performance promotion; allocator/driver
+attribution and tuning remain open. Synchronous allocation/free may still
+introduce implicit synchronization. Generic dynamic/composed AD and
+asynchronous ownership remain open.
+Evidence: benchmarks/baselines/nvidia_attention_owned_stream_20261008/README.md.
+Recorder: benchmarks/nvidia/benchmark_attention_owned_stream_ab.py.
+
+Not applicable to HIP execution: this changes only the CUDA owner. HIP producer ordering requires independent runtime and owning-device proof.
+
+
+## Grouped attention producer dependencies — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync ATTENTION-GROUPED-STREAM-2026-10-08.
+Capture, reverse seed and JVP direction groups now validate every tensor
+and order each distinct CUDA producer stream once per call. No wait is
+reused across calls. RTX 5070 affected lane: 146 passed, four existing fork
+warnings. A biased copy-loop arity issue was repaired before the green rerun.
+Matched per-buffer versus grouped-wait A/B is running; no speedup claim.
+Evidence: benchmarks/baselines/nvidia_attention_grouped_stream_20261008/README.md.
+Recorder: benchmarks/nvidia/benchmark_attention_owned_stream_ab.py.
+Historical control: benchmarks/baselines/nvidia_attention_grouped_stream_20261008/per_buffer_control.py.
+
+Not applicable to this backend's execution: CUDA-only dependency grouping. Its native dependency/lifetime contract requires independent owning-host proof.
+
+
+### Grouped-wait matched A/B completion
+
+ATTENTION-GROUPED-STREAM-2026-10-08 completed 96 correctness-gated profile
+executions and 48 identical-package comparisons on RTX 5070.
+Median per-buffer/grouped capture/backward/pair wall ratios:
+1.011891 / 1.043463 / 1.026943. Grouping reduces host/runtime dependency work;
+no isolated kernel gain or general performance promotion is established.
+146 affected tests and 12 audit/recorder checks pass.
+The earlier context-wide A/B remains a separate comparison; ratios across
+the two runs are not multiplied or treated as proof of baseline recovery.
+Evidence: benchmarks/baselines/nvidia_attention_grouped_stream_20261008/README.md.
+
+
+## Independent matrix/scale batch-axis ownership — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / ROCM-FP8-BLOCKSCALE-1.
+Sync SCALE-ONLY-BATCH-2026-10-08.
+The ordinary traced native gfx1201 scaled product now has owning-device
+proof when any one of A/B/lhs-scale/rhs-scale alone supplies prefix (2,3).
+13 frontend/device checks and 12 correctness-gated primal/JVP/VJP benchmark
+profiles pass; maximum absolute error 1.15684470559e-07. Shared scale adjoints
+reduce unmapped axes and retain their own scale shapes. Warm calls forbid
+compiler subprocesses. Public wall and native HIP program-event timings
+are separate. Generic batching/transpose statuses remain incomplete.
+Evidence: benchmarks/baselines/gfx1201_scale_only_batch_20261008/README.md.
+Recorder: benchmarks/rocm/benchmark_scale_only_batch.py.
+
+Owning gfx1201 named scale-only batch parity validated. gfx1151 requires its own physical route; RDNA4 FP8 WMMA proof cannot transfer.
+
+
+## Immutable checked scaled-owner metadata — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync SCALED-OWNER-METADATA-2026-10-08.
+Prepared HIP execution now reads immutable checked storage metadata rather
+than mutable diagnostic program JSON. Diagnostic snapshots remain per-owner
+and are parsed lazily; forged shapes/counts/outputs cannot alter execution.
+25 host unit checks and 80 exact gfx1201 device checks pass.
+Counterbalanced identical-native-package A/B completes 24 matched pairs:
+control/candidate warm public wall ratio 0.979850675, approximately 2.1%
+slower candidate. No performance promotion or isolated kernel gain.
+Evidence: benchmarks/baselines/gfx1201_scaled_owner_metadata_20261008/README.md.
+Recorder: benchmarks/rocm/benchmark_scaled_owner_metadata_ab.py.
+Historical control: benchmarks/baselines/gfx1201_scaled_owner_metadata_20261008/owner_control.py.
+
+Owning gfx1201 numerical and owner-isolation parity validated. gfx1151 has no admission through this scaled owner and requires its own physical route.
+
+
+## Cached checked scaled storage dtype — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Sync SCALED-OWNER-DTYPE-2026-10-08.
+Canonical NumPy binding dtypes are resolved once in the immutable checked
+ABI; each call still checks dtype, shape, layout and byte capacity.
+168 host and 80 owning gfx1201 checks pass. Nine-sample counterbalanced
+A/B completes 24 matched pairs with identical native program/image/Graph:
+control/candidate warm-wall median 1.031385388. This is about 3.1% lower
+host-adapter wall time versus the prior metadata version, not kernel gain
+or closure of general batching/AD or ROCm performance programs.
+Evidence: benchmarks/baselines/gfx1201_scaled_owner_dtype_20261008/README.md.
+Recorder: benchmarks/rocm/benchmark_scaled_owner_metadata_ab.py.
+Historical control: benchmarks/baselines/gfx1201_scaled_owner_dtype_20261008/dtype_control.py.
+
+Owning gfx1201 parity validated. gfx1151 does not inherit this FP8 physical route.
+
+## Native short-K dispatch experiment — 2026-10-08
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync GFX1201-NATIVE-SHORT-K-2026-10-08.
+Evidence: benchmarks/baselines/gfx1201_native_short_k_dispatch_20261008/README.md.
+New device coverage: tests/device/rocm/test_fp8_blockscale_w8a8.py.
+Recorder: benchmarks/rocm/record_gfx1201_interleaved_compiler_formats.py.
+
+gfx1201 parity validated for three reusable-image short/fallback tests and two interleaved format packets; 423 host gates pass. Named K128 register rows improve; LDS and FP8 K32/MXFP8/folded MXFP4 controls retain identical images. General performance/AD closure and native delivery remain open. gfx1151 FP8 WMMA is not applicable (RDNA3.5 lacks it).
+
+## Mixed nested scaled map integration — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync GFX1201-MIXED-NESTED-SCALED-2026-10-08.
+Evidence: benchmarks/baselines/gfx1201_mixed_nested_scaled_20261008/README.md.
+Fixtures: tests/unit/test_native_mixed_scaled_maps.py and
+tests/device/rocm/test_mixed_nested_scaled_execution.py.
+Recorder: benchmarks/rocm/benchmark_mixed_nested_scaled.py.
+
+Parity validated on gfx1201: 22 native primal/JVP/VJP/partial-group rows and 16 timed profiles; max error 3.31253e-6. Singleton map views preserve storage; native broadcast and AD own arithmetic. General closure remains open. gfx1151 scaled-map parity requires its own supported physical consumer.
+
+
+## Static NVIDIA producer-chain integration — 2026-10-08
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SM120-NATIVE-PRODUCER-CHAIN-2026-10-08.
+
+Shared program-schema changes require follow-up assessment. This SM120 physical chain does not establish rocm execution parity; existing target admission is unchanged.
+
+
+### Static chain public entry and benchmark evidence
+
+Sync SM120-NATIVE-PRODUCER-CHAIN-2026-10-08.
+Evidence: benchmarks/baselines/nvidia_native_producer_chain_20261008/README.md.
+Shared JIT evidence covers the exact NVIDIA chain; rocm physical execution parity remains follow-up required. No sibling target admission or schedule promotion.
+
+
+### Dynamic-chain capacity investigation
+
+Sync SM120-NATIVE-PRODUCER-CHAIN-2026-10-08.
+Fourteen owning SM120 runtime capacity cases pass; compiler dynamic-chain admission remains gated pending compiler-generated manifest and ABI proof. This is NVIDIA runtime evidence only; rocm target support is unchanged.
+
+
+### Static three-producer and epilogue proof
+
+Sync SM120-NATIVE-PRODUCER-CHAIN-2026-10-08.
+Evidence: benchmarks/baselines/nvidia_native_producer_chain_20261008/README.md.
+Static three-producer and epilogue proof is SM120-specific; rocm physical parity is follow-up required. Shared certificate admission now rejects chain metadata lacking native member/lifetime proof.
+
+
+## Prepared native attention staging — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync PREPARED-ATTENTION-STAGING-2026-10-08.
+Evidence: benchmarks/baselines/nvidia_prepared_attention_staging_20261008/README.md.
+
+Not applicable to rocm physical lowering: only CUDA prepared JVP/backward staging and stream retirement changed. No sibling ABI or numerical policy change, and no sibling execution/performance promotion.
+
+
+## Widened gfx1201 short-K evaluation — 2026-10-08
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync GFX1201-SHORT-K-WIDE-2026-10-08.
+Evidence: benchmarks/baselines/gfx1201_short_k_wide_four_format_20261008/README.md.
+
+Sixteen owning gfx1201 four-format rows pass. Both M=200 K128 LDS images remain identical and near parity; their historical AITER gaps remain open. Ragged K2048 register ratio 0.091979 and fallback K2304 ratio 0.439026 require scoped interpretation and further attribution. No selector promotion.
+
+
+## Isolated LDS short-K candidate — 2026-10-08
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync GFX1201-LDS-SHORT-K-2026-10-08.
+Evidence: benchmarks/baselines/gfx1201_lds_short_k_candidate_20261008/README.md.
+
+Owning gfx1201: eight LDS correctness checks and sixteen four-format interleaved rows complete. M200 N8192 K1024 regresses 17.9%; M200 N2048 K2048 improves 6.0%. The isolated candidate is unpromoted; primary compiler source and selector are unchanged. Resource attribution and revised scheduling remain open.
+
+Live gfx1201 resource follow-up reproduces both M200 outcomes: K128 registers 192→241, static LDS 27,648 bytes, zero local memory, reported occupancy two blocks unchanged. Register pressure is a measured lead, not a proved stall cause.
+
+K2048-only isolated revision: eight gfx1201 checks and sixteen four-format rows pass. M200 LDS registers reduce to 209 (control 192), K2048 ratio 0.934908, K1024 ratio 1.025554. Candidate remains unpromoted; follow-on resource/scheduling work is open.
+
+
+## Public NVIDIA softmax alias integration — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Sync NVIDIA-PUBLIC-SOFTMAX-ALIAS-2026-10-08.
+Evidence: benchmarks/baselines/nvidia_public_softmax_alias_20261008/README.md.
+
+Not applicable to rocm physical admission: only SM120 alias Schedule/JIT binding and CUDA resident FP32 dispatch changed. Shared JIT allocation/signature branches are target-scoped; host regression is required, and no sibling exact-device parity or support expansion is claimed.
+
+Public alias shared integration regression: 224 WSL checks pass, ten skips; final matching-runtime RTX 5070 lane passes 32 cases. Generated docs are regenerated. This host lane does not establish sibling physical parity.
+
+## Aggregate validation and isolated native follow-up — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6 / W1.1.
+Sync NVIDIA-NATIVE-OWNER-FOLLOWUP-2026-10-08.
+
+Fresh aggregate WSL unit sweep completed: 23,208 passes, 7,532 skips,
+874 deselections and four failures. Two failures are genuine scaled_matmul
+batching/transpose closure obligations. The stale SM120 softmax-safe target
+fixture is reconciled with its owning native/public proof; the standalone
+dashboard is regenerated with its owning generator. Focused repair validation
+passes 234 tests with 179 skips; no aggregate green claim.
+
+An isolated RTX 5070 native staging candidate completes five alternating
+fresh-process A/B windows over 18 identical-package profiles. Per-profile
+control/candidate public-wall ratios range 2.169–2.353, median 2.270.
+Resident event median ratio 0.997 is separate; no arithmetic kernel gain.
+An isolated prepared macro-CTA owner candidate passes the original long BF16
+norm/matmul numerical gates. Twelve producer/dtype/epilogue cases prove six
+plain macro and six fused typed routes with changed-input and retained-output
+checks. Broader owner regression: 171 passes and one control-reproduced
+diagnostic drift; the diagnostic repair plus norm lane passes 11 tests.
+Both native candidates remain outside authoritative source pending integration.
+Scratch evidence: /home/angstorms/scratch/nvidia-softmax-staging-evidence-20261008/
+and /home/angstorms/scratch/nvidia-macro-producer-candidate-20261008/.
+
+Not applicable to HIP allocation and physical schedules; owning ROCm performance and generic scaled-matmul closure remain open.
+
+### Native owner follow-up integrated into authoritative source
+
+NVIDIA-NATIVE-OWNER-FOLLOWUP-2026-10-08 now integrates the independently
+proved native retained staging and static macro-CTA producer owner into the
+working branch. A matching CMake runtime build succeeds; runtime SHA256:
+ca860af9503bbb4733c64d3a1c51634de7f7f1e09a7e3ad7720c8c6f67c58d60.
+A durable twelve-case owning producer test is added. Fresh combined device
+and shared contract validation is running. The prior A/B is component-bound
+pre-integration evidence, not a new combined-build speedup claim.
+Evidence: benchmarks/baselines/nvidia_native_owner_integration_20261008/README.md.
+Generic scaled_matmul batching/transpose closure and focused PR delivery remain
+open. Dynamic multi-producer and asynchronous ownership admission are unchanged.
+
+### Matching native-owner proof and long-chain characterization
+
+NVIDIA-NATIVE-OWNER-FOLLOWUP-2026-10-08: the combined authoritative runtime
+passes 448 owning RTX 5070 device checks and 397 shared contract/registry gates.
+The extended producer recorder completes twelve numerical/timing profiles;
+four K4096 column-major profiles select native macro consumers for two/three
+producers in FP16/BF16. Maximum absolute error across all twelve: 1.48945e-5.
+Separate stage CUDA events and prepared host wall are recorded; no A/B kernel
+gain or general asynchronous/dynamic composition closure is claimed.
+The initial benchmark upload layout mismatch is repaired by consuming the
+descriptor layout, with its terminal failure log retained. Evidence:
+benchmarks/baselines/nvidia_native_owner_integration_20261008/README.md.
+Full generic scaled_matmul batching/transpose closure and PR delivery remain open.
+
+## Isolated cooperative softmax compiler proof — 2026-10-08
+
+Owner W1.1 / E2E-REAL-6.
+Sync NVIDIA-COOPERATIVE-SOFTMAX-2026-10-08.
+
+Long-chain stage measurements motivate an opt-in cooperative_128 native
+softmax lowering. The isolated matching LLVM/MLIR compiler builds. Three
+f16/bf16/f32 Tile fixtures pass verify-each and lower to shared-memory native
+reductions; 54 barriers cover the two reductions and protected broadcasts.
+Serial target output is byte-identical to the unchanged compiler. Invalid
+schedule spelling is refused. This is compiler-only evidence: native launch,
+Graph/Schedule policy hashing, Tile verifier/checked geometry registration,
+public admission, nonfinite/ragged numerical proof and A/B timing are pending.
+No public route or authoritative compiler is replaced by this experiment.
+Evidence: benchmarks/baselines/nvidia_native_owner_integration_20261008/cooperative-softmax/README.md.
+
+Not applicable to HIP physical schedules; no sibling execution or performance claim.
+
+### Cooperative softmax native Schedule contract proof
+
+NVIDIA-COOPERATIVE-SOFTMAX-2026-10-08 now has an isolated matching compiler
+for explicit Graph policy, native Schedule hashing, checked Tile projection
+and cooperative native lowering. FP16/BF16/FP32 policies have distinct serial
+and cooperative hashes. Native Schedule replay is byte-identical; forged
+Schedule policy and workgroup geometry are rejected. Default serial Graph,
+Schedule and Tile boundaries are byte-identical to the unchanged primary.
+Six actual ordinary/safe frontend traces yield identical cooperative Tile
+without caller-owned Graph mutation. Forty isolated regression tests pass
+with the project pytest configuration. The old blanket refusal fixture is
+replaced in the candidate by positive hashed-policy and invalid/sibling
+refusal checks; primary admission/tests remain unchanged.
+Native runtime ABI/geometry, PTX packaging, owning numerical and timing proof,
+automatic schedule selection and authoritative integration remain pending.
+Evidence: benchmarks/baselines/nvidia_native_owner_integration_20261008/cooperative-softmax/README.md.
+
+### NVIDIA cooperative softmax package proof sibling assessment
+
+NVIDIA-COOPERATIVE-SOFTMAX-2026-10-08: not applicable to this backend's
+physical launch policy; HIP physical schedules require separate owning-device evidence.
+The explicit NVIDIA candidate has host/resident numerical and matched
+timing proof. No sibling execution or performance claim is made.
+Shared generic batching/transpose closure remains open.
+
+### Integrated shared softmax contract sibling assessment
+
+NVIDIA-COOPERATIVE-SOFTMAX-2026-10-08: follow-up required for matching
+shared IR regression validation; explicit cooperative softmax is rejected on ROCm targets.
+Serial defaults remain unchanged. The NVIDIA-only physical policy is not
+sibling device evidence. No sibling execution closure is claimed.
+
+## Mapped composed scaled-product native integration — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Sync GFX1201-COMPOSED-SCALED-MAPS-2026-10-08.
+
+72 owning gfx1201 numerical/lifetime cases pass ordinary compiled primal,
+JVP and reverse AD with mixed inputs, two leading map axes, shared scales
+and K256/K37. Nine complete native-program profiles preserve separate HIP
+event and public host timing samples; no speedup claim or default change.
+Ordinary primal now selects the registered ROCm family with exact gfx1201
+metadata. Generic batching/transpose, nonleading/dynamic/storage derivatives
+and arbitrary product-output broadcasting remain open.
+Evidence: benchmarks/baselines/gfx1201_composed_scaled_maps_20261008/README.md.
+
+Sibling assessment: gfx1201 parity validated in the named envelope; gfx1151 follow-up required because its FP8 producer contract differs.
+
+## LDS loop-only specialization and timing admission — 2026-10-08
+
+Owner ROCM-FP8-BLOCKSCALE-1 / E2E-REAL-6.
+Sync GFX1201-LDS-LOOP-ONLY-2026-10-08.
+
+An isolated uniform K2048 group-loop specialization shares prologue/epilogue
+but raises M200 registers from 192 to 223. Eight owning gfx1201 tests and
+sixteen four-format numerical profiles pass. Duration-admitted paired gains
+of 1.6–1.8% are comparable to unchanged-image controls; no promotion.
+The recorder now retains/retries entire paired series below its minimum
+duration; three new and 21 affected host tests pass. Two final unchanged-image
+rows exceed the 5% clock/event agreement band and remain diagnostic.
+Evidence: benchmarks/baselines/gfx1201_lds_loop_only_20261008/README.md.
+
+Sibling assessment: gfx1201 numerical parity validated for the diagnostic candidate; wider performance closure required. gfx1151 lacks RDNA4 FP8 WMMA and needs separate recorder/route proof.
+
+## Explicit static asynchronous saved-LSE ownership — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-ATTENTION-ASYNC-OWNER-2026-10-08.
+
+Compiler-owned VJP capture accepts explicit asynchronous execution on an owned
+CUDA stream. Snapshot dependencies, retained sources, stream-ordered seed
+release and registered-consumer completion protect saved O/LSE and gradients.
+156 affected owning/host tests and eight strengthened serialized replay cases
+pass on RTX 5070. Eight numerical timing arms preserve separate submission,
+completed host and complete-owner CUDA event costs with identical kernel images.
+No counterbalanced speedup claim or default change. Dynamic/composed attention,
+automatic external-consumer lifetime tracking and broader AD remain open.
+Evidence: benchmarks/baselines/nvidia_attention_async_owner_20261008/README.md.
+
+Sibling assessment: Follow-up required: HIP-owned asynchronous saved residuals need owning stream/allocation/lifetime proof. CUDA evidence does not transfer.
+
+## Bounded saved-LSE sequences — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-ATTENTION-BOUNDED-SEQUENCES-2026-10-08.
+
+Not applicable to rocm physical lowering: the native checkpoint admission requires nvidia_sm120/sm_120. No sibling dynamic-attention execution or parity claim.
+Native bounds are retained in verified Schedule identity. Raw owning-device image evidence does not establish checked public ABI closure.
+Evidence: ../../compiler/FIVE_SLICE_STATUS_20261007.md.
+
+## Checked bounded attention packages — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-ATTENTION-BOUNDED-PACKAGES-2026-10-08.
+
+Not applicable to rocm physical execution: the new package admission is SM120-only, and the shared runtime check is restricted to saved-LSE NVIDIA ABI IDs. No sibling execution or timing parity is claimed.
+See ../../compiler/FIVE_SLICE_STATUS_20261007.md and the owning evidence packet.
+
+## Bounded public JIT native attention AD — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-ATTENTION-BOUNDED-JIT-2026-10-08.
+
+Native paired AD now projects a frontend sequence-capacity request into
+symbolic Graph/Schedule/Tile products, preserving fixed dimensions, named
+argument roles, saved O/LSE and requested adjoints. The matching build,
+70 focused host tests and eight owning RTX 5070 compiler-forbidden serialized
+replay cases pass; six runtime shapes reuse each image pair. Eight numerical
+timing arms record separate completed capture, backward host and whole-owner
+CUDA event costs. Dynamic physical broadcast bias, dynamic JVP, arbitrary
+composition, aggregate validation and focused publication remain open.
+Evidence: benchmarks/baselines/nvidia_bounded_attention_jit_20261008/README.md.
+
+Sibling assessment: Follow-up required: native bounded checkpoint AD and checked physical-bias carriers need ROCm-owned implementation and separate gfx1151/gfx1201 numerical evidence. SM120 capacity projection is architecture gated.
+
+NVIDIA-ATTENTION-BOUNDED-JIT-2026-10-08 affected regression follow-up:
+652 host WSL attention/ABI/native-AD/registry/lifecycle tests pass.
+Six static test doubles now declare empty capacity bounds; saved generation
+mismatch assertions remain intact. Initial failures are preserved in the
+evidence packet. Aggregate/full-suite and publication gates remain open.
+
+## Bounded physical broadcast-bias execution — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-ATTENTION-DYNAMIC-BIAS-2026-10-08.
+
+Four actual physical bias extents now pass through native Tile/NVIDIA lowering
+for symbolic query/key storage and physical bias-gradient reduction. Package
+guards, residual allocations and checked launch scalars preserve the sealed
+symbolic policy while resolving actual storage; malformed pitches fail before
+CUDA loading. Matching native builds, 668 host WSL gates, sixteen native/
+guard cases and twenty owning RTX 5070 public replay cases pass. Six runtime
+shapes reuse each image pair with compiler recovery forbidden. Twenty
+correctness-gated timing arms preserve separate host and whole-owner event
+costs; no isolated kernel speedup or aggregate closure.
+Dynamic JVP, arbitrary composition, wider dynamic axes, automatic external
+consumer tracking and focused publication remain open.
+Evidence: benchmarks/baselines/nvidia_dynamic_attention_bias_20261008/README.md.
+
+Sibling assessment: Follow-up required: ROCm native checkpoint consumers need their own physical-extent lowering and gfx1151/gfx1201 execution evidence. No ROCm schedule or performance is inferred.
+
+NVIDIA-ATTENTION-DYNAMIC-BIAS-2026-10-08 final owning regression follow-up:
+92 static tuple-AD/asynchronous/bounded-package RTX 5070 cases and eleven
+final audit-document tests pass. Packet source/compiler/runtime fingerprints
+match authoritative bytes. Full-suite generic closure and delivery remain open.
+
+
+## Nested SM120 NVFP4 leading maps — 2026-10-08
+
+Owner E2E-REAL-6. Sync NVIDIA-NVFP4-NESTED-MAPS-2026-10-08.
+
+Follow-up required for sibling parity: this change extends the named SM120 NVFP4 prefix contract. The existing gfx1201 typed FP8 leading-prefix implementation retains its own Schedule/storage policy; its focused host contract tests pass in the 198-test lane. No fresh ROCm physical execution is claimed by NVIDIA results. gfx1151 has no named NVFP4 contract.

@@ -15,6 +15,9 @@
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/IR/Dialects.h"
 #include "Tessera/IR/TesseraOps.h"
+#include "Tessera/IR/NVFP4IngestContract.h"
+#include "Tessera/IR/ScaledBatchContract.h"
+#include "tessera/Dialect/Attn/AttnDialect.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Bufferization/IR/Bufferization.h"
@@ -24,13 +27,19 @@
 #include "mlir/Dialect/LLVMIR/LLVMDialect.h"
 #include "mlir/Dialect/LLVMIR/NVVMDialect.h"
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
+#include "mlir/Dialect/Math/IR/Math.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Builders.h"
+#include "Tessera/IR/StructuredReductionContract.h"
+#include "mlir/IR/IRMapping.h"
+#include "llvm/ADT/SetVector.h"
+#include "mlir/Transforms/RegionUtils.h"
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/DialectRegistry.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Pass/PassRegistry.h"
@@ -40,6 +49,7 @@
 #include "llvm/ADT/StringSet.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/JSON.h"
 #include "llvm/Support/SHA256.h"
 #include "llvm/Support/raw_ostream.h"
 
@@ -58,11 +68,17 @@ using namespace mlir;
 namespace tessera {
 
 #include "NativeCheckpoint.h"
+#include "NativeAttentionRecompute.h"
+#include "NativeAttentionJvp.h"
 #include "NativePagedKV.h"
+#include "NativeScaleTranspose.h"
+#include "NativeNVFP4Ingest.h"
+#include "NativeMXFP4Storage.h"
 #include "NativeMoeDispatch.h"
 #include "NativeSSD.h"
 #include "NativeAbsolute.h"
 #include "NativeX86Kernel.h"
+#include "NativeROCMMath.h"
 #include "NativeSparse.h"
 
 // ---------------------------------------------------------------------------
@@ -240,6 +256,9 @@ private:
 
 namespace {
 struct MatmulSchedule {
+  StringRef bLayout = "col_major";
+  bool nvfp4TransposeA = false;
+  bool nvfp4TransposeB = false;
   StringRef target;
   StringRef arch;
   StringRef storage;
@@ -256,6 +275,13 @@ struct MatmulSchedule {
   int64_t scaleBlockK = 0;
   StringRef scaleFormat;
   StringRef physicalContract;
+  int64_t independentBatchRows = 0;
+  int64_t independentBatchCount = 0;
+  bool sharedBatchRhs = false;
+  bool sharedBatchLhs = false;
+  bool typedTransposeA = false;
+  SmallVector<RankedTensorType> broadcastTypes;
+  RankedTensorType broadcastResult;
   //: ROCM-FP8-BLOCKSCALE-1: the B (weight) scale block along N, from
   //: `scale_layout.block[0]`. 0 unless the logical W8A8 block-scale contract
   //: was derived; semantic (it selects which scale multiplies a column), so it
@@ -419,6 +445,11 @@ constexpr StringLiteral kFp8W8A8BlockScaleContract =
 constexpr StringLiteral kFp8W8A8BlockScaleNKContract =
     "rocm_fp8_w8a8_blockscale_nk_v1";
 constexpr StringLiteral kFp8W8A8BlockScaleFormat = "fp32";
+constexpr StringLiteral kMxfp8BlockScaleContract =
+    "rocm_mxfp8_e4m3_e8m0_k32_v1";
+constexpr StringLiteral kMxfp8BlockScaleNKContract =
+    "rocm_mxfp8_e4m3_e8m0_k32_nk_v1";
+
 
 static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
                                              MatmulSchedule &schedule,
@@ -426,6 +457,7 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
                                              RankedTensorType rhs,
                                              RankedTensorType out,
                                              bool transposedB) {
+  const bool e8m0 = schedule.scaleFormat == "e8m0";
   auto refuse = [&](const Twine &why) {
     op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: ") << why;
     return failure();
@@ -442,10 +474,15 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
   if (schedule.dynamicM || schedule.dynamicN || schedule.dynamicK)
     return refuse("the W8A8 block-scale contract requires static M, N and K");
   const int64_t groupK = schedule.scaleBlockK;
+  if (groupK <= 0 || (e8m0 && groupK != 32))
+    return refuse("E8M0 microscaling requires positive K32 scale groups");
   if (groupK % schedule.tileK != 0)
     return refuse(Twine("scale_k=") + Twine(groupK) +
                   " is not a whole number of 16-wide WMMA K steps");
-  if (schedule.k % groupK != 0)
+  auto batchPolicy = op->getAttrOfType<StringAttr>("batching");
+  const bool independent = (batchPolicy && batchPolicy.getValue() == "broadcast") ||
+      tessera::needsScalarScaledPlane(op);
+  if (schedule.k % groupK != 0 && (!independent || schedule.k > INT64_MAX - groupK + 1))
     return refuse(Twine("K=") + Twine(schedule.k) +
                   " is not a whole number of scale groups of " +
                   Twine(groupK) +
@@ -458,24 +495,55 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
                     ? dyn_cast<IntegerAttr>(block[0])
                     : IntegerAttr();
   if (!granularity || granularity.getValue() != "block" || !blockN ||
-      blockN.getInt() <= 0)
+      blockN.getInt() <= 0 || (e8m0 && blockN.getInt() != 1))
     return refuse("scale_layout must be granularity=\"block\" with a "
                   "positive block = [scale_n, scale_k]");
-  const int64_t groups = schedule.k / groupK;
+  const int64_t groups = (schedule.k - 1) / groupK + 1;
   const int64_t nGroups = (schedule.n + blockN.getInt() - 1) / blockN.getInt();
   auto lhsScale = dyn_cast<RankedTensorType>(op->getOperand(2).getType());
   auto rhsScale = dyn_cast<RankedTensorType>(op->getOperand(3).getType());
+  auto batch = op->getAttrOfType<StringAttr>("batching");
+  if (batch && batch.getValue() == "broadcast") {
+    if (!lhsScale || !rhsScale || !lhsScale.hasStaticShape() ||
+        !rhsScale.hasStaticShape() || lhsScale.getRank() < 2 || rhsScale.getRank() < 2)
+      return refuse("independent scales require static matrix suffixes");
+    lhsScale = RankedTensorType::get(lhsScale.getShape().take_back(2), lhsScale.getElementType());
+    rhsScale = RankedTensorType::get(rhsScale.getShape().take_back(2), rhsScale.getElementType());
+  }
+  if (batch && (batch.getValue() == "shared_rhs_rows" ||
+                batch.getValue() == "independent_rhs")) {
+    if (!lhsScale || lhsScale.getRank() < 3 || !lhsScale.hasStaticShape())
+      return refuse("batched lhs_scale requires static leading batch storage");
+    int64_t rows = 1;
+    for (int64_t extent : lhsScale.getShape().drop_back()) {
+      if (extent <= 0 || rows > INT64_MAX / extent)
+        return refuse("batched lhs_scale extents overflow");
+      rows *= extent;
+    }
+    if (batch.getValue() == "independent_rhs")
+      rows = lhsScale.getDimSize(lhsScale.getRank() - 2);
+    lhsScale = RankedTensorType::get({rows, lhsScale.getDimSize(lhsScale.getRank()-1)}, lhsScale.getElementType());
+  }
+  if (batch && (batch.getValue() == "independent_rhs" || batch.getValue() == "shared_lhs")) {
+    if (!rhsScale || rhsScale.getRank() < 3 || !rhsScale.hasStaticShape())
+      return refuse("batched rhs_scale requires static leading batch storage");
+    rhsScale = RankedTensorType::get(rhsScale.getShape().take_back(2), rhsScale.getElementType());
+  }
   if (!lhsScale || lhsScale.getRank() != 2 ||
-      !lhsScale.getElementType().isF32() ||
+      (e8m0 ? !(lhsScale.getElementType().isSignlessInteger(8) ||
+                lhsScale.getElementType().isUnsignedInteger(8))
+            : !lhsScale.getElementType().isF32()) ||
       lhsScale.getDimSize(0) != schedule.m ||
       lhsScale.getDimSize(1) != groups)
-    return refuse(Twine("lhs_scale must be fp32 [M, K/scale_k] = [") +
+    return refuse(Twine("lhs_scale must use the declared fp32/E8M0 storage [M, K/scale_k] = [") +
                   Twine(schedule.m) + ", " + Twine(groups) + "]");
   if (!rhsScale || rhsScale.getRank() != 2 ||
-      !rhsScale.getElementType().isF32() ||
+      (e8m0 ? !(rhsScale.getElementType().isSignlessInteger(8) ||
+                rhsScale.getElementType().isUnsignedInteger(8))
+            : !rhsScale.getElementType().isF32()) ||
       rhsScale.getDimSize(0) != groups ||
       rhsScale.getDimSize(1) != nGroups)
-    return refuse(Twine("rhs_scale must be fp32 [K/scale_k, ceil(N/scale_n)] "
+    return refuse(Twine("rhs_scale must use the declared fp32/E8M0 storage [K/scale_k, ceil(N/scale_n)] "
                         "= [") +
                   Twine(groups) + ", " + Twine(nGroups) + "]");
   // `execution_mode` is a semantic key (Decision #21a): it must be STATED as
@@ -483,6 +551,9 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
   // beside this one require it the same way.
   auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
   auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr();
+  auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr();
+  if (e8m0 && (!accum || accum.getValue() != "fp32"))
+    return refuse("MXFP8 numeric_policy.accum must explicitly state fp32");
   if (!mode)
     return refuse("numeric_policy.execution_mode must state "
                   "\"exact_per_block\"; the scaling mode is never defaulted");
@@ -492,8 +563,9 @@ static LogicalResult deriveFp8W8A8BlockScale(Operation *op,
   // The weight's memory layout is part of the named contract: below
   // Schedule the operand is a raw pointer, and [K, N] and [N, K] read the
   // same bytes as different matrices.
-  schedule.physicalContract = transposedB ? kFp8W8A8BlockScaleNKContract
-                                          : kFp8W8A8BlockScaleContract;
+  schedule.physicalContract =
+      e8m0 ? (transposedB ? kMxfp8BlockScaleNKContract : kMxfp8BlockScaleContract)
+           : (transposedB ? kFp8W8A8BlockScaleNKContract : kFp8W8A8BlockScaleContract);
   schedule.scaleBlockN = blockN.getInt();
   schedule.output = out.getElementType().isBF16() ? "bf16" : "f32";
   return success();
@@ -643,11 +715,87 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   auto lhs = dyn_cast<RankedTensorType>(op->getOperand(0).getType());
   auto rhs = dyn_cast<RankedTensorType>(op->getOperand(1).getType());
   auto out = dyn_cast<RankedTensorType>(op->getResult(0).getType());
+  auto batchAttr = op->getAttrOfType<StringAttr>("batching");
+  auto batchPhysical = op->getAttrOfType<StringAttr>("physical_contract");
+  const bool independentRhs = batchAttr && batchAttr.getValue() == "independent_rhs";
+  const bool sharedLhs = batchAttr && batchAttr.getValue() == "shared_lhs";
+  const bool rhsBatched = independentRhs || sharedLhs;
+  const bool sharedRhsBatch = scaledMatmul && batchAttr &&
+      (batchAttr.getValue() == "shared_rhs_rows" || rhsBatched) && batchPhysical &&
+      batchPhysical.getValue() == "nvidia_sm120_nvfp4_blockscale_v1";
+  const bool typedSharedRows = scaledMatmul && batchAttr &&
+      (batchAttr.getValue() == "shared_rhs_rows" || rhsBatched) && !batchPhysical &&
+      lhs && isa<Float8E4M3FNType>(lhs.getElementType());
+  const bool flattenSharedRows = sharedRhsBatch || typedSharedRows;
+  const bool lhsBatched = flattenSharedRows && !sharedLhs;
+  auto flag = [&](StringRef name) {
+    auto value = op->getAttrOfType<BoolAttr>(name);
+    return value && value.getValue();
+  };
+  const bool nvfp4Contract = scaledMatmul && batchPhysical &&
+      batchPhysical.getValue() == "nvidia_sm120_nvfp4_blockscale_v1";
+  const bool nvfp4TransposeA = nvfp4Contract && flag("transposeA");
+  const bool nvfp4TransposeB = nvfp4Contract && flag("transposeB");
+  const bool broadcast = (scaledMatmul && batchAttr &&
+      batchAttr.getValue() == "broadcast" && !batchPhysical) ||
+      tessera::needsScalarScaledPlane(op);
+  SmallVector<RankedTensorType> broadcastTypes;
+  RankedTensorType broadcastResult;
+  int64_t batchCount = 1, batchRows = 0;
+  SmallVector<int64_t> logicalBatchPrefix;
+  if (broadcast) {
+    for (Value input : op->getOperands())
+      broadcastTypes.push_back(dyn_cast<RankedTensorType>(input.getType()));
+    if (broadcastTypes.size() != 4 ||
+        !tessera::hasExactScaledBroadcastPrefix(broadcastTypes, out))
+      return failure();
+    broadcastResult = out;
+    for (int64_t extent : out.getShape().drop_back(2)) {
+      if (batchCount > INT32_MAX / extent) return failure();
+      batchCount *= extent;
+    }
+    batchRows = out.getDimSize(out.getRank() - 2);
+    lhs = RankedTensorType::get(lhs.getShape().take_back(2), lhs.getElementType());
+    rhs = RankedTensorType::get(rhs.getShape().take_back(2), rhs.getElementType());
+    out = RankedTensorType::get(out.getShape().take_back(2), out.getElementType());
+  }
+  if (flattenSharedRows) {
+    int64_t batchRank = out ? out.getRank() - 2 : 0;
+    if (!lhs || !rhs || !out || batchRank < 1 ||
+        lhs.getRank() != (lhsBatched ? batchRank + 2 : 2) ||
+        rhs.getRank() != (rhsBatched ? batchRank + 2 : 2) ||
+        !lhs.hasStaticShape() || !rhs.hasStaticShape() || !out.hasStaticShape())
+      return failure();
+    logicalBatchPrefix.assign(out.getShape().begin(),out.getShape().end()-2);
+    batchCount = 1;
+    for (int64_t extent : logicalBatchPrefix) {
+      if (extent <= 0 || batchCount > INT64_MAX / extent) return failure();
+      batchCount *= extent;
+    }
+    batchRows = lhs.getDimSize((lhsBatched ? batchRank : 0) + (nvfp4TransposeA ? 1 : 0));
+    if (batchCount <= 0 || batchRows <= 0 || batchCount > INT64_MAX / batchRows ||
+        out.getDimSize(out.getRank() - 2) != batchRows)
+      return failure();
+    if (rhsBatched) {
+      if (rhs.getShape().drop_back(2) != out.getShape().drop_back(2)) return failure();
+      rhs = RankedTensorType::get(rhs.getShape().take_back(2), rhs.getElementType());
+    }
+    // The Schedule counts batch*row launch work while Graph keeps logical ranks.
+    // Shared-LHS scheduling synthesizes this row extent only for geometry;
+    // target lowering reuses the original rank-two A/scales without replication.
+    int64_t batchK = lhs.getDimSize((lhsBatched ? batchRank : 0) + (nvfp4TransposeA ? 0 : 1));
+    int64_t physicalRows = typedSharedRows && rhsBatched ? batchRows : batchCount * batchRows;
+    SmallVector<int64_t> flattenedShape = nvfp4TransposeA
+        ? SmallVector<int64_t>{batchK, physicalRows}
+        : SmallVector<int64_t>{physicalRows, batchK};
+    lhs = RankedTensorType::get(flattenedShape, lhs.getElementType());
+    out = RankedTensorType::get({physicalRows, out.getDimSize(out.getRank() - 1)}, out.getElementType());
+  }
   if (!lhs || !rhs || !out || lhs.getRank() != 2 || rhs.getRank() != 2 ||
       out.getRank() != 2)
     return failure();
   if (auto transpose = op->getAttrOfType<BoolAttr>("transposeA");
-      transpose && transpose.getValue())
+      transpose && transpose.getValue() && !nvfp4TransposeA && !broadcast)
     return failure();
   // ROCM-FP8-BLOCKSCALE-1: a block-scaled matmul may state its weight as
   // [N, K] (`transposeB`), the layout every W8A8 checkpoint ships and the one
@@ -656,22 +804,47 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   bool transposedB = false;
   if (auto transpose = op->getAttrOfType<BoolAttr>("transposeB");
       transpose && transpose.getValue()) {
-    if (!scaledMatmul || op->getAttrOfType<StringAttr>("physical_contract"))
-      return failure();
-    transposedB = true;
+    if (!nvfp4TransposeB) {
+      if (!scaledMatmul || op->getAttrOfType<StringAttr>("physical_contract"))
+        return failure();
+      transposedB = true;
+    }
   }
 
   MatmulSchedule schedule;
+  schedule.typedTransposeA = broadcast && flag("transposeA");
+  schedule.broadcastTypes = broadcastTypes;
+  schedule.broadcastResult = broadcastResult;
+  if (broadcast) {
+    schedule.independentBatchRows = batchRows;
+    schedule.independentBatchCount = batchCount;
+  }
+  schedule.nvfp4TransposeA = nvfp4TransposeA;
+  schedule.nvfp4TransposeB = nvfp4TransposeB;
+  if (rhsBatched || (sharedRhsBatch && nvfp4TransposeA)) {
+    schedule.sharedBatchRhs = !rhsBatched;
+    schedule.sharedBatchLhs = sharedLhs;
+    schedule.independentBatchRows = batchRows;
+    schedule.independentBatchCount = batchCount;
+  }
   if (auto physical = op->getAttrOfType<StringAttr>("physical_contract"))
     schedule.physicalContract = physical.getValue();
   schedule.target = moduleString(module, "tessera.target", "target");
   schedule.arch = moduleString(module, "tessera.arch", "arch");
+  // The module retains its exact frontend target. Matmul schedules use the
+  // ROCm family internally only after the explicit chip agrees.
+  if (schedule.target == "rocm_gfx1201") {
+    if (schedule.arch != "gfx1201")
+      return failure();
+    schedule.target = "rocm";
+  }
   bool nvidia_sm120 = schedule.target == "nvidia_sm120" &&
                       (schedule.arch.empty() || schedule.arch.contains("sm_120"));
   bool rocm_gfx1151 =
       (schedule.target == "rocm" || schedule.target == "rocm_gfx1151") &&
       (schedule.arch.empty() || schedule.arch.contains("gfx1151"));
   bool rocm_gfx1201 = schedule.target == "rocm" && schedule.arch == "gfx1201";
+  if (broadcast && !rocm_gfx1201) return failure();
   SmallVector<int64_t> bounds;
   if (auto attr = op->getAttrOfType<ArrayAttr>("shape_bounds")) {
     for (Attribute value : attr) {
@@ -691,9 +864,9 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       return failure();
     return bounds[boundIndex];
   };
-  auto m = bounded(lhs.getDimSize(0), 0, schedule.dynamicM);
-  auto n = bounded(rhs.getDimSize(1), 1, schedule.dynamicN);
-  auto k = bounded(lhs.getDimSize(1), 2, schedule.dynamicK);
+  auto m = bounded(lhs.getDimSize((nvfp4TransposeA || schedule.typedTransposeA) ? 1 : 0), 0, schedule.dynamicM);
+  auto n = bounded(rhs.getDimSize(nvfp4TransposeB ? 0 : 1), 1, schedule.dynamicN);
+  auto k = bounded(lhs.getDimSize((nvfp4TransposeA || schedule.typedTransposeA) ? 0 : 1), 2, schedule.dynamicK);
   if (failed(m) || failed(n) || failed(k))
     return failure();
   schedule.m = *m;
@@ -720,7 +893,7 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
   const bool rhsKCompatible =
       packedMxfp4
           ? compatible(rhs.getDimSize(0), (schedule.k + 1) / 2)
-          : compatible(rhs.getDimSize(foldedFamily || transposedB ? 1 : 0),
+          : compatible(rhs.getDimSize(foldedFamily || transposedB || nvfp4TransposeB ? 1 : 0),
                        packedFoldedMxfp4 ? schedule.k / 2 : schedule.k);
   if (schedule.m <= 0 || schedule.n <= 0 || schedule.k <= 0 ||
       !rhsKCompatible ||
@@ -774,7 +947,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     auto block = layout ? layout.getAs<ArrayAttr>("block") : ArrayAttr();
     auto format = layout ? layout.getAs<StringAttr>("format") : StringAttr();
     if (!block || block.size() != 2 || !format ||
-        (nvidiaNvfp4 && (!granularity || granularity.getValue() != "block")))
+        (nvidiaNvfp4 && (layout.size() != 3 || !granularity ||
+                         granularity.getValue() != "block")))
       return failure();
     auto blockK = dyn_cast<IntegerAttr>(block[1]);
     if (!blockK || blockK.getInt() <= 0)
@@ -802,7 +976,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
                     ? rhsScale.getDimSize(0) != schedule.n
                     : rhsScale.getDimSize(0) != schedule.k / 32 + 1 ||
                           rhsScale.getDimSize(1) != schedule.n) ||
-                   schedule.k % 64 != 0 || schedule.m <= 64 ||
+                   schedule.k % 64 != 0 || schedule.m <= 0 ||
+                   (!packedFoldedMxfp4 && schedule.m <= 64) ||
                    schedule.scaleBlockK != schedule.k ||
                    schedule.scaleFormat !=
                        (packedFoldedMxfp4 ? "e8m0_k32_plus_row_reference"
@@ -825,17 +1000,20 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
     auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr();
     if (!nvidia_sm120 || schedule.dynamicM || schedule.dynamicN ||
         schedule.dynamicK || !lhsNvfp4 || !rhsNvfp4 || !outElement.isF32() ||
-        !lhsScale || lhsScale.getRank() != 2 ||
+        !lhsScale || lhsScale.getRank() != (lhsBatched ? int64_t(logicalBatchPrefix.size()) + 2 : 2) ||
         !(lhsScale.getElementType().isUnsignedInteger(8) ||
           lhsScale.getElementType().isSignlessInteger(8)) ||
-        lhsScale.getDimSize(0) != schedule.m ||
-        lhsScale.getDimSize(1) != (schedule.k + 15) / 16 ||
-        !rhsScale || rhsScale.getRank() != 2 ||
+        (lhsBatched && lhsScale.getShape().drop_back(2) != ArrayRef<int64_t>(logicalBatchPrefix)) ||
+        lhsScale.getDimSize((lhsBatched ? logicalBatchPrefix.size() : 0) + (nvfp4TransposeA ? 1 : 0)) != (sharedRhsBatch ? batchRows : schedule.m) ||
+        lhsScale.getDimSize((lhsBatched ? logicalBatchPrefix.size() : 0) + (nvfp4TransposeA ? 0 : 1)) != (schedule.k / 16 + (schedule.k % 16 != 0)) ||
+        !rhsScale || rhsScale.getRank() != (rhsBatched ? int64_t(logicalBatchPrefix.size()) + 2 : 2) ||
         !(rhsScale.getElementType().isUnsignedInteger(8) ||
           rhsScale.getElementType().isSignlessInteger(8)) ||
-        rhsScale.getDimSize(0) != (schedule.k + 15) / 16 ||
-        rhsScale.getDimSize(1) != schedule.n ||
+        (rhsBatched && rhsScale.getShape().drop_back(2) != ArrayRef<int64_t>(logicalBatchPrefix)) ||
+        rhsScale.getDimSize((rhsBatched ? logicalBatchPrefix.size() : 0) + (nvfp4TransposeB ? 1 : 0)) != (schedule.k / 16 + (schedule.k % 16 != 0)) ||
+        rhsScale.getDimSize((rhsBatched ? logicalBatchPrefix.size() : 0) + (nvfp4TransposeB ? 0 : 1)) != schedule.n ||
         schedule.scaleBlockK != 16 || schedule.scaleFormat != "ue4m3" ||
+        !policy || policy.size() != 2 ||
         !accum || accum.getValue() != "fp32" || !mode ||
         mode.getValue() != "exact_per_block" ||
         schedule.bias || schedule.residual || schedule.activation != "none")
@@ -1030,7 +1208,8 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       // (GFX1201-PERF-2026-09-27); the derivation below checks the rest.
       (outElement.isF32() ||
        (outElement.isBF16() && scaledMatmul &&
-        schedule.scaleFormat == kFp8W8A8BlockScaleFormat)) &&
+        (schedule.scaleFormat == kFp8W8A8BlockScaleFormat ||
+         schedule.scaleFormat == "e8m0"))) &&
       !schedule.bias && !schedule.residual && schedule.activation == "none") {
     // OCP FP8 storage on RDNA4 (V_WMMA_F32_16X16X16_{FP8,BF8}_{FP8,BF8},
     // device-audited 2026-09-13); f32 accumulate, 1x1 register tile, no fused
@@ -1042,9 +1221,11 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       return failure();
     schedule.macroTileM = gfx1201StaticPanel ? 64 : 16;
     schedule.macroTileN = gfx1201StaticPanel ? 64 : 16;
-    if (transposedB && schedule.scaleFormat != kFp8W8A8BlockScaleFormat)
+    if (transposedB && schedule.scaleFormat != kFp8W8A8BlockScaleFormat &&
+        schedule.scaleFormat != "e8m0")
       return failure();
-    if (scaledMatmul && schedule.scaleFormat == kFp8W8A8BlockScaleFormat) {
+    if (scaledMatmul && (schedule.scaleFormat == kFp8W8A8BlockScaleFormat ||
+                         schedule.scaleFormat == "e8m0")) {
       // ROCM-FP8-BLOCKSCALE-1: derive (Decision #30) the logical W8A8
       // block-scale contract. fp32 is the scale format this contract names,
       // so an fp32-format scaled fp8 matmul that does not conform is an
@@ -1057,7 +1238,85 @@ static FailureOr<MatmulSchedule> getInferredMatmulSchedule(Operation *op) {
       // The isolated scale-group partial doubles the live accumulator
       // fragments, so the unscaled panel does not transfer; the W8A8 panel is
       // selected from its own measurement.
-      selectFp8W8A8BlockScalePanel(schedule);
+      if (schedule.scaleFormat == "e8m0") {
+        // Numerical integration seed, not a transferred FP8 performance rule.
+        // Start with one 16x16 wave and an isolated two-panel K32 partial.
+        schedule.macroTileM = 16;
+        schedule.macroTileN = 16;
+        schedule.blockK = 32;
+        schedule.warps = 1;
+        schedule.staging = "global";
+        // gfx1201 MXFP8 candidate: stage one complete K32 semantic group.
+        // This is an architecture-owned E8M0 profile, not admission of the
+        // measured fp32-scale selector. Exact-device A/B retains K>=1024:
+        // wider rows gain 2-3x while K128 loses about 8%. Smaller grids and
+        // unmeasured K256/K512 retain the one-wave seed. The image's checked
+        // runtime-K contract still admits every positive whole K32 group.
+        auto units = measuredComputeUnits(schedule.arch);
+        auto tiles = [&](int64_t tm, int64_t tn) {
+          return ((schedule.m + tm - 1) / tm) *
+                 ((schedule.n + tn - 1) / tn);
+        };
+        auto module = op->getParentOfType<ModuleOp>();
+        auto rawPolicy = module->getAttr("tessera.rocm.mxfp8_schedule");
+        if (rawPolicy && !isa<StringAttr>(rawPolicy)) {
+          op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: MXFP8 schedule policy "
+                        "must be a string auto, seed, lds, or lds_k64");
+          return failure();
+        }
+        auto policy = dyn_cast_or_null<StringAttr>(rawPolicy);
+        StringRef choice = policy ? policy.getValue() : StringRef("auto");
+        if ((choice != "auto" && choice != "seed" && choice != "lds" && choice != "lds_k64") ||
+            ((choice == "lds" || choice == "lds_k64") && !transposedB) ||
+            (choice == "lds_k64" && (schedule.k < 64 || schedule.k % 64 != 0))) {
+          op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: MXFP8 schedule policy "
+                        "must be auto, seed, lds, or lds_k64; LDS requires NK storage and lds_k64 requires whole K64 slabs");
+          return failure();
+        }
+        // Paired gfx1201 measurements retain a half-CU narrow grid for
+        // long K: 32 workgroups fill the RX 9070 XT WGPs. The bounds keep
+        // smaller grids, wider panels and unmeasured sizes on prior recipes.
+        const bool measuredLongK64 = transposedB && units &&
+            schedule.m >= 200 && schedule.m <= 512 &&
+            schedule.n >= 512 && schedule.n <= 2048 &&
+            schedule.k >= 2560 && schedule.k <= 5120 &&
+            schedule.k % 64 == 0 &&
+            tiles(128, 64) >= (*units + 1) / 2 &&
+            tiles(128, 128) < *units;
+        const bool chooseLds = choice == "lds" || choice == "lds_k64" ||
+            (choice == "auto" && transposedB && units && schedule.m >= 128 &&
+             schedule.k >= 1024 &&
+             (tiles(128, 64) >= *units || measuredLongK64));
+        if (chooseLds) {
+          schedule.macroTileM = 128;
+          schedule.macroTileN = choice != "lds_k64" && units && tiles(128, 128) >= *units ? 128 : 64;
+          schedule.warps = 8;
+          schedule.pipelineDepth = 1;
+          schedule.staging = "lds";
+          // Explicit experiment: physical K64 slab, two independently scaled
+          // K32 partials in ascending group order.
+          // Independent forward/reverse gfx1201 packets retain K64 only
+          // measured 128x64 panels. Wider panels retain K32; the narrow
+          // long-K extension keeps the two independent K32 scales.
+          const bool measuredK64 = choice == "auto" &&
+              schedule.macroTileN == 64 && schedule.k >= 1024 &&
+              (schedule.k <= 2048 || measuredLongK64) && schedule.k % 64 == 0;
+          if (choice == "lds_k64" || measuredK64) schedule.blockK = 64;
+        }
+      } else {
+        selectFp8W8A8BlockScalePanel(schedule);
+      }
+      if (schedule.typedTransposeA || schedule.k % schedule.scaleBlockK != 0) {
+        // Column-major A uses the canonical typed fragment gather. No LDS
+        // recipe measured for row-major A is transferred to this storage.
+        if (auto policy = module->getAttrOfType<StringAttr>("tessera.rocm.mxfp8_schedule");
+            policy && policy.getValue() != "auto" && policy.getValue() != "seed")
+          return failure();
+        schedule.macroTileM = schedule.macroTileN = 16;
+        schedule.blockK = schedule.scaleBlockK;
+        schedule.warps = schedule.pipelineDepth = 1;
+        schedule.staging = "global";
+      }
     }
     return schedule;
   }
@@ -1200,6 +1459,19 @@ static FailureOr<MatmulSchedule> getMatmulSchedule(Operation *op) {
   FailureOr<MatmulSchedule> schedule = getInferredMatmulSchedule(op);
   if (failed(schedule))
     return schedule;
+  if (Attribute request = op->getAttr("rhs_storage_order")) {
+    auto order = dyn_cast<StringAttr>(request);
+    if (!order || (order.getValue() != "row_major" && order.getValue() != "col_major") ||
+        schedule->target != "nvidia_sm120" || schedule->arch != "sm_120" ||
+        (schedule->storage != "f16" && schedule->storage != "bf16") ||
+        (schedule->output != "f32" && schedule->output != "f16") ||
+        schedule->tileM != 16 ||
+        schedule->tileN != 8 || schedule->tileK != 16) {
+      op->emitError("rhs_storage_order requires the SM120 typed view contract");
+      return failure();
+    }
+    schedule->bLayout = order.getValue();
+  }
   auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
   if (!policy)
     return schedule;
@@ -1257,6 +1529,19 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
        Twine(schedule.dynamicM) + Twine(schedule.dynamicN) +
        Twine(schedule.dynamicK))
           .str();
+  if (schedule.typedTransposeA) contract += ";typed_transpose_a=1";
+  if (schedule.nvfp4TransposeA) contract += ";nvfp4_transpose_a=1";
+  if (schedule.nvfp4TransposeB) contract += ";nvfp4_transpose_b=1";
+  if (!schedule.broadcastTypes.empty()) {
+    contract += ";batching=broadcast;operand_types=";
+    llvm::raw_string_ostream stream(contract);
+    for (auto type : schedule.broadcastTypes) { type.print(stream); stream << ";"; }
+    schedule.broadcastResult.print(stream);
+    stream.flush();
+  } else if (schedule.independentBatchCount > 0)
+    contract += std::string(schedule.sharedBatchLhs ? ";batching=shared_lhs;batch_rows=" : schedule.sharedBatchRhs ? ";batching=shared_rhs_rows;batch_rows=" : ";batching=independent_rhs;batch_rows=") +
+        std::to_string(schedule.independentBatchRows) + ";batch_count=" +
+        std::to_string(schedule.independentBatchCount);
   // ROCM-SPLIT-K-1: appended only when a split exists, so every unsplit
   // schedule keeps the digest it had before split-K could be expressed.
   if (schedule.splitK > 1)
@@ -1267,6 +1552,8 @@ static std::string scheduleDigest(const MatmulSchedule &schedule) {
   // register-panel schedule keeps its digest.
   if (schedule.staging != "global")
     contract += (Twine(";staging=") + schedule.staging).str();
+  if (schedule.bLayout != "col_major")
+    contract += (Twine(";b_storage_layout=") + schedule.bLayout).str();
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
 }
@@ -1354,6 +1641,15 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     schedule.columns = input.getShape().back();
     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
+    // The native Schedule owns this shape decision. Exact SM120 A/B evidence
+    // covers the coalesced CTA row schedule; short feature rows retain serial.
+    // An explicit schedule remains authoritative for tuning and comparison.
+    schedule.reductionSchedule =
+        nvidia && schedule.columns >= 256 ? "cooperative_128" : "serial";
+    if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
+      schedule.reductionSchedule = mode.getValue();
+    if (schedule.reductionSchedule != "serial" &&
+        (!nvidia || schedule.reductionSchedule != "cooperative_128")) return failure();
     return schedule;
   }
   if (opName == "tessera.softmax") {
@@ -1369,6 +1665,11 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
     schedule.columns = input.getShape().back();
     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
+    if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
+      schedule.reductionSchedule = mode.getValue();
+    if (schedule.reductionSchedule != "serial" &&
+        (!nvidia || schedule.reductionSchedule != "cooperative_128"))
+      return failure();
     return schedule;
   }
 
@@ -2836,6 +3137,11 @@ struct GraphToSchedulePass
 
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(GraphToSchedulePass)
 
+  GraphToSchedulePass() = default;
+  GraphToSchedulePass(const GraphToSchedulePass &other) : PassWrapper(other) {}
+  Option<bool> scaleTransposeWave{*this, "scale-transpose-wave",
+      llvm::cl::desc("Use one 32-lane wave per scale-adjoint element"),
+      llvm::cl::init(false)};
   StringRef getArgument() const override { return "tessera-graph-to-schedule"; }
   StringRef getDescription() const override {
     return "Create a content-addressed mixed-level schedule.matmul SSA edge "
@@ -2844,7 +3150,7 @@ struct GraphToSchedulePass
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
-    registry.insert<schedule::ScheduleDialect, gpu::GPUDialect, arith::ArithDialect,
+    registry.insert<attn::TesseraAttnDialect, schedule::ScheduleDialect, gpu::GPUDialect, arith::ArithDialect,
                     scf::SCFDialect, memref::MemRefDialect, vector::VectorDialect>();
   }
 
@@ -2854,10 +3160,20 @@ struct GraphToSchedulePass
       if (failed(scheduleNativeSparse(mod))) signalPassFailure();
       return;
     }
+    bool scaleTransposeSelected = false;
+    if (failed(scheduleNativeScaleTranspose(mod, scaleTransposeSelected, scaleTransposeWave))) return signalPassFailure();
+    if (scaleTransposeSelected) return;
     OpBuilder builder(mod.getContext());
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeX86Kernel(mod))) return signalPassFailure();
-    if (failed(scheduleNativeCheckpoints(mod))) return signalPassFailure();
+    if (failed(scheduleNativeROCMMath(mod))) return signalPassFailure();
+    bool jvpSelected=false;
+    if (failed(scheduleNativeAttentionJvp(mod,jvpSelected))) return signalPassFailure();
+    if (jvpSelected) return;
+    if (failed(importSavedAttentionGraphs(mod)) ||
+        failed(scheduleNativeCheckpoints(mod)) ||
+        failed(scheduleNativeAttentionRecompute(mod))) return signalPassFailure();
+    if (failed(scheduleNativeNVFP4Ingest(mod)) || failed(scheduleNativeMXFP4StorageIngest(mod))) return signalPassFailure();
     if (failed(scheduleNativePagedKV(mod))) return signalPassFailure();
     if (failed(scheduleNativeMoeDispatch(mod))) return signalPassFailure();
 
@@ -2998,7 +3314,17 @@ struct GraphToSchedulePass
           op->getName().getStringRef() == "tessera.scaled_matmul")
         matmuls.push_back(op);
     });
-    for (Operation *op : matmuls) {
+    for (auto [instance, op] : llvm::enumerate(matmuls)) {
+      // The digest identifies schedule content, while the binding identifies
+      // the particular Graph SSA product that owns the artifact lifetime.
+      // Equal schedules in one function (e.g. JVP terms) remain distinct.
+      auto binding = builder.getStringAttr(
+          (Twine("matmul-") + Twine(instance)).str());
+      if (op->hasAttr("tessera.canonical_k_step")) {
+        op->emitError("E2E-REAL-2 canonical tensor K-step must recover its "
+                      "complete logical contraction before Graph->Schedule");
+        return signalPassFailure();
+      }
       FailureOr<MatmulSchedule> selected = getMatmulSchedule(op);
       if (failed(selected)) {
         op->emitError("E2E-REAL-2 Graph->Schedule requires static rank-2 "
@@ -3009,6 +3335,7 @@ struct GraphToSchedulePass
       }
       std::string digest = scheduleDigest(*selected);
       op->setAttr("schedule.artifact_hash", builder.getStringAttr(digest));
+      op->setAttr("schedule.artifact_binding", binding);
       // A performance fallback may happen, but never silently (#21a).
       if (!selected->splitKFallback.empty())
         op->emitWarning("ROCM_SPLIT_K_NOT_APPLIED: ")
@@ -3024,6 +3351,7 @@ struct GraphToSchedulePass
       state.addOperands(op->getResult(0));
       state.addTypes(op->getResult(0).getType());
       state.addAttribute("artifact_hash", builder.getStringAttr(digest));
+      state.addAttribute("artifact_binding", binding);
       state.addAttribute("arch", builder.getStringAttr(selected->arch));
       state.addAttribute("tile_m", builder.getI64IntegerAttr(selected->tileM));
       state.addAttribute("tile_n", builder.getI64IntegerAttr(selected->tileN));
@@ -3064,8 +3392,10 @@ struct GraphToSchedulePass
                          builder.getStringAttr(selected->activation));
       state.addAttribute("residual", builder.getBoolAttr(selected->residual));
       state.addAttribute("output", builder.getStringAttr(selected->output));
+      if (selected->nvfp4TransposeA || selected->typedTransposeA) state.addAttribute("transposeA", builder.getBoolAttr(true));
+      if (selected->nvfp4TransposeB) state.addAttribute("transposeB", builder.getBoolAttr(true));
       state.addAttribute("a_layout", builder.getStringAttr("row_major"));
-      state.addAttribute("b_layout", builder.getStringAttr("col_major"));
+      state.addAttribute("b_layout", builder.getStringAttr(selected->bLayout));
       state.addAttribute("raster_order",
                          builder.getStringAttr(selected->rasterOrder));
       state.addAttribute("raster_group",
@@ -3078,6 +3408,7 @@ struct GraphToSchedulePass
       builder.setInsertionPointAfter(scheduled);
       OperationState artifactState(op->getLoc(), "schedule.artifact");
       artifactState.addAttribute("hash", builder.getStringAttr(digest));
+      artifactState.addAttribute("binding", binding);
       artifactState.addAttribute("arch", builder.getStringAttr(selected->arch));
       artifactState.addAttribute(
           "shape_key",
@@ -3155,9 +3486,12 @@ struct GraphToSchedulePass
       state.addAttribute("workgroup_size",
                          builder.getI64IntegerAttr(selected->workgroupSize));
       if (selected->family == "norm") {
+        state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("kind", builder.getStringAttr(selected->kind));
         state.addAttribute("epsilon", builder.getF32FloatAttr(selected->epsilon));
       } else if (selected->family == "softmax") {
+        if (selected->reductionSchedule != "serial")
+          state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
         state.addAttribute("exp_mode", builder.getStringAttr(selected->expMode));
         state.addAttribute("ftz", builder.getBoolAttr(false));
       } else {
@@ -3822,7 +4156,7 @@ struct ScheduleToTilePass
   void getDependentDialects(DialectRegistry &registry) const override {
     registry.insert<gpu::GPUDialect, arith::ArithDialect, bufferization::BufferizationDialect,
                     func::FuncDialect, LLVM::LLVMDialect, memref::MemRefDialect,
-                    NVVM::NVVMDialect, scf::SCFDialect,
+                    NVVM::NVVMDialect, scf::SCFDialect, math::MathDialect,
                     schedule::ScheduleDialect, tensor::TensorDialect>();
     registerTesseraDialects(registry);
     tile::registerTileDialect(registry);
@@ -3837,6 +4171,9 @@ struct ScheduleToTilePass
       if (failed(lowerCooperativeSSD(mod, ssdGPU))) signalPassFailure();
       return;
     }
+    bool scaleTransposeSelected = false;
+    if (failed(lowerNativeScaleTranspose(mod, scaleTransposeSelected))) return signalPassFailure();
+    if (scaleTransposeSelected) return;
     OpBuilder builder(mod.getContext());
     SmallVector<schedule::SparseMMAOp> sparseFragments;
     mod.walk([&](schedule::SparseMMAOp op) { sparseFragments.push_back(op); });
@@ -3852,7 +4189,13 @@ struct ScheduleToTilePass
     }
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeX86Kernel(mod))) return signalPassFailure();
-    if (failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
+    if (failed(lowerNativeROCMMath(mod))) return signalPassFailure();
+    bool jvpSelected=false;
+    if (failed(lowerNativeAttentionJvp(mod,jvpSelected))) return signalPassFailure();
+    if (jvpSelected) return;
+    if (failed(lowerNativeAttentionRecompute(mod)) ||
+        failed(lowerNativeCheckpoints(mod))) return signalPassFailure();
+    if (failed(lowerNativeNVFP4Ingest(mod)) || failed(lowerNativeMXFP4StorageIngest(mod))) return signalPassFailure();
     if (failed(lowerNativePagedKV(mod))) return signalPassFailure();
     if (failed(lowerNativeMoeDispatch(mod))) return signalPassFailure();
     if (failed(lowerNativeSSD(mod))) return signalPassFailure();
@@ -4078,6 +4421,12 @@ struct ScheduleToTilePass
             "scheduled decision does not match the retained Graph matmul contract");
         return signalPassFailure();
       }
+      auto orientationMatches = [&](StringRef name, bool expected) {
+        Attribute attr = scheduled->getAttr(name);
+        if (!attr) return !expected;
+        auto value = dyn_cast<BoolAttr>(attr);
+        return value && value.getValue() == expected;
+      };
       if (scheduled.getTileMAttr().getInt() != selected->tileM ||
           scheduled.getTileNAttr().getInt() != selected->tileN ||
           scheduled.getTileKAttr().getInt() != selected->tileK ||
@@ -4101,17 +4450,31 @@ struct ScheduleToTilePass
           scheduled.getResidual() != selected->residual ||
           scheduled.getOutput() != selected->output ||
           scheduled.getArch() != selected->arch ||
+          !orientationMatches("transposeA", selected->nvfp4TransposeA || selected->typedTransposeA) ||
+          !orientationMatches("transposeB", selected->nvfp4TransposeB) ||
           scheduled.getALayout() != "row_major" ||
-          scheduled.getBLayout() != "col_major" ||
+          scheduled.getBLayout() != selected->bLayout ||
           scheduled.getRasterOrder() != selected->rasterOrder ||
           scheduled.getRasterGroupAttr().getInt() != selected->rasterGroup) {
         scheduled.emitError("scheduled tile or numeric policy was altered after hashing");
         return signalPassFailure();
       }
       auto graphDigest = graph->getAttrOfType<StringAttr>("schedule.artifact_hash");
+      Attribute rawBinding = scheduled->getAttr("artifact_binding");
+      Attribute rawGraphBinding = graph->getAttr("schedule.artifact_binding");
+      auto binding = dyn_cast_or_null<StringAttr>(rawBinding);
+      // Legacy single-product carriers have no binding. A mixed or malformed
+      // triple must not fall back to an unscoped content-hash lookup.
+      if ((rawBinding || rawGraphBinding) &&
+          (!binding || binding.getValue().empty() ||
+           rawGraphBinding != binding)) {
+        scheduled.emitError("matmul artifact binding does not match its Graph subject");
+        return signalPassFailure();
+      }
       SmallVector<schedule::ArtifactOp> matchingArtifacts;
       mod.walk([&](schedule::ArtifactOp artifact) {
-        if (artifact.getHash() == scheduled.getArtifactHash())
+        if (artifact.getHash() == scheduled.getArtifactHash() &&
+            artifact->getAttr("binding") == rawBinding)
           matchingArtifacts.push_back(artifact);
       });
       if (!graphDigest || graphDigest.getValue() != scheduled.getArtifactHash() ||
@@ -4149,6 +4512,7 @@ struct ScheduleToTilePass
         const bool dynamicSm120 = selected->dynamicM || selected->dynamicN ||
                                   selected->dynamicK;
         const bool macroSm120Producer =
+            selected->bLayout == "col_major" &&
             selected->m >= 32 && selected->n >= 32 &&
             selected->k >= 16 &&
             (selected->storage == "f16" || selected->storage == "bf16") &&
@@ -4156,6 +4520,20 @@ struct ScheduleToTilePass
             sm120Work >= 67108864;
         const bool fusedEpilogue = selected->bias || selected->residual ||
                                    selected->activation != "none";
+        const bool typedSm120Producer =
+            selected->m > 0 && selected->n > 0 && selected->k > 0 &&
+            selected->tileM == 16 && selected->tileN == 8 &&
+            selected->tileK == 16 &&
+            (selected->storage == "f16" || selected->storage == "bf16") &&
+            selected->accum == "f32" &&
+            (selected->output == "f32" || selected->output == "f16");
+        const bool useMacroSm120Producer =
+            macroSm120Producer && selected->k % 8 == 0 && !fusedEpilogue &&
+            selected->output == "f32";
+        // The bridge derives CTA geometry from this symbol suffix. A typed
+        // tail uses 16x8 tiles even when its workload exceeds the macro cutoff.
+        const bool macroKernelGeometry =
+            macroSm120Producer && (useMacroSm120Producer || !typedSm120Producer);
         std::string epilogueSuffix;
         if (fusedEpilogue || selected->output == "f16")
           epilogueSuffix =
@@ -4166,10 +4544,12 @@ struct ScheduleToTilePass
                   .str();
         std::string kernelName =
             (graphFunction.getName() + epilogueSuffix +
-             (macroSm120Producer ? "_macro_kernel" : "_kernel"))
+             (dynamicSm120 && selected->bLayout == "row_major" ? "_row_rhs" : "") +
+             (macroKernelGeometry ? "_macro_kernel" : "_kernel"))
                 .str();
         if (selected->storage == "int4") kernelName = "tessera_tile_matmul_int4";
         if (selected->storage == "nvfp4") kernelName = "tessera_tile_matmul_nvfp4";
+        if (selected->independentBatchCount > 0) kernelName = "tessera_tile_matmul_nvfp4_batched";
         if (SymbolTable::lookupSymbolIn(mod, kernelName)) {
           scheduled.emitError("SM120 scheduled matmul kernel symbol already exists");
           return signalPassFailure();
@@ -4185,6 +4565,7 @@ struct ScheduleToTilePass
         if (selected->residual)
           kernelInputs.push_back(pointerType);
         kernelInputs.append({pointerType, i64, i64, i64});
+        if (selected->independentBatchCount > 0) kernelInputs.append({i64, i64});
         if (dynamicSm120)
           kernelInputs.append({i64, i64, i64});
         auto kernelType = LLVM::LLVMFunctionType::get(
@@ -4211,16 +4592,14 @@ struct ScheduleToTilePass
         auto epilogue = tile::TileEpilogueAttr::get(
             &getContext(), selected->bias, selected->activation,
             selected->output);
-        const bool typedSm120Producer = selected->m >= 16 && selected->m % 16 == 0 &&
-                                        selected->n >= 8 && selected->n % 8 == 0 &&
-                                        selected->k >= 16 && selected->k % 16 == 0 &&
-                                        (selected->storage == "f16" ||
-                                         selected->storage == "bf16") &&
-                                        selected->accum == "f32" &&
-                                        !fusedEpilogue &&
-                                        selected->output == "f32";
-        if (macroSm120Producer && selected->k % 8 == 0 && !fusedEpilogue &&
-            selected->output == "f32") {
+        // Static tails retain their exact leading dimensions in tile.memory.
+        // Logical bounds on the input views zero-fill incomplete MMA panels;
+        // a bounded output store writes only the logical M/N envelope.
+        const bool boundedStaticOutput =
+            !dynamicSm120 && (selected->m % 16 != 0 || selected->n % 8 != 0);
+        const bool boundedStaticInputs =
+            boundedStaticOutput || (!dynamicSm120 && selected->k % 16 != 0);
+        if (useMacroSm120Producer) {
           // NVIDIA owns this physical reuse boundary. One 128-thread CTA
           // computes a 32x32 output tile: four warps own 2x2 16x16 quadrants,
           // and each warp emits two adjacent m16n8 MMA tiles. A[32,16] and
@@ -4269,10 +4648,9 @@ struct ScheduleToTilePass
               kernelBuilder.getI64IntegerAttr(selected->macroTileN));
           kernelBuilder.create(macroState);
         } else if (typedSm120Producer) {
-          // The narrow, exact m16n8k16 seed uses the same proof-bearing
-          // composed-layout carrier as the portable Tile path.  Larger
-          // scheduled problems retain tile.matmul_kernel until their tiled
-          // loop producer can preserve this fragment lineage end-to-end.
+          // Canonical m16n8k16 schedules retain tensor-to-buffer provenance
+          // through bounded pointer-backed views and typed fragment carries.
+          // Macro CTA schedules use their separate shared-panel producer.
           auto tileType = tile::TileValueType::get(&getContext());
           auto typedMma = tile::TileMmaDescAttr::get(
               &getContext(), "mma_sync", selected->tileM, selected->tileN,
@@ -4297,7 +4675,8 @@ struct ScheduleToTilePass
           auto aMemory = tile::TileMemoryLayoutAttr::get(
               &getContext(), "gmem", "row_major", dynamicSm120 ? 0 : selected->k);
           auto bMemory = tile::TileMemoryLayoutAttr::get(
-              &getContext(), "gmem", "col_major", dynamicSm120 ? 0 : selected->k);
+              &getContext(), "gmem", selected->bLayout,
+              dynamicSm120 ? 0 : (selected->bLayout == "row_major" ? selected->n : selected->k));
           auto dMemory = tile::TileMemoryLayoutAttr::get(
               &getContext(), "gmem", "row_major", dynamicSm120 ? 0 : selected->n);
           auto composed = [&](ArrayRef<int64_t> shape, ArrayRef<int64_t> strides) {
@@ -4317,7 +4696,7 @@ struct ScheduleToTilePass
                 basis, {0, 0});
           };
           auto zero = arith::ConstantIntOp::create(kernelBuilder, loc, 0, 64);
-          // The launch ABI maps grid.x to N/8 and grid.y to M/16.  Carry the
+          // The launch ABI uses ceil(N/8) by ceil(M/16) output tiles.  Carry the
           // resulting logical origins into the shared views/materializations;
           // the physical packer may then use only the proven linear base plus
           // its fixed per-lane fragment coordinates.
@@ -4351,6 +4730,8 @@ struct ScheduleToTilePass
             state.addOperands({base, linear, row, col});
             if (dynamicSm120)
               state.addOperands({rowBound, colBound, leadingDim});
+            else if (boundedStaticInputs)
+              state.addOperands({rowBound, colBound});
             state.addTypes(tileType);
             state.addAttribute("tile.layout", layout); state.addAttribute("tile.memory", memory);
             state.addAttribute("tile.linear_base", kernelBuilder.getUnitAttr());
@@ -4370,6 +4751,8 @@ struct ScheduleToTilePass
           auto pack = [&](Value source, Type type, StringRef role) {
             OperationState state(loc, "tile.fragment_pack"); state.addOperands(source); state.addTypes(type);
             state.addAttribute("role", kernelBuilder.getStringAttr(role)); state.addAttribute("mma", typedMma);
+            if (role == "b" && selected->bLayout == "row_major")
+              state.addAttribute("transpose", kernelBuilder.getUnitAttr());
             return kernelBuilder.create(state)->getResult(0);
           };
           OperationState zeroState(loc, "tile.fragment_zero"); zeroState.addTypes(cType);
@@ -4420,8 +4803,10 @@ struct ScheduleToTilePass
                 ? dynamicComposed(false)
                 : composed({selected->m, selected->k}, {selected->k, 1});
             auto bComposed = dynamicSm120
-                ? dynamicComposed(true)
-                : composed({selected->k, selected->n}, {1, selected->k});
+                ? dynamicComposed(selected->bLayout == "col_major")
+                : (selected->bLayout == "row_major"
+                    ? composed({selected->k, selected->n}, {selected->n, 1})
+                    : composed({selected->k, selected->n}, {1, selected->k}));
             SmallVector<Value> aMaterialize{rowBase, panel};
             SmallVector<Value> bMaterialize{panel, colBase};
             if (dynamicSm120) {
@@ -4458,6 +4843,19 @@ struct ScheduleToTilePass
           storeState.addOperands({outTile, entry->getArgument(dIndex), rowBase, colBase});
           if (dynamicSm120)
             storeState.addOperands({runtimeM, runtimeN, ldd});
+          else if (boundedStaticOutput)
+            storeState.addOperands({runtimeM, runtimeN});
+          if (fusedEpilogue || selected->output == "f16") {
+            storeState.addAttribute("tile.epilogue", epilogue);
+            if (selected->bias)
+              storeState.addOperands(entry->getArgument(2));
+            if (selected->residual) {
+              storeState.addOperands(entry->getArgument(2 + unsigned(selected->bias)));
+              storeState.addAttribute("tile.residual", kernelBuilder.getBoolAttr(true));
+              storeState.addAttribute("tile.epilogue_order",
+                  kernelBuilder.getStringAttr("matmul_bias_activation_residual"));
+            }
+          }
           storeState.addAttribute("tile.layout", bLayout); storeState.addAttribute("tile.memory", dMemory);
           kernelBuilder.create(storeState);
         } else {
@@ -4465,7 +4863,11 @@ struct ScheduleToTilePass
         kernelState.addOperands(entry->getArguments());
         kernelState.addAttribute("mma", mma);
         kernelState.addAttribute("epilogue", epilogue);
+        if (selected->independentBatchCount > 0)
+          kernelState.addAttribute("batching", kernelBuilder.getStringAttr(selected->sharedBatchLhs ? "shared_lhs" : selected->sharedBatchRhs ? "shared_rhs_rows" : "independent_rhs"));
         if (selected->storage == "nvfp4") {
+          if (selected->nvfp4TransposeA) kernelState.addAttribute("transposeA", kernelBuilder.getBoolAttr(true));
+          if (selected->nvfp4TransposeB) kernelState.addAttribute("transposeB", kernelBuilder.getBoolAttr(true));
           kernelState.addAttribute("tessera.storage_packed",
                                    kernelBuilder.getBoolAttr(true));
           kernelState.addAttribute("tessera.storage_container",
@@ -4660,6 +5062,20 @@ struct ScheduleToTilePass
         kernelState.addOperands({a, b, biasPointer, d, m, n, k});
       else
         kernelState.addOperands({a, b, d, m, n, k});
+      if (selected->target == "rocm" && selected->independentBatchCount > 0) {
+        kernelState.addAttribute("batching", builder.getStringAttr(
+            !selected->broadcastTypes.empty() ? "broadcast" :
+            selected->sharedBatchLhs ? "shared_lhs" : "independent_rhs"));
+        if (!selected->broadcastTypes.empty()) {
+          SmallVector<Attribute> types;
+          for (auto type : selected->broadcastTypes) types.push_back(TypeAttr::get(type));
+          kernelState.addAttribute("batch_operands", builder.getArrayAttr(types));
+          kernelState.addAttribute("batch_result", TypeAttr::get(selected->broadcastResult));
+        }
+        kernelState.addAttribute("batch_count", builder.getI64IntegerAttr(selected->independentBatchCount));
+      }
+      if (selected->typedTransposeA)
+        kernelState.addAttribute("transposeA", builder.getBoolAttr(true));
       kernelState.addAttribute("mma", mma);
       kernelState.addAttribute("epilogue", epilogue);
       kernelState.addAttribute("warps",
@@ -4794,6 +5210,31 @@ struct ScheduleToTilePass
       for (schedule::ArtifactOp artifact : matchingArtifacts)
         artifact.erase();
     }
+    if (!consumedNvidiaGraphFunctions.empty()) {
+      // Graph layout metadata is consumed when ScheduleToTile replaces the
+      // Graph function with a kernel whose physical layout is carried by
+      // tile.layout on its views, fragments, and stores. Record that
+      // whole-module consumption for the metadata boundary verifier.
+      SmallVector<NamedAttribute> dropped;
+      if (auto existing = mod->getAttrOfType<DictionaryAttr>(
+              "tessera.lowering.dropped")) {
+        for (NamedAttribute entry : existing) {
+          if (entry.getName().strref() == "layout") {
+            auto reason = dyn_cast<StringAttr>(entry.getValue());
+            if (!reason || reason.getValue() != "consumed_by_pass") {
+              mod.emitError("ScheduleToTile cannot replace the existing layout metadata drop reason");
+              return signalPassFailure();
+            }
+            continue;
+          }
+          dropped.push_back(entry);
+        }
+      }
+      dropped.push_back(builder.getNamedAttr(
+          "layout", builder.getStringAttr("consumed_by_pass")));
+      mod->setAttr("tessera.lowering.dropped",
+                   builder.getDictionaryAttr(dropped));
+    }
     for (func::FuncOp graphFunction : consumedNvidiaGraphFunctions)
       graphFunction.erase();
 
@@ -4842,10 +5283,13 @@ struct ScheduleToTilePass
       if (isNorm) {
         auto eps = scheduled->getAttrOfType<FloatAttr>("epsilon");
         altered = altered || attrString("kind") != selected->kind ||
+                  attrString("schedule") != selected->reductionSchedule ||
                   !eps || eps.getValueAsDouble() != selected->epsilon;
       } else if (isSoftmax)
         altered = altered || attrString("exp_mode") != selected->expMode ||
-                  attrBool("ftz") != false;
+                  attrBool("ftz") != false ||
+                  (attrString("schedule").empty() ? StringRef("serial") :
+                   attrString("schedule")) != selected->reductionSchedule;
       else
         altered = altered || attrString("kind") != selected->kind ||
                   attrBool("keepdims") != selected->keepdims ||
@@ -4885,7 +5329,8 @@ struct ScheduleToTilePass
           return signalPassFailure();
         }
         // Preserve the established runtime launch symbols and serial schedule.
-        std::string name = isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + "_" + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage).str() :
+        std::string name = isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
+            (selected->reductionSchedule == "serial" ? "" : "_cooperative_128")).str() :
             (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {
           scheduled->emitError("NVIDIA scheduled kernel symbol already exists");
@@ -4909,10 +5354,13 @@ struct ScheduleToTilePass
         for (StringRef key : {"storage", "accum", "axis"})
           state.addAttribute(key, scheduled->getAttr(key));
         if (isNorm) {
+          state.addAttribute("schedule", scheduled->getAttr("schedule"));
           state.addAttribute("kind", scheduled->getAttr("kind"));
           state.addAttribute("affine", kb.getBoolAttr(false));
           state.addAttribute("tessera.norm_epsilon", kb.getF32FloatAttr(selected->epsilon));
         } else if (isSoftmax) {
+          if (scheduled->hasAttr("schedule"))
+            state.addAttribute("schedule", scheduled->getAttr("schedule"));
           for (StringRef key : {"exp_mode", "ftz"})
             state.addAttribute(key, scheduled->getAttr(key));
         } else {
@@ -5952,11 +6400,15 @@ struct ScheduleToTilePass
           scheduled.emitError("NVIDIA scheduled attention requires one isolated function");
           return signalPassFailure();
         }
-        for (unsigned i = 0; i < graph->getNumOperands(); ++i)
-          if (graph->getOperand(i) != nativeGraph.getArgument(i)) {
-            scheduled.emitError("NVIDIA scheduled attention requires ordered argument operands");
+        llvm::SmallDenseSet<unsigned, 4> inputRoles;
+        for (Value operand : graph->getOperands()) {
+          auto argument = dyn_cast<BlockArgument>(operand);
+          if (!argument || argument.getOwner() != &nativeGraph.getBody().front() ||
+              !inputRoles.insert(argument.getArgNumber()).second) {
+            scheduled.emitError("NVIDIA scheduled attention requires distinct function argument operands");
             return signalPassFailure();
           }
+        }
         auto ret = dyn_cast<func::ReturnOp>(nativeGraph.getBody().front().back());
         if (!ret || ret.getNumOperands() != 1 || ret.getOperand(0) != scheduled.getScheduled()) {
           scheduled.emitError("NVIDIA scheduled attention must be the function result");
@@ -6956,6 +7408,34 @@ struct ScheduleToTilePass
 
 std::unique_ptr<mlir::Pass> createPMV11VerifierPass() {
   return std::make_unique<PMV11VerifierPass>();
+}
+
+LogicalResult normalizeSM120MatmulEntryNames(ModuleOp mod) {
+  auto target = mod->getAttrOfType<StringAttr>("tessera.target");
+  auto arch = mod->getAttrOfType<StringAttr>("tessera.arch");
+  if (!target || target.getValue() != "nvidia_sm120" ||
+      !arch || arch.getValue() != "sm_120")
+    return mod.emitError("[TILE_IR_LOWERING] SM120 Schedule delegation requires "
+                         "explicit nvidia_sm120 target and sm_120 architecture");
+  SymbolTable symbols(mod);
+  SmallVector<func::FuncOp> entries;
+  mod.walk([&](Operation *op) {
+    if (op->getName().getStringRef() == "tessera.matmul" &&
+        !op->hasAttr("tessera.canonical_k_step")) {
+      auto fn = op->getParentOfType<func::FuncOp>();
+      if (fn && !llvm::is_contained(entries, fn))
+        entries.push_back(fn);
+    }
+  });
+  constexpr llvm::StringLiteral prefix = "nvidia_sm120_scheduled_matmul_";
+  for (func::FuncOp fn : entries) {
+    if (fn.getName().starts_with(prefix))
+      continue;
+    std::string name = (prefix + fn.getName()).str();
+    if (failed(symbols.rename(fn, name)))
+      return fn.emitError("[TILE_IR_LOWERING] SM120 entry namespace collision");
+  }
+  return success();
 }
 
 std::unique_ptr<mlir::Pass> createGraphToSchedulePass() {

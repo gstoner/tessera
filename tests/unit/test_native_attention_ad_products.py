@@ -38,6 +38,7 @@ def test_value_only_jvp_uses_linear_checkpoint_product():
     result = run(source('forward', ', tessera.autodiff.wrt_indices = [2]'), 'forward')
     assert result.returncode == 0, result.stderr
     assert 'tessera_attn.checkpoint_forward' in result.stdout
+    assert 'tessera_attn.checkpoint_jvp' not in result.stdout
 
 
 @pytest.mark.parametrize('mode,flag,wrt,dropout', [
@@ -61,10 +62,12 @@ def test_paired_attention_persists_forward_lse_without_backward_recompute():
     assert forward.count('tessera_attn.checkpoint_forward') == 1
     assert 'tessera_attn.checkpoint_forward' not in backward
     assert 'tessera.flash_attn ' not in result.stdout
-    assert 'tessera.flash_attn:lse' in forward and 'tessera.flash_attn:lse' in backward
+    assert 'tessera.flash_attn:output' in forward and 'tessera.flash_attn:lse' in forward
+    assert 'tessera.flash_attn:output' in backward and 'tessera.flash_attn:lse' in backward
     assert 'tessera_attn.checkpoint_backward' in backward
-    # Q, K, V, dO, persisted LSE: backward consumes its fifth argument.
-    assert '%arg4' in backward.split('tessera_attn.checkpoint_backward', 1)[1].split(':', 1)[0]
+    # Backward consumes saved output and LSE after the four ordinary inputs.
+    operands = backward.split('tessera_attn.checkpoint_backward', 1)[1].split(':', 1)[0]
+    assert '%arg4' in operands and '%arg5' in operands
 
 
 def test_two_attention_results_keep_distinct_lse_residual_slots():
@@ -83,8 +86,8 @@ def test_two_attention_results_keep_distinct_lse_residual_slots():
     assert 'tessera_attn.checkpoint_forward' not in backward
     products = backward.split('tessera_attn.checkpoint_backward')[1:]
     assert len(products) == 2
-    assert '%arg6' in products[0].split(':', 1)[0]
-    assert '%arg5' in products[1].split(':', 1)[0]
+    assert '%arg7' in products[0].split(':', 1)[0] and '%arg8' in products[0].split(':', 1)[0]
+    assert '%arg5' in products[1].split(':', 1)[0] and '%arg6' in products[1].split(':', 1)[0]
     assert 'causal = false' in products[0] and 'causal = true' in products[1]
 
 
@@ -147,3 +150,74 @@ def test_score_jvp_rejects_equal_shape_lse_from_another_forward():
     checked=subprocess.run([str(find_tessera_opt())],input=corrupted,text=True,capture_output=True,timeout=30)
     assert checked.returncode!=0
     assert 'same forward' in checked.stderr
+
+
+@pytest.mark.parametrize("indices", ["0", "2", "1, 0", "2, 0, 1"])
+@pytest.mark.parametrize("backward", [False, True])
+def test_generated_reverse_checkpoint_exports_requested_cotangent_selection(indices, backward):
+    from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+    if find_tessera_opt() is None:
+        pytest.skip("native compiler unavailable")
+    text = source("reverse", ", tessera.autodiff.wrt_indices = ["+indices+"]")
+    text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+    artifact = lower_generated_checkpoint(text, backward=backward)
+    artifact.validate()
+    assert artifact.backward is backward
+    assert artifact.dims == (1, 2, 1, 4, 6, 8, 8)
+    assert "tessera.attention_ad_pair" in artifact.graph_ir
+
+
+@pytest.mark.parametrize("indices,activity", [
+    ("0", (1,0,0)), ("2", (0,0,1)), ("1, 0", (1,1,0)),
+    ("2, 0, 1", (1,1,1)),
+])
+def test_native_checkpoint_pruning_derives_activity_from_native_request_and_roles(indices, activity):
+    from dataclasses import replace
+    from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+    from tessera.compiler.scheduled_matmul import run_tessera_opt
+    if find_tessera_opt() is None:
+        pytest.skip("native compiler unavailable")
+    text = source("reverse", ", tessera.autodiff.wrt_indices = ["+indices+"]")
+    text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+    legacy = lower_generated_checkpoint(text, backward=True)
+    artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+    assert legacy.gradient_activity == ()
+    assert artifact.gradient_activity == activity
+    assert artifact.names == legacy.names
+    assert artifact.schedule_digest != legacy.schedule_digest
+    assert 'inactive_gradient = "zero_fill_v1"' in artifact.tile_ir
+    with pytest.raises(ValueError, match="activity"):
+        replace(artifact, gradient_activity=()).validate()
+    sealed = "gradient_activity = array<i64: "+", ".join(map(str,activity))+">"
+    different = (0,0,1) if activity != (0,0,1) else (1,0,0)
+    changed = artifact.schedule_ir.replace(sealed, "gradient_activity = array<i64: "+", ".join(map(str,different))+">")
+    assert changed != artifact.schedule_ir
+    with pytest.raises(RuntimeError, match="contract changed"):
+        run_tessera_opt(find_tessera_opt(), changed, "--tessera-schedule-to-tile")
+
+
+@pytest.mark.parametrize("value", ["array<i64: 0, 0, 0>", "array<i64: 1, 2, 0>", "array<i64: 1, 0>", '"bad"'])
+def test_checkpoint_rejects_invalid_native_gradient_activity(value):
+    from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+    from tessera.compiler.scheduled_matmul import run_tessera_opt
+    if find_tessera_opt() is None:
+        pytest.skip("native compiler unavailable")
+    text = source("reverse", ", tessera.autodiff.wrt_indices = [2]")
+    text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+    artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+    changed = artifact.graph_ir.replace("tessera.checkpoint_gradient_activity = array<i64: 0, 0, 1>",
+                                       "tessera.checkpoint_gradient_activity = "+value)
+    assert changed != artifact.graph_ir
+    with pytest.raises(RuntimeError, match="gradient activity"):
+        run_tessera_opt(find_tessera_opt(), changed, "--tessera-graph-to-schedule")
+
+
+@pytest.mark.parametrize("indices", ["", "2, 2", "3", "-1"])
+def test_native_checkpoint_pruning_validates_requested_input_indices(indices):
+    from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+    if find_tessera_opt() is None:
+        pytest.skip("native compiler unavailable")
+    text = source("reverse", ", tessera.autodiff.wrt_indices = ["+indices+"]")
+    text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+    with pytest.raises(RuntimeError, match="gradient request"):
+        lower_generated_checkpoint(text, backward=True, prune_inactive=True)

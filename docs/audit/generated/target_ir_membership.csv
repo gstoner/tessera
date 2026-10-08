@@ -31,8 +31,8 @@ rocm,memcpy,optional-only,,dst_space src_space
 rocm,async_copy,optional-only,,dst_space src_space
 rocm,wait,optional-only,,dst_space src_space
 rocm,mfma,optional-only,,dst_space src_space
-rocm,wmma_gemm,requires,dtype,dst_space src_space
-rocm,scaled_wmma_gemm,requires,abi k_step_schedule package_abi,dst_space epilogue_schedule src_space staging staging_prefetch tile_m_per_wave tile_n_per_wave warps
+rocm,wmma_gemm,requires,dtype portable_abi,dst_space src_space
+rocm,scaled_wmma_gemm,requires,abi k_step_schedule package_abi,dst_space epilogue_schedule schedule_raster_group schedule_raster_order src_space staging staging_prefetch tile_m_per_wave tile_n_per_wave warps
 rocm,flash_attn,requires,dtype,dst_space src_space
 rocm,flash_attn_bwd,requires,dtype,dst_space src_space
 rocm,linear_attn,requires,dtype feature_map,dst_space src_space
@@ -83,9 +83,9 @@ rocm,reduce,requires,dtype,dst_space src_space
 rocm,paged_kv_read,requires,storage table_storage,dst_space src_space
 rocm,moe_dispatch,requires,index_storage storage,dst_space src_space
 rocm,argreduce,requires,dtype,dst_space src_space
-rocm,scan,requires,dtype,dst_space src_space
-rocm,unary,requires,dtype,dst_space src_space
-rocm,binary,requires,dtype,dst_space src_space
+rocm,scan,requires,dtype,dst_space output_dtype src_space
+rocm,unary,requires,dtype,dst_space output_dtype src_space
+rocm,binary,requires,dtype,dst_space output_dtype src_space
 rocm,compare,requires,dtype,dst_space src_space
 rocm,logical,optional-only,,dst_space src_space
 rocm,bitwise,optional-only,,dst_space src_space
@@ -109,6 +109,9 @@ rocm,elementwise,optional-only,,dst_space src_space
 rocm,kv_cache_read,optional-only,,dst_space src_space
 rocm,msa_block_sparse,optional-only,,dst_space src_space
 rocm,profiler_probe,optional-only,,dst_space src_space
+rocm,nvfp4_requantize,requires,arch destination_layout source_layout,dst_space numeric_policy schedule_hash src_space
+rocm,mxfp4_folded_storage,requires,arch schedule_hash storage_contract,dst_space src_space
+rocm,structured_reduction,requires,arch,dst_space src_space
 x86,amx_tile_load,requires,stride,
 x86,amx_tile_store,requires,stride,
 x86,amx_tile_zero,no-contract,,

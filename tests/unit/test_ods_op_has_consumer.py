@@ -249,6 +249,16 @@ def test_scan_parses_every_ods_form() -> None:
         "tile.tri_solve",                  # Tile_LinalgOp -> Tile_Op -> Op
         "tessera_solver.trsm",             # def TrsmOp : Op<Tessera_Solver_Dialect, "trsm">
         "tessera.matmul",
+        "tessera.flash_attn_bwd",
+        "tessera.nvfp4_requantize",
+        "tessera.mxfp4_folded_storage",
+        "tessera_rocm.nvfp4_requantize",
+        "tessera_rocm.mxfp4_folded_storage",
+        "tile.fragment_folded_scale",
+        "tile.nvfp4_requantize_kernel",
+        "tile.mxfp4_folded_storage_kernel",
+        "tile.structured_reduction_kernel",
+        "tessera_rocm.structured_reduction",
         "tessera_rocm.swmmac",
         "tile.tmem.store",                 # dotted mnemonic
         "tessera.neighbors.halo.region",   # dotted dialect name
@@ -264,12 +274,14 @@ def test_scan_parses_every_ods_form() -> None:
 #: Every op record under `src/`. Pinned exactly, not as a floor: a floor let
 #: the reader lose up to its slack without failing (GOV-ODS-CONSUMER-1 review).
 #: 618 -> 663: 45 unique x86 Graph op records added to the post-#875 baseline.
-_DECLARED_OP_RECORDS = 663
+_DECLARED_OP_RECORDS = 673
 
 
 def test_scan_calls_a_known_consumed_op_consumed() -> None:
     assert _TIERS["tessera.matmul"] == "compiler"
     assert _TIERS["tessera_rocm.swmmac"] == "compiler"
+    assert _TIERS["tile.structured_reduction_kernel"] == "compiler"
+    assert _TIERS["tessera_rocm.structured_reduction"] == "compiler"
 
 
 def _synthetic_repo(tmp: Path) -> None:

@@ -271,7 +271,7 @@ class CPUPlan:
         # CPU reference execution must honor the same storage contract as
         # Graph IR. NumPy weak-scalar promotion can widen a same_as_first
         # operation such as bfloat16 RMSNorm to FP32.
-        if shape_rule_for(op.op_name) == "same_as_first" and isinstance(result, np.ndarray):
+        if shape_rule_for(op.op_name) in {"same_as_first", "attention_value_width"} and isinstance(result, np.ndarray):
             input_dtype = np.asarray(operands[0]).dtype
             if result.dtype != input_dtype:
                 result = result.astype(input_dtype, copy=False)

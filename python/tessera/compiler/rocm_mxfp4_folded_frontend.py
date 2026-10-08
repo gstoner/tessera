@@ -53,6 +53,11 @@ class FoldedScaledMatmulProgram:
             "graph_ir_sha256": hashlib.sha256(self.graph_ir.encode()).hexdigest(),
             "tile_ir_sha256": provenance["tile_ir_sha256"],
             "target_ir_sha256": provenance["target_ir_sha256"],
+            "authored_target_ir_sha256": provenance.get("authored_target_ir_sha256"),
+            "image_shape_policy": provenance.get("image_shape_policy", "legacy_hip"),
+            "image_k": provenance.get("image_k"),
+            "image_whole_m": provenance.get("image_whole_m"),
+            "image_whole_n": provenance.get("image_whole_n"),
             "numeric_policy": provenance["numeric_policy"],
             "fold_lossless": provenance["fold_lossless"],
             "fold_inexact_value_count": provenance["fold_inexact_value_count"],
@@ -100,13 +105,22 @@ def _lower(tessera_opt: Path, graph_ir: str, *, target: bool) -> str:
 
 def compile_folded_scaled_matmul(
     a: np.ndarray, a_scale: np.ndarray, folded: FoldedRowReference, *,
-    tessera_opt: Path, allow_approximate: bool = False,
+    tessera_opt: Path, allow_approximate: bool = False, runtime_mn: bool = True, runtime_k: bool = True,
 ) -> FoldedScaledMatmulProgram:
     """Compile a typed frontend call into the exact gfx1201 folded ABI.
 
     Callers retain the returned package and launch it with matching buffers;
     checkpoint conversion belongs to model loading, not each invocation.
+    Native image identity defaults to runtime M/N/K within the checked K64
+    and whole/partial panel classes. Use runtime_k=False for the fixed-K
+    control, and both runtime_mn=False/runtime_k=False for a static control.
     """
+    if not isinstance(runtime_mn, bool):
+        raise TypeError("folded runtime_mn must be a bool")
+    if not isinstance(runtime_k, bool):
+        raise TypeError("folded runtime_k must be a bool")
+    if runtime_k and not runtime_mn:
+        raise ValueError("folded runtime_k requires runtime_mn")
     if not allow_approximate or folded.approximate_policy != "explicit_allow":
         raise ValueError("folded scaled_matmul requires explicit approximate policy")
     if a.ndim != 2 or a.dtype != np.uint8 or not a.flags.c_contiguous:
@@ -125,7 +139,7 @@ def compile_folded_scaled_matmul(
     tile_ir = _lower(tessera_opt, graph_ir, target=False)
     target_ir = _lower(tessera_opt, graph_ir, target=True)
     package = package_folded_scaled_wmma_target_ir(
-        tile_ir, target_ir, folded, allow_approximate=True,
+        tile_ir, target_ir, folded, allow_approximate=True, runtime_mn=runtime_mn, runtime_k=runtime_k,
     )
     if package.descriptor.abi_id != GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI:
         raise ValueError("folded scaled_matmul selected a mismatched package ABI")

@@ -46,7 +46,7 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
             # dy to lhs, (0 - dy) to rhs — so an energy or loss written with
             # a subtraction no longer stops reverse-mode.
             "add", "sub", "broadcast", "expand", "flatten", "gelu", "huber_loss",
-            "mae_loss", "mse_loss", "mul", "matmul", "permute", "reshape",
+            "mae_loss", "mse_loss", "mul", "matmul", "scaled_matmul", "permute", "reshape",
             "squeeze", "transpose", "unsqueeze", "view", "reduce", "sgd",
             "silu", "smooth_l1_loss",
             "softmax", "tanh", "sigmoid", "relu", "rmsnorm", "layer_norm",
@@ -78,7 +78,7 @@ def test_native_and_placeholder_adjoints_are_disjoint_and_grounded() -> None:
 def test_native_tangents_are_compiler_grounded() -> None:
     native = autodiff_ledger._ir_tangent_classes()
     assert native == {
-        "add", "sub", "mul", "matmul", "transpose", "reshape", "squeeze",
+        "add", "sub", "mul", "matmul", "scaled_matmul", "transpose", "reshape", "squeeze",
         "unsqueeze", "expand", "broadcast", "permute", "flatten", "view",
         "stop_gradient", "sigmoid", "tanh", "softmax", "reduce",
         "fft", "ifft", "rfft", "irfft", "dct", "dropout", "layer_norm",

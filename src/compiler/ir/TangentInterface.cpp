@@ -10,9 +10,10 @@ namespace tessera {
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (!denseAttentionAD(*this) || tangents.size() != 3) return {};
+  if (!denseAttentionAD(*this, true) || tangents.size() != getNumOperands()) return {};
   bool scoresActive = false;
-  for (auto value : tangents.take_front(2)) {
+  for (auto [index, value] : llvm::enumerate(tangents)) {
+    if (index == 2) continue;
     if (!value) continue;
     auto constant = value.getDefiningOp<mlir::arith::ConstantOp>();
     auto dense = constant ? mlir::dyn_cast<mlir::DenseFPElementsAttr>(constant.getValue()) : mlir::DenseFPElementsAttr();
@@ -22,9 +23,15 @@ llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     auto forward=attentionCheckpoint(builder,*this,false,getOperands());
     if (!forward) return {};
     mlir::OperationState state(getLoc(),"tessera_attn.checkpoint_jvp");
-    state.addOperands(getOperands());
+    state.addOperands(getOperands().take_front(3));
     state.addOperands(forward->getResults());
-    for (auto [primal,tangent] : llvm::zip(getOperands(),tangents)) {
+    auto zeroIfInactive = [&](mlir::Value primal, mlir::Value tangent) {
+      if (tangent) return tangent;
+      auto type=mlir::cast<mlir::RankedTensorType>(primal.getType());
+      return builder.create<mlir::arith::ConstantOp>(getLoc(),
+          mlir::DenseElementsAttr::get(type,builder.getF32FloatAttr(0.0))).getResult();
+    };
+    for (auto [primal,tangent] : llvm::zip(getOperands().take_front(3),tangents.take_front(3))) {
       if (!tangent) {
         auto type=mlir::cast<mlir::RankedTensorType>(primal.getType());
         tangent=builder.create<mlir::arith::ConstantOp>(getLoc(),
@@ -32,12 +39,17 @@ llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
       }
       state.addOperands(tangent);
     }
+    if (getNumOperands()==4) {
+      state.addOperands(getOperand(3));
+      state.addOperands(zeroIfInactive(getOperand(3),tangents[3]));
+    }
     state.addTypes(getResult().getType());
     state.addAttributes(forward->getAttrs());
     return {builder.create(state)->getResult(0)};
   }
   if (!tangents[2]) return {};
   llvm::SmallVector<mlir::Value> args{getOperand(0), getOperand(1), tangents[2]};
+  if (getNumOperands()==4) args.push_back(getOperand(3));
   auto product = attentionCheckpoint(builder, *this, false, args);
   return product ? llvm::SmallVector<mlir::Value>{product->getResult(0)} : llvm::SmallVector<mlir::Value>{};
 }
@@ -260,6 +272,57 @@ llvm::SmallVector<mlir::Value> MatmulOp::buildTangent(
   if (!rhsTerm)
     return {lhsTerm};
   return {builder.create<AddOp>(getLoc(), type, lhsTerm, rhsTerm).getResult()};
+}
+
+llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildTangent(
+    mlir::OpBuilder &builder, mlir::ValueRange tangents) {
+  if (tangents.size() != getNumOperands())
+    return {};
+  auto resultType = mlir::dyn_cast<mlir::RankedTensorType>(getResult().getType());
+  auto policy = getNumericPolicyAttr();
+  auto mode = policy ? mlir::dyn_cast_or_null<mlir::StringAttr>(
+                           policy.get("execution_mode"))
+                     : mlir::StringAttr{};
+  // Differentiate the exact scaled product before any low-precision store.
+  // A rounded output needs an explicit derivative policy; encoded scale/code
+  // tensors likewise have no implicit straight-through derivative.
+  if (!resultType || !resultType.getElementType().isF32() ||
+      !mode || mode.getValue() != "exact_per_block")
+    return {};
+  bool active = false;
+  for (auto [operand, tangent] : llvm::zip(getOperands(), tangents)) {
+    if (!tangent)
+      continue;
+    auto type = mlir::dyn_cast<mlir::RankedTensorType>(operand.getType());
+    if (!type || !mlir::isa<mlir::FloatType>(type.getElementType()) ||
+        tangent.getType() != operand.getType())
+      return {};
+    active = true;
+  }
+  if (!active)
+    return {};
+
+  // Multilinearity applies to each original scale group. Never transpose the
+  // group axis or expand/dequantize operands while constructing this JVP.
+  mlir::Value sum;
+  for (auto [index, tangent] : llvm::enumerate(tangents)) {
+    if (!tangent)
+      continue;
+    llvm::SmallVector<mlir::Value> operands(getOperands());
+    operands[index] = tangent;
+    mlir::OperationState state(getLoc(), getOperation()->getName());
+    state.addOperands(operands);
+    state.addTypes(getOperation()->getResultTypes());
+    state.addAttributes(getOperation()->getAttrs());
+    auto term = builder.create(state);
+    // Schedule identity belongs to the new SSA product, not its primal.
+    term->removeAttr("schedule.artifact_hash");
+    term->removeAttr("schedule.artifact_binding");
+    auto value = term->getResult(0);
+    sum = sum ? builder.create<AddOp>(getLoc(), resultType, sum, value).getResult()
+              : value;
+  }
+  return {sum};
 }
 
 llvm::SmallVector<mlir::Value> ESLowRankCorrectionOp::buildTangent(

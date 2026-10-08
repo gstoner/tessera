@@ -1,9 +1,11 @@
 """Measure cross-shape image reuse; package wall time is not GPU kernel time."""
 from __future__ import annotations
 import argparse
+import hashlib
 import json
 import platform
 import statistics
+import subprocess
 import time
 from pathlib import Path
 import numpy as np
@@ -11,6 +13,15 @@ from tessera import runtime as rt
 from tessera.compiler import rocm_native, scheduled_attention
 from tessera.compiler.attention_contract import reference_streaming_attention
 from tests.unit.test_scheduled_attention_consumers import _module
+
+ROOT = Path(__file__).resolve().parents[2]
+SOURCE_PATHS = (
+    "python/tessera/compiler/rocm_native.py",
+    "python/tessera/compiler/scheduled_attention.py",
+    "python/tessera/runtime.py",
+    "tests/unit/test_scheduled_attention_consumers.py",
+    "benchmarks/rocm/measure_scheduled_attention_cache.py",
+)
 
 
 def record():
@@ -64,8 +75,29 @@ def record():
         rocm_native._run_opt = original
     assert binary_calls == 1, binary_calls
     assert len({r["image_digest"] for r in rows}) == 1
-    return dict(schema="tessera.scheduled_attention_cache.v1",host=platform.node(),architecture=arch,
-                claim="host_compile_cost",binary_compiles=binary_calls,rows=rows)
+    source_hashes = {
+        name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+        for name in SOURCE_PATHS
+    }
+    revision = subprocess.run(
+        ["git", "rev-parse", "HEAD"], cwd=ROOT, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip()
+    dirty = bool(subprocess.run(
+        ["git", "status", "--porcelain"], cwd=ROOT, check=True,
+        capture_output=True, text=True,
+    ).stdout.strip())
+    return dict(
+        schema="tessera.scheduled_attention_cache.v1",
+        host=platform.node(),
+        architecture=arch,
+        claim="host_compile_cost",
+        binary_compiles=binary_calls,
+        source_revision=revision,
+        source_worktree_dirty=dirty,
+        relevant_source_sha256=source_hashes,
+        rows=rows,
+    )
 
 if __name__ == "__main__":
     parser=argparse.ArgumentParser(description=__doc__)

@@ -142,3 +142,13 @@ class TestPublicNamespace:
         assert "graph_ir_cache_stats" in tc.__all__
         assert hasattr(tc, "clear_graph_ir_cache")
         assert hasattr(tc, "graph_ir_cache_stats")
+
+def test_jit_cache_distinguishes_captured_attention_policy():
+    import tessera as ts
+    from benchmarks.nvidia.benchmark_jvp_argument_order import function
+    from tessera.compiler.graph_ir_cache import clear_graph_ir_cache
+    clear_graph_ir_cache()
+    modules=[ts.jit(target="nvidia_sm120",autodiff="forward",wrt=("q",))(
+        function(("q","k","v"),causal))._ensure_legacy_graph_ir()
+        for causal in (False,True,False)]
+    assert [module.functions[0].body[0].kwargs["causal"] for module in modules]==[False,True,False]

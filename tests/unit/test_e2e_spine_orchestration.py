@@ -31,6 +31,13 @@ from tessera.runtime import (
 )
 
 
+@pytest.fixture(autouse=True)
+def isolated_native_launchers(monkeypatch):
+    # Launch registration is process-wide; each orchestration test owns its hooks.
+    from tessera import runtime as rt
+    monkeypatch.setattr(rt, "_native_launchers", {})
+
+
 def _digest(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()
 

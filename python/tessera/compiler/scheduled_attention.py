@@ -15,6 +15,27 @@ _HASH_RE = re.compile(r'tessera\.schedule_hash = "([0-9a-f]{64})"')
 _RECURRENCE = "rank4_batch_query_head_kv_online_softmax_v1"
 
 
+def schedule_attention_argument_types(source, *, backward=False):
+    """Read physical operand roles from the native Schedule SSA edge."""
+    headers=re.findall(r'func.func @\w+\(([^\n]*)\) ->',source)
+    opname="attention_backward" if backward else "attention"
+    operations=re.findall(r' = schedule\.'+opname+r' ([^{\n]+)\{',source)
+    if len(headers)!=1 or len(operations)!=1:
+        raise ValueError("attention ABI requires one native function and Schedule edge")
+    graphname=r"(?:tessera\.flash_attn_bwd|tessera_attn\.backward)" if backward else r"tessera\.flash_attn"
+    graphs=re.findall(r'(?m)^\s*((?:%[\w]+(?::[0-9]+)?(?:,\s*)?)+) = '+graphname+r' ([^{\n]+)\{',source)
+    if (len(graphs)!=1 or set(re.findall(r'%[\w]+',operations[0]))
+            !=set(re.findall(r'%[\w]+',graphs[0][0]))):
+        raise ValueError("attention Schedule must reference its retained Graph result")
+    declarations=re.findall(r'(%[\w]+): (tensor<[^>]+>)',headers[0])
+    roles=re.findall(r'%[\w]+',graphs[0][1])
+    by_name=dict(declarations)
+    if (len(by_name)!=len(declarations) or len(roles)!=len(by_name)
+            or len(set(roles))!=len(roles) or set(roles)!=set(by_name)):
+        raise ValueError("attention Schedule operands must bind distinct function arguments")
+    return tuple(by_name[role] for role in roles)
+
+
 @dataclass(frozen=True)
 class ScheduledAttentionArtifact:
     graph_ir: str
@@ -69,10 +90,11 @@ class ScheduledAttentionArtifact:
         """Physical bias shape projected from the native Schedule function ABI."""
         if self.bias_name is None:
             return None
-        headers = re.findall(r'func.func @\w+\(([^\n]*)\) ->', self.schedule_ir)
-        if len(headers) != 1:
-            raise ValueError('attention bias requires one native function')
-        types = re.findall(r'tensor<([0-9]+)x([0-9]+)x([0-9]+)x([0-9]+)x(?:f32|f16|bf16)>', headers[0])
+        matches = [re.fullmatch(r'tensor<([0-9]+)x([0-9]+)x([0-9]+)x([0-9]+)x(?:f32|f16|bf16)>', value)
+                   for value in schedule_attention_argument_types(self.schedule_ir)]
+        if any(match is None for match in matches):
+            raise ValueError("attention bias requires static rank-four native argument types")
+        types = [match.groups() for match in matches if match is not None]
         if len(types) != 4:
             raise ValueError('attention bias requires four physical arguments')
         shape = tuple(map(int, types[3]))

@@ -15,6 +15,10 @@ target_link_libraries(launch_demo PRIVATE tessera_rocm_runtime)
 # `hardware_verified` contract requires; the execute_compare_fixture
 # (tests/unit/test_rocm_wmma_runtime_symbol.py) dlopens and numerically validates it.
 if (hip_FOUND)
+  add_library(tessera_rocm_native_image SHARED native_image_cache.cpp)
+  target_link_libraries(tessera_rocm_native_image PRIVATE hip::host)
+  add_library(tessera_rocm_native_movement SHARED native_movement_runtime.cpp native_nvfp4_runtime.cpp native_program_runtime.cpp)
+  target_link_libraries(tessera_rocm_native_movement PRIVATE tessera_rocm_native_image hip::host)
   find_library(TESSERA_HIPRTC_LIB NAMES hiprtc HINTS "${ROCM_PATH}/lib" /opt/rocm/lib)
   add_library(tessera_rocm_gemm SHARED tessera_rocm_gemm.cpp)
   target_link_libraries(tessera_rocm_gemm PUBLIC hip::host)

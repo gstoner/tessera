@@ -1,3 +1,4 @@
+#include "Tessera/IR/StructuredReductionContract.h"
 #include "TesseraROCM/Passes.h"
 #include "ROCMDirectAttention.h"
 #include "ROCMFragmentLayout.h"
@@ -30,6 +31,8 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/MathExtras.h"
+#include "llvm/Support/SHA256.h"
+#include "llvm/ADT/StringExtras.h"
 
 using namespace mlir;
 
@@ -550,6 +553,12 @@ static LogicalResult materializeFragmentStore(
   // is the store's trailing operand (see tile.store's verifier).
   auto epilogue =
       store->getAttrOfType<tessera::tile::TileEpilogueAttr>("tile.epilogue");
+  if (auto residual = store->getAttrOfType<BoolAttr>("tile.residual");
+      residual && residual.getValue()) {
+    op->emitError("ROCM_FRAGMENT_STORE_EPILOGUE: residual store requires a "
+                  "ROCm-owned native consumer and exact-device proof");
+    return failure();
+  }
   const bool epilogueBias = epilogue && epilogue.getBias();
   StringRef activation = epilogue ? epilogue.getActivation() : StringRef("none");
   if (epilogue && (integer || !tessera::tile::isSupportedActivation(activation))) {
@@ -1528,6 +1537,167 @@ static bool isKnownMultipleOf(Value v, int64_t d, unsigned depth = 0) {
   return false;
 }
 
+struct ConvertFragmentFoldedScale
+    : public OpConversionPattern<tessera::tile::FragmentFoldedScaleOp> {
+  ConvertFragmentFoldedScale(const TypeConverter &converter, MLIRContext *context,
+                            FragmentLaneCoordCache &laneCoords)
+      : OpConversionPattern(converter, context), laneCoords(laneCoords) {}
+  LogicalResult matchAndRewrite(tessera::tile::FragmentFoldedScaleOp op,
+      OpAdaptor adaptor, ConversionPatternRewriter &rewriter) const override {
+    auto f = dyn_cast<tessera::tile::FragmentType>(op.getAcc().getType());
+    const auto *converter =
+        static_cast<const TileFragmentTypeConverter *>(getTypeConverter());
+    auto physical = f ? converter->layoutFor(f) : std::nullopt;
+    auto vecTy = f ? dyn_cast_or_null<VectorType>(converter->convertType(f)) : VectorType();
+    if (!physical || !physical->materializationReady || !vecTy ||
+        !vecTy.getElementType().isF32())
+      return emitUnresolvableFragment(op, f, converter->getArch());
+    Location loc = op.getLoc();
+    auto coords = laneCoords.get(rewriter, loc, *physical);
+    Value stride = arith::ConstantIndexOp::create(
+        rewriter, loc, physical->accumulatorElementsPerLane);
+    Value c0 = arith::ConstantIndexOp::create(rewriter, loc, 0);
+    auto cf = [&](float value) -> Value {
+      return arith::ConstantOp::create(rewriter, loc,
+          rewriter.getF32FloatAttr(value));
+    };
+    Value zero = cf(0.0f);
+    Value infinity = arith::BitcastOp::create(rewriter, loc, rewriter.getF32Type(),
+        arith::ConstantIntOp::create(rewriter, loc, 0x7f800000, 32));
+    Value activationVector;
+    if (op.getVectorScales()) {
+      auto [firstRow, firstCol] = accumulatorElementCoordinate(
+          rewriter, loc, *physical, 0, coords.lane, coords.storeGroup,
+          stride, adaptor.getRowOrigin(), adaptor.getColOrigin());
+      const int64_t count = physical->accumulatorElementsPerLane;
+      Value rowEnd = arith::AddIOp::create(rewriter, loc, firstRow,
+          arith::ConstantIndexOp::create(rewriter, loc, count - 1));
+      Value complete = arith::AndIOp::create(rewriter, loc,
+          arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::ult,
+              rowEnd, adaptor.getRows()),
+          arith::CmpIOp::create(rewriter, loc, arith::CmpIPredicate::ult,
+              firstCol, adaptor.getCols()));
+      Value pointer = memref::ExtractAlignedPointerAsIndexOp::create(
+          rewriter, loc, adaptor.getLhsScale());
+      Value address = arith::AddIOp::create(rewriter, loc, pointer,
+          arith::MulIOp::create(rewriter, loc, firstRow,
+              arith::ConstantIndexOp::create(rewriter, loc, 4)));
+      Value aligned = arith::CmpIOp::create(rewriter, loc,
+          arith::CmpIPredicate::eq,
+          arith::RemUIOp::create(rewriter, loc, address,
+              arith::ConstantIndexOp::create(rewriter, loc, 16)), c0);
+      complete = arith::AndIOp::create(rewriter, loc, complete, aligned);
+      auto scalesTy = VectorType::get({count}, rewriter.getF32Type());
+      auto fourTy = VectorType::get({4}, rewriter.getF32Type());
+      // Vector loads require RDNA4's contiguous eight-element lane map.
+      bool contiguous = physical->accumulatorElementsPerLane == 8 &&
+                        physical->family == tessera_rocm::FragmentFamily::RDNA4WMMA;
+      if (!contiguous)
+        return rewriter.notifyMatchFailure(op, "vector folded scales require the contiguous RDNA4 accumulator map");
+      auto branch = scf::IfOp::create(rewriter, loc, TypeRange{scalesTy}, complete, true);
+      {
+        OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPointToStart(branch.thenBlock());
+        Value lo = vector::LoadOp::create(rewriter, loc, fourTy,
+            adaptor.getLhsScale(), ValueRange{firstRow},
+            false, llvm::MaybeAlign(16));
+        Value hi = vector::LoadOp::create(rewriter, loc, fourTy,
+            adaptor.getLhsScale(), ValueRange{arith::AddIOp::create(
+                rewriter, loc, firstRow, arith::ConstantIndexOp::create(rewriter, loc, 4))},
+            false, llvm::MaybeAlign(16));
+        SmallVector<int64_t> mask{0,1,2,3,4,5,6,7};
+        Value scales = vector::ShuffleOp::create(rewriter, loc, lo, hi, mask);
+        scf::YieldOp::create(rewriter, loc, scales);
+        rewriter.setInsertionPointToStart(branch.elseBlock());
+        Value fallback = arith::ConstantOp::create(rewriter, loc, scalesTy,
+            DenseElementsAttr::get(scalesTy, rewriter.getF32FloatAttr(0.0)));
+        for (int64_t i = 0; i < count; ++i) {
+          auto [row, col] = accumulatorElementCoordinate(
+              rewriter, loc, *physical, i, coords.lane, coords.storeGroup,
+              stride, adaptor.getRowOrigin(), adaptor.getColOrigin());
+          Value valid = arith::CmpIOp::create(rewriter, loc,
+              arith::CmpIPredicate::slt, row, adaptor.getRows());
+          Value safe = arith::SelectOp::create(rewriter, loc, valid, row, c0);
+          Value value = memref::LoadOp::create(rewriter, loc,
+              adaptor.getLhsScale(), ValueRange{safe});
+          fallback = vector::InsertOp::create(rewriter, loc, value, fallback,
+              ArrayRef<int64_t>{i});
+        }
+        scf::YieldOp::create(rewriter, loc, fallback);
+      }
+      activationVector = branch.getResult(0);
+    }
+    Value result = adaptor.getAcc();
+    for (int64_t i = 0; i < physical->accumulatorElementsPerLane; ++i) {
+      auto [row, col] = accumulatorElementCoordinate(rewriter, loc, *physical,
+          i, coords.lane, coords.storeGroup, stride,
+          adaptor.getRowOrigin(), adaptor.getColOrigin());
+      Value rowOk = arith::CmpIOp::create(rewriter, loc,
+          arith::CmpIPredicate::slt, row, adaptor.getRows());
+      Value colOk = arith::CmpIOp::create(rewriter, loc,
+          arith::CmpIPredicate::slt, col, adaptor.getCols());
+      Value safeRow = arith::SelectOp::create(rewriter, loc, rowOk, row, c0);
+      Value safeCol = arith::SelectOp::create(rewriter, loc, colOk, col, c0);
+      Value activation = activationVector
+          ? Value(vector::ExtractOp::create(rewriter, loc, activationVector,
+                  ArrayRef<int64_t>{i}))
+          : Value(memref::LoadOp::create(rewriter, loc,
+                  adaptor.getLhsScale(), ValueRange{safeRow}));
+      Value exponent = memref::LoadOp::create(rewriter, loc,
+          adaptor.getRhsReference(), ValueRange{safeCol});
+      Value bits = arith::ShLIOp::create(rewriter, loc,
+          arith::ExtUIOp::create(rewriter, loc, rewriter.getI32Type(), exponent),
+          arith::ConstantIntOp::create(rewriter, loc, 23, 32));
+      // Code zero maps to positive zero, as in the existing folded ABI.
+      // Reserved code 255 is rejected by the checked payload loader.
+      Value reference = arith::BitcastOp::create(rewriter, loc,
+          rewriter.getF32Type(), bits);
+      Value combined = arith::MulFOp::create(rewriter, loc, reference, activation);
+      Value partial = vector::ExtractOp::create(rewriter, loc,
+          adaptor.getAcc(), ArrayRef<int64_t>{i});
+      Value normal = arith::MulFOp::create(rewriter, loc, partial, combined);
+      Value finite = arith::CmpFOp::create(rewriter, loc,
+          arith::CmpFPredicate::OLT, math::AbsFOp::create(rewriter, loc, combined), infinity);
+      Value nonzero = arith::CmpFOp::create(rewriter, loc,
+          arith::CmpFPredicate::ONE, combined, zero);
+      Value regular = arith::AndIOp::create(rewriter, loc, finite, nonzero);
+      // The wide branch preserves exceptional scale-product recovery. A
+      // likelihood hint changes layout/scheduling, never its numeric gate.
+      Value likely = arith::ConstantIntOp::create(rewriter, loc, 1, 1);
+      regular = LLVM::ExpectOp::create(rewriter, loc,
+          TypeRange{rewriter.getI1Type()}, regular, likely).getResult();
+      auto branch = scf::IfOp::create(rewriter, loc,
+          TypeRange{rewriter.getF32Type()}, regular, true);
+      {
+        OpBuilder::InsertionGuard guard(rewriter);
+        rewriter.setInsertionPointToStart(branch.thenBlock());
+        scf::YieldOp::create(rewriter, loc, normal);
+        rewriter.setInsertionPointToStart(branch.elseBlock());
+        Value p64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), partial);
+        Value r64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), reference);
+        Value a64 = arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), activation);
+        Value wide = arith::TruncFOp::create(rewriter, loc, rewriter.getF32Type(),
+            arith::MulFOp::create(rewriter, loc,
+                arith::MulFOp::create(rewriter, loc, p64, r64), a64));
+        Value pzero = arith::CmpFOp::create(rewriter, loc,
+            arith::CmpFPredicate::OEQ, partial, zero);
+        Value afinite = arith::CmpFOp::create(rewriter, loc,
+            arith::CmpFPredicate::OLT,
+            math::AbsFOp::create(rewriter, loc, activation), infinity);
+        Value scaled = arith::SelectOp::create(rewriter, loc,
+            arith::AndIOp::create(rewriter, loc, pzero, afinite), zero, wide);
+        scf::YieldOp::create(rewriter, loc, scaled);
+      }
+      result = vector::InsertOp::create(rewriter, loc, branch.getResult(0),
+          result, ArrayRef<int64_t>{i});
+    }
+    rewriter.replaceOp(op, result);
+    return success();
+  }
+private:
+  FragmentLaneCoordCache &laneCoords;
+};
+
 struct ConvertFragmentScaledAccumulate
     : public OpConversionPattern<tessera::tile::FragmentScaledAccumulateOp> {
   ConvertFragmentScaledAccumulate(const TypeConverter &converter,
@@ -1572,6 +1742,27 @@ struct ConvertFragmentScaledAccumulate
     Value acc = adaptor.getAcc();
     Value partial = adaptor.getPartial();
     Value result = acc;
+    // E8M0 finite codes represent exact powers of two, including code zero
+    // (2^-127). Combining the signed exponents avoids an intermediate scale
+    // product; ldexp rounds the scaled partial once to f32. Code 255 is NaN.
+    auto scaleE8M0 = [&](Value p, Value lhsRaw, Value rhsRaw) -> Value {
+      Value lhs = arith::ExtUIOp::create(rewriter, loc, rewriter.getI32Type(), lhsRaw);
+      Value rhs = arith::ExtUIOp::create(rewriter, loc, rewriter.getI32Type(), rhsRaw);
+      Value c254 = arith::ConstantIntOp::create(rewriter, loc, 254, 32);
+      Value c255 = arith::ConstantIntOp::create(rewriter, loc, 255, 32);
+      Value exponent = arith::SubIOp::create(rewriter, loc,
+          arith::AddIOp::create(rewriter, loc, lhs, rhs), c254);
+      Value scaled = LLVM::LoadExpOp::create(rewriter, loc,
+          rewriter.getF32Type(), p, exponent);
+      Value lhsNaN = arith::CmpIOp::create(rewriter, loc,
+          arith::CmpIPredicate::eq, lhs, c255);
+      Value rhsNaN = arith::CmpIOp::create(rewriter, loc,
+          arith::CmpIPredicate::eq, rhs, c255);
+      Value nanBits = arith::ConstantIntOp::create(rewriter, loc, 0x7fc00000, 32);
+      Value nan = arith::BitcastOp::create(rewriter, loc, rewriter.getF32Type(), nanBits);
+      return arith::SelectOp::create(rewriter, loc,
+          arith::OrIOp::create(rewriter, loc, lhsNaN, rhsNaN), nan, scaled);
+    };
     auto slt = arith::CmpIPredicate::slt;
     // A weight-scale block that is a whole number of fragment widths holds
     // every column of a fragment whose origin is 16-aligned, so the element
@@ -1624,13 +1815,18 @@ struct ConvertFragmentScaledAccumulate
                                   : Value(memref::LoadOp::create(
                                         rewriter, loc, adaptor.getRhsScale(),
                                         ValueRange{rhsIndex}));
-      Value scale = arith::MulFOp::create(rewriter, loc, lhsScale, rhsScale);
       Value p = vector::ExtractOp::create(rewriter, loc, partial,
                                           ArrayRef<int64_t>{i});
       Value a = vector::ExtractOp::create(rewriter, loc, acc,
                                           ArrayRef<int64_t>{i});
-      Value joined = arith::AddFOp::create(
-          rewriter, loc, a, arith::MulFOp::create(rewriter, loc, p, scale));
+      Value scaled;
+      if (op.getScaleFormat() == "e8m0") {
+        scaled = scaleE8M0(p, lhsScale, rhsScale);
+      } else {
+        Value scale = arith::MulFOp::create(rewriter, loc, lhsScale, rhsScale);
+        scaled = arith::MulFOp::create(rewriter, loc, p, scale);
+      }
+      Value joined = arith::AddFOp::create(rewriter, loc, a, scaled);
       result = vector::InsertOp::create(rewriter, loc, joined, result,
                                         ArrayRef<int64_t>{i});
     }
@@ -1677,6 +1873,7 @@ static LogicalResult convertTypedFragments(Operation *root, StringRef arch) {
   patterns.add<ConvertFragmentPack>(converter, ctx, laneCoords);
   patterns.add<ConvertFragmentUnpackStore>(converter, ctx, laneCoords);
   patterns.add<ConvertFragmentScaledAccumulate>(converter, ctx, laneCoords);
+  patterns.add<ConvertFragmentFoldedScale>(converter, ctx, laneCoords);
 
   ConversionTarget target(*ctx);
   target.markUnknownOpDynamicallyLegal(
@@ -2497,6 +2694,126 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
+
+    SmallVector<LLVM::LLVMFuncOp> mathFunctions;
+    getOperation().walk([&](LLVM::LLVMFuncOp fn) {
+      if (fn->hasAttr("tessera.rocm_math_contract")) mathFunctions.push_back(fn);
+    });
+    for (auto fn : mathFunctions) {
+      auto c = fn->getAttrOfType<DictionaryAttr>("tessera.rocm_math_contract");
+      auto hash = fn->getAttrOfType<StringAttr>("tessera.schedule_hash");
+      auto family = c ? c.getAs<StringAttr>("family") : StringAttr();
+      auto kind = c ? c.getAs<StringAttr>("kind") : StringAttr();
+      auto ownerArch = c ? c.getAs<StringAttr>("architecture") : StringAttr();
+      std::string text;
+      if (c) { llvm::raw_string_ostream os(text); c.print(os); }
+      std::string digest = llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(text)), true);
+      if (!c || !hash || hash.getValue() != digest || !family || !kind ||
+          !ownerArch || ownerArch.getValue() != arch ||
+          (arch != "gfx1151" && arch != "gfx1201") ||
+          (c.get("storage") != StringAttr::get(fn.getContext(), "f32") &&
+           c.get("storage") != StringAttr::get(fn.getContext(), "f16") &&
+           c.get("storage") != StringAttr::get(fn.getContext(), "bf16")) ||
+          c.get("output_storage") != StringAttr::get(fn.getContext(), "f32") ||
+          !fn.getBody().hasOneBlock() || fn.getBody().front().getOperations().size() != 2) {
+        fn.emitError("ROCm math requires an intact native Tile contract on the owning architecture");
+        return signalPassFailure();
+      }
+      Operation *tile = &fn.getBody().front().front();
+      bool scan = family.getValue() == "scan";
+      bool binary = family.getValue() == "binary";
+      auto roles = c.getAs<ArrayAttr>("roles");
+      bool valid = roles && roles.size() == (binary ? 2u : 1u) &&
+          tile->getName().getStringRef() == (scan ? "tile.scan_kernel" : "tile.elementwise_kernel") &&
+          tile->getAttr("tessera.schedule_hash") == hash &&
+          tile->getAttr("storage") == c.get("storage") &&
+          tile->getAttr("kind") == kind &&
+          tile->getNumOperands() == roles.size() + (scan ? 3u : 2u) &&
+          fn.getNumArguments() == tile->getNumOperands();
+      if (valid) {
+        valid &= c.get("numeric_policy") == StringAttr::get(
+            fn.getContext(), scan ? "f32_inclusive_scan" : "f32_compute");
+        for (NamedAttribute attr : tile->getAttrs()) {
+          auto name = attr.getName().getValue();
+          if (name != "kind" && name != "storage" && name != "tessera.schedule_hash" &&
+              name != (scan ? "inclusive" : "family") &&
+              name != "output_storage") valid = false;
+        }
+        for (auto [i, attr] : llvm::enumerate(roles)) {
+          auto role = dyn_cast<IntegerAttr>(attr);
+          if (!role || role.getInt() < 0 || role.getInt() >= static_cast<int64_t>(roles.size()) ||
+              tile->getOperand(i) != fn.getArgument(role.getInt())) valid = false;
+        }
+        for (unsigned i = roles.size(); i < tile->getNumOperands(); ++i)
+          if (tile->getOperand(i) != fn.getArgument(i)) valid = false;
+        valid &= tile->getAttr("output_storage") == c.get("output_storage");
+        if (scan) valid &= tile->getAttr("inclusive") == BoolAttr::get(fn.getContext(), true);
+        valid &= scan ? (kind.getValue() == "sum" || kind.getValue() == "max") :
+            binary ? (kind.getValue() == "add" || kind.getValue() == "div") :
+            (kind.getValue() == "sqrt" || kind.getValue() == "exp");
+        if (!scan) valid &= tile->getAttr("family") == StringAttr::get(
+            fn.getContext(), binary ? "binary" : kind.getValue() == "exp" ? "transcendental" : "unary");
+        valid &= isa<LLVM::ReturnOp>(fn.getBody().front().back());
+      }
+      if (!valid) {
+        fn.emitError("ROCm math Tile operands or policy disagree with native replay");
+        return signalPassFailure();
+      }
+      OpBuilder b(getOperation().getContext());
+      b.setInsertionPointToEnd(getOperation().getBody());
+      OperationState state(tile->getLoc(), scan ? "tessera_rocm.scan" :
+                           binary ? "tessera_rocm.binary" : "tessera_rocm.unary");
+      state.addAttribute("name", b.getStringAttr(fn.getSymName()));
+      state.addAttribute("kind", scan ? b.getStringAttr(kind.getValue() == "sum" ? "cumsum" : "cummax") : kind);
+      state.addAttribute("dtype", c.get("storage"));
+      state.addAttribute("output_dtype", c.get("output_storage"));
+      state.addAttribute("native_math_contract", c);
+      state.addAttribute("schedule_hash", hash);
+      b.create(state); fn.erase();
+    }
+    SmallVector<tessera::tile::NVFP4RequantizeKernelOp> ingestKernels;
+    getOperation().walk([&](tessera::tile::NVFP4RequantizeKernelOp op) {
+      ingestKernels.push_back(op);
+    });
+    for (auto kernel : ingestKernels) {
+      if (arch != "gfx1201") {
+        kernel.emitError("NVFP4 checkpoint conversion is currently gfx1201 only");
+        return signalPassFailure();
+      }
+      auto fn = kernel->getParentOfType<func::FuncOp>();
+      auto contract = kernel.getContract();
+      OpBuilder b(getOperation().getContext());
+      b.setInsertionPointToEnd(getOperation().getBody());
+      OperationState state(kernel.getLoc(),"tessera_rocm.nvfp4_requantize");
+      state.addAttribute("name",b.getStringAttr(fn.getSymName()));
+      for (StringRef attr : {"n","k","row_offsets","arch","numeric_policy"})
+        state.addAttribute(attr,contract.get(attr));
+      state.addAttribute("execution_mode",b.getStringAttr("explicit_scale_requantization"));
+      state.addAttribute("source_layout",b.getStringAttr("e2m1_row_k_e4m3_k16_projection_global"));
+      state.addAttribute("destination_layout",b.getStringAttr("e2m1_row_k_e8m0_k32_group_n"));
+      state.addAttribute("schedule_hash",kernel->getAttr("artifact_hash"));
+      b.create(state);fn.erase();
+    }
+    SmallVector<tessera::tile::MXFP4FoldedStorageKernelOp> storageKernels;
+    getOperation().walk([&](tessera::tile::MXFP4FoldedStorageKernelOp op) {
+      storageKernels.push_back(op);
+    });
+    for (auto kernel : storageKernels) {
+      if (arch != "gfx1201") {
+        kernel.emitError("MXFP4 storage bridge is currently gfx1201 only");
+        return signalPassFailure();
+      }
+      auto fn = kernel->getParentOfType<func::FuncOp>();
+      auto contract = kernel.getContract();
+      OpBuilder b(getOperation().getContext());
+      b.setInsertionPointToEnd(getOperation().getBody());
+      OperationState state(kernel.getLoc(),"tessera_rocm.mxfp4_folded_storage");
+      state.addAttribute("name",b.getStringAttr(fn.getSymName()));
+      for (StringRef attr : {"n","k","arch","storage_contract"})
+        state.addAttribute(attr,contract.get(attr));
+      state.addAttribute("schedule_hash",kernel->getAttr("artifact_hash"));
+      b.create(state);fn.erase();
+    }
     SmallVector<gpu::GPUFuncOp> typedGemmContracts;
     getOperation().walk([&](gpu::GPUFuncOp function) {
       if (function->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))
@@ -2626,7 +2943,7 @@ struct LowerTileToROCMPass
     getOperation().walk([&](Operation *op) {
       StringRef name = op->getName().getStringRef();
       if (name == "tile.sparse_mma" || name == "tile.mma" || name == "tile.matmul_kernel" ||
-          name == "tile.scaled_matmul_kernel" ||
+          name == "tile.scaled_matmul_kernel" || name == "tile.structured_reduction_kernel" ||
           name == "tile.materialize_composed_layout" ||
           name == "tile.norm_kernel" || name == "tile.softmax_kernel" || name == "tile.reduce_kernel" ||
           name == "tile.attention_kernel" ||
@@ -3261,6 +3578,21 @@ struct LowerTileToROCMPass
         continue;
       }
 
+      if (name == "tile.structured_reduction_kernel") {
+        if (arch != "gfx1201" || failed(tessera::verifyStructuredReductionCarrier(op))) {
+          op->emitError("structured scale transpose requires its owning gfx1201 Target");
+          signalPassFailure();
+          return;
+        }
+        OperationState state(op->getLoc(), "tessera_rocm.structured_reduction");
+        state.addAttributes(op->getAttrs());
+        state.addRegion();
+        auto target = builder.create(state);
+        target->getRegion(0).takeBody(op->getRegion(0));
+        op->erase();
+        continue;
+      }
+
       if (name == "tile.reduce_kernel") {
         auto storage = op->getAttrOfType<StringAttr>("storage");
         auto accum = op->getAttrOfType<StringAttr>("accum");
@@ -3439,11 +3771,14 @@ struct LowerTileToROCMPass
         const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
         // ROCM-FP8-BLOCKSCALE-1: the logical W8A8 contract Graph->Schedule
         // derived from a conforming e4m3 x e4m3 / fp32-scale op.
-        const bool fp8W8A8NK =
-            physical &&
-            physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1";
+        const bool mxfp8 = physical &&
+            (physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_v1" ||
+             physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1");
+        const bool fp8W8A8NK = physical &&
+            (physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
+             physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1");
         const bool fp8W8A8 =
-            fp8W8A8NK || (physical && physical.getValue() ==
+            mxfp8 || fp8W8A8NK || (physical && physical.getValue() ==
                                           "rocm_fp8_w8a8_blockscale_v1");
         auto scaleBlockN =
             op->getAttrOfType<IntegerAttr>("tessera.scale_block_n");
@@ -3451,14 +3786,20 @@ struct LowerTileToROCMPass
             (!desc || !epilogue || !problemM || !problemN || !problemK ||
              !macroM || !macroN || !scaleBlockN ||
              desc.getAType() != "e4m3" || desc.getBType() != "e4m3" ||
-             desc.getScaleFormat() != "fp32" ||
+             desc.getScaleFormat() != (mxfp8 ? "e8m0" : "fp32") ||
+             (mxfp8 && (desc.getScaleBlockK() != 32 ||
+                         scaleBlockN.getInt() != 1)) ||
              (epilogue.getOutputType() != "f32" &&
               epilogue.getOutputType() != "bf16") ||
              epilogue.getBias() ||
              epilogue.getActivation() != "none" || problemM.getInt() <= 0 ||
              problemN.getInt() <= 0 || problemK.getInt() <= 0 ||
              desc.getScaleBlockK() <= 0 ||
-             problemK.getInt() % desc.getScaleBlockK() != 0 ||
+             (problemK.getInt() % desc.getScaleBlockK() != 0 &&
+              (!op->getAttrOfType<StringAttr>("batching") ||
+               op->getAttrOfType<StringAttr>("batching").getValue() != "broadcast" ||
+               !op->getAttrOfType<StringAttr>("staging") ||
+               op->getAttrOfType<StringAttr>("staging").getValue() != "global")) ||
              (desc.getK() * desc.getKBlocks()) % desc.getScaleBlockK() != 0 ||
              scaleBlockN.getInt() <= 0)) {
           op->emitError(
@@ -3508,7 +3849,8 @@ struct LowerTileToROCMPass
                                           ? "e8m0_k32_plus_row_reference"
                                           : "e8m0_row_reference") ||
              epilogue.getOutputType() != "bf16" ||
-             problemM.getInt() <= 64 || problemN.getInt() <= 0 ||
+             problemM.getInt() <= 0 || (!packedFoldedMxfp4 && problemM.getInt() <= 64) ||
+             problemN.getInt() <= 0 ||
              problemK.getInt() <= 0 || problemK.getInt() % 64 != 0 ||
              !macroM || !macroN || !warps || macroM.getInt() != 256 ||
              macroN.getInt() != 64 || warps.getInt() != 8)) {
@@ -3526,6 +3868,8 @@ struct LowerTileToROCMPass
                        : packedFoldedMxfp4 ? "a_bpacked_sa_scaleplane_d_m_n_k"
                                     : foldedMxfp4 ? "a_bfold_sa_rowref_d_m_n_k"
                                     : "a_b_lhs_scale_rhs_scale_d_m_n_k"));
+        for (StringRef key : {"batching", "batch_count", "batch_operands", "batch_result", "transposeA"})
+          if (Attribute value = op->getAttr(key)) state.addAttribute(key, value);
         state.addAttribute("m", problemM);
         state.addAttribute("n", problemN);
         state.addAttribute("k", problemK);
@@ -3563,6 +3907,10 @@ struct LowerTileToROCMPass
                              warps ? warps : builder.getI64IntegerAttr(1));
           state.addAttribute("pipeline_depth",
                              depth ? depth : builder.getI64IntegerAttr(1));
+          if (Attribute order = op->getAttr("tessera.raster_order"))
+            state.addAttribute("schedule_raster_order", order);
+          if (Attribute group = op->getAttr("tessera.raster_group"))
+            state.addAttribute("schedule_raster_group", group);
         }
         if (foldedFamily) {
           state.addAttribute("stage_k", builder.getI64IntegerAttr(64));
@@ -3618,6 +3966,14 @@ struct LowerTileToROCMPass
                     ? "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
                     : packedMxfp4
                     ? "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1"
+                    : mxfp8 && fp8W8A8NK && epilogue.getOutputType() == "bf16"
+                    ? "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1"
+                    : mxfp8 && fp8W8A8NK
+                    ? "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.f32.wide_scale.v1"
+                    : mxfp8 && epilogue.getOutputType() == "bf16"
+                    ? "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_b_sa_sb_o_m_n_k.bf16.wide_scale.v1"
+                    : mxfp8
+                    ? "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_b_sa_sb_o_m_n_k.f32.wide_scale.v1"
                     : fp8W8A8NK && epilogue.getOutputType() == "bf16"
                     ? "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
                     : fp8W8A8NK
@@ -3691,6 +4047,7 @@ struct LowerTileToROCMPass
         state.addAttribute("m", builder.getI64IntegerAttr(16));
         state.addAttribute("n", builder.getI64IntegerAttr(16));
         state.addAttribute("k", builder.getI64IntegerAttr(16));
+        state.addAttribute("k_blocks", builder.getI64IntegerAttr(desc.getKBlocks()));
         state.addAttribute("mt",
                            builder.getI64IntegerAttr(macroM.getInt() / 16));
         state.addAttribute("nt",
@@ -3700,6 +4057,8 @@ struct LowerTileToROCMPass
         if (!fp8Storage)
           state.addAttribute("dtype", builder.getStringAttr(desc.getAType()));
         state.addAttribute("bias", builder.getBoolAttr(epilogue.getBias()));
+        state.addAttribute("portable_abi", builder.getBoolAttr(true));
+        state.addAttribute("output", builder.getStringAttr(epilogue.getOutputType()));
         state.addAttribute("activation",
                            builder.getStringAttr(epilogue.getActivation()));
         for (StringRef attrName : {"tessera.schedule_hash",
@@ -3730,6 +4089,16 @@ struct LowerTileToROCMPass
                           "consumer");
             signalPassFailure();
             return;
+          }
+          if (split.getInt() > 1) {
+            auto extent = op->getOperand(op->getNumOperands() - 1)
+                              .getDefiningOp<arith::ConstantIntOp>();
+            if (!extent || extent.value() <= 0) {
+              op->emitError("ROCM_SPLIT_K_UNSUPPORTED: split-K Target projection requires positive static K");
+              signalPassFailure();
+              return;
+            }
+            state.addAttribute("problem_k", builder.getI64IntegerAttr(extent.value()));
           }
           state.addAttribute("split_k", split);
           state.addAttribute("split_k_reduction", reduction);

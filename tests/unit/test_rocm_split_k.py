@@ -395,3 +395,28 @@ def test_gfx1201_split_k_workspace_is_typed_and_the_launcher_checks_it():
         assert not result.get("ok"), json.dumps(result, default=str)
         # Refused by the split-K checks, not by something unrelated.
         assert "split-K" in str(result.get("reason") or result.get("error")), json.dumps(result, default=str)
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1", reason="exact gfx1201 owning-device gate")
+@pytest.mark.parametrize("dtype", ["fp16","bf16"])
+@pytest.mark.parametrize("activation,bias", [("none",False),("relu",True)])
+def test_split_partition_image_reuses_mn_but_not_k(dtype,activation,bias):
+    native=_rocm_native()
+    native._cache.clear()
+    native._shape_free_targets.clear()
+    packages=[]
+    for shape in ((16,2048,256),(15,2048,200)):
+        package,out,ref=_run_split_k_package(shape,dtype,activation,bias)
+        assert package.image.compile_state==("cold" if not packages else "warm_cache")
+        assert "problem_k = 2048 : i64" in package.target_ir
+        assert "k_blocks" in package.target_ir
+        np.testing.assert_allclose(out,ref,rtol=3e-4,atol=3e-4)
+        packages.append(package)
+    assert packages[0].image.image_digest==packages[1].image.image_digest
+    assert packages[0].image.payload==packages[1].image.payload
+    assert packages[0].descriptor.provenance["schedule_digest"]!=packages[1].descriptor.provenance["schedule_digest"]
+    other,out,ref=_run_split_k_package((16,4096,256),dtype,activation,bias)
+    assert other.image.compile_state=="cold"
+    assert other.image.payload!=packages[0].image.payload
+    assert "problem_k = 4096 : i64" in other.target_ir
+    np.testing.assert_allclose(out,ref,rtol=3e-4,atol=3e-4)

@@ -95,8 +95,12 @@ def test_exact_target_packets_cover_local_rows_and_leave_siblings_blocking(rows)
     assert {(row.family, row.target) for row in target_rows} == declared
     exact = {row.target for row in target_rows if not row.blocks_exact_coverage}
     blocking = {row.target for row in target_rows if row.blocks_exact_coverage}
-    assert exact == {"rocm", "x86"}
-    assert blocking == {"apple_gpu", "nvidia_sm120"}
+    assert exact == {"rocm", "x86", "rocm_gfx1201"}
+    assert blocking == {"apple_gpu", "nvidia_sm120", "rocm"}
+    scale_rows = {row.target: row for row in target_rows
+                  if row.family == "scaled_product_transpose"}
+    assert not scale_rows["rocm_gfx1201"].blocks_exact_coverage
+    assert scale_rows["rocm"].blocks_exact_coverage
     for row in target_rows:
         if not row.blocks_exact_coverage:
             assert Path(row.evidence_gate).is_file()

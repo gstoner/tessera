@@ -177,18 +177,37 @@ def check_close(got: np.ndarray, want: np.ndarray, magnitude: np.ndarray, *, rel
 # --------------------------------------------------------------------------
 # Tessera
 # --------------------------------------------------------------------------
+def hsaco_text(payload: bytes) -> bytes:
+    import struct
+    if payload[:6] != b"\x7fELF\x02\x01":
+        raise ValueError("expected an ELF64 little-endian HSACO")
+    offset = struct.unpack_from("<Q", payload, 40)[0]
+    stride, count, names_id = struct.unpack_from("<HHH", payload, 58)
+    sections = [struct.unpack_from("<IIQQQQIIQQ", payload, offset+i*stride)
+                for i in range(count)]
+    names = sections[names_id]
+    strings = payload[names[4]:names[4]+names[5]]
+    for section in sections:
+        if strings[section[0]:].split(b"\0", 1)[0] == b".text":
+            return payload[section[4]:section[4]+section[5]]
+    raise ValueError("HSACO has no text section")
+
+
 def memref(pointer: P, size: int) -> list:
     return [P(pointer.value), P(pointer.value), ct.c_int64(0), ct.c_int64(size), ct.c_int64(1)]
 
 
 def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=1,
-                   scale_group_panels=-1, lds=None, check_panel=True):
+                   scale_group_panels=-1, lds=None, check_panel=True,
+                   project_image_identity=True):
     """``panel`` overrides the carrier's macro tile; ``lds`` =
     (warps, pipeline_depth, stage_k, pad_bytes, prefetch) additionally
     overrides its staging to the LDS-staged multi-wave body. Both are
     sweep-only: such a row is labelled ``panel_override`` and never stands
     for the production route, which is whatever the Schedule chose."""
+    graph_start = time.perf_counter()
     program = lower_blockscale(shape, check_panel=check_panel)
+    graph_schedule_tile_ms = (time.perf_counter() - graph_start) * 1e3
     overridden = panel is not None or lds is not None
     tile_ir = program.tile_ir
     if panel is not None:
@@ -216,9 +235,24 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
     if overridden:
         program = type(program)(program.shape, program.entry, program.graph_ir,
                                 program.schedule_ir, tile_ir)
+    package_start = time.perf_counter()
     package = package_blockscale(program, k_unroll=k_unroll, scale_group_panels=scale_group_panels,
                                  blockscale_stage_k=stage_k, blockscale_lds_pad_bytes=pad,
-                                 blockscale_prefetch=prefetch)
+                                 blockscale_prefetch=prefetch,
+                                 project_image_identity=project_image_identity)
+    package_first_use_ms = (time.perf_counter() - package_start) * 1e3
+    repeated_package_ms = []
+    for _ in range(3):
+        start = time.perf_counter()
+        repeated = package_blockscale(program, k_unroll=k_unroll,
+            scale_group_panels=scale_group_panels, blockscale_stage_k=stage_k,
+            blockscale_lds_pad_bytes=pad, blockscale_prefetch=prefetch,
+            project_image_identity=project_image_identity)
+        repeated_package_ms.append((time.perf_counter() - start) * 1e3)
+        if repeated.image.image_digest != package.image.image_digest:
+            raise RuntimeError("Repeated package changed image identity")
+        if repeated.image.compile_state != "warm_cache":
+            raise RuntimeError("Repeated package unexpectedly recompiled")
     prov = package.descriptor.provenance
     block_m, block_n = prov["macro_tile"]
     threads = int(prov["workgroup"][0])
@@ -233,6 +267,17 @@ def tessera_launch(hip, device, shape: BlockScaleShape, *, panel=None, k_unroll=
                     (threads, 1, 1))
     meta = {
         "route": prov["route"], "physical_route": prov["physical_route"],
+        "entry_symbol": package.descriptor.entry_symbol,
+        "compile_state": package.image.compile_state,
+        "runtime_shape_image": prov["runtime_shape_image"],
+        "runtime_mn_image": prov["runtime_mn_image"],
+        "lds_whole_m": prov["lds_whole_m"], "lds_whole_n": prov["lds_whole_n"],
+        "project_image_identity": project_image_identity,
+        "text_sha256": hashlib.sha256(hsaco_text(package.image.payload)).hexdigest(),
+        "graph_schedule_tile_ms": graph_schedule_tile_ms,
+        "package_first_use_ms": package_first_use_ms,
+        "repeated_package_samples_ms": repeated_package_ms,
+        "repeated_package_median_ms": float(np.median(repeated_package_ms)),
         "panel_override": overridden, "macro_tile": [block_m, block_n],
         "staging": prov["staging"], "warps": prov["warps"],
         "pipeline_depth": prov["pipeline_depth"], "workgroup_threads": threads,
@@ -474,7 +519,7 @@ def main() -> None:
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--aiter-root", type=Path, default=Path.home() / "programming/aiter")
     parser.add_argument("--shape", action="append", default=[],
-                        help="M,N,K (repeatable); K and N multiples of 128")
+                        help="M,N,K (repeatable); K a multiple of 128, ragged M/N allowed")
     parser.add_argument("--sweep", action="append", default=[],
                         help="Tessera-only sweep variant PMxPN:U:G:L (register panel) or "
                              "lds:MMxMN:W:D:S:P:F:L (LDS body: macro tile, warps, pipeline "
@@ -498,6 +543,8 @@ def main() -> None:
                         help="N,K: take AITER's tuned config from this (N, K) file for "
                              "every shape (a K scan at one fixed AITER config; "
                              "FOUNDATION-BATCH-3-2026-09-28)")
+    parser.add_argument("--static-image-control", action="store_true",
+                        help="add matched static-Target image arms to isolate identity projection")
     parser.add_argument("--windows", type=int, default=10)
     parser.add_argument("--min-window-ms", type=float, default=6.0)
     parser.add_argument("--output", type=Path, required=True)
@@ -511,6 +558,14 @@ def main() -> None:
         alt_compilers[name] = Path(path).resolve()
 
     hip = Hip()
+    from tessera import runtime as rt
+    live_arch = rt._rocm_live_arch()
+    if live_arch != "gfx1201":
+        raise RuntimeError(f"Expected gfx1201, active architecture is {live_arch!r}")
+    device_id = ct.c_int()
+    hip.check(hip.lib.hipGetDevice(ct.byref(device_id)))
+    device_name = ct.create_string_buffer(256)
+    hip.check(hip.lib.hipDeviceGetName(device_name, len(device_name), device_id.value))
     marker = build_marker(args.compiler)
     clock = Clock(hip, marker.image, marker.entry)
     fn, aiter_source_sha = ((None, None) if args.sweep and not args.with_aiter
@@ -522,6 +577,22 @@ def main() -> None:
     record = {
         "work_item": "ROCM-FP8-BLOCKSCALE-1", "sync_key": args.sync_key,
         "host": platform.node(), "kernel_release": platform.release(),
+        "architecture": live_arch, "device": device_name.value.decode(),
+        "device_ordinal": device_id.value,
+        "source_sha256": {
+            name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+            for name in (
+                "benchmarks/rocm/benchmark_gfx1201_fp8_blockscale.py",
+                "python/tessera/compiler/rocm_fp8_blockscale.py",
+                "python/tessera/compiler/rocm_native.py",
+                "python/tessera/compiler/rocm_pipeline.py",
+                "python/tessera/runtime.py",
+                "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp",
+                "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp",
+                "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp",
+                "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td",
+            )
+        },
         "source_commit": git("rev-parse", "HEAD"), "worktree_dirty": bool(git("status", "--porcelain")),
         "compiler": str(args.compiler.resolve()),
         "compiler_sha256": hashlib.sha256(args.compiler.read_bytes()).hexdigest(),
@@ -581,8 +652,12 @@ def main() -> None:
             else:
                 variants.append((tuple(int(v) for v in parts[0].split("x")), int(parts[1]),
                                  int(parts[2]), parts[3], None, alias))
+        if args.static_image_control:
+            variants += [(*variant[:5], variant[5] if len(variant)>5 else "", False)
+                         for variant in variants]
         for panel, unroll, group_panels, layout, lds, *rest in variants:
             alias = rest[0] if rest else ""
+            project_image_identity = rest[1] if len(rest)>1 else True
             os.environ["TESSERA_OPT"] = str(alt_compilers[alias] if alias else
                                             args.compiler.resolve())
             if lds is not None:
@@ -594,14 +669,17 @@ def main() -> None:
                 label = f"tessera_{layout}_{panel[0]}x{panel[1]}_u{unroll}_g{group_panels}"
             if alias:
                 label += f"@{alias}"
+            if not project_image_identity:
+                label += "+static_image"
             layout, _, output = layout.partition("+")
             shape = BlockScaleShape(m, n, k, 128, 128, layout, output or "f32")
             try:
                 # An @alias arm is another compiler build, whose Schedule
                 # rule this tree's panel oracle does not describe.
-                launch, meta, _ = tessera_launch(hip, device, shape, panel=panel, k_unroll=unroll,
+                launch, meta, package = tessera_launch(hip, device, shape, panel=panel, k_unroll=unroll,
                                                  scale_group_panels=group_panels, lds=lds,
-                                                 check_panel=not alias)
+                                                 check_panel=not alias,
+                                                 project_image_identity=project_image_identity)
             except Exception as error:  # a variant the generator refuses is a result, not a crash
                 row[label] = {"refused": str(error)[:400]}
                 continue
@@ -614,6 +692,34 @@ def main() -> None:
             else:
                 got = hip.download(device["o32"], np.zeros((m, n), np.float32))
                 meta["oracle_max_rel_err"] = check_close(got, want, magnitude, rel=1e-5)
+            meta["image_input_level"] = package.descriptor.provenance["image_input_level"]
+            meta["lds_runtime_k"] = package.descriptor.provenance["lds_runtime_k"]
+            # Timing this public launcher separately includes staging/transfers,
+            # dispatch and completion; compilation and artifact construction are excluded.
+            artifact = rt.RuntimeArtifact(
+                metadata={"target": package.image.target}, native_image=package.image,
+                launch_descriptor=package.descriptor, tile_ir=package.tile_ir,
+                target_ir=package.target_ir)
+            host_out = np.empty((m, n), dtype=got.dtype)
+            host_args = {
+                "buffers": {"a": a, "b": np.ascontiguousarray(b.T) if layout == "nk" else b,
+                            "a_scale": sa, "b_scale": sb, "o": host_out},
+                "scalars": {"M": m, "N": n, "K": k}}
+            samples = []
+            for trial in range(12):
+                start = time.perf_counter()
+                receipt = rt.launch(artifact, host_args)
+                elapsed_ms = (time.perf_counter() - start) * 1e3
+                if not receipt.get("ok") or receipt.get("execution_kind") != "native_gpu":
+                    raise RuntimeError(f"End-to-end native launch failed: {receipt}")
+                check_close(host_out, want, magnitude,
+                            rel=2 ** -7 if shape.output == "bf16" else 1e-5)
+                if trial >= 5:
+                    samples.append(elapsed_ms)
+            meta["end_to_end"] = {
+                "samples_ms": samples, "median_ms": float(np.median(samples)),
+                "warmups": 5, "compile_included": False,
+                "domain": "public runtime launch including staging, transfers and completion"}
             row[label] = meta
             arms[label] = launch
         if fn is not None:

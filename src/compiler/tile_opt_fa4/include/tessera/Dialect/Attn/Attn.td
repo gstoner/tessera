@@ -283,7 +283,8 @@ def BackwardReduceSplitOp : Op<Tessera_Attn_Dialect, "backward_reduce_split", [P
 def CheckpointForwardOp : Op<Tessera_Attn_Dialect, "checkpoint_forward", [Pure]> {
   let summary = "Compute plain scaled attention and natural-log row LSE";
   let arguments = (ins AnyRankedTensor:$query, AnyRankedTensor:$key,
-                      AnyRankedTensor:$value, F32Attr:$scale, BoolAttr:$causal);
+                      AnyRankedTensor:$value, Optional<AnyRankedTensor>:$bias,
+                      F32Attr:$scale, BoolAttr:$causal);
   let results = (outs AnyRankedTensor:$output, AnyRankedTensor:$row_lse);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
@@ -291,21 +292,27 @@ def CheckpointForwardOp : Op<Tessera_Attn_Dialect, "checkpoint_forward", [Pure]>
 
 def CheckpointBackwardOp : Op<Tessera_Attn_Dialect, "checkpoint_backward", [Pure]> {
   let summary = "Compute deterministic attention gradients using saved row LSE";
-  let arguments = (ins AnyRankedTensor:$d_output, AnyRankedTensor:$query,
-                      AnyRankedTensor:$key, AnyRankedTensor:$value,
-                      AnyRankedTensor:$row_lse, F32Attr:$scale, BoolAttr:$causal);
+  let description = [{
+    Inputs are dO,Q,K,V,O,[bias],row_lse,[dLSE]. The final row cotangent
+    is present exactly when lse_cotangent=true. Both row tensors are
+    f32[B,Hq,Sq]; Q/K/bias include the derivative of the LSE result.
+  }];
+  let arguments = (ins Variadic<AnyRankedTensor>:$inputs,
+                      F32Attr:$scale, BoolAttr:$causal,
+                      OptionalAttr<BoolAttr>:$lse_cotangent);
   let results = (outs AnyRankedTensor:$d_query, AnyRankedTensor:$d_key,
-                     AnyRankedTensor:$d_value);
+                     AnyRankedTensor:$d_value, Optional<AnyRankedTensor>:$d_bias);
   let hasVerifier = 1;
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
 }
 
 // Internal AD product, not a new public Graph operation.
 def CheckpointJVPOp : Op<Tessera_Attn_Dialect, "checkpoint_jvp", [Pure]> {
-  let summary = "Compute Q/K/V attention tangents from the paired O and row LSE";
+  let summary = "Compute attention tangents from paired O/LSE and optional score bias";
   let arguments = (ins AnyRankedTensor:$query, AnyRankedTensor:$key,
       AnyRankedTensor:$value, AnyRankedTensor:$output, AnyRankedTensor:$row_lse,
       AnyRankedTensor:$d_query, AnyRankedTensor:$d_key, AnyRankedTensor:$d_value,
+      Variadic<AnyRankedTensor>:$bias_operands,
       F32Attr:$scale, BoolAttr:$causal);
   let results = (outs AnyRankedTensor:$d_output);
   let hasVerifier = 1;

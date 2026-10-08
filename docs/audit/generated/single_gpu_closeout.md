@@ -14,9 +14,9 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 421 | backend_pathway_owned=406, multi_gpu_deferred=15 | backend_codegen=406, distributed_validation=15 |
+| `backend_kernel` | 424 | backend_pathway_owned=409, multi_gpu_deferred=15 | backend_codegen=409, distributed_validation=15 |
 | `benchmark_evidence` | 2 | benchmark_required=2 | benchmarks=2 |
-| `sharding_rule` | 60 | local_layout_transform=1, multi_gpu_deferred=2, needs_mesh_or_domain_proof=50, single_device_identity=7 | compiler_middle_end=1, distributed_validation=2, primitive_registry=57 |
+| `sharding_rule` | 61 | local_layout_transform=2, multi_gpu_deferred=2, needs_mesh_or_domain_proof=50, single_device_identity=7 | compiler_middle_end=2, distributed_validation=2, primitive_registry=57 |
 | `target_ir` | 25 | architecture_evidence_gated=20, multi_gpu_deferred=4, single_gpu_promote=1 | backend_codegen=21, distributed_validation=4 |
 | `tile_ir` | 21 | architecture_evidence_gated=20, single_gpu_closeable=1 | backend_codegen=20, compiler_middle_end=1 |
 
@@ -196,6 +196,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `mor_partition` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `mor_router` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `mor_scatter` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `mxfp4_folded_storage` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `pack` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `patchify` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `pixel_shuffle` | layout_transform | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -241,6 +242,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `matmul` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `moe_swiglu_block` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `quantized_matmul` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `scaled_matmul` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `tridiagonal_solve` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `asymmetric_bce` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `binary_cross_entropy_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -329,6 +331,7 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `dequantize_fp6` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequantize_fp8` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `dequantize_nvfp4` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `nvfp4_requantize` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `quantize_fp4` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `quantize_fp6` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `quantize_fp8` | quantize | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -486,6 +489,7 @@ test, ABI, and surface dashboards.
 | `sharding_rule` | `solve` | linalg_solver | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `tri_solve` | linalg_solver | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `factorized_matmul` | loop_nest | partial | `local_layout_transform` | compiler_middle_end | Prove local layout/shard metadata preservation on one device. |
+| `sharding_rule` | `scaled_matmul` | loop_nest | planned | `local_layout_transform` | compiler_middle_end | Prove local layout/shard metadata preservation on one device. |
 | `sharding_rule` | `moe` | moe | partial | `needs_mesh_or_domain_proof` | primitive_registry | Keep partial until the domain-specific mock-mesh or one-device shard proof lands. |
 | `sharding_rule` | `moe_combine` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Requires collective or multi-rank semantics; defer to distributed validation. |
 | `sharding_rule` | `moe_dispatch` | moe_transport | partial | `multi_gpu_deferred` | distributed_validation | Requires collective or multi-rank semantics; defer to distributed validation. |

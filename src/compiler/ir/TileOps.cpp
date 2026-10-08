@@ -1,3 +1,5 @@
+#include "Tessera/IR/NVFP4IngestContract.h"
+#include "mlir/Dialect/Func/IR/FuncOps.h"
 //===- TileOps.cpp - Tessera Tile IR op verifiers -------------*- C++ -*-===//
 //
 // Sprint 9: rank/shape verifiers for the contraction tile ops. These mirror the
@@ -1072,18 +1074,37 @@ LogicalResult FragmentPackOp::verify() {
   return success();
 }
 
+LogicalResult FragmentFoldedScaleOp::verify() {
+  auto acc = dyn_cast<FragmentType>(getAcc().getType());
+  if (!acc || acc.isUnknown() || acc.getRole() != "acc" || acc.getAcc() != "f32")
+    return emitOpError("TILE_FRAGMENT_FOLDED_SCALE_TYPE: requires a stated f32 accumulator fragment");
+  auto lhs = dyn_cast<MemRefType>(getLhsScale().getType());
+  auto rhs = dyn_cast<MemRefType>(getRhsReference().getType());
+  if (!lhs || !rhs || lhs.getRank() != 1 || rhs.getRank() != 1 ||
+      !lhs.getElementType().isF32() || !rhs.getElementType().isInteger(8))
+    return emitOpError("TILE_FRAGMENT_FOLDED_SCALE_BUFFERS: requires rank-1 f32 token scales and raw i8 E8M0 column references");
+  return success();
+}
+
 LogicalResult FragmentScaledAccumulateOp::verify() {
   auto acc = dyn_cast<FragmentType>(getAcc().getType());
   if (!acc || acc.isUnknown() || acc.getRole() != "acc" || acc.getAcc() != "f32")
     return emitOpError(
         "TILE_FRAGMENT_SCALED_ACCUMULATE_TYPE: accumulates a stated f32 "
         "accumulator fragment");
+  const bool e8m0 = getScaleFormat() == "e8m0";
+  if (!e8m0 && getScaleFormat() != "fp32")
+    return emitOpError("TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scale_format "
+                       "must be fp32 or e8m0");
   for (Value scale : {getLhsScale(), getRhsScale()}) {
     auto type = dyn_cast<MemRefType>(scale.getType());
-    if (!type || type.getRank() != 1 || !type.getElementType().isF32())
+    if (!type || type.getRank() != 1 ||
+        (e8m0 ? !type.getElementType().isSignlessInteger(8)
+              : !type.getElementType().isF32()))
       return emitOpError(
-          "TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scales are rank-1 f32 "
-          "memrefs (row-major [rows, groups] and [groups, ceil(cols/scale_n)])");
+          "TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scales must be rank-1 "
+          "f32 for fp32 or signless i8 for e8m0 (row-major [rows, groups] "
+          "and [groups, ceil(cols/scale_n)])");
   }
   if (getScaleN() <= 0)
     return emitOpError("TILE_FRAGMENT_SCALED_ACCUMULATE_SCALE: scale_n must "
@@ -1300,7 +1321,33 @@ LogicalResult StoreOp::verify() {
         return emitOpError("TILE_STORE_EPILOGUE_BIAS: a biased epilogue store "
                            "needs its trailing bias operand");
       --inputs;
+      auto residual = getOperation()->getAttrOfType<BoolAttr>("tile.residual");
+      const size_t tail = residual && residual.getValue() ? 2 : 1;
+      if (getInputs().size() < tail)
+        return emitOpError("biased epilogue store needs a trailing fp32 bias operand");
+      Value value = getInputs()[getInputs().size() - tail];
+      auto memref = dyn_cast<MemRefType>(value.getType());
+      if (!isa<LLVM::LLVMPointerType>(value.getType()) &&
+          (!memref || memref.getRank() != 1 || !memref.getElementType().isF32()))
+        return emitOpError("biased epilogue store needs an opaque pointer or rank-1 f32 memref");
     }
+  }
+  if (auto residual = getOperation()->getAttrOfType<BoolAttr>("tile.residual");
+      residual && residual.getValue()) {
+    auto epilogue = getOperation()->getAttrOfType<TileEpilogueAttr>("tile.epilogue");
+    auto order = getOperation()->getAttrOfType<StringAttr>("tile.epilogue_order");
+    if (!epilogue || !order ||
+        order.getValue() != "matmul_bias_activation_residual")
+      return emitOpError("residual store requires tile.epilogue and "
+                         "tile.epilogue_order=matmul_bias_activation_residual");
+    if (inputs == 0)
+      return emitOpError("residual store needs a trailing fp32 residual operand");
+    --inputs;
+    Value value = getInputs().back();
+    auto memref = dyn_cast<MemRefType>(value.getType());
+    if (!isa<LLVM::LLVMPointerType>(value.getType()) &&
+        (!memref || memref.getRank() != 2 || !memref.getElementType().isF32()))
+      return emitOpError("residual store needs an opaque pointer or rank-2 f32 memref");
   }
   const bool dynamic = memory.getLeadingDim() == 0;
   const bool valid = dynamic ? (inputs == 5 || inputs == 7)
@@ -1316,6 +1363,19 @@ LogicalResult StoreOp::verify() {
 }
 
 LogicalResult MatmulKernelOp::verify() {
+  // Operand orientation is semantic even before a target lowering runs.
+  for (StringRef name : {StringRef("transposeA"), StringRef("transposeB")}) {
+    if (Attribute attr = getOperation()->getAttr(name)) {
+      auto orientation = dyn_cast<BoolAttr>(attr);
+      if (!orientation)
+        return emitOpError("orientation flags must be boolean");
+      auto physical = getOperation()->getAttrOfType<StringAttr>("physical_contract");
+      if (orientation.getValue() &&
+          (!physical || physical.getValue() != "nvidia_sm120_nvfp4_blockscale_v1"))
+        return emitOpError("operand orientation requires the named NVFP4 contract");
+    }
+  }
+
   auto desc = getOperation()->getAttrOfType<TileMmaDescAttr>("mma");
   auto epilogue = getOperation()->getAttrOfType<TileEpilogueAttr>("epilogue");
   if (!desc)
@@ -1339,12 +1399,23 @@ LogicalResult MatmulKernelOp::verify() {
   unsigned pointerCount = blockScaled
       ? 5
       : 3 + unsigned(epilogue.getBias()) + unsigned(residual);
-  unsigned compactExpected = pointerCount + 3;
+  auto batching = getOperation()->getAttrOfType<StringAttr>("batching");
+  const bool independentRhs = batching && batching.getValue() == "independent_rhs";
+  const bool batched = independentRhs || (batching &&
+      (batching.getValue() == "shared_rhs_rows" || batching.getValue() == "shared_lhs"));
+  if (batching) {
+    auto physical = getOperation()->getAttrOfType<StringAttr>("physical_contract");
+    if (!batched || desc.getAType() != "nvfp4" ||
+        !physical || physical.getValue() != "nvidia_sm120_nvfp4_blockscale_v1" ||
+        epilogue.getActivation() != "none" || epilogue.getOutputType() != "f32")
+      return emitOpError("independent RHS batching requires the named NVFP4 profile without epilogue");
+  }
+  unsigned compactExpected = pointerCount + (batched ? 5 : 3);
   unsigned stridedExpected = pointerCount + 6;
   bool strided = !blockScaled && getInputs().size() == stridedExpected;
   if (getInputs().size() != compactExpected && !strided)
     return emitOpError() << (blockScaled
-        ? "expects packed A, packed B, scale A, scale B, D, M, N, K operands"
+        ? "expects packed A, packed B, scale A, scale B, D, M, N, K and declared batch dimensions"
         : "expects A, B, optional bias, optional residual, D, M, N, K, "
           "and optional LDA, LDB, LDD operands");
   for (Value dim : getInputs().drop_front(pointerCount))
@@ -1470,6 +1541,17 @@ LogicalResult SoftmaxKernelOp::verify() {
     return emitOpError("requires an explicit exp_mode");
   if (!getOperation()->getAttrOfType<BoolAttr>("ftz"))
     return emitOpError("requires an explicit ftz boolean");
+  if (auto schedule = getOperation()->getAttrOfType<StringAttr>("schedule")) {
+    if (schedule.getValue() != "serial" && schedule.getValue() != "cooperative_128")
+      return emitOpError("softmax schedule must be serial|cooperative_128");
+    if (schedule.getValue() == "cooperative_128") {
+      auto function = getOperation()->getParentOfType<LLVM::LLVMFuncOp>();
+      auto workgroup = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
+      if (!function || !function->hasAttr("nvvm.kernel") ||
+          !workgroup || workgroup.getInt() != 128)
+        return emitOpError("cooperative softmax requires an NVVM kernel with workgroup size 128");
+    }
+  }
   return success();
 }
 
@@ -1679,6 +1761,22 @@ LogicalResult SpectralBackwardKernelOp::verify() {
   return success();
 }
 
+// Narrow math storage is admitted only for the native ROCm widening recipe.
+// Sibling consumers retain their existing f32 Tile contract.
+static bool isNativeROCMWideningMath(Operation *op, StringRef storage) {
+  auto fn = op->getParentOfType<LLVM::LLVMFuncOp>();
+  auto mod = op->getParentOfType<ModuleOp>();
+  auto contract = fn ? fn->getAttrOfType<DictionaryAttr>("tessera.rocm_math_contract") : DictionaryAttr();
+  auto target = mod ? mod->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
+  auto arch = mod ? mod->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
+  return contract && target && target.getValue() == "rocm" && arch &&
+      (arch.getValue() == "gfx1151" || arch.getValue() == "gfx1201") &&
+      contract.getAs<StringAttr>("architecture") == arch &&
+      contract.get("storage") == StringAttr::get(op->getContext(), storage) &&
+      contract.get("output_storage") == StringAttr::get(op->getContext(), "f32") &&
+      (storage == "f16" || storage == "bf16");
+}
+
 LogicalResult ElementwiseKernelOp::verify() {
   auto family = getOperation()->getAttrOfType<StringAttr>("family");
   auto kind = getOperation()->getAttrOfType<StringAttr>("kind");
@@ -1715,7 +1813,9 @@ LogicalResult ElementwiseKernelOp::verify() {
   if (!getInputs().back().getType().isInteger(64))
     return emitOpError("flattened element count N must be i64");
   StringRef requiredStorage = logical ? "i8" : bitwise ? "i32" : "f32";
-  if (storage.getValue() != requiredStorage)
+  if (storage.getValue() != requiredStorage &&
+      !((unary || binary || transcendental) && outputStorage.getValue() == "f32" &&
+        isNativeROCMWideningMath(getOperation(), storage.getValue())))
     return emitOpError() << family.getValue() << " requires storage=\""
                          << requiredStorage << "\"";
   if (where) {
@@ -1994,8 +2094,13 @@ LogicalResult ScanKernelOp::verify() {
   if (!kind || (kind.getValue() != "sum" && kind.getValue() != "product" &&
                 kind.getValue() != "max" && kind.getValue() != "min"))
     return emitOpError("requires kind=sum|product|max|min");
-  if (!storage || storage.getValue() != "f32")
-    return emitOpError("requires storage=f32");
+  auto output = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  if (!storage || (storage.getValue() != "f32" &&
+      (!output || output.getValue() != "f32" ||
+       !isNativeROCMWideningMath(getOperation(), storage.getValue()))))
+    return emitOpError("requires f32 storage or native ROCm widening-to-f32 storage");
+  if (output && output.getValue() != "f32")
+    return emitOpError("scan output_storage currently requires f32");
   if (!inclusive || !inclusive.getValue())
     return emitOpError("currently requires inclusive=true");
   return success();
@@ -2024,6 +2129,19 @@ LogicalResult NormKernelOp::verify() {
     return emitOpError("requires f16, bf16, or f32 storage and f32 accumulation");
   if (!axis || axis.getInt() != -1 || !affine || affine.getValue())
     return emitOpError("requires axis=-1 and affine=false");
+  if (getOperation()->hasAttr("schedule") &&
+      !getOperation()->getAttrOfType<StringAttr>("schedule"))
+    return emitOpError("norm schedule must be a string attribute");
+  if (auto schedule = getOperation()->getAttrOfType<StringAttr>("schedule")) {
+    if (schedule.getValue() != "serial" && schedule.getValue() != "cooperative_128")
+      return emitOpError("norm requires serial|cooperative_128 schedule");
+    if (schedule.getValue() == "cooperative_128") {
+      auto module = getOperation()->getParentOfType<ModuleOp>();
+      auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
+      if (!arch || arch.getValue() != "sm_120")
+        return emitOpError("cooperative norm requires module tessera.arch=sm_120");
+    }
+  }
   return success();
 }
 
@@ -2096,7 +2214,19 @@ LogicalResult AttentionKernelOp::verify() {
   if (lseCheckpoint && (lseCheckpoint.getValue() != "recompute" &&
                         lseCheckpoint.getValue() != "saved"))
     return emitOpError("requires lse_checkpoint=\"recompute\" or \"saved\"");
-  if (getInputs().size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse))
+  auto biasShape = getOperation()->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+  if (getOperation()->hasAttr("bias_shape") &&
+      (!biasShape || !hasBias || biasShape.size() != 4 ||
+       biasShape[0] <= 0 || biasShape[1] <= 0 ||
+       llvm::any_of(biasShape.asArrayRef(), [](int64_t dim) {
+         return dim <= 0 && !ShapedType::isDynamic(dim);
+       })))
+    return emitOpError("bias_shape requires fixed positive batch/head and positive or symbolic sequence dimensions");
+  bool dynamicBias = biasShape && llvm::any_of(biasShape.asArrayRef(),
+      [](int64_t dim) { return ShapedType::isDynamic(dim); });
+  if (dynamicBias && !hasSavedLse)
+    return emitOpError("symbolic physical bias requires saved LSE");
+  if (getInputs().size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) + 4 * unsigned(dynamicBias))
     return emitOpError(
         "expects Q, K, V, optional bias, O, optional row_lse, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
   unsigned pointerCount = 4 + unsigned(hasBias) + unsigned(hasSavedLse);
@@ -2188,19 +2318,69 @@ LogicalResult AttentionBackwardKernelOp::verify() {
   auto lseCheckpoint =
       getOperation()->getAttrOfType<StringAttr>("lse_checkpoint");
   bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
+  auto savedOutputAttr = getOperation()->getAttrOfType<BoolAttr>("saved_output");
+  bool hasSavedOutput = savedOutputAttr && savedOutputAttr.getValue();
+  auto lseCotangentAttr = getOperation()->getAttrOfType<BoolAttr>("lse_cotangent");
+  bool hasLseCotangent = lseCotangentAttr && lseCotangentAttr.getValue();
+  if (getOperation()->hasAttr("lse_cotangent") && !lseCotangentAttr)
+    return emitOpError("lse_cotangent must be boolean");
+  if (hasLseCotangent && (!hasSavedLse || !hasSavedOutput))
+    return emitOpError("LSE cotangent requires saved output and row LSE");
+  auto biasGradientAttr = getOperation()->getAttrOfType<BoolAttr>("bias_gradient");
+  bool hasBiasGradient = biasGradientAttr && biasGradientAttr.getValue();
+  if (auto activityAttr = getOperation()->getAttr("gradient_activity")) {
+    auto activity = dyn_cast<DenseI64ArrayAttr>(activityAttr);
+    if (!hasSavedLse || !hasSavedOutput || !activity ||
+        activity.size() != 3 + unsigned(hasBiasGradient) ||
+        llvm::any_of(activity.asArrayRef(), [](int64_t x) { return x != 0 && x != 1; }) ||
+        llvm::none_of(activity.asArrayRef(), [](int64_t x) { return x == 1; }))
+      return emitOpError("gradient_activity requires nonempty binary saved-checkpoint result roles");
+  }
+  auto outputAttr = getOperation()->getAttr("gradient_output");
+  auto output = dyn_cast_or_null<StringAttr>(outputAttr);
+  bool compact = bool(outputAttr);
+  auto activity = getOperation()->getAttrOfType<DenseI64ArrayAttr>("gradient_activity");
+  unsigned removed = 0;
+  if (compact) {
+    if (!output || output.getValue() != "compact_v1" || !activity)
+      return emitOpError("compact gradient output requires verified saved-checkpoint activity");
+    auto launch = getOperation()->getAttrOfType<StringAttr>("gradient_launch");
+    if (!launch || (launch.getValue() != "packed_v1" && launch.getValue() != "logical_v1"))
+      return emitOpError("compact checkpoint launch requires packed_v1 or logical_v1");
+    auto threads = getOperation()->getAttrOfType<IntegerAttr>("block_threads");
+    if (!threads || !threads.getType().isInteger(64) || (threads.getInt() != 64 && threads.getInt() != 128))
+      return emitOpError("compact checkpoint threads require 64 or 128");
+    removed = llvm::count(activity.asArrayRef(), int64_t(0));
+  }
+  if (getOperation()->hasAttr("bias_gradient") && !biasGradientAttr)
+    return emitOpError("bias_gradient must be boolean");
+  if (hasBiasGradient && (!hasBias || !hasSavedLse || !hasSavedOutput))
+    return emitOpError("bias gradient requires bias and saved output/LSE");
+  auto biasShape = getOperation()->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+  if (getOperation()->hasAttr("bias_shape") &&
+      (!biasShape || !hasBias || biasShape.size() != 4 ||
+       biasShape[0] <= 0 || biasShape[1] <= 0 ||
+       llvm::any_of(biasShape.asArrayRef(), [](int64_t dim) {
+         return dim <= 0 && !ShapedType::isDynamic(dim);
+       })))
+    return emitOpError("bias_shape requires fixed positive batch/head and positive or symbolic sequence dimensions");
+  bool dynamicBias = biasShape && llvm::any_of(biasShape.asArrayRef(),
+      [](int64_t dim) { return ShapedType::isDynamic(dim); });
+  if (dynamicBias && (!hasSavedLse || !hasSavedOutput))
+    return emitOpError("symbolic physical bias requires saved output and LSE");
   if (!bias)
     return emitOpError("requires an explicit bias boolean");
   if (lseCheckpoint && (lseCheckpoint.getValue() != "recompute" &&
                         lseCheckpoint.getValue() != "saved"))
     return emitOpError("requires lse_checkpoint=\"recompute\" or \"saved\"");
-  if (getInputs().size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse))
+  if (getInputs().size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse) + unsigned(hasSavedOutput) + unsigned(hasBiasGradient) + unsigned(hasLseCotangent) - removed + 4 * unsigned(dynamicBias))
     return emitOpError(
         "expects dO, Q, K, V, optional bias, optional row_lse, dQ, dK, dV, B, Hq, Hkv, Sq, Sk, D, and Dv operands");
-  unsigned pointerCount = 7 + unsigned(hasBias) + unsigned(hasSavedLse);
+  unsigned pointerCount = 7 + unsigned(hasBias) + unsigned(hasSavedLse) + unsigned(hasSavedOutput) + unsigned(hasBiasGradient) + unsigned(hasLseCotangent) - removed;
   for (Value pointer : getInputs().take_front(pointerCount))
     if (!isa<LLVM::LLVMPointerType>(pointer.getType()))
       return emitOpError(
-          "dO, Q, K, V, optional bias, optional row_lse, dQ, dK, and dV operands must be !llvm.ptr");
+          "dO, Q, K, V, optional bias, optional row_lse, optional saved O, dQ, dK, and dV operands must be !llvm.ptr");
   for (Value dim : getInputs().drop_front(pointerCount))
     if (!dim.getType().isInteger(64))
       return emitOpError("attention backward dimensions must be i64");
@@ -2224,6 +2404,10 @@ LogicalResult AttentionBackwardKernelOp::verify() {
     return emitOpError(
         "deterministic reference route requires storage=\"f16\", "
         "storage=\"bf16\", or storage=\"f32\"");
+  if (hasLseCotangent && storage.getValue() != "f32")
+    return emitOpError("saved LSE cotangent requires f32 storage");
+  if (hasBiasGradient && storage.getValue() != "f32")
+    return emitOpError("saved bias gradient requires f32 storage");
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)
@@ -2247,6 +2431,8 @@ LogicalResult AttentionBackwardKernelOp::verify() {
     return emitOpError("attention backward requires deterministic=true");
   if (!workspace || !workspaceOwner)
     return emitOpError("requires explicit workspace_bytes/workspace_owner");
+  if (hasLseCotangent && route.getValue() != "deterministic_direct")
+    return emitOpError("LSE cotangent requires the deterministic direct route");
   if (route.getValue() == "deterministic_direct") {
     if (workspace.getInt() != 0)
       return emitOpError("deterministic_direct requires workspace_bytes=0");
@@ -2957,4 +3143,86 @@ mlir::LogicalResult tessera::tile::SparseMMAOp::verify() {
       (getIntegerBits() != 8 && !a.getElementType().isInteger(8)))
     return emitOpError("sparse integer width requires i8 operands and 4 or 8 bits");
   return mlir::success();
+}
+
+
+LogicalResult tessera::tile::NVFP4RequantizeKernelOp::verify() {
+  auto c = getContract();
+  auto n = c.getAs<IntegerAttr>("n"), k = c.getAs<IntegerAttr>("k");
+  if (!n || !k || failed(mlir::tessera_contract::verifyNVFP4Extents(
+          getOperation(),n.getInt(),k.getInt(),c.getAs<ArrayAttr>("row_offsets"))) ||
+      failed(mlir::tessera_contract::verifyNVFP4Policy(
+          getOperation(),c.getAs<DictionaryAttr>("numeric_policy"))))
+    return failure();
+  for (auto [key,value] : {
+      std::pair<StringRef,StringRef>{"arch","gfx1201"},
+      {"target","rocm_gfx1201"},{"layout","row_major"},
+      {"ownership","private_outputs_distinct_readonly_inputs"},
+      {"scale_storage","e4m3_bits"}}) {
+    auto attr = c.getAs<StringAttr>(key);
+    if (!attr || attr.getValue() != value)
+      return emitOpError("conversion memory/target contract changed");
+  }
+  auto bindings = c.getAs<ArrayAttr>("bindings");
+  if (!bindings || bindings.size() != 6 ||
+      getArtifactHash() != mlir::tessera_contract::nvfp4ContractHash(c))
+    return emitOpError("conversion contract hash or binding count changed");
+  auto fn = (*this)->getParentOfType<func::FuncOp>();
+  if (getInputs().size() != 6 || !fn || !fn.getBody().hasOneBlock() ||
+      fn.getNumArguments() != 6 || fn.getNumResults() ||
+      fn.getBody().front().getOperations().size() != 2 ||
+      !isa<func::ReturnOp>(fn.getBody().front().back()))
+    return emitOpError("conversion requires an isolated six-buffer entry");
+  for (unsigned i = 0; i < 6; ++i) {
+    auto type = dyn_cast<MemRefType>(getInputs()[i].getType());
+    bool isDouble = i == 2 || i == 5;
+    if (getInputs()[i] != fn.getArgument(i) || !type ||
+        type.getShape() != ArrayRef<int64_t>{ShapedType::kDynamic} ||
+        !type.getLayout().isIdentity() || type.getMemorySpaceAsInt() != 0 ||
+        !(isDouble ? type.getElementType().isF64() :
+                     type.getElementType().isSignlessInteger(8)))
+      return emitOpError("conversion buffer lineage, element type or layout changed");
+  }
+  return success();
+}
+
+LogicalResult tessera::tile::MXFP4FoldedStorageKernelOp::verify() {
+  auto c = getContract();
+  auto n = c.getAs<IntegerAttr>("n"), k = c.getAs<IntegerAttr>("k");
+  if (!n || !k || failed(mlir::tessera_contract::verifyMXFP4StorageExtents(
+      getOperation(),n.getInt(),k.getInt(),c.getAs<StringAttr>("storage_contract"))))
+    return failure();
+  for (auto [key,value] : {
+      std::pair<StringRef,StringRef>{"arch","gfx1201"},
+      {"target","rocm_gfx1201"},{"layout","row_major"},
+      {"ownership","private_outputs_distinct_readonly_inputs"},
+      {"scale_storage","legacy_e8m0_bits"}}) {
+    auto attr = c.getAs<StringAttr>(key);
+    if (!attr || attr.getValue() != value)
+      return emitOpError("conversion memory/target contract changed");
+  }
+  auto bindings = c.getAs<ArrayAttr>("bindings");
+  if (!bindings || bindings.size() != 4 ||
+      getArtifactHash() != mlir::tessera_contract::nvfp4ContractHash(c))
+    return emitOpError("conversion contract hash or binding count changed");
+  auto fn = (*this)->getParentOfType<func::FuncOp>();
+  if (getInputs().size() != 4 || !fn || !fn.getBody().hasOneBlock() ||
+      fn.getNumArguments() != 4 || fn.getNumResults() ||
+      fn.getBody().front().getOperations().size() != 2 ||
+      !isa<func::ReturnOp>(fn.getBody().front().back()))
+    return emitOpError("conversion requires an isolated four-buffer entry");
+  for (unsigned i = 0; i < 4; ++i) {
+    auto type = dyn_cast<MemRefType>(getInputs()[i].getType());
+    if (getInputs()[i] != fn.getArgument(i) || !type ||
+        type.getShape() != ArrayRef<int64_t>{ShapedType::kDynamic} ||
+        !type.getLayout().isIdentity() || type.getMemorySpaceAsInt() != 0 ||
+        !type.getElementType().isSignlessInteger(8))
+      return emitOpError("conversion buffer lineage, element type or layout changed");
+  }
+  return success();
+}
+
+#include "Tessera/IR/StructuredReductionContract.h"
+mlir::LogicalResult tessera::tile::StructuredReductionKernelOp::verify() {
+  return tessera::verifyStructuredReductionCarrier(getOperation());
 }

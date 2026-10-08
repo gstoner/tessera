@@ -1429,7 +1429,8 @@ def vjp_linear_attn_state(
 
 @_vjp("flash_attn")
 def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
-                   dropout_p=0.0, seed=None, attn_bias=None, **_):
+                   dropout_p=0.0, seed=None, attn_bias=None, lse_checkpoint=None,
+                   _output_index=0, **_):
     """Adjoint of standard scaled-dot-product attention (numpy reference path).
 
     Forward: ``S = scale * QK^T (+ attn_bias);  P = softmax(S);  O = PV``.
@@ -1453,7 +1454,10 @@ def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
     attention dropout should set ``deterministic=True, seed=...`` so the mask
     is reproducible.
     """
-    if dropout_p > 0.0 and seed is None:
+    lse_output = lse_checkpoint == "saved" and _output_index == 1
+    if lse_checkpoint == "saved" and _output_index not in (0, 1):
+        raise ValueError("saved attention output index must be zero or one")
+    if dropout_p > 0.0 and seed is None and not lse_output:
         # Without a seed the forward drew from a fresh default_rng, so the mask
         # it applied cannot be reconstructed here. Differentiating the
         # no-dropout function instead would return a silently wrong gradient,
@@ -1473,6 +1477,16 @@ def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
     if scale is None:
         scale = 1.0 / math.sqrt(d)
 
+    original_k_shape, original_v_shape = K.shape, V.shape
+    groups = 1
+    if Q.ndim == K.ndim == V.ndim == 4:
+        hq, hkv, hv = Q.shape[1], K.shape[1], V.shape[1]
+        if hkv <= 0 or hq <= 0 or hkv != hv or hq % hkv:
+            raise ValueError("attention adjoint requires matching grouped K/V heads")
+        groups = hq // hkv
+        if groups > 1:
+            K, V = np.repeat(K, groups, axis=1), np.repeat(V, groups, axis=1)
+
     # Recompute forward intermediates
     S = np.matmul(Q, np.swapaxes(K, -1, -2)) * scale
     if bias is not None:
@@ -1490,24 +1504,33 @@ def vjp_flash_attn(dout, Q, K, V, *bias_positional, scale=None, causal=False,
     # used for dV and multiplies dP before the softmax backward. Drawing from
     # `default_rng(seed).binomial` in the same order reproduces `keep` exactly.
     drop = None
-    if dropout_p > 0.0:
+    if dropout_p > 0.0 and not lse_output:
         rng = np.random.default_rng(seed)
         drop = rng.binomial(1, 1.0 - dropout_p, P.shape) / (1.0 - dropout_p)
     W = P if drop is None else P * drop
 
-    # dV = W^T @ dO
-    dV = np.matmul(np.swapaxes(W, -1, -2), dout)
-    # dP = (dO @ V^T) through the mask
-    dP = np.matmul(dout, np.swapaxes(V, -1, -2))
-    if drop is not None:
-        dP = dP * drop
-    # dS through softmax: dS = (dP - sum(dP * P, -1, keepdims)) * P
-    dS = (dP - (dP * P).sum(axis=-1, keepdims=True)) * P
+    if lse_output:
+        if np.asarray(dout).shape != S.shape[:-1]:
+            raise ValueError("row-LSE cotangent shape differs from attention rows")
+        dV = np.zeros_like(V)
+        dS = P * np.asarray(dout)[..., None]
+    else:
+        dV = np.matmul(np.swapaxes(W, -1, -2), dout)
+        dP = np.matmul(dout, np.swapaxes(V, -1, -2))
+        if drop is not None:
+            dP = dP * drop
+        dS = (dP - (dP * P).sum(axis=-1, keepdims=True)) * P
     if causal:
         dS = np.where(mask, 0.0, dS)
     # dQ = dS @ K * scale;  dK = dS^T @ Q * scale
     dQ = np.matmul(dS, K) * scale
     dK = np.matmul(np.swapaxes(dS, -1, -2), Q) * scale
+    if groups > 1:
+        dK = dK.reshape(original_k_shape[0], original_k_shape[1], groups, *original_k_shape[2:]).sum(axis=2)
+        dV = dV.reshape(original_v_shape[0], original_v_shape[1], groups, *original_v_shape[2:]).sum(axis=2)
+    dQ = _sum_to_shape(dQ, Q.shape)
+    dK = _sum_to_shape(dK, original_k_shape)
+    dV = _sum_to_shape(dV, original_v_shape)
     if bias_pos is not None:
         # bias was a recorded positional input → return its gradient. It adds
         # straight into S (pre-softmax), so dbias = dS reduced to the (possibly
@@ -1977,7 +2000,18 @@ def vjp_hybrid_attention(dout, Q, K, V, **kwargs):
 
 @_vjp("moe_dispatch")
 def vjp_moe_dispatch(dout, x, route, *, transport=None, **_):
-    return (_sum_to_shape(np.asarray(dout), np.asarray(x).shape), None)
+    from tessera import ops
+    from tessera.stdlib.moe import DispatchPlan
+    forward = getattr(ops.moe_dispatch, "__wrapped__", ops.moe_dispatch)
+    expected = forward(x, route, transport=transport)
+    dout = np.asarray(dout)
+    if dout.shape != np.asarray(expected).shape:
+        raise ValueError("MoE dispatch cotangent must match the gathered slots")
+    indices = (route.sort_perm // route.top_k if isinstance(route, DispatchPlan)
+               else np.asarray(route))
+    dx = np.zeros(np.asarray(x).shape, dtype=np.result_type(np.asarray(x), dout))
+    np.add.at(dx, indices, dout)
+    return dx, None
 
 
 @_vjp("moe_combine")

@@ -536,3 +536,26 @@ def test_gfx1151_scheduled_attention_compiles_exact_artifact() -> None:
         window_right=0,
     )
     np.testing.assert_allclose(output, expected, rtol=3e-2, atol=3e-2)
+
+
+@pytest.mark.parametrize("attribute",["graph_ir","schedule_ir"])
+def test_nvidia_attention_rejects_divergent_retained_lineage_before_target_compile(attribute,monkeypatch):
+    from dataclasses import replace
+    from tessera.compiler import nvidia_native
+    tool=find_tessera_opt()
+    if tool is None:pytest.skip("requires matching production tessera-opt")
+    artifact=scheduled_attention.lower_scheduled_attention(_module(target="x86"),target="nvidia_sm120")
+    # A syntactically valid changed policy must not be certified by unchanged
+    # metadata or allowed to reach target compilation.
+    changed=getattr(artifact,attribute).replace("scale = 5.000000e-01", "scale = 2.500000e-01")
+    if changed==getattr(artifact,attribute):
+        import re
+        changed,count=re.subn(r"scale = [^ ,}]+( : f(?:32|64))?",
+                             lambda match: "scale = 0.25"+(match[1] or ""),
+                             getattr(artifact,attribute),count=1)
+        assert count==1
+    bad=replace(artifact,**{attribute:changed})
+    def forbidden(*args,**kwargs):pytest.fail("divergent lineage reached target compilation")
+    monkeypatch.setattr(nvidia_native,"_compile_tile_ir",forbidden)
+    with pytest.raises((ValueError,RuntimeError)):
+        nvidia_native.package_scheduled_attention(bad,pipeline_name="tessera-lower-to-nvidia-sm120")

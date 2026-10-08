@@ -87,6 +87,17 @@ config.test_format = lit.formats.ShTest(execute_external=False)
 config.suffixes = ['.mlir']
 config.environment['PATH'] = os.environ.get('PATH', '')
 
+# Native HSACO serialization must use the same owning SDK as the shell.
+# Keep Target/LLVM tests available without AMD device libraries; only the
+# binary stage is conditional on the actual SDK, not the host GPU.
+for _name in ("ROCM_PATH", "HIP_PATH"):
+    if os.environ.get(_name):
+        config.environment[_name] = os.environ[_name]
+_rocm_root = os.environ.get("ROCM_PATH", "")
+if _rocm_root and os.path.isdir(os.path.join(_rocm_root, "amdgcn", "bitcode")):
+    config.available_features.add("rocm-device-libs")
+
+
 _TESSERA_OPT = _resolve(
     "TESSERA_OPT",
     "build/tools/tessera-opt/tessera-opt",

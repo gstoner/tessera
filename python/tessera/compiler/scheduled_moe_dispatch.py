@@ -39,7 +39,7 @@ class ScheduledMoeDispatchArtifact:
             raise ValueError("MoE Tile entry disagrees with runtime ABI")
 
 
-def lower_scheduled_moe_dispatch(module, *, target: str = "rocm_gfx1151") -> ScheduledMoeDispatchArtifact:
+def project_scheduled_moe_dispatch_graph(module, *, target: str = "rocm_gfx1151") -> str:
     if target != "rocm_gfx1151":
         raise ValueError("MoE token-gather Schedule only admits gfx1151")
     from .rocm_native import _moe_dispatch_contract
@@ -49,10 +49,23 @@ def lower_scheduled_moe_dispatch(module, *, target: str = "rocm_gfx1151") -> Sch
         raise ValueError("MoE token gather needs static f32[T,H], i32[S] -> f32[S,H]")
     x, token, output, dims = contract
     source = copy.deepcopy(module)
+    # An explicit None is the public API default, not a transport policy.
+    if source.functions[0].body[0].kwargs.get("transport") is None:
+        source.functions[0].body[0].kwargs.pop("transport", None)
     source.module_attrs.update({"tessera.target": '"rocm_gfx1151"',
                                 "tessera.arch": '"gfx1151"'})
     source.functions[0].fn_attrs["tessera.bindings"] = json.dumps((x, token, output))
-    graph = source.to_mlir(target=target, canonical=True)
+    return source.to_mlir(target=target, canonical=True)
+
+
+def lower_scheduled_moe_dispatch(module, *, target: str = "rocm_gfx1151") -> ScheduledMoeDispatchArtifact:
+    graph = project_scheduled_moe_dispatch_graph(module, target=target)
+    from .rocm_native import _moe_dispatch_contract
+
+    contract = _moe_dispatch_contract(module)
+    if contract is None:
+        raise ValueError("MoE dispatch lost its admitted Graph contract")
+    x, token, output, dims = contract
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("MoE dispatch needs production tessera-opt")

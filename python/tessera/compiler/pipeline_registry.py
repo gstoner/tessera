@@ -438,7 +438,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-warpspec-legality",
             "tessera-tile-barrier-reuse-legality",
         ),
-        lit_fixtures=("tests/tessera-ir/phase3/cuda13/nvidia_pipeline_alias.mlir",),
+        lit_fixtures=(
+            "tests/tessera-ir/phase3/cuda13/nvidia_pipeline_alias.mlir",
+        ),
         phase="lowering",
         status="lit_verified",
         sprint="G-5",
@@ -493,6 +495,8 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
     PipelineSpec(
         name="tessera-nvidia-pipeline-sm120",
         passes=(
+            # Whole-function replay recovery only; retain Graph IR here.
+            "tessera-tile-ir-lowering",
             "tessera-effect-annotate",
             "canonicalize",
             "tessera-swiglu-fusion",
@@ -506,6 +510,9 @@ REGISTERED_PIPELINES: tuple[PipelineSpec, ...] = (
             "tessera-compute-legalize",
             "tessera-ir-contracts",
             "tessera-symdim-equality",
+            "tessera-pm-verify",
+            "tessera-graph-to-schedule",
+            "tessera-schedule-to-tile",
             "tessera-tile-ir-lowering",
             "tessera-warp-specialize",
             # Consumer Blackwell retains typed warp-MMA/attention carriers

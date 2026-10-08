@@ -147,3 +147,19 @@ module attributes {
     return %a : tensor<8xf32>
   }
 }
+
+// -----
+
+// A module-level exception with no matching drop in any snapshot scope stays stale.
+module attributes {
+  tessera.metadata_snapshot = {module_stale = {layout = ["\22row_major\22", 1]}},
+  tessera.lowering.dropped = {layout = "consumed_by_pass"}
+} {
+  // CHECK: METADATA_OBLIGATION_STALE_DECLARATION
+  // CHECK-SAME: no snapshot scope lost that attribute
+  func.func @module_stale(%a: tensor<8xf32>) -> tensor<8xf32> {
+    %0 = "tessera.cast"(%a) {layout = "row_major"}
+      : (tensor<8xf32>) -> tensor<8xf32>
+    return %0 : tensor<8xf32>
+  }
+}

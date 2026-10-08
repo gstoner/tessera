@@ -128,7 +128,7 @@ _HAS_VERIFIER_RE = re.compile(r'\blet\s+hasVerifier\s*=\s*1\s*;')
 # Regex for `LogicalResult OpName::verify()` (with optional whitespace
 # and an optional ``mlir::`` prefix).  Captures the op name.
 _VERIFY_IMPL_RE = re.compile(
-    r'(?:mlir::)?LogicalResult\s+([A-Za-z_][A-Za-z0-9_]*)::verify\s*\(\s*\)',
+    r'(?:mlir::)?LogicalResult\s+(?:[A-Za-z_][A-Za-z0-9_]*::)*([A-Za-z_][A-Za-z0-9_]*)::verify\s*\(\s*\)',
 )
 
 # Regex for the trivial-stub body shape.  Matches both the free-function

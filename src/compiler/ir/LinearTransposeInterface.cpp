@@ -1,7 +1,12 @@
+#include "Tessera/IR/ScaledBatchContract.h"
 //===- LinearTransposeInterface.cpp - Graph IR linear transpose -*- C++ -*-===//
 
 #include "Tessera/IR/TesseraOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Dialect/Arith/IR/Arith.h"
+#include "mlir/Dialect/SCF/IR/SCF.h"
+#include "mlir/Dialect/Tensor/IR/Tensor.h"
+#include <functional>
 #include "mlir/IR/BuiltinAttributes.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "llvm/ADT/STLExtras.h"
@@ -85,6 +90,195 @@ static llvm::SmallVector<mlir::Value> transposeImplicitBroadcast(
   if (grad.getType() != inTy)
     grad = builder.create<ReshapeOp>(op->getLoc(), inTy, grad).getY();
   return {grad};
+}
+
+
+bool ScaledMatmulOp::isLinearInOperand(unsigned index) {
+  // Typed low-precision matrix storage has no implicit straight-through rule.
+  return index == 2 || index == 3;
+}
+
+llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
+    mlir::OpBuilder &builder, mlir::ValueRange outputCotangents) {
+  using namespace mlir;
+  auto result = dyn_cast<RankedTensorType>(getResult().getType());
+  auto a = dyn_cast<RankedTensorType>(getLhs().getType());
+  auto b = dyn_cast<RankedTensorType>(getRhs().getType());
+  auto sa = dyn_cast<RankedTensorType>(getLhsScale().getType());
+  auto sb = dyn_cast<RankedTensorType>(getRhsScale().getType());
+  auto layout = getScaleLayoutAttr();
+  auto block = layout ? layout.getAs<ArrayAttr>("block") : ArrayAttr{};
+  auto format = layout ? layout.getAs<StringAttr>("format") : StringAttr{};
+  auto granularity = layout ? layout.getAs<StringAttr>("granularity") : StringAttr{};
+  auto policy = getNumericPolicyAttr();
+  auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr{};
+  auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr{};
+  auto batch = getOperation()->getAttrOfType<StringAttr>("batching");
+  StringRef batching = batch ? batch.getValue() : "";
+  bool broadcast = batching == "broadcast";
+  bool mappedA = batching == "shared_rhs_rows" || batching == "independent_rhs";
+  bool mappedB = batching == "shared_lhs" || batching == "independent_rhs";
+  if (outputCotangents.size() != 1 || !outputCotangents[0] ||
+      !result || !a || !b || !sa || !sb ||
+      !result.hasStaticShape() || !a.hasStaticShape() ||
+      !b.hasStaticShape() || !sa.hasStaticShape() || !sb.hasStaticShape() ||
+      result.getRank() < 2 ||
+      !result.getElementType().isF32() || !sa.getElementType().isF32() ||
+      !sb.getElementType().isF32() ||
+      !isa<Float8E4M3FNType>(a.getElementType()) ||
+      !isa<Float8E4M3FNType>(b.getElementType()) ||
+      getOperation()->hasAttr("physical_contract") ||
+      !format || format.getValue() != "fp32" ||
+      !granularity || granularity.getValue() != "block" ||
+      !mode || mode.getValue() != "exact_per_block" ||
+      !accum || accum.getValue() != "fp32" ||
+      !block || block.size() != 2 ||
+      !isa<IntegerAttr>(block[0]) || !isa<IntegerAttr>(block[1]) ||
+      (!batching.empty() && !mappedA && !mappedB && !broadcast) ||
+      outputCotangents[0].getType() != result)
+    return {};
+  int64_t sn = cast<IntegerAttr>(block[0]).getInt();
+  int64_t sk = cast<IntegerAttr>(block[1]).getInt();
+  int64_t prefix = result.getRank() - 2;
+  int64_t m = result.getDimSize(prefix), n = result.getDimSize(prefix + 1);
+  int64_t k = a.getDimSize(a.getRank() - (getTransposeA() ? 2 : 1));
+  if (sn <= 0 || sk <= 0 || m <= 0 || n <= 0 || k <= 0 ||
+      (broadcast ? !hasExactScaledBroadcastPrefix({a, b, sa, sb}, result)
+                 : (a.getRank() != (mappedA ? prefix : 0) + 2 ||
+                    b.getRank() != (mappedB ? prefix : 0) + 2 ||
+                    sa.getRank() != a.getRank() || sb.getRank() != b.getRank())) ||
+      (prefix != 0 && batching.empty()))
+    return {};
+  auto matches = [&](RankedTensorType type, bool mapped, int64_t x, int64_t y) {
+    if (type.getDimSize(type.getRank()-2) != x ||
+        type.getDimSize(type.getRank()-1) != y) return false;
+    for (int64_t i = 0; !broadcast && mapped && i < prefix; ++i)
+      if (type.getDimSize(i) != result.getDimSize(i)) return false;
+    return true;
+  };
+  if (!matches(a, mappedA, getTransposeA() ? k : m, getTransposeA() ? m : k) ||
+      !matches(b, mappedB, getTransposeB() ? n : k, getTransposeB() ? k : n) ||
+      !matches(sa, mappedA, m, (k+sk-1)/sk) ||
+      !matches(sb, mappedB, (k+sk-1)/sk, (n+sn-1)/sn))
+    return {};
+
+  // Each scale gradient is its own structured reduction. Shared operands
+  // reduce every logical batch axis; mapped operands keep the exact prefix.
+  // The ragged final K/N groups stop at the original logical extent.
+  auto loc = getLoc();
+  auto makeGradient = [&](bool lhs) -> Value {
+    auto type = lhs ? sa : sb;
+    // Scale storage, not matrix mapping, owns gradient coordinates.
+    int64_t scalePrefix = type.getRank() - 2;
+    SmallVector<int64_t> reductionAxes;
+    for (int64_t axis = 0; axis < prefix; ++axis) {
+      int64_t ownAxis = axis - (prefix - scalePrefix);
+      if (ownAxis < 0 || type.getDimSize(ownAxis) == 1)
+        reductionAxes.push_back(axis);
+    }
+    auto generated = tensor::GenerateOp::create(
+        builder, loc, type, ValueRange{},
+        [&](OpBuilder &g, Location l, ValueRange indices) {
+          auto constant = [&](int64_t v) -> Value {
+            return arith::ConstantIndexOp::create(g, l, v);
+          };
+          Value zero = arith::ConstantOp::create(g, l, g.getF32FloatAttr(0));
+          Value c0 = constant(0), c1 = constant(1);
+          SmallVector<Value> batchIndices(prefix, c0);
+          for (int64_t axis = 0; axis < scalePrefix; ++axis)
+            if (type.getDimSize(axis) != 1)
+              batchIndices[prefix - scalePrefix + axis] = indices[axis];
+          auto operandPrefix = [&](RankedTensorType operand) {
+            SmallVector<Value> coordinates;
+            int64_t ownPrefix = operand.getRank() - 2;
+            for (int64_t axis = 0; axis < ownPrefix; ++axis)
+              coordinates.push_back(operand.getDimSize(axis) == 1 ? c0
+                  : batchIndices[prefix - ownPrefix + axis]);
+            return coordinates;
+          };
+          int64_t offset = scalePrefix;
+          Value group = indices[offset + (lhs ? 1 : 0)];
+          Value row = lhs ? indices[offset] : Value{};
+          Value column;
+          Value klo = arith::MulIOp::create(g, l, group, constant(sk));
+          Value khi = arith::MinUIOp::create(g, l, constant(k),
+              arith::AddIOp::create(g, l, klo, constant(sk)));
+          Value nlo = lhs ? c0 : arith::MulIOp::create(
+              g, l, indices[offset+1], constant(sn));
+          Value nhi = lhs ? constant(n) : arith::MinUIOp::create(g, l, constant(n),
+              arith::AddIOp::create(g, l, nlo, constant(sn)));
+          std::function<Value(OpBuilder &, int64_t, Value)> reduce;
+          reduce = [&](OpBuilder &r, int64_t axis, Value seed) -> Value {
+            // Shared batch axes, then M (RHS gradient), N, and group-local K.
+            int64_t batchLoops = reductionAxes.size();
+            int64_t rowLoops = lhs ? 0 : 1;
+            int64_t nAxis = batchLoops + rowLoops;
+            int64_t kAxis = nAxis + 1;
+            Value lower = c0, upper;
+            if (axis < batchLoops) {
+              upper = arith::ConstantIndexOp::create(r, l, result.getDimSize(reductionAxes[axis]));
+            } else if (!lhs && axis == batchLoops) {
+              upper = arith::ConstantIndexOp::create(r, l, m);
+            } else if (axis == nAxis) {
+              lower = nlo; upper = nhi;
+            } else {
+              lower = klo; upper = khi;
+            }
+            auto loop = scf::ForOp::create(r, l, lower, upper, c1,
+                ValueRange{seed}, [&](OpBuilder &body, Location at,
+                                      Value iv, ValueRange carried) {
+                  if (axis < batchLoops) batchIndices[reductionAxes[axis]] = iv;
+                  else if (!lhs && axis == batchLoops) row = iv;
+                  else if (axis == nAxis) column = iv;
+                  if (axis < nAxis) {
+                    scf::YieldOp::create(body, at, reduce(body, axis+1, carried[0]));
+                    return;
+                  }
+                  if (axis == nAxis) {
+                    // Preserve the primal's group-local dot before either
+                    // scale/cotangent multiplication and spatial/batch join.
+                    Value partial = reduce(body, kAxis, zero);
+                    SmallVector<Value> si = operandPrefix(sa);
+                    SmallVector<Value> ti = operandPrefix(sb);
+                    SmallVector<Value> oi(batchIndices);
+                    si.append({row, group});
+                    Value blockColumn = arith::DivUIOp::create(body, at, column,
+                        arith::ConstantIndexOp::create(body, at, sn));
+                    ti.append({group, blockColumn});
+                    oi.append({row, column});
+                    Value coefficient = tensor::ExtractOp::create(body, at,
+                        lhs ? getRhsScale() : getLhsScale(), lhs ? ti : si);
+                    Value dy = tensor::ExtractOp::create(body, at, outputCotangents[0], oi);
+                    Value term = arith::MulFOp::create(body, at, partial, coefficient);
+                    term = arith::MulFOp::create(body, at, term, dy);
+                    scf::YieldOp::create(body, at,
+                        arith::AddFOp::create(body, at, carried[0], term).getResult());
+                    return;
+                  }
+                  SmallVector<Value> ai = operandPrefix(a);
+                  SmallVector<Value> bi = operandPrefix(b);
+                  ai.push_back(getTransposeA() ? iv : row);
+                  ai.push_back(getTransposeA() ? row : iv);
+                  bi.push_back(getTransposeB() ? column : iv);
+                  bi.push_back(getTransposeB() ? iv : column);
+                  Value av = tensor::ExtractOp::create(body, at, getLhs(), ai);
+                  Value bv = tensor::ExtractOp::create(body, at, getRhs(), bi);
+                  av = arith::ExtFOp::create(body, at, body.getF32Type(), av);
+                  bv = arith::ExtFOp::create(body, at, body.getF32Type(), bv);
+                  Value term = arith::MulFOp::create(body, at, av, bv);
+                  scf::YieldOp::create(body, at,
+                      arith::AddFOp::create(body, at, carried[0], term).getResult());
+                });
+            return loop.getResult(0);
+          };
+          tensor::YieldOp::create(g, l, reduce(g, 0, zero));
+        });
+    generated->setAttr("tessera.autodiff.scale_adjoint",
+                       builder.getStringAttr(lhs ? "lhs_scale" : "rhs_scale"));
+    return generated.getResult();
+  };
+  Value dsa = makeGradient(true), dsb = makeGradient(false);
+  return {Value{}, Value{}, dsa, dsb};
 }
 
 llvm::SmallVector<mlir::Value> MatmulOp::buildLinearTranspose(

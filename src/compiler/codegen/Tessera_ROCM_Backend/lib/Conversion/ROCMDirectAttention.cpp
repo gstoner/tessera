@@ -570,6 +570,9 @@ materializeROCMDirectAttention(tessera::tile::AttentionKernelOp kernel,
 LogicalResult materializeROCMDirectAttentionBackward(
     tessera::tile::AttentionBackwardKernelOp kernel, OpBuilder &builder, StringRef arch) {
   Operation *op = kernel.getOperation();
+  auto lseCotangent = op->getAttrOfType<BoolAttr>("lse_cotangent");
+  if (lseCotangent && lseCotangent.getValue())
+    return op->emitError("ROCm attention backward LSE cotangent needs an owning native consumer");
   auto biasAttr = op->getAttrOfType<BoolAttr>("bias");
   bool hasBias = biasAttr && biasAttr.getValue();
   auto lseCheckpoint = op->getAttrOfType<StringAttr>("lse_checkpoint");

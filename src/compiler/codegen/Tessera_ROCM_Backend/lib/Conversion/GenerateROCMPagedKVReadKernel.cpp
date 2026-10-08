@@ -41,16 +41,20 @@ void emitBody(OpBuilder &b, Location loc, gpu::GPUFuncOp function) {
   Value block = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
   Value thread = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
   Value linear = add(mul(block, ci(BlockSize)), thread);
-  Value total = mul(mul(tokens, heads), dim);
+  // Compact storage keeps each token's H*D elements contiguous. Decode the
+  // token and its flat intra-token offset directly; splitting head and
+  // feature first adds a dynamic division without changing the address.
+  // The checked ABI bounds the positive shape products before launch.
+  Value elementsPerToken = mul(heads, dim);
+  Value total = mul(tokens, elementsPerToken);
   Value inBounds = b.create<arith::CmpIOp>(
       loc, arith::CmpIPredicate::slt, linear, total);
   auto guarded = b.create<scf::IfOp>(loc, inBounds, false);
   b.setInsertionPointToStart(guarded.thenBlock());
 
-  Value d = b.create<arith::RemUIOp>(loc, linear, dim);
-  Value tokenHead = b.create<arith::DivUIOp>(loc, linear, dim);
-  Value head = b.create<arith::RemUIOp>(loc, tokenHead, heads);
-  Value token = b.create<arith::DivUIOp>(loc, tokenHead, heads);
+  Value token = b.create<arith::DivUIOp>(loc, linear, elementsPerToken);
+  Value tokenOffset =
+      b.create<arith::RemUIOp>(loc, linear, elementsPerToken);
   Value logical = add(start, token);
   Value logicalPage = b.create<arith::DivUIOp>(loc, logical, pageSize);
   Value pageOffset = b.create<arith::RemUIOp>(loc, logical, pageSize);
@@ -59,8 +63,8 @@ void emitBody(OpBuilder &b, Location loc, gpu::GPUFuncOp function) {
   Value physical = b.create<arith::IndexCastUIOp>(
       loc, b.getIndexType(), physical32);
   Value pageIndex = add(
-      mul(add(mul(add(mul(physical, pageSize), pageOffset), heads), head), dim),
-      d);
+      mul(add(mul(physical, pageSize), pageOffset), elementsPerToken),
+      tokenOffset);
   Value value = b.create<memref::LoadOp>(loc, pages, ValueRange{pageIndex});
   b.create<memref::StoreOp>(loc, value, output, ValueRange{linear});
 

@@ -2,11 +2,27 @@
 status: Ratified (direction locked 2026-06-11); implementation phased below
 classification: Design / Roadmap
 authority: Compiler evaluator architecture — supersedes ad-hoc benchmark/conformance framing
-last_updated: 2026-08-08
+last_updated: 2026-10-06
 audit_role: plan
 plan_state: landing
 ---
 # Tessera Compiler Evaluator — Architecture & Roadmap
+
+## 2026-10-06: bounded math package consumer closure
+
+EVIDENCE-PACKET-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1,
+sync `ROCM-MATH-WIDENING-2026-10-06`: the gfx1151 physical-math recorder
+now consumes 21 serialized native Graph/Schedule/Tile/Target packages.
+The 18 former metadata rows use exact Graph widening casts and native math;
+the metadata constructor is removed. Output correctness precedes timing and
+each launch receipt binds the image/descriptor. Ordinary JIT and portable
+products have separate gfx1151/gfx1201 numerical and timing packets. These
+diagnostic host/device measurements supply no selector promotion authority.
+
+[Evidence](../../../benchmarks/baselines/rocm_native_math_20261006/README.md).
+General AD counterparts, asynchronous attribution, other packet families,
+composition and clean performance admission remain active obligations.
+
 
 > **Routing:** start at [`README.md`](README.md). This document owns evaluator
 > rungs, evidence, and promotion acceptance; global ordering lives only in

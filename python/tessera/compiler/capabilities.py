@@ -24,6 +24,7 @@ class OpCapability:
     layouts: tuple[str, ...] = ("row_major",)
     reason: str = ""
     dtypes_derived: bool = False
+    min_rank: int | None = None
     """True when `dtypes` came from `policy accumulator ∩ target dtypes` rather
     than from an explicit backend declaration.
 
@@ -122,7 +123,10 @@ def supports_op(
     cap = TARGET_CAPABILITIES[target_name]
     op_cap = cap.op(op)
     dtype_ok = dtype is None or not op_cap.dtypes or dtype in op_cap.dtypes
-    rank_ok = rank is None or not op_cap.ranks or rank in op_cap.ranks
+    rank_ok = rank is None or (
+        (not op_cap.ranks or rank in op_cap.ranks)
+        and (op_cap.min_rank is None or rank >= op_cap.min_rank)
+    )
     supported = op_cap.runtime_status != "unsupported" and dtype_ok and rank_ok
     reason = op_cap.reason
     if not dtype_ok:
@@ -752,6 +756,36 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         runtime_backend="hip",
         default_runtime_status="artifact_only",
         supported_ops={
+            "tessera.cast": OpCapability(
+                "tessera.cast","ready",dtypes=("fp16","bf16"),ranks=(2,3),
+                reason="Exact widening to fp32 feeding one native math consumer; "
+                       "original Graph casts are verified and fused into loads. "
+                       "General standalone cast/layout/AD routes remain separate."),
+            **{
+                "tessera."+kind: OpCapability(
+                    "tessera."+kind, "ready", dtypes=("fp32",), ranks=(2,3),
+                    reason="Isolated static compact row-major f32 Graph/Schedule/Tile "
+                           "math consumer; exact gfx1151 native image oracle and IEEE "
+                           "proof in rocm_native_math_20261006. Composed, dynamic "
+                           "and narrow-storage routes require separate proof")
+                for kind in ("sqrt","exp","add","div","cumsum","cummax")
+            },
+            "tessera.softmax": OpCapability(
+                "tessera.softmax","ready",dtypes=("fp32","fp16"),ranks=(1,2,3),
+                reason="Static f32/f16 last-axis softmax uses the canonical native "
+                       "Graph/Schedule/Tile descriptor with f32 accumulation; "
+                       "owning gfx1151 differential checks cover both storage types. "
+                       "Other layouts/AD remain gated"),
+
+            "tessera.kv_cache.read": OpCapability(
+                "tessera.kv_cache.read", "ready", dtypes=("fp32",), ranks=(4,),
+                reason="Named static PLHD pages + i32 logical page table, valid contiguous "
+                       "start/end; exact gfx1151 native Schedule package. General layouts remain gated"),
+            "tessera.moe_dispatch": OpCapability(
+                "tessera.moe_dispatch", "ready", dtypes=("fp32",), ranks=(2,),
+                reason="Named static f32[T,H] plus explicit i32[S] token-of-slot gather; "
+                       "native Graph/Schedule/Tile and exact gfx1151 oracle. Plan objects and "
+                       "distributed transport require their separate routes"),
             **_ops(
                 "artifact_only",
                 ("tessera.matmul",),
@@ -852,6 +886,45 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
         runtime_backend="hip",
         default_runtime_status="artifact_only",
         supported_ops={
+            "tessera.cast": OpCapability(
+                "tessera.cast","ready",dtypes=("fp16","bf16"),ranks=(2,3),
+                reason="Exact widening to fp32 feeding one native math consumer; "
+                       "original Graph casts are verified and fused into loads. "
+                       "General standalone cast/layout/AD routes remain separate."),
+            **{
+                "tessera."+kind: OpCapability(
+                    "tessera."+kind, "ready", dtypes=("fp32",), ranks=((2,3,4) if kind=="add" else (2,3)),
+                    reason=("Static compact row-major f32 product/sum add, ranks 2..4; "
+                            "owning mapped primal/JVP/VJP proof in gfx1201_composed_scaled_maps_20261008. "
+                            "Dynamic/nonleading and narrow-storage composition require separate proof"
+                            if kind=="add" else
+                            "Isolated static compact row-major f32 Graph/Schedule/Tile math consumer; "
+                            "exact gfx1201 native image oracle and IEEE proof in rocm_native_math_20261006. "
+                            "Composed, dynamic and narrow-storage routes require separate proof"))
+                for kind in ("sqrt","exp","add","div","cumsum","cummax")
+            },
+            "tessera.kv_cache.read": OpCapability(
+                "tessera.kv_cache.read", "ready", dtypes=("fp32",), ranks=(4,),
+                reason="Named static PLHD f32 pages plus i32 logical page table and "
+                       "explicit contiguous valid start/end; native Graph/Schedule/Tile "
+                       "package and exact gfx1201 oracle. General cache layouts remain gated"),
+            "tessera.scaled_matmul": OpCapability(
+                "tessera.scaled_matmul","ready",dtypes=("uint8","fp8_e4m3"),min_rank=2,
+                reason="Named static packed folded gfx1201 checkpoint consumer; typed E4M3FN "
+                       "exact fp32 block-scale products, static shared-RHS/independent-RHS/shared-LHS leading-prefix batches "
+                       "and f32 scale JVP native programs. "
+                       "Other dtype/layout/dynamic and general AD profiles require separate proof"),
+            "tessera.mxfp4_folded_storage": OpCapability(
+                "tessera.mxfp4_folded_storage","ready",dtypes=("uint8",),ranks=(2,),
+                reason="Named static lossless checkpoint-to-fragment storage bridge uses canonical "
+                       "Graph/Schedule/Tile JIT and checked replay on exact gfx1201; "
+                       "general uint8 remains planned/gated"),
+            "tessera.nvfp4_requantize": OpCapability(
+                "tessera.nvfp4_requantize","ready",dtypes=("uint8",),ranks=(2,),
+                reason="Isolated static checkpoint @jit uses checked native Graph/Schedule/Tile "
+                       "conversion on exact gfx1201, with ordered projection boundaries and "
+                       "explicit lossy policy; general uint8 remains planned/gated"),
+
             **{
                 canonical_op(proof.op_name): OpCapability(
                     canonical_op(proof.op_name), "ready",
@@ -1131,8 +1204,37 @@ def _with_complex_storage(target: TargetCapability) -> TargetCapability:
     return dataclasses.replace(target, supported_ops=ops)
 
 
+def _with_nvfp4_ingest_state(target: TargetCapability) -> TargetCapability:
+    # The catalog name alone must not inherit an unrelated backend's ready
+    # default when no dtype was supplied by a dashboard/selector query.
+    if target.name == "rocm_gfx1201":
+        return target
+    from dataclasses import replace
+    ops=dict(target.supported_ops)
+    ops["tessera.scaled_matmul"]=OpCapability(
+        "tessera.scaled_matmul","artifact_only",dtypes=("uint8",),ranks=(2,),
+        reason="Scaled Graph dialect is available; this public resident JIT profile requires "
+               "a sibling physical layout/program and exact-device proof")
+    if target.name == "nvidia_sm120":
+        ops["tessera.scaled_matmul"] = OpCapability(
+            "tessera.scaled_matmul", "artifact_only",
+            dtypes=("uint8", "nvfp4"), min_rank=2,
+            reason="SM120 named NVFP4 K16 block-scale Graph/Schedule/Tile contract; "
+                   "native verification requires static logical NVFP4 A/B, UE4M3 scales, "
+                   "fp32 accumulation/output and exact_per_block policy. "
+                   "Named static shared-RHS/independent-RHS/shared-LHS leading-prefix batching only; native verification preserves exact logical prefixes before Schedule flattening. No generic scaled or sibling-target execution claim")
+    ops["tessera.mxfp4_folded_storage"]=OpCapability(
+        "tessera.mxfp4_folded_storage","unsupported",dtypes=("uint8",),ranks=(2,),
+        reason="Native lossless storage bridge is gfx1201-only; sibling physical proof required")
+    ops["tessera.nvfp4_requantize"]=OpCapability(
+        "tessera.nvfp4_requantize","unsupported",dtypes=("uint8",),ranks=(2,),
+        reason="Native checkpoint conversion package is gfx1201-only; "
+               "this backend requires its own physical lowering and device evidence")
+    return replace(target,supported_ops=ops)
+
+
 TARGET_CAPABILITIES = {
-    name: _with_complex_storage(_with_derived_dtypes(target))
+    name: _with_nvfp4_ingest_state(_with_complex_storage(_with_derived_dtypes(target)))
     for name, target in TARGET_CAPABILITIES.items()
 }
 

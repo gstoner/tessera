@@ -116,3 +116,26 @@ def test_receipt_distinguishes_hsaco_bytes_from_composite_image_identity() -> No
         "complete_tile_vector_scales"
     )
     assert receipt["selected_schedule"]["row_guard"] == "wave"
+
+@pytest.mark.parametrize("value",[None,0,1,"true"])
+def test_frontend_validates_image_policy_before_compiler_access(value):
+    a,a_scale,folded=_inputs()
+    with pytest.raises(TypeError,match="runtime_mn must be a bool"):
+        compile_folded_scaled_matmul(a,a_scale,folded,
+            tessera_opt=Path("/does/not/exist/tessera-opt"),
+            allow_approximate=True,runtime_mn=value)
+
+@pytest.mark.parametrize("value",[None,0,1,"true"])
+def test_frontend_validates_runtime_k_before_compiler_access(value):
+    a,a_scale,folded=_inputs()
+    with pytest.raises(TypeError,match="runtime_k must be a bool"):
+        compile_folded_scaled_matmul(a,a_scale,folded,
+            tessera_opt=Path("/does/not/exist/tessera-opt"),
+            allow_approximate=True,runtime_k=value)
+
+def test_frontend_runtime_k_requires_runtime_mn():
+    a,a_scale,folded=_inputs()
+    with pytest.raises(ValueError,match="runtime_k requires runtime_mn"):
+        compile_folded_scaled_matmul(a,a_scale,folded,
+            tessera_opt=Path("/does/not/exist/tessera-opt"),
+            allow_approximate=True,runtime_k=True,runtime_mn=False)

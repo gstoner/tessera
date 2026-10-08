@@ -167,10 +167,11 @@ if(TESSERA_ENABLE_CUDA)
   # no NVRTC device pass). References the core-runtime tsrRegisterGpuLauncher seam
   # (resolved by the hosting binary — the shipped .so keeps it undefined, exactly
   # like a plugin, so the direct register/invoke path dlopens standalone).
-  add_library(tessera_nvidia_ptx_launch SHARED tessera_nvidia_ptx_launch.cpp)
+  add_library(tessera_nvidia_ptx_launch SHARED tessera_nvidia_ptx_launch.cpp attention_jvp_prepared.cpp matmul_prepared.cpp)
   if(COMMAND tessera_runtime_library_optimization)
     tessera_runtime_library_optimization(tessera_nvidia_ptx_launch)  # RUNTIME-LIB-OPT-1
   endif()
+  target_link_libraries(tessera_nvidia_ptx_launch PRIVATE ${CMAKE_DL_LIBS})
   target_include_directories(tessera_nvidia_ptx_launch PUBLIC
     "${CMAKE_SOURCE_DIR}/src/runtime/include")
   if(TARGET CUDA::cuda_driver)

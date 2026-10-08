@@ -17,6 +17,44 @@
 
 extern "C" {
 
+// Compiler-verified static matmul package owner. dtype: f32=1,f16=2,bf16=3.
+// Views carry bytes, exact physical shape and byte strides; all are checked
+// before upload. prepare pins its module/context; synchronous calls share context scratch.
+struct TesseraNvidiaMatmulHostView {
+  void *data;
+  size_t bytes;
+  int32_t dtype, rank;
+  int64_t shape[2], strides[2];
+};
+int tessera_nvidia_matmul_prepare(const void *image, size_t image_bytes,
+    const char *entry, const int64_t *mnk, int storage, int bias, int residual,
+    int row_b, int half_output, uint64_t *handle);
+// Bind immutable capacities to a checked dynamic strided kernel before use.
+// Axis mask: 1=M, 2=N, 4=K. Unset axes retain exact capacity extents.
+int tessera_nvidia_matmul_set_dynamic_axes(uint64_t handle, int axes);
+// Add a verified RMSNorm/LayerNorm/softmax producer. Its output is
+// private native scratch; synchronous stream completion retires both kernels.
+int tessera_nvidia_matmul_attach_producer(uint64_t handle, const void *image,
+    size_t image_bytes, const char *entry, int cooperative);
+// Append another checked shape-preserving producer before first invocation.
+int tessera_nvidia_matmul_append_producer(uint64_t handle, const void *image,
+    size_t imageBytes, const char *entry, int cooperative);
+
+// Resolve the live checked native context for context-scoped portable owners.
+int tessera_nvidia_matmul_context_identity(uint64_t *identity);
+int tessera_nvidia_matmul_invoke(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t count);
+// Synchronous resident variant. Views contain device pointers; the last view
+// is the disjoint source-shaped intermediate. All buffers and the nondefault
+// stream must belong to the handle context. Earlier views follow consumer ABI.
+int tessera_nvidia_matmul_invoke_resident(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t count, void *stream);
+int tessera_nvidia_matmul_close(uint64_t handle);
+int tessera_nvidia_matmul_scratch_stats(uint64_t handle,
+    size_t *capacity, size_t *allocations);
+const char *tessera_nvidia_matmul_last_error();
+
+
 // Register PTX text for a kernel entry name (the "serialize" input from
 // ptx_emit). Returns 0 on success, nonzero on a null argument. Overwrites any
 // prior PTX for the name and invalidates its cached module so a re-register
@@ -100,5 +138,42 @@ int tessera_nvidia_ptx_device_memory(size_t* total_bytes, size_t* free_bytes);
 // Requires linking against the core runtime (libtessera_runtime); the direct
 // register/invoke pair above does not.
 int tessera_nvidia_register_ptx_launcher(void);
+
+
+// Native prepared saved-LSE attention product; host fp32 storage, frontend
+// primals followed by requested physical tangent roles. Compiler-owned images.
+int tessera_nvidia_attention_jvp_prepare(
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* tangent_image, size_t tangent_bytes, const char* tangent_entry,
+    const char* sizer_path, const char* sizer_entry, const int64_t* dims,
+    const int* frontend_mapping, const int* active_roles, size_t active_count,
+    uint64_t* handle);
+// Explicit rank-four physical bias: four frontend primals and tangent role 3.
+int tessera_nvidia_attention_jvp_prepare_bias(
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* tangent_image, size_t tangent_bytes, const char* tangent_entry,
+    const char* sizer_path, const char* sizer_entry, const int64_t* dims,
+    const int64_t* bias_shape, const int* frontend_mapping,
+    const int* active_roles, size_t active_count, uint64_t* handle);
+int tessera_nvidia_attention_jvp_invoke(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, void* const* outputs, const size_t* output_bytes,
+    float* device_milliseconds);
+int tessera_nvidia_attention_jvp_close(uint64_t handle);
+const char* tessera_nvidia_attention_jvp_last_error(void);
+
+// Synchronous static f32 saved-LSE reverse product. Requested role order is
+// retained while native compact kernels receive their sorted physical outputs.
+int tessera_nvidia_attention_vjp_prepare(
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* backward_image, size_t backward_bytes, const char* backward_entry,
+    const int64_t* dims, const int64_t* bias_shape, const int* frontend_mapping,
+    const int* active_roles, size_t active_count, uint64_t* handle);
+int tessera_nvidia_attention_vjp_invoke(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, void* const* outputs, const size_t* output_bytes,
+    size_t output_count, float* device_milliseconds);
+int tessera_nvidia_attention_vjp_close(uint64_t handle);
+const char* tessera_nvidia_attention_vjp_last_error(void);
 
 }  // extern "C"

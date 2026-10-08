@@ -1026,7 +1026,12 @@ def to_native_source_ir(traced, *, name='source_program', autodiff=None):
                     boolean_type = op.result_type.replace('xf32>', 'xi1>')
                     if boolean_type == op.result_type:
                         raise SourceControlFlowError('native source comparison mask dtype is unsupported')
-                    comparison = replace(op, result=native[1:], result_type=boolean_type)
+                    from .graph_ir import _parse_mlir_tensor_type
+                    boolean_ir_type = _parse_mlir_tensor_type(boolean_type)
+                    comparison = replace(
+                        op, result=native[1:], result_type=boolean_type,
+                        inferred_type=boolean_ir_type, inferred_types=(boolean_ir_type,),
+                    )
                     lines.append(comparison.to_mlir(indent=indent, canonical=True))
                     lines.append(f'{indent}%{op.result} = arith.uitofp {native} : {boolean_type} to {op.result_type}')
                 else:

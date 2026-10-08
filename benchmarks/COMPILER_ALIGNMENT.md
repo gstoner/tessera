@@ -10,7 +10,7 @@ sequencing. `linalg` was supplied twice and is reviewed once.
 
 | Directory | Executed boundary | Disposition and missing proof |
 |---|---|---|
-| `math/` | Seven serialized native-package probes for x86; gfx1151 sum has three serialized f32/f16/bf16 package rows, while 18 ROCm math rows retain metadata-driven runtime probes. Host-wall timing includes wrapper work. Direct x86 scan C ABIs form a separate comparison. | Keep as diagnostic regression probes. Require observed native execution, finite correctly shaped outputs, and positive repetitions. No fresh run may inherit selector eligibility from target name or old packets. x86 and gfx1151 sum rows bind serialized native packages to each launch; the other ROCm rows and calibrated paired promotion evidence remain open. |
+| `math/` | Seven serialized native-package rows for x86 and 21 for gfx1151 across f32/f16/bf16 inputs. Explicit narrow Graph casts feed native f32 math; every launch binds its image/descriptor and output is f32. Host-wall timing includes wrapper work. Direct x86 scan C ABIs remain a separate comparison. | Metadata construction is retired from this recorder (sync `ROCM-MATH-WIDENING-2026-10-06`). Keep diagnostic regression status: native execution, finite correctly shaped output and correctness precede timing. Separate owning 72-row math package packets record resident HIP events versus warm JIT/portable walls on gfx1151 and gfx1201. No selector promotion or matched speedup is implied. |
 | `linalg/` | fp64 public `tessera.ops` cholesky, QR, SVD and triangular solve; NumPy/SciPy-style reference composition. | Keep as numerical oracle. Enforce residual bounds even in smoke mode and retain valid JSON stdout. This script's route says nothing about whether another backend has native factorization support. Add a separate exact-package comparison instead of silently changing the oracle. |
 | `energy_core/` | Python EBM composition with host RNG, analytic gradient, annealing and partition work. Public primitives can opportunistically dispatch to Apple. | Keep the domain workload. Fixed `cpu` attribution was incorrect: report unattributed library composition until per-call route receipts are captured. Report logical-byte bandwidth as an estimate. Determinism is not a native execution certificate. **2026-09-27:** receipts now attribute each row, and they show the x86 AVX-512 lane too, not only Apple (see the last section). |
 | `clifford_core/` | Public multivector/rotor/grade operations, with optional Apple primitive fast paths; Python composition and NumPy oracle share implementation. | Keep as a composition oracle. Report unattributed library execution; no proof of whole-program MLIR compilation, independent per-op correctness or GPU kernel timing. **2026-09-27:** rows are receipt-attributed (see the last section). |
@@ -49,11 +49,11 @@ they do not supersede their numerical contracts.
    environment and sample provenance. Retain existing readers through adapters;
    do not globally rename historical schemas. New runs are not promotion eligible
    without a validated comparison bound to those exact artifacts.
-2. **F0/F2:** replace math's manufactured `RuntimeArtifact.metadata` declarations
-   with package consumers, and collect per-call routes for GA/EBM. Until then,
-   retain their diagnostic/unattributed labels. Public JIT and native package
-   comparisons should use matched inputs and separate compilation, transfer,
-   launch preparation and kernel time.
+2. **F0/F2:** math's manufactured metadata declarations are retired from the
+   physical recorder. Extend general composition and GA/EBM compiled products;
+   their existing per-call receipts remain bounded attribution. Public JIT and
+   native package comparisons should use matched inputs and separate compilation,
+   transfer, launch preparation and kernel time.
 3. **AD / F3:** pair the existing direct-IR tests with automatic public frontend
    entry points for the same workloads, including saved-product ownership and
    failure paths. Graph constructors stay until differential proof covers their
@@ -173,3 +173,11 @@ The rows remain host-wall composition timings and cannot promote.
 
 Still open here: math's package consumers (item 2), the AD public-frontend
 pairing (item 3), DLOP profiler receipts, and asynchronous attribution.
+
+## Retained compiler validation receipt
+
+benchmarks/baselines/rocm_packed_native_20261003_host_unit.txt records
+16 host unit passes for the packed-native slice. It is a host regression
+receipt; it does not establish GPU numerical execution or timing. The
+rocm_gfx1201_shape_key_20261002 packet README documents the older static
+image-reuse measurements and their separate timing domains.

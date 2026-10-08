@@ -22,15 +22,15 @@ the bootstrap row can go.
 | Metric | Count |
 |---|---|
 | Backends with a bootstrap module | 5 |
-| `package_*` functions total | 74 |
+| `package_*` functions total | 77 |
 | — Graph-input boundaries (including scheduled wrappers) | 45 |
-|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 8 |
-|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 2 |
-|   ·  of the bootstrap, both | 1 |
-|   ·  of the bootstrap, other (wrapper / dispatcher) | 34 |
+|   ·  of the bootstrap, construct Tile IR then run `tessera-opt` | 9 |
+|   ·  of the bootstrap, **delegate** (runtime compiler / library / object) | 0 |
+|   ·  of the bootstrap, both | 0 |
+|   ·  of the bootstrap, other (wrapper / dispatcher) | 36 |
 | — typed scheduled-artifact inputs (consumption needs verification) | 14 |
-| — unclassified/raw inputs (not assumed compiled) | 15 |
-| Lines in those modules | 11349 |
+| — unclassified/raw inputs (not assumed compiled) | 18 |
+| Lines in those modules | 12109 |
 | Classified family/target candidates (shape admission not implied) | 54 |
 | — covered by a compiled route | 6 |
 | — packager lowers only through the generic Schedule→Tile route | 11 |
@@ -45,8 +45,8 @@ exact artifacts before treating a row as a constructor deletion target.
 
 | Target | Module | Graph input | Typed artifact input | Unknown/raw input | Family candidates | Lines |
 |---|---|---|---|---|---|---|
-| `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 12 | 12 | 4263 |
-| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3453 |
+| `nvidia_sm120` | `nvidia_native.py` | 19 | 1 | 15 | 12 | 4978 |
+| `rocm_gfx1151` | `rocm_native.py` | 7 | 5 | 1 | 5 | 3498 |
 | `x86` | `x86_native.py` | 7 | 4 | 1 | 8 | 1603 |
 | `apple_cpu` | `apple_cpu_native.py` | 1 | 0 | 0 | 10 | 215 |
 | `apple_gpu` | `apple_native.py` | 11 | 4 | 1 | 19 | 1815 |

@@ -27,6 +27,13 @@ See the [review of math, linalg, energy, Clifford, autodiff and operator suites]
 | `linalg/` | Active CPU reference | `linalg_bench.py` — hardware-free cholesky/qr/svd/tri_solve reference path through `tessera.ops.*`, verified against numpy/scipy, in the canonical schema. |
 | `rl/` | Active proxy / hardware-gated | `benchmark_policy_losses.py` (PPO/GRPO/CISPO loss rows split by proof level — python_reference, compiler_decomposed_reference, apple_gpu_value_target_ir) and `benchmark_glm52_serving_pressure.py` (CPU reference for the scaled GLM-5.2 DSA/MLA/MTP serving contract). |
 
+## Native compiler integration recorders
+
+- `nvidia/benchmark_native_producer_chain.py`: RTX 5070 static two/three-producer Graph→Schedule→Tile packages; independent numerical checks, per-stage CUDA events and prepared program wall time. Evidence: `baselines/nvidia_native_producer_chain_20261008/`.
+- `nvidia/benchmark_prepared_attention_staging_ab.py`: alternating fresh-process control/candidate attention staging comparison, with correctness checks and separate device-event and host-wall measurements. Evidence: `baselines/nvidia_prepared_attention_staging_20261008/ab_packet.json`.
+
+- `nvidia/benchmark_public_softmax_alias.py`: owning RTX 5070 public softmax/safe-alias JIT packages, FP16/BF16/FP32 correctness, matching native images, resident CUDA events and separate warm public wall timing. Evidence: `baselines/nvidia_public_softmax_alias_20261008/`.
+
 ## Quick Checks
 
 ```bash
@@ -135,3 +142,206 @@ named here. Paths are relative to `benchmarks/`; outputs are under
 - Keep analytical roofline/proxy benchmarks, but label them explicitly.
 - Move purely speculative benchmark concepts to `archive/benchmarks/` once they
   are no longer feeding active compiler/runtime work.
+
+## Compiler-slice recorders and their evidence
+
+This inventory names the new compiler-slice recorder consumers. A source link
+is not evidence of execution. Packet READMEs define the tested architecture,
+envelope and timing domains; rows without a packet link remain diagnostic.
+
+| Recorder | Packet reference | Evidence boundary |
+| --- | --- | --- |
+| [whole_copy_images](baselines/rocm_three_formats_20261003/whole_copy_images.py) | [rocm_three_formats_20261003](baselines/rocm_three_formats_20261003/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_native_compile_orchestration](benchmark_native_compile_orchestration.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_attention_argument_order](nvidia/benchmark_attention_argument_order.py) | [nvidia_attention_argument_order_20261002](baselines/nvidia_attention_argument_order_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_attention_gradient_activity](nvidia/benchmark_attention_gradient_activity.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_bias_attention_jvp](nvidia/benchmark_bias_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_bounded_lhs_jit](nvidia/benchmark_bounded_lhs_jit.py) | [nvidia_bounded_lhs_jit_20261006](baselines/nvidia_bounded_lhs_jit_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_canonical_tensor_replay](nvidia/benchmark_canonical_tensor_replay.py) | [nvidia_sm120_registered_tensor_pipeline_20261002](baselines/nvidia_sm120_registered_tensor_pipeline_20261002/README.md); [nvidia_sm120_canonical_tensor_replay_20261002](baselines/nvidia_sm120_canonical_tensor_replay_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_checkpoint_bias_gradient](nvidia/benchmark_checkpoint_bias_gradient.py) | [nvidia_checkpoint_bias_gradient_20261002](baselines/nvidia_checkpoint_bias_gradient_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_checkpoint_broadcast_core](nvidia/benchmark_checkpoint_broadcast_core.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_checkpoint_broadcast_package](nvidia/benchmark_checkpoint_broadcast_package.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_compact_attention_gradients](nvidia/benchmark_compact_attention_gradients.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_cooperative_norm](nvidia/benchmark_cooperative_norm.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_dynamic_lhs_frontend](nvidia/benchmark_dynamic_lhs_frontend.py) | [nvidia_dynamic_lhs_owner_20261006](baselines/nvidia_dynamic_lhs_owner_20261006/README.md); [nvidia_dynamic_lhs_frontend_20261006](baselines/nvidia_dynamic_lhs_frontend_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_dynamic_row_lhs](nvidia/benchmark_dynamic_row_lhs.py) | [nvidia_dynamic_row_lhs_20261006](baselines/nvidia_dynamic_row_lhs_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_forward_attention_jvp](nvidia/benchmark_forward_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_jit_attention_vjp](nvidia/benchmark_jit_attention_vjp.py) | [nvidia_jit_attention_vjp_20261002](baselines/nvidia_jit_attention_vjp_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_lhs_jit_dispatch](nvidia/benchmark_lhs_jit_dispatch.py) | [nvidia_prepared_lhs_20261006](baselines/nvidia_prepared_lhs_20261006/README.md); [nvidia_portable_lhs_owner_20261006](baselines/nvidia_portable_lhs_owner_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_native_norm_accuracy_program](nvidia/benchmark_native_norm_accuracy_program.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_native_norm_selection](nvidia/benchmark_native_norm_selection.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_norm_accuracy](nvidia/benchmark_norm_accuracy.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_norm_accuracy_performance](nvidia/benchmark_norm_accuracy_performance.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_ordinary_attention](nvidia/benchmark_ordinary_attention.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_prepared_attention_jvp](nvidia/benchmark_prepared_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_prepared_attention_vjp](nvidia/benchmark_prepared_attention_vjp.py) | [nvidia_prepared_attention_vjp_20261006](baselines/nvidia_prepared_attention_vjp_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_public_attention_jvp](nvidia/benchmark_public_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_public_attention_vjp](nvidia/benchmark_public_attention_vjp.py) | [nvidia_prepared_attention_vjp_20261006](baselines/nvidia_prepared_attention_vjp_20261006/README.md); [nvidia_public_attention_vjp_20261006](baselines/nvidia_public_attention_vjp_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_public_bias_attention_jvp](nvidia/benchmark_public_bias_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_public_matmul_package](nvidia/benchmark_public_matmul_package.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_resident_tensor_epilogue](nvidia/benchmark_resident_tensor_epilogue.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_rhs_jit_dispatch](nvidia/benchmark_rhs_jit_dispatch.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_rhs_tensor_program](nvidia/benchmark_rhs_tensor_program.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_row_major_b_core](nvidia/benchmark_row_major_b_core.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_row_major_b_schedule](nvidia/benchmark_row_major_b_schedule.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_scheduled_attention_checkpoint_backward](nvidia/benchmark_scheduled_attention_checkpoint_backward.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_scheduled_softmax_matmul_edge](nvidia/benchmark_scheduled_softmax_matmul_edge.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_scheduled_typed_matmul](nvidia/benchmark_scheduled_typed_matmul.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [replay_attention_jvp_program](nvidia/replay_attention_jvp_program.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [replay_bias_attention_jvp](nvidia/replay_bias_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [replay_public_attention_jvp](nvidia/replay_public_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [replay_public_attention_vjp](nvidia/replay_public_attention_vjp.py) | [nvidia_public_attention_vjp_20261006](baselines/nvidia_public_attention_vjp_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [record_value_only_attention_jvp](record_value_only_attention_jvp.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_captured_movement](rocm/benchmark_captured_movement.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_gfx1201_checkpoint_formats](rocm/benchmark_gfx1201_checkpoint_formats.py) | [rocm_checkpoint_native_ingest_20261005](baselines/rocm_checkpoint_native_ingest_20261005/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_gfx1201_mxfp8_package](rocm/benchmark_gfx1201_mxfp8_package.py) | [rocm_mxfp8_exponent_scale_20261003](baselines/rocm_mxfp8_exponent_scale_20261003/README.md); [rocm_mxfp8_checked_package_20261003](baselines/rocm_mxfp8_checked_package_20261003/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_gfx1201_three_formats](rocm/benchmark_gfx1201_three_formats.py) | [rocm_three_formats_20261003](baselines/rocm_three_formats_20261003/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_graph_nvfp4_ingest](rocm/benchmark_graph_nvfp4_ingest.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_ingest_normalization_ab](rocm/benchmark_ingest_normalization_ab.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_jit_nvfp4_program](rocm/benchmark_jit_nvfp4_program.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_math_launch_attribution](rocm/benchmark_math_launch_attribution.py) | [rocm_native_math_20261006](baselines/rocm_native_math_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_movement_route_admission](rocm/benchmark_movement_route_admission.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_mxfp4_storage_jit](rocm/benchmark_mxfp4_storage_jit.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_native_math_package](rocm/benchmark_native_math_package.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_native_math_schedule](rocm/benchmark_native_math_schedule.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_native_math_staging](rocm/benchmark_native_math_staging.py) | [rocm_native_math_20261006](baselines/rocm_native_math_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_native_movement](rocm/benchmark_native_movement.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_native_nvfp4_allocation_reuse](rocm/benchmark_native_nvfp4_allocation_reuse.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_native_nvfp4_ingest_leaf](rocm/benchmark_native_nvfp4_ingest_leaf.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_native_nvfp4_owner](rocm/benchmark_native_nvfp4_owner.py) | [rocm_packed_image_identity_20261006](baselines/rocm_packed_image_identity_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_nvfp4_ingest_jit](rocm/benchmark_nvfp4_ingest_jit.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_nvfp4_manifest_cache](rocm/benchmark_nvfp4_manifest_cache.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_nvfp4_static_program_retention](rocm/benchmark_nvfp4_static_program_retention.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_packed_image_identity](rocm/benchmark_packed_image_identity.py) | [rocm_packed_image_identity_20261006](baselines/rocm_packed_image_identity_20261006/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [benchmark_paged_softmax_edge](rocm/benchmark_paged_softmax_edge.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_public_movement_jit](rocm/benchmark_public_movement_jit.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_resident_movement](rocm/benchmark_resident_movement.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [benchmark_resident_nvfp4](rocm/benchmark_resident_nvfp4.py) | No sealed packet link found in the current packet READMEs. | Development/diagnostic recorder; no execution or promotion claim from this inventory. |
+| [folded_graph_windows](rocm/folded_graph_windows.py) | [rocm_folded_graph_windows_20261002](baselines/rocm_folded_graph_windows_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [record_gfx1201_folded_native_package](rocm/record_gfx1201_folded_native_package.py) | [rocm_folded_native_runtime_k_20261002](baselines/rocm_folded_native_runtime_k_20261002/README.md); [rocm_folded_native_fragment_retirement_20261002](baselines/rocm_folded_native_fragment_retirement_20261002/README.md); [rocm_folded_graph_windows_20261002](baselines/rocm_folded_graph_windows_20261002/README.md); [rocm_folded_native_runtime_mn_20261002](baselines/rocm_folded_native_runtime_mn_20261002/README.md); [rocm_folded_native_package_20261002](baselines/rocm_folded_native_package_20261002/README.md); [rocm_folded_cold_branch_20261002](baselines/rocm_folded_cold_branch_20261002/README.md); [rocm_folded_panel_group_20261002](baselines/rocm_folded_panel_group_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [record_gfx1201_folded_register_pressure](rocm/record_gfx1201_folded_register_pressure.py) | [rocm_folded_terminal_prefetch_20261002](baselines/rocm_folded_terminal_prefetch_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [record_gfx1201_matmul_shape_key](rocm/record_gfx1201_matmul_shape_key.py) | [rocm_gfx1201_shape_key_20261002](baselines/rocm_gfx1201_shape_key_20261002/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+| [record_gfx1201_mxfp8_native_boundary](rocm/record_gfx1201_mxfp8_native_boundary.py) | [rocm_mxfp8_schedule_20261003](baselines/rocm_mxfp8_schedule_20261003/README.md) | Receipt scope and limitations are recorded in the linked packet. |
+
+- `benchmarks/nvidia/benchmark_nvfp4_shared_rhs_batch.py`: correctness-gated native shared-RHS NVFP4 batches versus serial native calls; [owning packet and separate timing domains](baselines/compiler_contract_revalidation_20261006/README.md). No generic batching or selector promotion.
+
+## Named SM120 NVFP4 frontend recorders
+
+- `benchmarks/nvidia/record_nvfp4_tensor_jit.py`: ordinary logical-storage JIT, static batch/vmap and typed constraint proofs; independent decoded oracle and separate public wall/native-event timing.
+- `benchmarks/nvidia/record_nvfp4_transpose.py`: native Graph/Schedule/Tile operand orientation, packed storage and K16 scale checks; identical quantized inputs across orientation arms and exact-device source/tool receipts.
+
+Packets and validation scope: [compiler contract revalidation](baselines/compiler_contract_revalidation_20261006/README.md). General batching and AD closure remain open.
+
+## Public saved-LSE native recorder
+
+`nvidia/record_public_saved_lse_attention.py` records ordinary SM120 saved-LSE
+JIT, portable replay and resident CUDA-event evidence in
+`baselines/nvidia_ordinary_attention_20261006/public-saved-lse-rtx5070.json`.
+Independent FP64 correctness checks gate both outputs before timing.
+
+`nvidia/record_lse_checkpoint.py` also records version-4 timed-output oracle
+checks in `baselines/nvidia_checkpoint_event_readback_20261006/`. Native
+readback follows the stop event and is excluded from CUDA-event latency.
+
+Native ROCm paged-KV A/B recorder: benchmarks/rocm/record_paged_kv_index_ab.py; exact-architecture evidence: benchmarks/baselines/rocm_paged_kv_flat_index_20261007/README.md.
+
+## Typed scaled-program recorders
+
+These recorders bind the named gfx1201 envelopes below. Native event windows,
+host wall costs and diagnostic member plans retain their separate meanings.
+
+| Recorder | Evidence consumer |
+| --- | --- |
+| `baselines/scaled_matmul_native_members_20261007/validate_members.py` | Same packet: member images and independent numerical checks; diagnostic member launcher. |
+| `baselines/scaled_matmul_native_package_20261007/validate_projected_package.py` | Same packet: compiler-projected package numerical and ABI checks. |
+| `rocm/record_native_scaled_program.py` | Diagnostic native-owner plan admission and numerical/measurement output selected by --output. |
+| `rocm/benchmark_public_scaled_jvp.py` | Public scale-JVP and native-owner cost packets under baselines/scaled_matmul_public_jvp_20261007. |
+| `rocm/benchmark_native_program_format_staging.py` | baselines/scaled_program_three_format_staging_20261007: FP8/MXFP8/folded-MXFP4 diagnostic staging. |
+| `rocm/benchmark_public_typed_scaled_primal.py` | baselines/rocm_typed_scaled_primal_20261007 and rocm_mxfp8_public_primal_20261007: public primal execution. |
+| `rocm/benchmark_native_primal_projection.py` | baselines/rocm_primal_image_projection_20261007: paired image-projection attribution. |
+| `rocm/benchmark_public_primal_transfers.py` | baselines/rocm_primal_transfer_attribution_20261007: public transfer attribution. |
+| `rocm/benchmark_shared_scaled_batch.py` | baselines/rocm_shared_scaled_batch_20261007: native shared-RHS primal/JVP batch cost. |
+| `rocm/benchmark_independent_scaled_batch.py` | baselines/rocm_independent_scaled_batch_20261007: independent-RHS/shared-LHS cost. |
+| `rocm/benchmark_native_plan_binding.py` | baselines/rocm_native_plan_binding_20261007: complete-content ABI binding A/B. |
+| `rocm/benchmark_public_typed_scaled_vmap.py` | baselines/rocm_public_typed_vmap_20261007: public leading-map cost. |
+| `rocm/benchmark_public_mapped_scaled_jvp.py` | baselines/rocm_public_mapped_jvp_20261007: mapped native scale-JVP cost. |
+| `rocm/benchmark_multidimensional_scaled_batch.py` | baselines/rocm_multidimensional_scaled_batch_20261007: static two-axis FP8/MXFP8 native numerics and separate public/prepared/HIP-event costs. |
+| `rocm/benchmark_native_scaled_vjp.py` | baselines/rocm_native_scaled_vjp_20261007: native scale-gradient numerics and separate one/two-member HIP events plus prepared host costs. |
+| `rocm/benchmark_nested_typed_scaled_vmap.py` | baselines/rocm_nested_typed_vmap_20261007: two public maps, native batch owner and separate public/prepared/HIP-event costs. |
+
+The public scale-VJP regime recorder benchmarks/rocm/benchmark_native_scaled_vjp.py
+is consumed by benchmarks/baselines/rocm_public_scaled_vjp_regimes_20261007/README.md,
+including explicit --public-compare-wave --shape B0 B1 M N K execution.
+
+| Archived recorder | Evidence consumer |
+| --- | --- |
+| baselines/rocm_nvfp4_short_m_20261007/recorder.py | Same packet: twelve correctness-gated packed resident shapes with native event, graph and prepared wall timings. |
+| baselines/rocm_deep_leading_map_20261007/recorder.py | Same packet: equivalent two/three/four-map prefixes, alternating public serial/wave walls and separate native event windows; --output selects the receipt. |
+
+| Native resident recorder | Evidence consumer |
+| --- | --- |
+| nvidia/record_resident_tensor_owner.py | Native resident producer/matmul image ownership: alternating same-image synchronized call walls, independent pre/post numerics, separate component CUDA event dispatch windows; TESSERA_RESIDENT_OWNER_PACKET selects the receipt. |
+| nvidia/record_padded_resident_tensor_owner.py | Padded row/column offset RHS: same-image synchronized call A/B, pre/post numerics and separate component CUDA event dispatch; TESSERA_RESIDENT_OWNER_PACKET selects the receipt. |
+
+### Native owner integration evidence — 2026-10-08
+
+The component recorders below are frozen captures of the tested scratch
+experiments; their original source/runtime identities are retained in the packets.
+The integrated producer characterization is rerunnable through
+benchmark_native_producer_chain.py --long-macro.
+
+| Recorder | Evidence and scope |
+| --- | --- |
+| [benchmark_softmax_staging_ab.py](baselines/nvidia_native_owner_integration_20261008/softmax-staging/benchmark_softmax_staging_ab.py) | Five-window native staging A/B; public host wall and resident events remain separate. |
+| [check_macro_edges.py](baselines/nvidia_native_owner_integration_20261008/macro-producer/check_macro_edges.py) | Frozen isolated macro/typed producer numerical and retained-output checks. |
+| [check_softmax_staging_lifetime_20261008.py](baselines/nvidia_native_owner_integration_20261008/softmax-staging/check_softmax_staging_lifetime_20261008.py) | Frozen growing/shrinking staging and matmul-interleave lifetime check; captured filename normalized to identifier spelling. |
+
+See baselines/nvidia_native_owner_integration_20261008/README.md for the
+matching combined-build execution and stage timing receipts.
+
+Cooperative softmax compiler-only proof captures:
+[check_schedule_contract.py](baselines/nvidia_native_owner_integration_20261008/cooperative-softmax/check_schedule_contract.py)
+checks native hashing/replay and refusal boundaries;
+[check_frontend_contract.py](baselines/nvidia_native_owner_integration_20261008/cooperative-softmax/check_frontend_contract.py)
+checks real frontend traces and caller-owned Graph preservation.
+These are frozen prototype receipts; GPU execution and promotion remain pending.
+
+Cooperative softmax package proof recorders: check_package_device,
+check_softmax_ab and check_package_corruption are frozen in
+benchmarks/baselines/nvidia_native_owner_integration_20261008/cooperative-softmax/.
+
+The isolated cooperative regression fixture is
+test_nvidia_scheduled_kernel_contract.py in the same frozen packet directory.
+
+check_chain_device.py records the isolated cooperative softmax native
+producer-chain execution and retained-output lifetime proof in that packet.
+
+check_chain_ab.py records the matched alternating prepared full-chain
+softmax policy comparison in the cooperative-softmax packet.
+
+benchmark_cooperative_softmax_chain.py records matched prepared whole-chain
+host timing for the explicit native softmax Schedule policy.
+
+benchmark_composed_scaled_jvp.py records the two-product public scale-JVP native event and separate host timings in baselines/gfx1201_composed_scaled_jvp_20261008.
+
+benchmark_composed_scaled_vjp.py records independent/shared scale-adjoint correctness, complete native event windows and separate public host costs; owning evidence: baselines/gfx1201_composed_scaled_vjp_20261008/README.md.
+
+benchmark_composed_scaled_maps.py records gfx1201 mapped product/sum primal/JVP/VJP correctness and separate complete-native-event/public-host timings; evidence: baselines/gfx1201_composed_scaled_maps_20261008/README.md.
+
+benchmark_attention_async_owner.py records SM120 saved-LSE native-owner submission, completed host and full owned-stream event costs with independent numerics and identical images; evidence: baselines/nvidia_attention_async_owner_20261008/README.md.
+
+### Native bounded attention images (SM120)
+
+Run benchmarks/nvidia/benchmark_bounded_attention_images.py with --output PATH
+on the owning RTX 5070 after loading the matching compiler/CUDA environment.
+This recorder proves bounded native checkpoint images across Sq/Sk with
+independent numerical checks and separate event/host launch windows.
+Public JIT/package ABI integration is explicitly pending.
+Evidence: baselines/nvidia_bounded_attention_native_20261008/README.md.
+
+### Checked bounded saved-LSE packages (SM120)
+
+benchmarks/nvidia/benchmark_bounded_attention_packages.py --output PATH
+records completed capture, backward submission, completed host and private
+CUDA event windows. See baselines/nvidia_bounded_attention_packages_20261008.
+The public JIT/automatic AD integration boundary remains explicit.

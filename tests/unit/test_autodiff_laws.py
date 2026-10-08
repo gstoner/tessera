@@ -353,9 +353,6 @@ _BENIGN_SWALLOWS = {
         "vjp-side multi-output cotangent selector, not a forward kwarg",
     ("rope_split", "jvp", "_output_index"):
         "vjp-side multi-output cotangent selector, not a forward kwarg",
-    ("moe_dispatch", "jvp", "transport"):
-        "reference forward is value-identity for every transport; the "
-        "kwarg selects a mechanism, not a function",
     # NOTE: reasons must not spell out `ops.<name>` — the test_coverage
     # scanner regex-matches that pattern in strings/comments and would count
     # prose as a direct test reference, overstating coverage (Codex review

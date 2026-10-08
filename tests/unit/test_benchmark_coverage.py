@@ -55,7 +55,17 @@ def test_operator_benchmark_representatives_feed_bench_axis():
     assert expected <= bc.benchmarked_ops()
     opbench_sourced = expected - {"conv2d", "flash_attn", "softmax"}
     for op in opbench_sourced:
-        assert "Tessera_Operator_Benchmarks" in (bc.benchmark_source_for(op) or "")
+        manifest_sources = {
+            entry.benchmark_json for entry in bm.all_manifests().get(op, ())
+            if entry.benchmark_json
+        }
+        source = bc.benchmark_source_for(op) or ""
+        if manifest_sources:
+            # Native exact-device packets have priority over generic operator
+            # harnesses; require the source to be attached to the actual op.
+            assert source in manifest_sources
+        else:
+            assert "Tessera_Operator_Benchmarks" in source
 
 
 def test_fused_chain_aliases_are_benchmark_only():

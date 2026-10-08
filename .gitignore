@@ -2,6 +2,9 @@
 # build-asan / build-tsan / build-ubsan come from scripts/run_sanitizers.sh
 build/
 build-*/
+# Host validation builds use hidden scratch-tree names.
+/.build/
+/.build-*/
 cmake-build-*/
 # CMake/CTest staging directories beneath tools/** (the CLI starter
 # scaffold uses _build/ — keep those local artifacts out of git).

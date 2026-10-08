@@ -25,7 +25,7 @@ from tests._support import rocm_isa
 def test_nvfp4_gate_up_ingest_runs_graph_schedule_tile_package_on_gfx1201():
     assert rt._rocm_live_arch() == "gfx1201"
     root = Path(__file__).resolve().parents[3]
-    fixture = root / "tests/tessera-ir/phase2/e2e_scaled_matmul_rocm_target.mlir"
+    fixture = root / "tests/tessera-ir/phase2/e2e_mxfp4_ingest_rocm.mlir"
     tessera_opt = os.environ.get("TESSERA_OPT")
     assert tessera_opt, "native Graph/Schedule proof requires TESSERA_OPT"
     common = [

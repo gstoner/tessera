@@ -18,7 +18,7 @@ def test_nvidia_f32_scheduled_kernel_admission(family):
 
 
 @pytest.mark.parametrize("dtype", ["fp16", "bf16", "fp32"])
-def test_nvidia_softmax_admits_last_axis_but_softmax_safe_waits_for_device_rows(dtype):
+def test_nvidia_softmax_and_safe_alias_admit_same_last_axis_contract(dtype):
     from tessera.compiler.graph_ir import tensor_ir_type
 
     module = _module(family="softmax", target="nvidia_sm120")
@@ -34,6 +34,8 @@ def test_nvidia_softmax_admits_last_axis_but_softmax_safe_waits_for_device_rows(
     assert not scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
     op.kwargs["axis"] = -1
     op.op_name = "tessera.softmax_safe"
+    assert scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
+    op.kwargs["axis"] = 0
     assert not scheduled_kernel.supports_scheduled_kernel(module, target="nvidia_sm120")
 
 
@@ -65,9 +67,27 @@ def test_nvidia_scheduled_kernel_native_boundary(family, monkeypatch):
     assert calls == [artifact.tile_ir]
     assert package.tile_ir == artifact.tile_ir
     assert package.descriptor.provenance["schedule_digest"] == artifact.schedule_digest
-    assert nvidia_native.package_scheduled_kernel(
+    replay = nvidia_native.package_scheduled_kernel(
         replace(artifact, graph_ir="discarded"), pipeline_name="tessera-nvidia-pipeline-sm120"
-    ) == package
+    )
+    # Schedule replay owns code generation, while Graph text still identifies
+    # ancestry in a descriptor used by whole-program certificates.
+    import hashlib
+    assert replay.image == package.image
+    assert replay.tile_ir == package.tile_ir
+    assert replay.target_ir == package.target_ir
+    assert replay.backend_ir == package.backend_ir
+    assert package.descriptor.provenance["graph_ir_digest"] == hashlib.sha256(
+        artifact.graph_ir.encode()
+    ).hexdigest()
+    assert replay.descriptor.provenance["graph_ir_digest"] == hashlib.sha256(
+        b"discarded"
+    ).hexdigest()
+    assert replay.descriptor.provenance["graph_ir_digest"] != package.descriptor.provenance["graph_ir_digest"]
+    assert replace(
+        replay.descriptor, provenance=package.descriptor.provenance
+    ) == package.descriptor
+    assert calls == [artifact.tile_ir, artifact.tile_ir]
     with pytest.raises(ValueError, match="shape|axis"):
         nvidia_native.package_scheduled_kernel(replace(artifact, input_shape=(99,)), pipeline_name="tessera-nvidia-pipeline-sm120")
     altered = artifact.schedule_ir.replace('workgroup_size = 128', 'workgroup_size = 64', 1)
@@ -231,11 +251,20 @@ def test_production_unary_constructors_are_retired():
 
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
-def test_reduction_option_does_not_change_softmax_schedule():
+def test_softmax_explicit_policy_preserves_rejection_boundaries():
     module = _module(family="softmax", target="nvidia_sm120")
-    normal = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120")
-    unrelated = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule="cooperative_128")
-    assert unrelated == normal
+    serial = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule="serial")
+    cooperative = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule="cooperative_128")
+    assert serial.schedule == "serial"
+    assert cooperative.schedule == "cooperative_128"
+    assert serial.schedule_digest != cooperative.schedule_digest
+    with pytest.raises(ValueError):
+        scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule="cooperative_64")
+    for target in ("x86", "apple_gpu", "rocm_gfx1151", "rocm_gfx1201"):
+        with pytest.raises(ValueError):
+            scheduled_kernel.lower_scheduled_kernel(
+                _module(family="softmax", target=target), target=target,
+                schedule="cooperative_128")
 
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
@@ -244,19 +273,21 @@ def test_softmax_consumer_refuses_unrelated_policy_fields(fields):
     artifact = scheduled_kernel.lower_scheduled_kernel(
         _module(family="softmax", target="nvidia_sm120"), target="nvidia_sm120"
     )
-    with pytest.raises(ValueError, match="fixed policy"):
+    expected = "policy disagrees on schedule" if "schedule" in fields else "fixed policy"
+    with pytest.raises(ValueError, match=expected):
         nvidia_native.package_scheduled_kernel(replace(artifact, **fields), pipeline_name="pipeline")
 
 
 @pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
 @pytest.mark.parametrize("family,schedule", [
-    ("softmax", "serial"), ("reduce", "serial"), ("reduce", "cooperative_128"),
+    ("softmax", "serial"), ("softmax", "cooperative_128"), ("reduce", "serial"), ("reduce", "cooperative_128"),
 ])
 def test_unary_package_rejects_swapped_tile_buffers_before_compilation(family, schedule, monkeypatch):
     import re
 
     artifact = scheduled_kernel.lower_scheduled_kernel(
-        _module(family=family, target="nvidia_sm120"), target="nvidia_sm120", schedule=schedule)
+        _module(family=family, target="nvidia_sm120"), target="nvidia_sm120",
+        schedule=schedule)
     pattern = rf"(tile\.{family}_kernel\s+)(%[\w]+), (%[\w]+)"
     altered, count = re.subn(pattern, lambda m: f"{m[1]}{m[3]}, {m[2]}", artifact.tile_ir)
     assert count == 1 and altered != artifact.tile_ir

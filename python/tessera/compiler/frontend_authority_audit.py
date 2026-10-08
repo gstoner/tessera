@@ -70,6 +70,14 @@ _EXACT_TARGET_PACKETS = {
 }
 
 
+# Newly registered families must bind their own architecture-specific proof.
+# The generic ROCm alias is not covered by the gfx1201-only packet.
+_EXACT_FAMILY_TARGET_PACKETS = {
+    ("scaled_product_transpose", "rocm_gfx1201"): "tests/device/rocm/test_public_scaled_vjp.py",
+    ("scaled_product_transpose", "rocm"): None,
+}
+
+
 @dataclass(frozen=True)
 class FamilyRow:
     family: str
@@ -152,7 +160,9 @@ def collect_target_rows() -> list[FamilyTargetRow]:
     result: list[FamilyTargetRow] = []
     for row in collect_rows():
         for target in row.targets:
-            packet = _EXACT_TARGET_PACKETS.get(target)
+            packet = _EXACT_FAMILY_TARGET_PACKETS.get(
+                (row.family, target), _EXACT_TARGET_PACKETS.get(target)
+            )
             result.append(
                 FamilyTargetRow(
                     family=row.family,
@@ -236,6 +246,8 @@ def render_dashboard() -> str:
         "every declared family in one process, validate independent numerical "
         "oracles, require runtime-origin physical attestations, and compare "
         "the observed family/target set exactly with the live declarations. "
+        "Family-specific packets cover their named architecture and envelope; "
+        "they do not inherit coverage from legacy whole-target packets. "
         "A test double produces only `runtime_unattested` evidence and cannot "
         "satisfy these packets.\n\n"
         f"- declared family/target rows: **{len(target_rows)}**\n"

@@ -16,7 +16,10 @@ static FailureOr<NativePagedKV> pagedKVContract(Operation *graph) {
   if (!fn || !llvm::hasSingleElement(fn.getBody()) || fn.getNumArguments() != 2 ||
       fn.getNumResults() != 1 || graph->getNumOperands() != 2 || graph->getNumResults() != 1 ||
       (!sm120 && !gfx1151 && !gfx1201) ||
-      graph->getOperand(0) != fn.getArgument(0) || graph->getOperand(1) != fn.getArgument(1) ||
+      !((graph->getOperand(0) == fn.getArgument(0) &&
+         graph->getOperand(1) == fn.getArgument(1)) ||
+        (graph->getOperand(0) == fn.getArgument(1) &&
+         graph->getOperand(1) == fn.getArgument(0))) ||
       graph->getResultTypes() != fn.getResultTypes())
     return graph->emitError("paged read requires an isolated SM120, gfx1151, or gfx1201 tensor entry"), failure();
   for (unsigned i = 0; i < fn.getNumArguments(); ++i)

@@ -76,7 +76,7 @@ def _generic_materialized_package():
     tessera_opt = find_tessera_opt()
     if tessera_opt is None:
         raise RuntimeError("generic MXFP4 evidence requires TESSERA_OPT")
-    fixture = ROOT / "tests/tessera-ir/phase2/e2e_scaled_matmul_rocm_target.mlir"
+    fixture = ROOT / "tests/tessera-ir/phase2/e2e_mxfp4_ingest_rocm.mlir"
     common = [
         str(tessera_opt),
         "--tessera-graph-to-schedule",

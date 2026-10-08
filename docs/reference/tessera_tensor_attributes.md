@@ -180,3 +180,14 @@ JAX also provides two dtype behaviors Tessera should mirror over time:
 - Target capability gates: `python/tessera/compiler/capabilities.py`.
 - Primitive dtype/layout contract status:
   `python/tessera/compiler/primitive_coverage.py`.
+
+### Explicit gated storage annotations
+
+A planned/gated storage declaration may use an explicitly gated Dtype token,
+for example Tensor["M", "G", Dtype("uint8", allow_planned_gated=True)].
+The annotation and emitted Graph argument carry dtype_status="planned_gated".
+Concrete tracer storage must match the declared storage. Bare "uint8" Tensor
+annotations remain refused. Admission does not imply general arithmetic or
+backend support; the consuming operation and target verify their storage,
+packing and numerical contracts. gfx1201 MXFP8 uses these bytes as E8M0
+K32 scales, not integer arithmetic operands.

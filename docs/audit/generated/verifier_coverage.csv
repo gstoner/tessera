@@ -99,6 +99,7 @@ src/compiler/ir/TesseraOps.td,ExpOp,1,1,real
 src/compiler/ir/TesseraOps.td,ExpandOp,1,1,real
 src/compiler/ir/TesseraOps.td,Expm1Op,1,1,real
 src/compiler/ir/TesseraOps.td,FFTOp,1,1,real
+src/compiler/ir/TesseraOps.td,FlashAttnBwdOp,1,1,real
 src/compiler/ir/TesseraOps.td,FlashAttnOp,1,1,real
 src/compiler/ir/TesseraOps.td,FlattenOp,1,1,real
 src/compiler/ir/TesseraOps.td,FloorDivOp,1,1,real
@@ -162,6 +163,7 @@ src/compiler/ir/TesseraOps.td,MSASelectBlocksOp,1,1,real
 src/compiler/ir/TesseraOps.td,MSASparseAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,MSELossBackwardOp,1,1,real
 src/compiler/ir/TesseraOps.td,MSELossOp,1,1,real
+src/compiler/ir/TesseraOps.td,MXFP4FoldedStorageOp,1,1,real
 src/compiler/ir/TesseraOps.td,MaskedFillOp,1,1,real
 src/compiler/ir/TesseraOps.td,MatmulOp,1,1,real
 src/compiler/ir/TesseraOps.td,MaximumOp,1,1,real
@@ -179,6 +181,7 @@ src/compiler/ir/TesseraOps.td,MorScatterOp,1,1,real
 src/compiler/ir/TesseraOps.td,MulOp,1,1,real
 src/compiler/ir/TesseraOps.td,MultiHeadAttentionOp,1,1,real
 src/compiler/ir/TesseraOps.td,NTKRopeOp,1,1,real
+src/compiler/ir/TesseraOps.td,NVFP4RequantizeOp,1,1,real
 src/compiler/ir/TesseraOps.td,NativeSparseAttnFusedOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeOp,1,1,real
 src/compiler/ir/TesseraOps.td,NeighborsHaloExchangeOp,1,1,real

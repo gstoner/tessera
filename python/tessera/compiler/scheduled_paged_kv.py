@@ -66,8 +66,8 @@ def lower_scheduled_paged_kv(names: tuple[str, str, str], dims: tuple[int, ...])
     return artifact
 
 
-def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVArtifact:
-    """Lower the caller's typed Graph op; only bindings are added at admission."""
+def project_scheduled_paged_kv_graph(module, *, target: str) -> str:
+    """Project a copy of the typed Graph; native passes own subsequent IR."""
     if target not in {"rocm_gfx1151", "rocm_gfx1201"}:
         raise ValueError("ROCm paged read Schedule admission requires gfx1151 or gfx1201")
     from .rocm_native import _paged_kv_contract
@@ -86,7 +86,17 @@ def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVAr
     source.module_attrs.update({"tessera.target": json.dumps(target),
                                 "tessera.arch": json.dumps(architecture)})
     source.functions[0].fn_attrs["tessera.bindings"] = json.dumps((pages, table, output))
-    graph = source.to_mlir(target=target, canonical=True)
+    return source.to_mlir(target=target, canonical=True)
+
+
+def lower_scheduled_paged_kv_graph(module, *, target: str) -> ScheduledPagedKVArtifact:
+    graph = project_scheduled_paged_kv_graph(module, target=target)
+    from .rocm_native import _paged_kv_contract
+
+    contract = _paged_kv_contract(module)
+    if contract is None:
+        raise ValueError("paged read lost its admitted Graph contract")
+    pages, table, output, dims = contract
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("paged read requires production tessera-opt")

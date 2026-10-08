@@ -232,12 +232,14 @@ msa_sparse_attention,state,,1,1,0
 mse_loss,pure,,1,1,0
 mul,pure,,1,1,0
 multi_head_attention,state,,1,1,1
+mxfp4_folded_storage,pure,,1,1,0
 ne,pure,,1,1,0
 nesterov,pure,,1,1,0
 nonzero,pure,,1,1,0
 norm,pure,,1,1,0
 normalize_group_advantages,pure,,1,1,0
 ntk_rope,pure,,1,1,0
+nvfp4_requantize,pure,,1,1,0
 pack,movement,,1,1,0
 pad,pure,,1,1,0
 permute,pure,,1,1,0
@@ -277,6 +279,7 @@ rope_merge,pure,,1,1,0
 rope_split,pure,,1,1,0
 round,pure,,1,1,0
 rsqrt,pure,,1,1,0
+scaled_matmul,pure,,1,1,0
 scatter,pure,,1,1,0
 scatter_add,pure,,1,1,0
 scatter_reduce,pure,,1,1,0

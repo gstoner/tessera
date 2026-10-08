@@ -467,3 +467,13 @@ def test_external_breadth_requires_proved_lowering_and_unshadowed_consumer(
         "def package_graph_breadth(module, **kwargs):\n    " + body + "\n")
     monkeypatch.setattr(audit, "_COMPILER", tmp_path)
     assert audit._packager_is_generic_scheduled("x86", "breadth") is expected
+
+
+@pytest.mark.parametrize("attribute", ["softcap", "softmax", "source_span", "solver"])
+def test_metadata_attribute_is_not_a_shared_library_delegate(attribute):
+    assert audit._packager_kind(f"x = artifact.{attribute}; _compile_tile_ir(x)") == "constructs_tile_ir"
+
+
+@pytest.mark.parametrize("library", ["libcustom.so", "libcustom.so.1", "/opt/libcustom.so"])
+def test_shared_library_suffix_still_counts_as_delegation(library):
+    assert audit._packager_kind(f"load({library!r})") == "delegates"

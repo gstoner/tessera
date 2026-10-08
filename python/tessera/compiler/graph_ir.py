@@ -231,11 +231,13 @@ def _canonicalize_spectral_attrs(
 _KEYWORD_OPERANDS: Dict[str, tuple[str, ...]] = {
     # Matmul epilogues preserve value lineage: bias and residual are tensor
     # edges, while activation/output policy remains attributes.
+    "tessera.flash_attn": ("attn_bias",),
     "tessera.matmul": ("bias", "residual"),
     # Affine normalization has a fixed ABI: data, scale, bias. Alphabetical
     # fallback used to silently swap beta/gamma in the legacy candidate.
     "tessera.layer_norm": ("gamma", "beta"),
     "tessera.rmsnorm": ("gamma",),
+    "tessera.kv_cache.read": ("page_table",),
     # NSA branch 3: per-block scores (B, H, S_q, num_blocks), unwrapped and
     # `np.asarray`d by the reference exactly like Q/K/V. A real operand.
     "tessera.attn_top_k_blocks": ("scores",),
@@ -367,6 +369,9 @@ def apply_presence_flags(
 # Values are the required keyword-only attribute names, so a rename in the
 # reference signature is caught rather than silently emitting a stale key.
 _KEYWORD_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
+    "tessera.scaled_matmul": ("scale_layout", "numeric_policy", "physical_contract", "transposeA", "transposeB", "batching"),
+    "tessera.nvfp4_requantize": ("numeric_policy", "row_offsets"),
+    "tessera.mxfp4_folded_storage": ("storage_contract",),
     "tessera.es_low_rank_correction": ("out_dim", "rank", "sigma"),
     "tessera.attn_sliding_window": ("window_size",),
     "tessera.attn_top_k_blocks": ("top_k", "block_size"),
@@ -399,7 +404,21 @@ def _scalar_const_env(fn: Any) -> Dict[str, Any]:
     """Scalar constants visible to ``fn`` — closure free vars + module globals —
     so a positional scalar param passed by *name* (``top_k(x, k)`` with ``k`` a
     free variable) resolves to its value as an op attribute, like a literal.
-    Only int/float/bool/str are captured (the kinds that lower to attributes)."""
+    Plain literal lists/tuples/dictionaries are copied for structured attributes;
+    tensors, arbitrary objects and executable expressions are never captured."""
+    from copy import deepcopy
+    def attribute_literal(value: Any, depth: int = 0) -> bool:
+        if depth > 16:
+            return False
+        if type(value) in (int, float, bool, str, type(None)):
+            return True
+        if type(value) in (list, tuple):
+            return all(attribute_literal(item, depth + 1) for item in value)
+        if type(value) is dict:
+            return all(type(key) is str and attribute_literal(item, depth + 1)
+                for key, item in value.items())
+        return False
+
     env: Dict[str, Any] = {}
     code = getattr(fn, "__code__", None)
     closure = getattr(fn, "__closure__", None)
@@ -409,13 +428,13 @@ def _scalar_const_env(fn: Any) -> Dict[str, Any]:
                 val = cell.cell_contents
             except ValueError:
                 continue
-            if isinstance(val, (int, float, bool, str)):
-                env[name] = val
+            if attribute_literal(val):
+                env[name] = deepcopy(val)
     g = getattr(fn, "__globals__", None)
     if isinstance(g, dict) and code is not None:
         for name in code.co_names:
-            if name not in env and isinstance(g.get(name), (int, float, bool, str)):
-                env[name] = g[name]
+            if name not in env and name in g and attribute_literal(g[name]):
+                env[name] = deepcopy(g[name])
     return env
 
 
@@ -474,6 +493,13 @@ def _mlir_dtype(dtype: Optional[str]) -> str:
         "nvfp4": "!tessera.nvfp4",
         "int4": "i4",
         "int8": "i8",
+        # Packed checkpoint contracts use an unsigned byte container. This
+        # builtin spelling does not change canonical dtype admission: uint8
+        # remains planned/gated and does not imply a logical FP4 dtype.
+        "uint8": "ui8",
+        "uint16": "ui16",
+        "uint32": "ui32",
+        "uint64": "ui64",
         "int16": "i16",
         "int32": "i32",
         "int64": "i64",
@@ -909,9 +935,14 @@ class IRArg:
     layout: Optional[str] = None
     model_parameter: bool = False
     model_parameter_bytes_bound: Optional[int] = None
+    dtype_status: Optional[str] = None
 
     def to_mlir(self) -> str:
         attrs = []
+        if self.dtype_status:
+            if self.dtype_status != "planned_gated":
+                raise ValueError("invalid Graph argument dtype_status")
+            attrs.append('tessera.dtype_status = "planned_gated"')
         if self.effect:
             attrs.append(f'tessera.effect = "{self.effect}"')
         if self.shard_spec:
@@ -1008,9 +1039,13 @@ class IROp:
         ops_str = ", ".join(self.operands)
         types_in = ", ".join(self.operand_types)
         names = self.result_names
-        if names and self.result_type:
+        result_type = self.result_type
+        if self.inferred_types:
+            result_type = (str(self.inferred_types[0]) if len(self.inferred_types) == 1
+                           else "(" + ", ".join(map(str, self.inferred_types)) + ")")
+        if names and result_type:
             lhs = ", ".join(f"%{n}" for n in names) + " = "
-            type_str = f" : ({types_in}) -> {self.result_type}"
+            type_str = f" : ({types_in}) -> {result_type}"
         elif names:
             lhs = ", ".join(f"%{n}" for n in names) + " = "
             type_str = ""
@@ -1020,16 +1055,22 @@ class IROp:
         attr_parts = []
         if self.attrs:
             attr_parts.append(self.attrs)
+        # None denotes absence for these optional attention modifiers.
+        # Keep every other attribute so native admission can diagnose it.
+        nullable_attention_attrs = {"bias", "window", "softcap", "logit_softcap", "dropout", "dropout_p"}
+        attention = self.op_name in {"tessera.flash_attn", "tessera.flash_attn_bwd"}
         attr_parts.extend(
             f"{key} = {_format_named_attr(key, value)}"
             for key, value in self.kwargs.items()
+            if not (attention and value is None and key in nullable_attention_attrs)
+            and not (self.op_name == "tessera.scaled_matmul" and key in {"batching", "physical_contract"} and value is None)
         )
         # Dense attention carries its physical head width in ODS. Infer it
         # from Q when the caller did not supply it; keep explicit values so
         # the verifier can diagnose disagreement instead of silently fixing it.
         dense_attention = (
             self.op_name == "tessera.flash_attn"
-            and len(self.operand_types) == 3
+            and len(self.operand_types) in {3, 4}
             and all(re.fullmatch(r"tensor<(?:[0-9]+|\?)x(?:[0-9]+|\?)x(?:[0-9]+|\?)x[0-9]+x(?:f16|bf16|f32|f64)>", t)
                     for t in self.operand_types)
         )
@@ -1118,6 +1159,9 @@ class IROp:
 
 
 def _format_named_attr(key: str, value: Any) -> str:
+    # The registered dropout attribute is F64 even when a caller writes 0.
+    if key == "dropout_p" and isinstance(value, int) and not isinstance(value, bool):
+        return _format_attr_value(float(value))
     if key in {"numeric_policy", "scale_layout"} and isinstance(value, dict):
         return _format_dictionary_attr(value)
     return _format_attr_value(value)
@@ -1788,6 +1832,8 @@ class _OpExtractor(ast.NodeVisitor):
         # 1`` for arg ``a``) immediately versions.
         self._taken_ssa_names: set[str] = set(arg_names)
         self._name_alias: Dict[str, str] = {name: name for name in arg_names}
+        # Tuple bindings preserve each SSA component through local rebinding.
+        self._tuple_alias: Dict[str, tuple[str, ...]] = {}
         # The function's returned SSA values + their IR types, captured at the
         # `return` statement so the built GraphIRFunction declares real outputs.
         self.return_values: List[str] = []
@@ -1843,6 +1889,16 @@ class _OpExtractor(ast.NodeVisitor):
             return
         tgt = node.targets[0]
         if isinstance(tgt, ast.Name):
+            if isinstance(node.value, ast.Name):
+                components = self._tuple_alias.get(node.value.id)
+                if components is not None:
+                    self._tuple_alias[tgt.id] = components
+                    self._name_alias.pop(tgt.id, None)
+                else:
+                    rhs_ssa = self._resolve_ssa_name(node.value.id)
+                    self._tuple_alias.pop(tgt.id, None)
+                    self._name_alias[tgt.id] = rhs_ssa
+                return
             # SSA-renaming (audit-fix 2026-05-31): reserve a unique SSA
             # name for this assignment BEFORE evaluating the RHS, but
             # only adopt it as the current alias *after* the RHS emits.
@@ -1850,9 +1906,16 @@ class _OpExtractor(ast.NodeVisitor):
             # right-hand side; only afterward does ``c`` resolve to the
             # new SSA.
             ssa_name = self._reserve_ssa_for_assign(tgt.id)
-            if self._emit_expr(node.value, result_name=ssa_name) is not None:
-                # Adopt the new SSA name as the current alias.
-                self._name_alias[tgt.id] = ssa_name
+            before = len(self.ops)
+            value = self._emit_expr(node.value, result_name=ssa_name)
+            if value is not None:
+                emitted = self.ops[-1] if len(self.ops) > before else None
+                if emitted is not None and len(emitted.result_names) > 1:
+                    self._tuple_alias[tgt.id] = tuple("%" + name for name in emitted.result_names)
+                    self._name_alias.pop(tgt.id, None)
+                else:
+                    self._tuple_alias.pop(tgt.id, None)
+                    self._name_alias[tgt.id] = value.removeprefix("%")
                 return
             # ``_emit_expr`` returned None — release the reserved name
             # so a later assignment can reuse it.
@@ -1875,11 +1938,17 @@ class _OpExtractor(ast.NodeVisitor):
             # from the body rather than failing. Declaring a multi-result
             # contract and emitting both SSA results is only half of it if no
             # Python spelling can bind them.
-            first = self._emit_expr(node.value)
-            if first is None:
-                return
-            emitted = self.ops[-1] if self.ops else None
-            names = emitted.result_names if emitted is not None else []
+            components = (self._tuple_alias.get(node.value.id)
+                          if isinstance(node.value, ast.Name) else None)
+            if components is not None:
+                names = [value.removeprefix("%") for value in components]
+            else:
+                before = len(self.ops)
+                first = self._emit_expr(node.value)
+                if first is None:
+                    return
+                emitted = self.ops[-1] if len(self.ops) > before else None
+                names = emitted.result_names if emitted is not None else []
             if len(names) != len(tgt.elts):
                 # Arity mismatch: bind what we can rather than silently
                 # dropping the statement, and leave the rest unbound so a
@@ -1889,6 +1958,7 @@ class _OpExtractor(ast.NodeVisitor):
             # the checker, so bind through an explicitly-typed list.
             targets = [e for e in tgt.elts if isinstance(e, ast.Name)]
             for target, ssa in zip(targets, names):
+                self._tuple_alias.pop(target.id, None)
                 self._name_alias[target.id] = ssa
             return
         elif isinstance(tgt, ast.Subscript):
@@ -1911,6 +1981,13 @@ class _OpExtractor(ast.NodeVisitor):
     def visit_Return(self, node: ast.Return) -> None:
         if node.value is None:
             return
+        if isinstance(node.value, ast.Name) and node.value.id in self._tuple_alias:
+            values = self._tuple_alias[node.value.id]
+            if all(self._is_defined_value(value) for value in values):
+                self.return_values = list(values)
+                self.return_result_types = [self._value_types.get(value, TENSOR_OPAQUE)
+                                            for value in values]
+                return
         # Capture the returned SSA value(s) + type(s) so the function declares
         # real outputs (tuple returns → multiple values). If any element can't
         # be lowered to an SSA value, OR it resolves to a value that isn't
@@ -1932,6 +2009,12 @@ class _OpExtractor(ast.NodeVisitor):
                 return
             names.append(ssa)
             types.append(self._value_types.get(ssa, TENSOR_OPAQUE))
+        if isinstance(node.value, ast.Call) and len(names) == 1:
+            producer = next((op for op in reversed(self.ops)
+                if op.result_names and "%" + op.result_names[0] == names[0]), None)
+            if producer is not None and len(producer.result_names) > 1:
+                names = ["%" + name for name in producer.result_names]
+                types = [self._value_types.get(name, TENSOR_OPAQUE) for name in names]
         self.return_values = names
         self.return_result_types = types
 
@@ -2319,7 +2402,21 @@ class _OpExtractor(ast.NodeVisitor):
                 self._value_types[f"%{op.result}"] = _ir_type
             self.ops.append(op)
             return f"%{op.result}"
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name):
+            components = self._tuple_alias.get(node.value.id)
+            if components is not None:
+                try:
+                    index = ast.literal_eval(node.slice)
+                except (ValueError, TypeError):
+                    index = None
+                if type(index) is int and -len(components) <= index < len(components):
+                    return components[index]
+                self._unsupported(node, "multi-result tuple selection requires an in-range integer index")
+                return None
         if isinstance(node, ast.Name):
+            if node.id in self._tuple_alias:
+                self._unsupported(node, "multi-result tuple requires destructuring or component selection")
+                return None
             return f"%{self._resolve_ssa_name(node.id)}"
         if isinstance(node, ast.Attribute) and node.attr == "T":
             value = self._emit_expr(node.value)
@@ -2482,6 +2579,9 @@ class _OpExtractor(ast.NodeVisitor):
             # (Decision #30) rather than from the call syntax.
             if value_name and self._is_defined_value(value_name):
                 kw_operands[kw.arg] = value_name
+            elif isinstance(kw.value, ast.Name) and kw.value.id in self._const_env:
+                from copy import deepcopy
+                kwargs[kw.arg] = deepcopy(self._const_env[kw.value.id])
             else:
                 kwargs[kw.arg] = value_name or "?"
 
@@ -2539,6 +2639,15 @@ class _OpExtractor(ast.NodeVisitor):
                 "numeric_policy",
                 {"storage": "fp32", "softmax": "fp32", "accum": "fp32"},
             )
+
+        if (mlir_name == "tessera.kv_cache.read" and len(inferred_operands) == 2
+                and inferred_operands[0].rank == 4
+                and inferred_operands[1].rank == 1
+                and inferred_operands[1].dtype == "int32"
+                and kwargs.get("end") is None
+                and isinstance(kwargs.get("start"), int)
+                and not isinstance(kwargs["start"], bool)):
+            kwargs["end"] = kwargs["start"] + 1
 
         result_types = _infer_result_types(
             mlir_name,
@@ -2620,6 +2729,26 @@ def _span_from_ast(node: ast.AST) -> SourceSpan:
 
 def _shape_same_as_first(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     return operand_types[0]
+
+
+def _shape_attention_value_width(operand_types: List[IRType],
+                                 attrs: Optional[Dict[str, Any]] = None):
+    q = operand_types[0]
+    checkpoint = (attrs or {}).get("lse_checkpoint")
+    if checkpoint not in (None, "saved"):
+        raise ValueError("attention lse_checkpoint must be None or saved")
+    if len(operand_types) < 3:
+        output = tensor_ir_type(("*",), q.dtype, layout=q.layout)
+        lse = tensor_ir_type(("*",), "fp32", layout=q.layout)
+    else:
+        v = operand_types[2]
+        if q.rank is None or v.rank is None or q.rank < 2 or v.rank < 2:
+            output = tensor_ir_type(("*",), q.dtype, layout=q.layout)
+            lse = tensor_ir_type(("*",), "fp32", layout=q.layout)
+        else:
+            output = tensor_ir_type((*q.shape[:-1], v.shape[-1]), q.dtype, layout=q.layout)
+            lse = tensor_ir_type(q.shape[:-1], "fp32", layout=q.layout)
+    return (output, lse) if checkpoint == "saved" else output
 
 
 def _shape_matmul_2d(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
@@ -3935,6 +4064,18 @@ def _shape_state_handle(operand_types: List[IRType],
     return HANDLE_KV_CACHE
 
 
+def _shape_moe_dispatch(operand_types: List[IRType],
+                        attrs: Optional[Dict[str, Any]] = None) -> IRType:
+    x = operand_types[0]
+    if len(operand_types) == 2:
+        token = operand_types[1]
+        if x.rank == 2 and token.rank == 1 and token.dtype == "int32":
+            return tensor_ir_type((token.shape[0], x.shape[1]), x.dtype, layout=x.layout)
+    # Opaque DispatchPlan transport retains its existing frontier; the tensor
+    # contract is distinguishable by its typed index operand.
+    return x
+
+
 def _shape_kv_cache_read(operand_types: List[IRType],
                          attrs: Optional[Dict[str, Any]] = None):
     """`kv_cache.read(cache, start, end) -> (K, V)` — TENSORS, not a handle.
@@ -3949,6 +4090,24 @@ def _shape_kv_cache_read(operand_types: List[IRType],
     fifth. The shapes stay opaque because they depend on the cache's runtime
     extent, but the ARITY and the tensor-ness are known and now stated.
     """
+    if len(operand_types) == 2:
+        pages, table = operand_types
+        if pages.rank == 4 and table.rank == 1 and table.dtype == "int32":
+            attrs = attrs or {}
+            start = attrs.get("start")
+            end = attrs.get("end")
+            if end is None and isinstance(start, int) and not isinstance(start, bool):
+                end = start + 1
+            if (not isinstance(start, int) or isinstance(start, bool)
+                    or not isinstance(end, int) or isinstance(end, bool)):
+                raise ValueError("paged kv_cache_read requires static integer start/end")
+            if start < 0 or end <= start:
+                raise ValueError("paged kv_cache_read requires a nonempty valid interval")
+            page_size, logical_pages = _dim(pages.shape[1]), _dim(table.shape[0])
+            if page_size is not None and logical_pages is not None and end > page_size * logical_pages:
+                raise ValueError("paged kv_cache_read interval exceeds logical page capacity")
+            return tensor_ir_type((str(end-start), pages.shape[2], pages.shape[3]),
+                                  pages.dtype, layout=pages.layout)
     return (TENSOR_OPAQUE, TENSOR_OPAQUE)
 
 
@@ -3995,8 +4154,185 @@ def _shape_alibi_bias(operand_types: List[IRType],
     return tensor_ir_type((heads, sequence, sequence), "fp32")
 
 
+
+def _shape_scaled_matmul(operands, attrs):
+    """Logical output shape of an explicitly scaled four-operand product."""
+    attrs = attrs or {}
+    if len(operands) != 4:
+        raise ValueError("scaled_matmul requires A, B and two scale operands")
+    a,b,sa,sb=operands
+    physical=attrs.get("physical_contract")
+    transpose_a, transpose_b = (attrs.get(name, False) for name in ("transposeA", "transposeB"))
+    if type(transpose_a) is not bool or type(transpose_b) is not bool:
+        raise ValueError("scaled_matmul transpose attributes must be boolean")
+    packed=physical=="rocm_mxfp4_w4a8_packed_folded_prefill_v1"
+    output="bf16" if packed else "fp32"
+    if a.rank is None or b.rank is None:
+        return tensor_ir_type(("*",),output)
+    if attrs.get("batching") == "broadcast":
+        if physical is not None:
+            raise ValueError("scaled_matmul broadcast requires a semantic typed product")
+        if any(t.rank is None for t in operands):
+            return tensor_ir_type(("*",), "fp32")
+        if any(t.rank < 2 for t in operands):
+            raise ValueError("scaled_matmul broadcast requires matrix and scale suffixes")
+        m, ka = a.shape[-2:][::-1] if transpose_a else a.shape[-2:]
+        kb, n = b.shape[-2:][::-1] if transpose_b else b.shape[-2:]
+        if ka != kb and "?" not in (ka, kb):
+            raise ValueError("scaled_matmul logical K differs")
+        prefix: Tuple[str, ...] = ()
+        for operand in operands:
+            if any(d.isdigit() and int(d) <= 0 for d in operand.shape):
+                raise ValueError("scaled_matmul broadcast requires positive extents")
+            own = operand.shape[:-2]
+            depth = max(len(prefix), len(own))
+            lhs = ("1",) * (depth - len(prefix)) + prefix
+            rhs = ("1",) * (depth - len(own)) + own
+            if any(x.isdigit() and y.isdigit() and x != y and
+                   x != "1" and y != "1" for x, y in zip(lhs, rhs)):
+                raise ValueError("scaled_matmul operand prefixes do not broadcast")
+            prefix = _broadcast_batch(prefix, own)
+        return tensor_ir_type((*prefix, m, n), "fp32")
+    if attrs.get("batching") in {"shared_rhs_rows","independent_rhs","shared_lhs"} and physical is None:
+        policy=attrs["batching"]
+        lhs_batched=policy!="shared_lhs"
+        rhs_batched=policy!="shared_rhs_rows"
+        if ((a.rank < 3 if lhs_batched else a.rank != 2) or (b.rank < 3 if rhs_batched else b.rank != 2)
+                or sa.rank != a.rank or sb.rank != b.rank
+                or a.dtype != "fp8_e4m3" or b.dtype != "fp8_e4m3" or transpose_a):
+            raise ValueError("typed batches require explicit E4M3 matrix/scale batch storage and no lhs transpose")
+        batch=b.shape[:-2] if not lhs_batched else a.shape[:-2]
+        m,k=a.shape[-2:]
+        kb,n=b.shape[-2:][::-1] if transpose_b else b.shape[-2:]
+        if ((k != kb and "?" not in (k,kb)) or
+                (lhs_batched and rhs_batched and b.shape[:-2]!=batch)):
+            raise ValueError("typed batch K or batch extent differs")
+        return tensor_ir_type((*batch,m,n),"fp32")
+    if attrs.get("batching") in {"shared_rhs_rows", "independent_rhs", "shared_lhs"}:
+        shared_lhs = attrs["batching"] == "shared_lhs"
+        lhs_batched = not shared_lhs
+        rhs_batched = attrs["batching"] != "shared_rhs_rows"
+        if (physical != "nvidia_sm120_nvfp4_blockscale_v1"
+                or (a.rank < 3 if lhs_batched else a.rank != 2)
+                or (b.rank < 3 if rhs_batched else b.rank != 2)
+                or a.dtype != "nvfp4" or b.dtype != "nvfp4"):
+            raise ValueError("NVFP4 batching requires declared logical matrix/scale batch storage")
+        effective_a = (*a.shape[:-2], a.shape[-1], a.shape[-2]) if transpose_a else a.shape
+        effective_b = (*b.shape[:-2], b.shape[-1], b.shape[-2]) if transpose_b else b.shape
+        prefix = tuple(map(int,effective_b[:-2] if shared_lhs else effective_a[:-2]))
+        import math
+        batch = math.prod(prefix)
+        m, k = map(int, effective_a[-2:])
+        kb, n = map(int, effective_b[-2:])
+        if rhs_batched and tuple(map(int,effective_b[:-2])) != prefix:
+            raise ValueError("independent RHS batch count differs")
+        scale_k = (k + 15) // 16
+        expected_sa: tuple[str, ...] = (str(m), str(scale_k))
+        expected_sb: tuple[str, ...] = (str(scale_k), str(n))
+        if lhs_batched: expected_sa = (*map(str,prefix), *expected_sa)
+        if rhs_batched: expected_sb = (*map(str,prefix), *expected_sb)
+        if transpose_a: expected_sa = (*expected_sa[:-2], expected_sa[-1], expected_sa[-2])
+        if transpose_b: expected_sb = (*expected_sb[:-2], expected_sb[-1], expected_sb[-2])
+        if (min(*prefix, m, k, n) <= 0 or batch * m > 2**63 - 1 or k != kb
+                or sa.dtype != "uint8" or sb.dtype != "uint8"
+                or sa.shape != expected_sa or sb.shape != expected_sb):
+            raise ValueError("NVFP4 batch shapes/scales differ")
+        return tensor_ir_type((*prefix, m, n), "fp32")
+    if attrs.get("batching") is not None:
+        raise ValueError("scaled_matmul batching policy is unknown")
+    if a.rank!=2 or b.rank!=2:
+        raise ValueError("scaled_matmul frontend requires rank-two operands")
+    if packed:
+        try:
+            m,k=map(int,a.shape);n,half_k=map(int,b.shape)
+        except (ValueError,TypeError):
+            raise ValueError("packed folded frontend requires static M/N/K") from None
+        if (m<=0 or n<=0 or n%16 or k<=0 or k%64 or half_k*2!=k
+                or a.dtype!="uint8" or b.dtype!="uint8"
+                or sa.dtype!="fp32" or sa.shape!=(str(m),)
+                or sb.dtype!="uint8" or sb.shape!=(str(k//32+1),str(n))):
+            raise ValueError("packed folded frontend operand shape/storage differs")
+        return tensor_ir_type((m,n),"bf16")
+    if physical=="nvidia_sm120_nvfp4_blockscale_v1":
+        if a.dtype is None or b.dtype is None:
+            # Decoration-time Tensor annotations describe logical dimensions
+            # but do not yet distinguish logical NVFP4 from legacy bytes.
+            # Defer the RHS extent until concrete storage specializes tracing.
+            return tensor_ir_type((a.shape[0], "?"), "fp32")
+        if a.dtype == "nvfp4" or b.dtype == "nvfp4":
+            if a.dtype != "nvfp4" or b.dtype != "nvfp4":
+                raise ValueError("NVFP4 scaled_matmul requires matching logical storage")
+            m, ka = a.shape[::-1] if transpose_a else a.shape
+            kb, n = b.shape[::-1] if transpose_b else b.shape
+            if ka != kb and "?" not in (ka, kb):
+                raise ValueError("NVFP4 scaled_matmul logical K differs")
+            return tensor_ir_type((m, n), "fp32")
+        if a.shape[1]!=str(int(b.shape[1])*2):
+            raise ValueError("NVFP4 scaled_matmul packed K differs")
+        return tensor_ir_type((a.shape[0],b.shape[0]),"fp32")
+    if physical in {"rocm_fp8_w8a8_blockscale_nk_v1","rocm_mxfp8_e4m3_e8m0_k32_nk_v1"}:
+        if a.shape[1]!=b.shape[1]:
+            raise ValueError("scaled_matmul NK storage has conflicting K")
+        return tensor_ir_type((a.shape[0],b.shape[0]),"bf16")
+    if physical is not None:
+        return TENSOR_OPAQUE
+    transpose_a = attrs.get("transposeA", False)
+    transpose_b = attrs.get("transposeB", False)
+    if not isinstance(transpose_a, bool) or not isinstance(transpose_b, bool):
+        raise ValueError("scaled_matmul transpose attributes must be boolean")
+    m, ka = (a.shape[1], a.shape[0]) if transpose_a else a.shape
+    kb, n = (b.shape[1], b.shape[0]) if transpose_b else b.shape
+    if ka != kb and "?" not in (ka, kb):
+        raise ValueError("scaled_matmul logical K differs")
+    return tensor_ir_type((m,n),"fp32")
+
+
+def _shape_mxfp4_folded_storage(operands, attrs):
+    if len(operands)!=2:
+        raise ValueError("MXFP4 storage bridge requires two byte containers")
+    if operands[0].rank is None:
+        return (IRType("tensor<*xui8>",("*",),"uint8"),
+                IRType("tensor<*xui8>",("*",),"uint8"))
+    if len(operands[0].shape)!=2:
+        raise ValueError("MXFP4 storage bridge requires rank-two packed bytes")
+    try:
+        n,half_k=map(int,operands[0].shape)
+    except (ValueError,TypeError):
+        raise ValueError("MXFP4 storage bridge requires static N/K") from None
+    k=half_k*2
+    if n<=0 or n%16 or k<=0 or k%64:
+        raise ValueError("MXFP4 storage bridge requires positive N16/K64")
+    return (tensor_ir_type((n,half_k),"uint8"),
+            tensor_ir_type((k//32+1,n),"uint8"))
+
+
+def _shape_nvfp4_requantize(operands, attrs):
+    if len(operands) != 3:
+        raise ValueError("NVFP4 ingest requires three checkpoint operands")
+    if operands[0].rank is None:
+        # Decoration captures an unranked frontend signature; concrete tracing
+        # resolves all three results before any native package is admitted.
+        return (IRType("tensor<*xui8>", ("*",), "uint8"),
+                IRType("tensor<*xui8>", ("*",), "uint8"),
+                IRType("tensor<*xf64>", ("*",), "fp64"))
+    if len(operands[0].shape) != 2:
+        raise ValueError("NVFP4 ingest requires rank-two packed codes")
+    try:
+        n, packed_k = map(int, operands[0].shape)
+    except (ValueError,TypeError):
+        raise ValueError("NVFP4 ingest requires static checkpoint extents") from None
+    if n<=0 or packed_k<=0 or packed_k%16:
+        raise ValueError("NVFP4 ingest requires positive N/K32")
+    return (tensor_ir_type((n,packed_k),"uint8"),
+            tensor_ir_type((packed_k//16,n),"uint8"),
+            tensor_ir_type((n,packed_k//16,2),"fp64"))
+
+
 _SHAPE_RULES = {
     "same_as_first": _shape_same_as_first,
+    "nvfp4_requantize": _shape_nvfp4_requantize,
+    "mxfp4_folded_storage": _shape_mxfp4_folded_storage,
+    "scaled_matmul": _shape_scaled_matmul,
     "alibi_bias": _shape_alibi_bias,
     "matrix_scalar": _shape_matrix_scalar,
     "vec": _shape_vec,
@@ -4028,6 +4364,7 @@ _SHAPE_RULES = {
     "transpose": _shape_transpose,
     "reduce_trailing": _shape_reduce_trailing,
     "depth_attention": _shape_depth_attention,
+    "attention_value_width": _shape_attention_value_width,
     "matmul_trailing": _shape_matmul_trailing,
     "same_as_second": _shape_same_as_second,
     "conv_spatial": _shape_conv_spatial,
@@ -4066,6 +4403,7 @@ _SHAPE_RULES = {
     "layout_permute": _shape_layout_permute,
     "state_handle": _shape_state_handle,
     "kv_cache_read": _shape_kv_cache_read,
+    "moe_dispatch": _shape_moe_dispatch,
     "all_gather": _shape_all_gather,
     "reduce_scatter": _shape_reduce_scatter,
     # Not yet classified. Same result as the historical fallback, but reached
@@ -4268,6 +4606,10 @@ def _parse_mlir_tensor_type(text: str) -> IRType:
         "!tessera.nvfp4": "nvfp4",
         "i4": "int4",
         "i8": "int8",
+        "ui8": "uint8",
+        "ui16": "uint16",
+        "ui32": "uint32",
+        "ui64": "uint64",
         "i16": "int16",
         "i32": "int32",
         "i64": "int64",
@@ -4337,7 +4679,8 @@ def ir_args_from_signature(fn: Callable) -> List[IRArg]:
                     dim_names = tuple(str(dim) for dim in shape)
 
         args.append(IRArg(name=param_name, ir_type=ir_type, effect=effect,
-                          dim_names=dim_names, layout=layout))
+                          dim_names=dim_names, layout=layout,
+                          dtype_status=getattr(ann, "dtype_status", None)))
     return args
 
 
@@ -4660,6 +5003,12 @@ def specialize_module_from_values(
                 # the canonical name (`fp8_e4m3`, not `f8E4M3FN`).
                 dtype = {"float8_e4m3fn": "fp8_e4m3", "float8_e5m2": "fp8_e5m2",
                          "float4_e2m1fn": "fp4_e2m1"}.get(str(arr.dtype))
+            if (dtype is None and arr.dtype == np.dtype(np.uint8)
+                    and arg.dtype_status == "planned_gated"
+                    and arg.ir_type.dtype == "uint8"):
+                # Preserve an explicit encoded-storage declaration; an
+                # ndarray byte dtype alone never admits gated Graph storage.
+                dtype = "uint8"
             if dtype is None:
                 raise TypeError(f"unsupported specialization dtype {arr.dtype}")
             arg.ir_type = tensor_ir_type(tuple(int(d) for d in arr.shape), dtype)

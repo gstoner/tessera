@@ -34,8 +34,9 @@ def test_proof_binds_current_generators_and_checkers() -> None:
     identity = _identity()
     assert identity["architecture"] == "gfx1201"
     folded = "python/tessera/compiler/rocm_mxfp4_folded.py"
+    packed = "python/tessera/compiler/rocm_mxfp4_packed_folded.py"
     for path, digest in identity["relabel_generator_sha256"].items():
-        if path == folded:
+        if path in {folded,packed}:
             continue  # checked by emitted-source identity below
         assert _sha(ROOT / path) == digest, path
     # GFX1201-LANES-2026-09-27 added an opt-in load schedule to the folded
@@ -51,6 +52,22 @@ def test_proof_binds_current_generators_and_checkers() -> None:
         full_k64, safe = (part.split("=")[1] == "true" for part in key.split(","))
         source = emit_mxfp4_folded_prefill_hip(full_k64=full_k64, safe_epilogue=safe)
         assert hashlib.sha256(source.encode()).hexdigest() == digest, key
+    # Native packaging helpers were added alongside the legacy packed
+    # producer. Preserve sealed timings and compare the emitted legacy source
+    # rather than invalidating them for unrelated module additions.
+    from tessera.compiler.rocm_mxfp4_packed_folded import emit_mxfp4_packed_folded_prefill_hip
+    current=BASE / "rocm_ingest_resident_20261005"
+    emitted=json.loads((current / "legacy_packed_emission_identity.json").read_text())
+    assert emitted["historical_generator_sha256"]==identity["relabel_generator_sha256"][packed]
+    assert emitted["generator_path"]==packed
+    labels={key.split("/")[1].removeprefix("packed_") for key in identity["instruction_streams"]["variants"]
+            if "/packed_" in key}
+    assert len(labels)==10
+    assert set(emitted["flags"])==set(emitted["emission_sha256"])==labels
+    assert _sha(current / "record_legacy_packed_emission_identity.py")==emitted["recorder_sha256"]
+    for label,flags in emitted["flags"].items():
+        source=emit_mxfp4_packed_folded_prefill_hip(**flags)
+        assert hashlib.sha256(source.encode()).hexdigest()==emitted["emission_sha256"][label],label
     for name, digest in identity["checker_sha256"].items():
         assert _sha(PROOF / name) == digest, name
 

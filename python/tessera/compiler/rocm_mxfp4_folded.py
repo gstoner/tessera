@@ -631,6 +631,54 @@ def package_mxfp4_folded_prefill(
         compile_state="cold",
         device_libraries=_driver_selected_device_libraries(arch="gfx1201"),
     )
+    return _bind_folded_prefill_image(
+        m, n, k, folded, image=image, entry=entry, source=source,
+        backend_ir=" ".join(command[:-2]), allow_approximate=allow_approximate,
+        schedule=schedule, safe_epilogue_scales=safe_epilogue_scales,
+    )
+
+
+def _bind_folded_prefill_image(
+    m: int, n: int, k: int, folded: FoldedRowReference, *,
+    image: NativeImageArtifact, entry: str, source: str, backend_ir: str,
+    allow_approximate: bool,
+    schedule: FoldedPrefillSchedule,
+    safe_epilogue_scales: np.ndarray | None = None,
+) -> ROCMNativePackage:
+    """Bind a checked physical payload/ABI to an already materialized image."""
+    if not isinstance(schedule, FoldedPrefillSchedule):
+        raise TypeError("folded MXFP4 schedule must be a FoldedPrefillSchedule")
+    if not allow_approximate or folded.approximate_policy != "explicit_allow":
+        raise ValueError("folded MXFP4 requires explicit approximate policy")
+    if min(m, n, k) <= 0 or k % 32:
+        raise ValueError("folded MXFP4 requires positive M/N and K divisible by 32")
+    if m <= 64:
+        raise ValueError("folded BM256/TM4 route requires prefill M > 64")
+    if folded.weight_bytes.shape != (n, k) or folded.row_reference.shape != (n,):
+        raise ValueError("folded payload disagrees with M/N/K")
+    if folded.weight_bytes.dtype != np.uint8 or folded.row_reference.dtype != np.uint8:
+        raise TypeError("folded payload requires raw E4M3 and E8M0 uint8 arrays")
+    if not folded.weight_bytes.flags.c_contiguous or not folded.row_reference.flags.c_contiguous:
+        raise ValueError("folded payload must be contiguous at package load")
+    if np.any(folded.row_reference == 255):
+        raise ValueError("folded E8M0 row reference code 255 is reserved")
+    # The Graph/Target carrier requires K64 slabs. Direct K32 callers retain
+    # the masked final slab; never infer this property inside HIP from a shape.
+    full_k64 = k % 64 == 0
+    if schedule.staging_prefetch != "none" and not full_k64:
+        raise ValueError("folded register prefetch requires K divisible by 64")
+    safe_certificate = (
+        certify_folded_safe_scales(safe_epilogue_scales, folded.row_reference)
+        if safe_epilogue_scales is not None else None
+    )
+    if safe_epilogue_scales is not None and safe_epilogue_scales.shape != (m,):
+        raise ValueError("safe epilogue activation scales disagree with M")
+    abi_id = (GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
+              if safe_certificate is not None else GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI)
+    if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
+        raise ValueError("folded image must target gfx1201")
+    if not any(e.symbol == entry and e.abi_id == abi_id for e in image.entry_points):
+        raise ValueError("folded image entry disagrees with the checked ABI")
     provenance = {
         "work_item": "ROCM-MXFP4-W4A8-1",
         "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
@@ -689,7 +737,7 @@ def package_mxfp4_folded_prefill(
     )
     return ROCMNativePackage(
         f"rocm.mxfp4_w4a8 folded_row_reference M={m} N={n} K={k}",
-        source, " ".join(command[:-2]), image, descriptor,
+        source, backend_ir, image, descriptor,
     )
 
 

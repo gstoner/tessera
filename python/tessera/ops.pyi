@@ -1,4 +1,4 @@
-from typing import Any, Iterable, Literal, Mapping, Optional, Sequence, Tuple, TypedDict, Union
+from typing import Any, Iterable, Literal, Mapping, Optional, Sequence, Tuple, TypedDict, Union, overload
 
 DType = Literal[
     "fp32",
@@ -216,6 +216,7 @@ def fused_epilogue(
     cast_dtype: Optional[DType] = ...,
 ) -> Tensor: ...
 def qkv_projection(x: Tensor, W_qkv: Tensor) -> Tuple[Tensor, Tensor, Tensor]: ...
+@overload
 def flash_attn(
     Q: Tensor,
     K: Tensor,
@@ -229,7 +230,24 @@ def flash_attn(
     params: Optional[FlashParams] = ...,
     deterministic: Optional[Determinism] = ...,
     attn_bias: Optional[Tensor] = ...,
+    lse_checkpoint: None = ...,
 ) -> Tensor: ...
+@overload
+def flash_attn(
+    Q: Tensor,
+    K: Tensor,
+    V: Tensor,
+    *,
+    scale: Optional[float] = ...,
+    causal: bool = ...,
+    cache: Optional[Any] = ...,
+    dropout_p: float = ...,
+    seed: Optional[int] = ...,
+    params: Optional[FlashParams] = ...,
+    deterministic: Optional[Determinism] = ...,
+    attn_bias: Optional[Tensor] = ...,
+    lse_checkpoint: Literal["saved"],
+) -> Tuple[Tensor, Tensor]: ...
 def varlen_sdpa(
     Q: Tensor,
     K: Tensor,

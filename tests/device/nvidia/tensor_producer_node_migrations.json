@@ -1,0 +1,36 @@
+{
+  "owner": "W1.1",
+  "migration": "tensor-producer-epilogues-20261006",
+  "migrations": [
+    {
+      "source_file": "tests/unit/test_nvidia_tensor_program.py",
+      "destination_file": "tests/device/nvidia/test_tensor_producer_epilogues.py",
+      "test_name": "test_resident_tensor_edge_executes_complete_epilogue"
+    },
+    {
+      "source_file": "tests/unit/test_nvidia_tensor_program.py",
+      "destination_file": "tests/device/nvidia/test_tensor_producer_epilogues.py",
+      "test_name": "test_host_tensor_edge_uses_the_complete_epilogue_contract"
+    },
+    {
+      "source_file": "tests/unit/test_sm120_legacy_scheduled_producer.py",
+      "destination_file": "tests/device/nvidia/test_tensor_producer_epilogues.py",
+      "test_name": "test_legacy_sm120_producer_executes_native_schedule_package"
+    },
+    {
+      "source_file": "tests/unit/test_sm120_legacy_scheduled_producer.py",
+      "destination_file": "tests/device/nvidia/test_tensor_producer_epilogues.py",
+      "test_name": "test_legacy_dynamic_fused_package_reuses_checked_runtime_shapes"
+    },
+    {
+      "source_file": "tests/unit/test_sm120_legacy_scheduled_producer.py",
+      "destination_file": "tests/device/nvidia/test_tensor_producer_epilogues.py",
+      "test_name": "test_sm120_canonical_tensor_loop_package_executes"
+    },
+    {
+      "source_file": "tests/unit/test_sm120_legacy_scheduled_producer.py",
+      "destination_file": "tests/device/nvidia/test_tensor_producer_epilogues.py",
+      "test_name": "test_permuted_tensor_producer_executes_native_package"
+    }
+  ]
+}

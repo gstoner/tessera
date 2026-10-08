@@ -155,9 +155,9 @@ class DeviceClock:
         if status != 0:
             raise RuntimeError(f"device-clock {what} failed rc={status}")
 
-    def _marker(self) -> None:
+    def _marker(self, stream=None) -> None:
         self._check(self.hip.hipModuleLaunchKernel(
-            self.function, 1, 1, 1, 1, 1, 1, 0, None, self._argv, None,
+            self.function, 1, 1, 1, 1, 1, 1, 0, stream, self._argv, None,
         ), "marker launch")
 
     def window(self, engine: base._Engine, launches: int, *, bracketed: bool) -> dict[str, Any]:

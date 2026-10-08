@@ -138,6 +138,7 @@ target_link_libraries(TesseraPasses
   PUBLIC
     TesseraIR
     TesseraScheduleIR
+    TesseraPM
     TesseraCollectiveDialect
     MLIRIR
     MLIRAnalysis

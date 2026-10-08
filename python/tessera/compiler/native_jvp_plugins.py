@@ -47,10 +47,11 @@ class NativeJVPPluginDeclaration:
             or not self.tile_consumer.startswith("tile.")
         ):
             raise ValueError("canonical native JVP plugins require Schedule and Tile consumers")
-        if not {"x86", "rocm"}.issubset(self.target_consumers) or any(
+        if (not self.target_consumers or
+                not set(self.target_consumers).issubset({"x86","rocm","nvidia_sm120"})) or any(
             not value for value in self.target_consumers.values()
         ):
-            raise ValueError("native JVP declaration requires x86 and ROCm Target consumers")
+            raise ValueError("native JVP declaration requires explicit supported Target consumers")
 
 
 Planner = Callable[..., NativeJVPFamilyPlan]
@@ -691,6 +692,72 @@ def _source_kwargs_spectral_arguments(
     }
 
 
+@register_native_jvp_plugin(
+    "flash_attn", family="attention_checkpoint",
+    schedule_consumer="schedule.artifact",
+    tile_consumer="tile.alloc_shared",
+    target_consumers={"nvidia_sm120":"nvidia.sm120_saved_lse_jvp"},
+)
+def _plan_attention_checkpoint(*, primal_inputs, wrt_indices, target,
+                               architecture, execution_mode, ir_contract=None, **_):
+    import os
+    import re
+    from pathlib import Path
+    from .native_attention_program import compile_attention_program
+    from .scheduled_matmul import find_tessera_opt
+    if (target,architecture,execution_mode)!=("nvidia_sm120","sm120","cuda_runtime"):
+        raise ValueError("attention JVP requires its native SM120 consumer")
+    if len(primal_inputs) not in (3,4) or any(str(x.dtype)!="float32" for x in primal_inputs):
+        raise ValueError("attention JVP requires fp32 Q/K/V and optional bias frontend inputs")
+    if not isinstance(ir_contract,Mapping):
+        raise ValueError("attention JVP requires its traced native IR binding")
+    compiler=find_tessera_opt()
+    if compiler is None:
+        raise ValueError("attention JVP requires the selected native compiler")
+    program=compile_attention_program(
+        re.sub(r'=\s+(tessera\.[A-Za-z0-9_.]+)\(',r'= "\1"(',
+               ir_contract["source_graph_ir"]),wrt_indices,compiler=compiler,
+        llvm_bin=os.environ.get("TESSERA_NATIVE_STORAGE_LLVM_BIN",
+            str(Path(os.environ.get("LLC","/usr/lib/llvm-23/bin/llc")).parent)),
+        input_names=tuple(ir_contract["input_names"]))
+    names=[f"primal_{i}" for i in range(len(primal_inputs))]+[f"tangent_{i}" for i in wrt_indices]
+    child={
+        "target":target,"compiler_path":"nvidia_sm120_attention_jvp_compiled",
+        "executable":True,"execution_kind":"native_gpu","execution_mode":execution_mode,
+        "arg_names":names,"program_json":program.to_json(),
+        "program_digest":program.program_digest,
+    }
+    return NativeJVPFamilyPlan("attention_checkpoint",(
+        _step("attention_product",child,names,outputs=("primal","tangent")),))
+
+
+@register_native_jvp_plugin(
+    "scaled_matmul", family="scaled_product_program",
+    schedule_consumer="schedule.artifact",
+    tile_consumer="tile.scaled_matmul_kernel",
+    target_consumers={"rocm":"rocm.gfx1201_native_scaled_program"},
+)
+def _plan_scaled_product_program(*, primal_inputs, wrt_indices, target,
+                                 architecture, execution_mode, ir_contract=None, **_):
+    from .native_scaled_program import package_native_scaled_jvp
+    if (target,architecture,execution_mode)!=("rocm","gfx1201","hip_runtime"):
+        raise ValueError("scaled FP8 JVP requires its native gfx1201 program consumer")
+    if (not 4 <= len(primal_inputs) <= 128 or not wrt_indices
+            or len(set(wrt_indices)) != len(wrt_indices)
+            or any(type(i) is not int or not 0 <= i < len(primal_inputs)
+                   or str(primal_inputs[i].dtype) != "float32" for i in wrt_indices)):
+        raise ValueError("scaled FP8 JVP requires floating scale tangent roles")
+    if not isinstance(ir_contract,Mapping):
+        raise ValueError("scaled FP8 JVP requires its traced native Graph")
+    program=package_native_scaled_jvp(ir_contract["source_graph_ir"])
+    names=[f"primal_{i}" for i in range(len(primal_inputs))]+[f"tangent_{i}" for i in wrt_indices]
+    child={"target":target,"compiler_path":"rocm_scaled_jvp_program_compiled",
+           "executable":True,"execution_kind":"native_gpu","execution_mode":execution_mode,
+           "arg_names":names,"native_scaled_program":program.to_manifest()}
+    return NativeJVPFamilyPlan("scaled_product_program",(
+        _step("scaled_product",child,names,outputs=("primal","tangent")),))
+
+
 def plan_native_jvp_family(
     *, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[int, ...],
     target: str, architecture: str, execution_mode: str,
@@ -742,7 +809,7 @@ def native_jvp_plugin_declarations() -> Mapping[str, NativeJVPPluginDeclaration]
 def build_native_jvp_family_artifact(
     *, source: Any, primal_inputs: Sequence[Any], wrt_indices: tuple[int, ...],
     target: str, architecture: str, execution_mode: str, source_graph_ir: str,
-    paired_jvp_ir: str, arg_names: Sequence[str],
+    paired_jvp_ir: str, arg_names: Sequence[str], input_names: Sequence[str] = (),
 ) -> tuple[NativeJVPFamilyPlan, Any]:
     """Plan and construct a native package entirely inside the family boundary."""
     from .native_jvp import build_native_jvp_artifact
@@ -753,6 +820,8 @@ def build_native_jvp_family_artifact(
         )
         if source.op_name == "tessera.istft" else None
     )
+    if source.op_name in {"tessera.flash_attn", "tessera.scaled_matmul"}:
+        ir_contract={"source_graph_ir":source_graph_ir,"input_names":list(input_names)}
     plan = plan_native_jvp_family(
         source=source, primal_inputs=primal_inputs, wrt_indices=wrt_indices,
         target=target, architecture=architecture, execution_mode=execution_mode,
@@ -798,7 +867,7 @@ def build_native_jvp_family_artifact(
         "consumer": plan.declaration.schedule_consumer,
         "actions": schedule_actions,
     }
-    if ir_contract is not None:
+    if ir_contract is not None and plan.family == "spectral_compound":
         # The Graph->Schedule artifact the compiler minted for the paired
         # tessera.istft_jvp; the package is bound to it, not to the kwargs.
         schedule_program["graph_schedule_artifact"] = str(ir_contract["artifact_hash"])

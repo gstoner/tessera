@@ -23,6 +23,8 @@
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
+#include "ROCMNativeProgramMember.h"
+#include "Tessera/IR/StructuredReductionContract.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -335,6 +337,28 @@ struct GenerateROCMReduceKernelPass
 
   void runOnOperation() override {
     ModuleOp module = getOperation();
+    SmallVector<Operation *> structured;
+    module.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera_rocm.structured_reduction")
+        structured.push_back(op);
+    });
+    for (auto op : structured) {
+      if (failed(tessera::verifyStructuredReductionCarrier(op))) return signalPassFailure();
+      auto name = op->getAttrOfType<StringAttr>("name");
+      auto count = op->getAttrOfType<IntegerAttr>("count").getInt();
+      auto threads = op->getAttrOfType<IntegerAttr>("workgroup_size").getInt();
+      const int64_t scalars[] = {count};
+      bool wave = op->getAttrOfType<StringAttr>("algorithm").getValue() == "wave_per_scale_element";
+      const int64_t geometry[] = {wave ? count : (count + threads - 1) / threads, 1, 1, threads, 1, 1};
+      if (failed(projectROCMNativeProgramMember(module, name.getValue(), 4, scalars, geometry,
+          op->getAttrOfType<StringAttr>("algorithm").getValue())))
+        return signalPassFailure();
+      // The GPU region already contains the actual verified native SSA.
+      // Move it across the target boundary; never synthesize its arithmetic.
+      auto *gpuModule = &op->getRegion(0).front().front();
+      gpuModule->moveBefore(op);
+      op->erase();
+    }
     SmallVector<Operation *> directives;
     module.walk([&](Operation *op) {
       if (op->getName().getStringRef() == "tessera_rocm.reduce")

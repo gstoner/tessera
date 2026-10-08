@@ -58,6 +58,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
@@ -205,21 +206,41 @@ def toolchain_identity(
     return ToolchainIdentity(family, _family_components(family), dict(delegate or {}))
 
 
-_FILE_DIGESTS: dict[tuple[str, int, int], str] = {}
+_FILE_DIGESTS: dict[tuple, str] = {}
+_FILE_DIGEST_LOCK = threading.Lock()
 
 
 def _file_digest(path: Path) -> str:
-    st = path.stat()
-    key = (str(path), st.st_mtime_ns, st.st_size)
-    cached = _FILE_DIGESTS.get(key)
-    if cached is None:
-        h = hashlib.sha256()
-        with path.open("rb") as fh:
+    path = path.resolve()
+    def signature(st):
+        return (st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns)
+    with path.open("rb") as fh:
+        before = os.fstat(fh.fileno())
+        key = (str(path), *signature(before))
+        with _FILE_DIGEST_LOCK:
+            cached = _FILE_DIGESTS.get(key)
+        if cached is None:
+            h = hashlib.sha256()
             for chunk in iter(lambda: fh.read(1 << 20), b""):
                 h.update(chunk)
-        cached = "sha256:" + h.hexdigest()
+            cached = "sha256:" + h.hexdigest()
+        if signature(os.fstat(fh.fileno())) != signature(before) or signature(path.stat()) != signature(before):
+            raise RuntimeError("toolchain binary changed while computing its content identity")
+    with _FILE_DIGEST_LOCK:
+        if key not in _FILE_DIGESTS and len(_FILE_DIGESTS) >= 128:
+            # Bounded identities; eviction affects only recomputation cost.
+            _FILE_DIGESTS.pop(next(iter(_FILE_DIGESTS)))
         _FILE_DIGESTS[key] = cached
     return cached
+
+
+def binary_content_digest(path: Path) -> str:
+    """Exact SHA-256 with per-process reuse only for the same stable file.
+
+    Atomic replacement, same-size edits with restored mtime, and symlink
+    retargeting invalidate the identity. An in-flight rebuild is rejected.
+    """
+    return _file_digest(Path(path)).removeprefix("sha256:")
 
 
 _IDENTITIES: dict[tuple[str, int, int, str | None], dict[str, str]] = {}

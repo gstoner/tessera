@@ -36,10 +36,21 @@ namespace tessera {
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildAdjoint(
     mlir::OpBuilder &builder, mlir::ValueRange cotangents) {
-  if (!denseAttentionAD(*this) || cotangents.size() != 1 || !cotangents[0]) return {};
+  if (!denseAttentionAD(*this, true, true) || cotangents.size() != getNumResults() ||
+      llvm::none_of(cotangents, [](mlir::Value value) { return bool(value); })) return {};
+  auto zeroIfInactive = [&](mlir::Value primal, mlir::Value seed) {
+    if (seed) return seed;
+    auto type = mlir::cast<mlir::RankedTensorType>(primal.getType());
+    return mlir::arith::ConstantOp::create(builder, getLoc(),
+        mlir::DenseElementsAttr::get(type, builder.getF32FloatAttr(0.0))).getResult();
+  };
+  auto outputSeed = zeroIfInactive(getOperation()->getResult(0), cotangents[0]);
   auto saved = attentionCheckpoint(builder, *this, false, getOperands());
   if (!saved) return {};
-  llvm::SmallVector<mlir::Value> args{cotangents[0], getOperand(0), getOperand(1), getOperand(2), saved->getResult(1)};
+  llvm::SmallVector<mlir::Value> args{outputSeed, getOperand(0), getOperand(1), getOperand(2), saved->getResult(0), saved->getResult(1)};
+  if (getNumOperands() == 4) args.insert(args.end() - 1, getOperand(3));
+  if (getNumResults() == 2)
+    args.push_back(zeroIfInactive(getOperation()->getResult(1), cotangents[1]));
   auto backward = attentionCheckpoint(builder, *this, true, args);
   if (!backward) return {};
   return llvm::SmallVector<mlir::Value>(backward->getResults());

@@ -1,5 +1,6 @@
 include "TesseraROCMDialect.td"
 include "mlir/Interfaces/SideEffectInterfaces.td"
+include "mlir/IR/SymbolInterfaces.td"
 
 class TesseraROCM_Op<string mnemonic, list<Trait> traits = []>
   : Op<TesseraROCMDialect, mnemonic, traits>;
@@ -72,6 +73,11 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     lowering (`_lower_rocm_op` on `tile.mma`) now EMITS this directive, so it is
     produced by the IR stack (not only synthesized by the runtime).
 
+    **ABI.** portable_abi = true records the Schedule/Tile argument order
+    A, B, optional bias, D, M, N, K. The default false preserves the legacy
+    directive order A, B, D, M, N, K, optional bias. This physical attribute
+    survives shape-independent projection and participates in image identity.
+
     **Fused epilogue.** `bias` (default false) appends a per-output-column bias
     operand (a `memref<?>` of length N, accumulator dtype) that is added to each
     accumulator element before the activation. `activation` (default `"none"`)
@@ -89,6 +95,9 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
     kernel sums the slices in fixed order `0..S-1` and applies the epilogue
     once. `split_k_reduction` names that order and is required whenever
     `split_k > 1`; `ordered` is the only admitted value. The pair carries a
+    k_blocks preserves the Schedule macro-K panel count. A split directive
+    additionally carries positive problem_k, binding its partition extent;
+    M/N remain runtime dimensions. These fields participate in image identity.
     Tessera contract upstream ROCDL has no field for -- the determinism of
     the reduction -- which is what earns it a place here (Decision #19).
   }];
@@ -97,9 +106,12 @@ def ROCM_WMMAGemmOp : TesseraROCM_Op<"wmma_gemm"> {
                        DefaultValuedAttr<I64Attr, "1">:$nt,
                        DefaultValuedAttr<ROCM_GemmDTypeAttr, "\"f16\"">:$dtype,
                        DefaultValuedAttr<BoolAttr, "false">:$bias,
+                       DefaultValuedAttr<BoolAttr, "false">:$portable_abi,
                        DefaultValuedAttr<StrAttr, "\"none\"">:$activation,
                        DefaultValuedAttr<I64Attr, "1">:$split_k,
-                       DefaultValuedAttr<StrAttr, "\"\"">:$split_k_reduction);
+                       DefaultValuedAttr<StrAttr, "\"\"">:$split_k_reduction,
+                       DefaultValuedAttr<I64Attr, "1">:$k_blocks,
+                       OptionalAttr<I64Attr>:$problem_k);
   let assemblyFormat = "attr-dict";
   let hasVerifier = 1;
 }
@@ -139,6 +151,18 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
     the Tessera contract upstream ROCDL cannot carry -- which scale multiplies
     which partial -- and so earns its place here (Decision #19).
 
+    Native image identity may project a verified one-wave global W8A8
+    directive to runtime_shape with m/n/k = 0. M/N/K then come exclusively
+    from the checked launch ABI; scale-group divisibility and buffer extents
+    remain descriptor-owned. This contract is not valid for the static LDS
+    body or other scaled physical contracts. The LDS W8A8 projection instead
+    uses runtime_mn with m/n=0 and positive static k. whole_m/whole_n carry
+    the panel-divisibility class that selects masked or unmasked stores;
+    raster geometry uses runtime M/N, while K staging remains image-owned.
+    With runtime_k as well, k=0 and the scale-group loop bound and last-stage
+    prefetch clamp come from runtime K. The launch must require positive K
+    divisible by scale_k; stage geometry and edge classes remain image keys.
+
     The W8A8 form also states its physical schedule (performance keys,
     GFX1201-PERF-2026-09-27): `staging` is `global` for the one-wave register
     panel or `lds` for the multi-wave LDS-staged workgroup of `warps` waves
@@ -164,6 +188,13 @@ def ROCM_ScaledWMMAGemmOp : TesseraROCM_Op<"scaled_wmma_gemm"> {
                        // for the W8A8 contract (one scale per scale_n
                        // columns per K group). Absent for every MX form.
                        OptionalAttr<I64Attr>:$scale_n,
+                       OptionalAttr<UnitAttr>:$runtime_shape,
+                       OptionalAttr<UnitAttr>:$runtime_mn,
+                       OptionalAttr<UnitAttr>:$runtime_k,
+                       OptionalAttr<BoolAttr>:$whole_m,
+                       OptionalAttr<BoolAttr>:$whole_n,
+                       OptionalAttr<StrAttr>:$schedule_raster_order,
+                       OptionalAttr<I64Attr>:$schedule_raster_group,
                        OptionalAttr<StrAttr>:$staging,
                        OptionalAttr<I64Attr>:$warps,
                        OptionalAttr<I64Attr>:$pipeline_depth,
@@ -1157,7 +1188,8 @@ def ROCM_ScanKernelOp : TesseraROCM_Op<"scan"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<ROCM_ScanKindAttr, "\"cumsum\"">:$kind,
-                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
+                       OptionalAttr<ROCM_FloatDTypeAttr>:$output_dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -1180,7 +1212,8 @@ def ROCM_UnaryKernelOp : TesseraROCM_Op<"unary"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<ROCM_UnaryKindAttr, "\"exp\"">:$kind,
-                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
+                       OptionalAttr<ROCM_FloatDTypeAttr>:$output_dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -1202,7 +1235,8 @@ def ROCM_BinaryKernelOp : TesseraROCM_Op<"binary"> {
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<ROCM_BinaryKindAttr, "\"sub\"">:$kind,
-                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype);
+                       DefaultValuedAttr<ROCM_FloatDTypeAttr, "\"f32\"">:$dtype,
+                       OptionalAttr<ROCM_FloatDTypeAttr>:$output_dtype);
   let assemblyFormat = "attr-dict";
 }
 
@@ -1596,4 +1630,39 @@ def ROCM_MsaBlockSparseOp : TesseraROCM_Op<"msa_block_sparse"> {
 def ROCM_ProfilerProbeOp : TesseraROCM_Op<"profiler_probe"> {
   let summary = "Intra-kernel profiler probe on the ROCm target lane";
   let assemblyFormat = "attr-dict";
+}
+
+
+// Physical ingest leaf. Graph/Schedule integration must preserve this named
+// lossy conversion rather than normalizing it into an ordinary cast.
+def ROCM_NVFP4IngestPolicyAttr
+    : DictionaryAttrBase<CPred<"::llvm::isa<::mlir::DictionaryAttr>($_self)">,
+                         "checkpoint requantization numeric policy dictionary">;
+def ROCM_NVFP4RequantizeOp : TesseraROCM_Op<"nvfp4_requantize"> {
+  let summary = "Policy-gated NVFP4 K16 to packed MXFP4 K32 joint-SSE ingest";
+  let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$n, I64Attr:$k,
+      I64ArrayAttr:$row_offsets, StrAttr:$execution_mode,
+      StrAttr:$source_layout, StrAttr:$destination_layout,
+      OptionalAttr<ROCM_NVFP4IngestPolicyAttr>:$numeric_policy, OptionalAttr<StrAttr>:$schedule_hash);
+  let assemblyFormat = "attr-dict";
+  let hasVerifier = 1;
+}
+
+def ROCM_MXFP4FoldedStorageOp : TesseraROCM_Op<"mxfp4_folded_storage"> {
+  let summary = "Native lossless MXFP4 fragment-byte and row-reference storage bridge";
+  let arguments = (ins StrAttr:$name, I64Attr:$n, I64Attr:$k, StrAttr:$arch,
+      StrAttr:$storage_contract, StrAttr:$schedule_hash);
+  let results = (outs);
+  let hasVerifier = 1;
+}
+
+def ROCM_StructuredReductionOp : TesseraROCM_Op<"structured_reduction",
+    [SingleBlock, NoTerminator, SymbolTable, RecursiveMemoryEffects]> {
+  let summary = "gfx1201 native structured scale-adjoint region";
+  let arguments = (ins StrAttr:$name, StrAttr:$arch, I64Attr:$count,
+      I64Attr:$input_count, I64Attr:$workgroup_size,
+      StrAttr:$algorithm, StrAttr:$artifact_hash, StrAttr:$body_hash);
+  let regions = (region AnyRegion:$body);
+  let assemblyFormat = "attr-dict-with-keyword $body";
+  let hasVerifier = 1;
 }

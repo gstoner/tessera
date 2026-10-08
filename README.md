@@ -82,6 +82,14 @@ not the destination for new shared lowering infrastructure.
 
 ## Development status
 
+Static rank-2/3 ROCm `sqrt`, `exp`, `add`, `div`, `cumsum` and `cummax`
+have ordinary `@jit` and portable native package proof on gfx1151 and gfx1201.
+Explicit Graph casts admit f16/bf16 input storage with f32 computation/output;
+native MLIR folds widening into loads. This is a bounded route, with
+[owning-device tests and separate kernel/host timings](benchmarks/baselines/rocm_native_math_20261006/README.md);
+general composition, dynamic layouts and AD remain active work.
+
+
 Support is specific to the operation, shape, dtype, layout, target and execution
 route. Consult the linked evidence before treating a whole backend or domain as
 supported.

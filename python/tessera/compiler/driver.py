@@ -542,6 +542,13 @@ def compile_graph_module(
     scheduled_depth_attention_artifact = None
     scheduled_checkpoint_artifact = None
     scheduled_paged_kv_artifact = None
+    from .scheduled_paged_kv import ScheduledPagedKVArtifact
+    from .scheduled_moe_dispatch import ScheduledMoeDispatchArtifact
+    scheduled_rocm_movement_artifact: ScheduledPagedKVArtifact | ScheduledMoeDispatchArtifact | None = None
+    scheduled_rocm_movement_kind = None
+    scheduled_math_recipe = None
+    scheduled_typed_scaled_program = None
+    scheduled_checkpoint_storage_module = None
     if bool(options.get("package_native", False)) and target_kind in {
         "x86",
         "rocm_gfx1151",
@@ -552,17 +559,41 @@ def compile_graph_module(
 
         from . import scheduled_depth_attention
 
-        from . import nvidia_native
+        from . import nvidia_native, rocm_native
         checkpoint_contract = None
         paged_contract = None
         if target_kind == "nvidia_sm120":
             checkpoint_contract = nvidia_native._attention_lse_contract(module) or nvidia_native._attention_backward_lse_contract(module)
             paged_contract = nvidia_native._paged_kv_contract(module)
-        if checkpoint_contract is not None:
-            from .scheduled_checkpoint import lower_scheduled_checkpoint
-            names, dims, scale, causal = checkpoint_contract
-            scheduled_checkpoint_artifact = lower_scheduled_checkpoint(
-                names, dims, scale, causal, backward=len(names) == 8)
+        from .rocm_nvfp4_ingest_native import (
+            supports_nvfp4_ingest,project_nvfp4_ingest_graph)
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage,project_mxfp4_storage_graph
+        from .rocm_math_native import supports_math, lower_math_graph
+        from .rocm_typed_scaled_native import supports_typed_scaled, lower_typed_scaled
+        if target_kind == "rocm_gfx1201" and supports_typed_scaled(module):
+            scheduled_typed_scaled_program = lower_typed_scaled(module)
+            graph_text = scheduled_typed_scaled_program.graph_ir
+        elif target_kind in {"rocm_gfx1151", "rocm_gfx1201"} and supports_math(module):
+            scheduled_math_recipe = lower_math_graph(module, target_kind)
+            graph_text = scheduled_math_recipe.graph_ir
+        elif target_kind=="rocm_gfx1201" and (supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)):
+            projector=project_nvfp4_ingest_graph if supports_nvfp4_ingest(module) else project_mxfp4_storage_graph
+            scheduled_checkpoint_storage_module=projector(module)
+            graph_text=scheduled_checkpoint_storage_module.to_mlir(target=target_kind,canonical=True)
+        elif target_kind in {"rocm_gfx1151", "rocm_gfx1201"} and rocm_native.supports_paged_kv_read(module):
+            from .scheduled_paged_kv import lower_scheduled_paged_kv_graph
+            scheduled_rocm_movement_kind = "paged_kv"
+            scheduled_rocm_movement_artifact = lower_scheduled_paged_kv_graph(module, target=target_kind)
+            graph_text = scheduled_rocm_movement_artifact.graph_ir
+        elif target_kind == "rocm_gfx1151" and rocm_native.supports_moe_dispatch(module):
+            from .scheduled_moe_dispatch import lower_scheduled_moe_dispatch
+            scheduled_rocm_movement_kind = "moe_dispatch"
+            scheduled_rocm_movement_artifact = lower_scheduled_moe_dispatch(module, target=target_kind)
+            graph_text = scheduled_rocm_movement_artifact.graph_ir
+        elif checkpoint_contract is not None:
+            from .scheduled_checkpoint import lower_checkpoint_graph
+            scheduled_checkpoint_artifact = lower_checkpoint_graph(
+                module, backward=nvidia_native.supports_attention_backward_lse(module))
             graph_text = scheduled_checkpoint_artifact.graph_ir
         elif paged_contract is not None:
             from .scheduled_paged_kv import lower_scheduled_paged_kv
@@ -708,6 +739,8 @@ def compile_graph_module(
             or scheduled_kernel_artifact is not None
             or scheduled_attention_artifact is not None
             or scheduled_depth_attention_artifact is not None
+            or scheduled_checkpoint_storage_module is not None
+            or scheduled_rocm_movement_artifact is not None
             else "graph-ir-renderer"
         ),
         representation="mlir",
@@ -822,6 +855,13 @@ def compile_graph_module(
             nvidia_package = nvidia_native.package_scheduled_checkpoint(scheduled_checkpoint_artifact, pipeline_name=producer)
         elif scheduled_paged_kv_artifact is not None:
             nvidia_package = nvidia_native.package_scheduled_paged_kv(scheduled_paged_kv_artifact, pipeline_name=producer)
+        elif scheduled_matmul_artifact is not None and scheduled_matmul_artifact.storage == "nvfp4":
+            # The scale-bearing NVFP4 ABI has five buffers, unlike the ordinary
+            # A/B/D matmul ABI. Keep the original Graph scale/batch contract.
+            nvidia_package = nvidia_native.package_nvfp4_matmul(
+                module, pipeline_name=producer, scheduled_artifact=scheduled_matmul_artifact)
+            if nvidia_package.tile_ir != scheduled_matmul_artifact.tile_ir:
+                raise ValueError("NVFP4 package does not match the retained native Schedule/Tile product")
         elif scheduled_matmul_artifact is not None:
             # Consume the shared Schedule -> launch-Tile artifact directly;
             # this keeps NVIDIA's physical lowering while removing the second
@@ -906,7 +946,47 @@ def compile_graph_module(
             (resolution.declared_pipeline or request.pipeline_name) if resolution is not None else request.pipeline_name
         )
         package_start = time.perf_counter()
-        if scheduled_depth_attention_artifact is not None:
+        if scheduled_typed_scaled_program is not None:
+            from .rocm_typed_scaled_native import package_typed_scaled
+            rocm_package = package_typed_scaled(module,scheduled_typed_scaled_program,pipeline_name=producer)
+            package_kind = "typed_scaled_matmul"
+            schedule,tile,target_artifact,backend_artifact=_scheduled_package_artifacts(
+                graph,scheduled_typed_scaled_program.schedule_ir,rocm_package.tile_ir,
+                target_kind,rocm_package.target_ir,rocm_package.backend_ir)
+        elif scheduled_math_recipe is not None:
+            from .rocm_math_native import package_math_recipe
+            rocm_package = package_math_recipe(scheduled_math_recipe, pipeline_name=producer)
+            package_kind = "math"
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph, scheduled_math_recipe.schedule_ir, rocm_package.tile_ir,
+                target_kind, rocm_package.target_ir, rocm_package.backend_ir)
+        elif scheduled_rocm_movement_artifact is not None:
+            package_kind = scheduled_rocm_movement_kind
+            packager = (rocm_native.package_paged_kv_read if package_kind == "paged_kv"
+                        else rocm_native.package_moe_dispatch)
+            rocm_package = packager(
+                module, pipeline_name=producer,
+                architecture=target_kind.removeprefix("rocm_"),
+                scheduled_artifact=scheduled_rocm_movement_artifact)
+            if rocm_package.tile_ir != scheduled_rocm_movement_artifact.tile_ir:
+                raise ValueError("packaged movement Tile disagrees with the native Schedule")
+            schedule, tile, target_artifact, backend_artifact = _scheduled_package_artifacts(
+                graph, scheduled_rocm_movement_artifact.schedule_ir, rocm_package.tile_ir,
+                target_kind, rocm_package.target_ir, rocm_package.backend_ir)
+        elif scheduled_checkpoint_storage_module is not None:
+            from .rocm_nvfp4_ingest_native import package_nvfp4_ingest_graph
+            from .rocm_mxfp4_storage_native import package_mxfp4_storage_graph,supports_mxfp4_storage
+            if supports_mxfp4_storage(scheduled_checkpoint_storage_module):
+                ingest_package=package_mxfp4_storage_graph(scheduled_checkpoint_storage_module)
+                package_kind="mxfp4_folded_storage"
+            else:
+                ingest_package=package_nvfp4_ingest_graph(scheduled_checkpoint_storage_module)
+                package_kind="nvfp4_requantize"
+            rocm_package=ingest_package.native
+            schedule,tile,target_artifact,backend_artifact=_scheduled_package_artifacts(
+                graph,ingest_package.schedule_ir,rocm_package.tile_ir,target_kind,
+                rocm_package.target_ir,rocm_package.backend_ir)
+        elif scheduled_depth_attention_artifact is not None:
             package_kind = "depth_attention"
             rocm_package = rocm_native.package_scheduled_depth_attention(
                 scheduled_depth_attention_artifact,
@@ -999,7 +1079,9 @@ def compile_graph_module(
                     "dtype": rocm_package.descriptor.buffers[0].dtype,
                     "op_family": package_kind,
                     "work_item": (
-                        "E2E-REAL-3"
+                        "E2E-REAL-6"
+                        if scheduled_rocm_movement_artifact is not None or scheduled_math_recipe is not None
+                        else "E2E-REAL-3"
                         if package_kind == "matmul"
                         else "E2E-REAL-5A"
                         if scheduled_attention_artifact is not None
@@ -1095,6 +1177,7 @@ def compile_graph_module(
                     "dtype": x86_package.descriptor.buffers[0].dtype,
                     "op_family": package_kind,
                     "work_item": (
+                        "ROCM-NVFP4-INGEST-1" if package_kind in {"nvfp4_requantize","mxfp4_folded_storage"} else
                         "E2E-REAL-3"
                         if scheduled_matmul_artifact is not None
                         else "E2E-REAL-5A"
@@ -1439,7 +1522,21 @@ def canonical_compile_options(
             supports_native_package,
         )
 
-        resolved["package_native"] = supports_native_package(module) and native_packaging_available()
+        from .rocm_math_native import supports_math
+        resolved["package_native"] = (supports_native_package(module) or supports_math(module)) and native_packaging_available()
+    if target_kind == "rocm_gfx1201" and "package_native" not in resolved:
+        from .rocm_native import native_packaging_available, supports_paged_kv_read, requests_softmax
+        from .scheduled_kernel import supports_scheduled_kernel
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest
+
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage
+        from .rocm_math_native import supports_math
+        from .rocm_typed_scaled_native import supports_typed_scaled
+        resolved["package_native"] = (
+            supports_typed_scaled(module) or supports_nvfp4_ingest(module) or supports_mxfp4_storage(module)
+            or supports_paged_kv_read(module) or supports_math(module)
+            or (requests_softmax(module) and supports_scheduled_kernel(module,target=target_kind))
+        ) and native_packaging_available()
     if target_kind == "x86" and "package_native" not in resolved:
         from .x86_native import supports_native_package, tools_available
 

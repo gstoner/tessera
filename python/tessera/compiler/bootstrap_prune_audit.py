@@ -244,7 +244,7 @@ _IR_CONSTRUCTION_RE = re.compile(
 _DELEGATION_MARKERS: tuple[str, ...] = (
     "nvrtc", "NVRTC", "hiprtc", "HIPRTC",
     "cublas", "cudnn", "cutlass", "rocblas", "hipblas",
-    ".so", "__global__", "ptx_emit", "libtessera",
+    "__global__", "ptx_emit", "libtessera",
 )
 
 
@@ -282,7 +282,10 @@ def _packager_kind(body: str) -> str:
     ``other``, which is a taxonomy that reports mostly nothing.
     """
     constructs = bool(_IR_CONSTRUCTION_RE.search(body))
-    delegates = any(marker in body for marker in _DELEGATION_MARKERS)
+    # A library suffix ends at a token boundary. Metadata attributes such as
+    # artifact.softcap/source_span are ordinary IR data, not library delegation.
+    delegates = bool(re.search(r"\.so\b", body)) or any(
+        marker in body for marker in _DELEGATION_MARKERS)
     if constructs and delegates:
         return "both"
     if constructs:

@@ -1,3 +1,4 @@
+#include <limits>
 //===- AttnOps.cpp — FA-4 attention op verifiers + helpers ───────────────===//
 //
 // Implements verifiers for the Phase 3 attention ops defined in Attn.td:
@@ -622,27 +623,89 @@ static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool ba
   SmallVector<RankedTensorType> inputs;
   for (Type type : op->getOperandTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(type);
-    if (!tensor || !tensor.hasStaticShape() || !tensor.getElementType().isF32() ||
-        llvm::any_of(tensor.getShape(), [](int64_t d) { return d <= 0; }))
-      return op->emitOpError("checkpoint operands require positive static f32 shapes");
+    if (!tensor || tensor.getEncoding() || !tensor.getElementType().isF32() ||
+        llvm::any_of(tensor.getShape(), [](int64_t d) { return !ShapedType::isDynamic(d) && d <= 0; }))
+      return op->emitOpError("checkpoint operands require positive or bounded f32 shapes");
     inputs.push_back(tensor);
   }
+  auto seedAttr = op->getAttrOfType<BoolAttr>("lse_cotangent");
+  bool seeded = seedAttr && seedAttr.getValue();
+  if (op->hasAttr("lse_cotangent") && (!seedAttr || !backward))
+    return op->emitOpError("LSE cotangent requires a boolean backward policy");
+  unsigned expectedBase = backward ? 6 : 3;
+  if (inputs.size() != expectedBase + unsigned(seeded) &&
+      inputs.size() != expectedBase + unsigned(seeded) + 1)
+    return op->emitOpError("checkpoint input count disagrees with LSE cotangent policy");
+  bool bias = inputs.size() == expectedBase + unsigned(seeded) + 1;
+  bool biasGradient = backward && op->getNumResults() == 4;
+  unsigned lseIndex = 5 + unsigned(bias);
   unsigned base = backward ? 1 : 0;
   auto q=inputs[base], k=inputs[base+1], v=inputs[base+2];
   if (q.getRank()!=4 || k.getRank()!=4 || v.getRank()!=4)
     return op->emitOpError("checkpoint Q/K/V must have rank four");
   int64_t b=q.getDimSize(0), hq=q.getDimSize(1), sq=q.getDimSize(2), d=q.getDimSize(3);
   int64_t hkv=k.getDimSize(1), sk=k.getDimSize(2), dv=v.getDimSize(3);
+
+  // Capacity is a native contract, never an inferred launch-time relabeling.
+  auto shapeModule = op->getParentOfType<ModuleOp>();
+  auto boundsRaw = shapeModule ? shapeModule->getAttr("tessera.attention_shape_bounds") : Attribute();
+  auto bounds = dyn_cast_or_null<DenseI64ArrayAttr>(boundsRaw);
+  bool dynamicSequence = ShapedType::isDynamic(sq) || ShapedType::isDynamic(sk);
+  SmallVector<int64_t> symbolic{b,hq,hkv,sq,sk,d,dv};
+  if (boundsRaw && (!bounds || bounds.size() != 7))
+    return op->emitOpError("checkpoint sequence bounds require seven i64 capacities");
+  if (dynamicSequence != bool(bounds))
+    return op->emitOpError("dynamic checkpoint sequences require explicit native shape bounds");
+  for (unsigned axis = 0; axis < symbolic.size(); ++axis) {
+    bool dynamic = ShapedType::isDynamic(symbolic[axis]);
+    if ((dynamic && axis != 3 && axis != 4) || (!dynamic && symbolic[axis] <= 0))
+      return op->emitOpError("checkpoint only sequence axes may be dynamic");
+    if (bounds && (bounds[axis] <= 0 || (!dynamic && bounds[axis] != symbolic[axis])))
+      return op->emitOpError("checkpoint capacity must preserve fixed dimensions");
+  }
+  if (bounds) {
+    // Reject capacity products that overflow the checked byte-address ABI.
+    // Check each physical tensor, rather than multiplying unrelated roles.
+    for (SmallVector<unsigned> axes : {SmallVector<unsigned>{0,1,3,5},
+                                      SmallVector<unsigned>{0,2,4,5},
+                                      SmallVector<unsigned>{0,2,4,6},
+                                      SmallVector<unsigned>{0,1,3,6},
+                                      SmallVector<unsigned>{0,1,3,4}}) {
+      int64_t capacity = 4;
+      for (unsigned axis : axes) {
+        int64_t extent = bounds[axis];
+        if (extent > std::numeric_limits<int64_t>::max() / capacity)
+        return op->emitOpError("checkpoint capacity exceeds the byte-address ABI");
+        capacity *= extent;
+      }
+    }
+  }
+
   auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
   auto output=tensor({b,hq,sq,dv}), lse=tensor({b,hq,sq});
+  if (bias) {
+    auto biasType = inputs[backward ? 5 : 3];
+    if (biasType.getRank() != 4)
+      return op->emitOpError("checkpoint bias requires rank-four broadcast f32 shape");
+    SmallVector<int64_t, 4> scores{b,hq,sq,sk};
+    for (unsigned axis = 0; axis < 4; ++axis)
+      if (biasType.getDimSize(axis) != 1 && biasType.getDimSize(axis) != scores[axis])
+        return op->emitOpError("checkpoint bias axes must be one or match [B,Hq,Sq,Sk]");
+    if (biasGradient && op->getResult(3).getType() != biasType)
+      return op->emitOpError("checkpoint bias gradient must match the physical bias shape");
+  } else if (biasGradient) {
+    return op->emitOpError("checkpoint bias gradient requires a bias operand");
+  }
   if (k!=tensor({b,hkv,sk,d}) || v!=tensor({b,hkv,sk,dv}) || hq%hkv ||
       (!backward && (op->getResult(0).getType()!=output || op->getResult(1).getType()!=lse)) ||
-      (backward && (inputs[0]!=output || inputs[4]!=lse ||
+      (backward && (inputs[0]!=output || inputs[4]!=output || inputs[lseIndex]!=lse ||
        op->getResult(0).getType()!=q || op->getResult(1).getType()!=k || op->getResult(2).getType()!=v)))
     return op->emitOpError("checkpoint result or LSE shapes disagree");
   auto scale=op->getAttrOfType<FloatAttr>("scale").getValue();
   if (!scale.isFinite() || scale.isNegative() || scale.isZero())
     return op->emitOpError("checkpoint scale must be finite and positive");
+  if (seeded && inputs.back() != lse)
+    return op->emitOpError("LSE cotangent must match saved row LSE");
   return success();
 }
 mlir::LogicalResult CheckpointForwardOp::verify() { return verifyCheckpointTensorOp(*this,false); }
@@ -650,6 +713,9 @@ mlir::LogicalResult CheckpointBackwardOp::verify() { return verifyCheckpointTens
 
 mlir::LogicalResult CheckpointJVPOp::verify() {
   using namespace mlir;
+  const bool bias = getNumOperands() == 10;
+  if (getNumOperands() != 8 && !bias)
+    return emitOpError("JVP requires either no bias operands or paired bias/tangent operands");
   SmallVector<RankedTensorType> types;
   for (Type type : getOperandTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(type);
@@ -669,11 +735,22 @@ mlir::LogicalResult CheckpointJVPOp::verify() {
       types[4]!=tensor({b,h,n}) || types[5]!=q || types[6]!=k || types[7]!=v ||
       getResult().getType()!=types[3])
     return emitOpError("JVP tangent, output or LSE shapes disagree");
+  if (bias) {
+    const auto shape = types[8].getShape();
+    const int64_t scores[4] = {b,h,n,k.getDimSize(2)};
+    if (types[8].getRank()!=4 || types[9]!=types[8])
+      return emitOpError("JVP score bias and its tangent require matching rank-four shapes");
+    for (unsigned axis=0;axis<4;++axis)
+      if (shape[axis]!=1 && shape[axis]!=scores[axis])
+        return emitOpError("JVP score bias axes must be one or match the score shape");
+  }
   auto scale=(*this)->getAttrOfType<FloatAttr>("scale").getValue();
   if (!scale.isFinite() || scale.isNegative() || scale.isZero())
     return emitOpError("JVP scale must be finite and positive");
   auto producer=getOutput().getDefiningOp<CheckpointForwardOp>();
-  if (!producer || getRowLse()!=producer.getRowLse() ||
+  if (!producer || producer->getNumOperands()!=(bias?4u:3u) ||
+      (bias && getOperand(8)!=producer->getOperand(3)) ||
+      getRowLse()!=producer.getRowLse() ||
       getQuery()!=producer.getQuery() || getKey()!=producer.getKey() || getValue()!=producer.getValue() ||
       getScaleAttr()!=producer.getScaleAttr() || getCausalAttr()!=producer.getCausalAttr())
     return emitOpError("JVP requires the same forward Q/K/V, output, LSE and policy generation");

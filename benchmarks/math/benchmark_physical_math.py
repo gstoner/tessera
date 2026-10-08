@@ -16,10 +16,6 @@ import numpy as np
 
 
 def _artifact(rt: Any, target: str, family: str, op_name: str, operands, kwargs=None):
-    if target == "rocm" and op_name != "sum":
-        # These families still lack a uniform native package contract. Keep
-        # their diagnostic boundary explicit; never claim compiler ancestry.
-        return _legacy_rocm_artifact(rt, target, family, op_name, operands, kwargs)
     from tessera.compiler import rocm_native, scheduled_kernel, x86_native
     from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 
@@ -48,6 +44,29 @@ def _artifact(rt: Any, target: str, family: str, op_name: str, operands, kwargs=
                    result_type=str(result_type), kwargs=dict(kwargs or {}))],
         return_values=["%o"],
     )])
+    if target == "rocm" and op_name != "sum":
+        from tessera.compiler import rocm_math_native
+        function=module.functions[0]
+        # Explicit widening preserves Graph math dtype semantics; native MLIR
+        # fuses these exact casts into input loads without an intermediate buffer.
+        casts=[]
+        for index,(name,typ) in enumerate(zip(names,types)):
+            if typ.dtype == "fp32":
+                continue
+            cast_name="wide_"+name
+            casts.append(IROp(result=cast_name,op_name="tessera.cast",
+                operands=["%"+name],operand_types=[str(typ)],
+                result_type=str(result_type),kwargs={"dtype":"fp32"}))
+            function.body[0].operands[index]="%"+cast_name
+            function.body[0].operand_types[index]=str(result_type)
+        function.body=casts+function.body
+        scheduled=rocm_math_native.lower_math_graph(module,"rocm_gfx1151")
+        package=rocm_math_native.package_math_recipe(scheduled,pipeline_name="tessera-lower-to-rocm")
+        artifact=rt.RuntimeArtifact(graph_ir=scheduled.graph_ir,schedule_ir=scheduled.schedule_ir,
+            tile_ir=package.tile_ir,target_ir=package.target_ir,
+            metadata={"target":package.image.target,"compiler_path":"rocm_math_native_descriptor"},
+            native_image=package.image,launch_descriptor=package.descriptor)
+        return rt.RuntimeArtifact.from_json(artifact.to_json())
     scheduled = scheduled_kernel.lower_scheduled_kernel(
         module, target="x86" if target == "x86" else "rocm_gfx1151")
     package = (x86_native.package_scheduled_kernel(scheduled, pipeline_name="tessera-lower-to-x86")
@@ -78,8 +97,11 @@ def _native_arguments(artifact, operands):
                 raise ValueError("physical math requires static output shape guards")
             args[binding.name] = np.empty(tuple(g.value for g in guards), np.float32)
     provenance = descriptor.provenance
+    math_info=provenance.get("native_math",{})
     scalar_values = {
-        "N": provenance.get("elements"), "Rows": provenance.get("rows"),
+        "N": math_info.get("elements",provenance.get("elements")),
+        "Rows": math_info.get("rows",provenance.get("rows")),
+        "Columns": math_info.get("columns"),
         "Cols": provenance.get("cols"), "Outer": provenance.get("outer"),
         "AxisExtent": provenance.get("axis_extent"), "Inner": provenance.get("inner"),
     }
@@ -102,24 +124,6 @@ def _package_receipt(artifact):
                       for stage in ("graph_ir", "schedule_ir", "tile_ir", "target_ir")},
         "serialization": "RuntimeArtifact JSON roundtrip before launch",
     }
-
-
-def _legacy_rocm_artifact(rt: Any, target: str, family: str, op_name: str, operands, kwargs=None):
-    names = [f"a{index}" for index in range(len(operands))]
-    return rt.RuntimeArtifact(metadata={
-        "target": target,
-        "compiler_path": f"{target}_{family}_compiled",
-        "executable": True,
-        "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
-        "arg_names": names,
-        "output_name": "o",
-        "ops": [{
-            "op_name": f"tessera.{op_name}",
-            "result": "o",
-            "operands": names,
-            "kwargs": kwargs or {},
-        }],
-    })
 
 
 def _dtype(name: str):
@@ -242,6 +246,15 @@ def _measure_dtype(rt: Any, target: str, dtype_name: str,
         cold_ns = time.perf_counter_ns() - start
         if not cold.get("ok"):
             raise RuntimeError(cold.get("reason", f"{family}/{op_name} failed"))
+        reference = reference_fn()
+        cold_output=np.asarray(cold["output"])
+        if cold_output.shape != reference.shape or not np.all(np.isfinite(cold_output)):
+            raise RuntimeError(f"{target}/{op_name} cold output has invalid shape or nonfinite values before timing")
+        tolerance = (5e-3 if dtype_name=="f32" else
+                     (6e-1 if dtype_name=="f16" else 5.0) if family in {"reduce","scan"} else
+                     (1e-2 if dtype_name=="f16" else 5e-2))
+        if np.max(np.abs(cold_output.astype(np.float32)-reference.astype(np.float32)),initial=0)>tolerance:
+            raise RuntimeError(f"{target}/{op_name} cold correctness failed before timing")
         samples = []
         output = None
         for _ in range(iterations):
@@ -379,8 +392,7 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         "host": platform.platform(),
         "processor": platform.processor(),
         "timing_domain": "synchronized_host_wall",
-        "compiler_boundary": ("serialized_native_package" if target == "x86" else
-                              "mixed_native_sum_and_metadata_probes"),
+        "compiler_boundary": "serialized_native_package",
         "promotion_eligible": False,
         "eligibility_reason": "no exact-artifact clean-host paired promotion packet",
         "iterations": iterations,
@@ -416,7 +428,8 @@ def _run(target: str, dtype_name: str, iterations: int) -> dict[str, Any]:
         "selector_eligible": False,
         "device_event_follow_up": WSL_WITNESS_MISSING,
         "storage_dtypes": ["f32", "f16", "bf16"],
-        "module_policy": "mixed_legacy_process_cache_native_sum_per_launch",
+        "module_policy": "checked_native_image_descriptor_launch",
+        "f32_cache_comparison_scope": "not applicable: legacy cache controls no packaged rows",
         "dtype_rows": dtype_rows,
         "f32_cache_comparison": _rocm_cache_comparison(
             rt, rows_by_dtype["f32"], iterations

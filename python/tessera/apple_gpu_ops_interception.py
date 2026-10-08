@@ -267,14 +267,18 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
                     seed: Optional[int] = None,
                     # PagedKVState consumer alias (Workstream A) — routes to the
                     # unifying KV ABI instead of dense K/V.
-                    kv_state: Any = None):
+                    kv_state: Any = None,
+                    lse_checkpoint: Optional[str] = None):
         if kv_state is not None:
             if original_fn is None:
                 raise NotImplementedError(
                     "tessera.ops.flash_attn(kv_state=...) needs the eager "
                     "reference (paged_attention) to be available")
-            return original_fn(Q, kv_state=kv_state, scale=scale, causal=causal)
+            return original_fn(Q, kv_state=kv_state, scale=scale, causal=causal,
+                               lse_checkpoint=lse_checkpoint)
         if _active_trace() is not None:
+            if lse_checkpoint is not None:
+                raise ValueError("Apple encode-session attention has no saved-LSE output contract")
             if (B is None or Sq is None or Sk is None or D is None):
                 # Infer from Q/K shapes (B, S, D).
                 q_shape = _ndarray_shape(Q)
@@ -316,7 +320,8 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
         return original_fn(Q, K, V, scale=scale, causal=causal,
                             cache=cache, dropout_p=dropout_p,
                             params=params, deterministic=deterministic,
-                            seed=seed, attn_bias=attn_bias)
+                            seed=seed, attn_bias=attn_bias,
+                            lse_checkpoint=lse_checkpoint)
     return flash_attn
 
 

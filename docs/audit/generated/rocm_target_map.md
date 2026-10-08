@@ -11,13 +11,13 @@ A `device_verified_jit` or `device_verified_abi` row in this dashboard requires 
 
 | target | ISA | architecture | products | priority | proof policy | rows |
 |---|---|---|---|---|---|---:|
-| `rocm_gfx950` | `gfx950` | CDNA 4 | MI350X / MI355X / MI350P | `current_datacenter` | exact-device proof required | 4 |
-| `rocm_gfx1250` | `gfx1250` | CDNA 5 Wave32 XDL-WMMA | MI455X | `forward_datacenter` | upstream-LLVM artifact; exact-device proof required | 1 |
-| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D | `current_workstation` | exact-device proof required | 13 |
-| `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 / RX 9050 families | `current_consumer` | exact-device proof required | 1 |
-| `rocm_gfx1151` | `gfx1151` | RDNA 3.5 Wave32 | Ryzen AI Max+ 395 / Radeon 8060S | `proven_development` | may use checked-in gfx1151 execution evidence | 36 |
+| `rocm_gfx950` | `gfx950` | CDNA 4 | MI350X / MI355X / MI350P | `current_datacenter` | exact-device proof required | 7 |
+| `rocm_gfx1250` | `gfx1250` | CDNA 5 Wave32 XDL-WMMA | MI455X | `forward_datacenter` | upstream-LLVM artifact; exact-device proof required | 4 |
+| `rocm_gfx1201` | `gfx1201` | RDNA 4 | Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D | `current_workstation` | exact-device proof required | 24 |
+| `rocm_gfx1200` | `gfx1200` | RDNA 4 | Radeon RX 9060 / RX 9050 families | `current_consumer` | exact-device proof required | 4 |
+| `rocm_gfx1151` | `gfx1151` | RDNA 3.5 Wave32 | Ryzen AI Max+ 395 / Radeon 8060S | `proven_development` | may use checked-in gfx1151 execution evidence | 39 |
 | `rocm_gfx1152` | `gfx1152` | Wave32 development bridge | development ISA | `compiler_bridge` | no execution inheritance | 0 |
-| `rocm_gfx942` | `gfx942` | CDNA 3 | MI300X / MI325X | `compatibility` | exact-device proof required | 4 |
+| `rocm_gfx942` | `gfx942` | CDNA 3 | MI300X / MI325X | `compatibility` | exact-device proof required | 7 |
 
 ## Family rollup
 
@@ -25,13 +25,19 @@ The rollup reports where proof exists; it does not promote the family alias.
 
 | op | exact targets | proven targets | artifact-only targets |
 |---|---:|---|---|
+| add | 1 | - | - |
 | alibi | 1 | gfx1151 | - |
 | attn_sliding_window | 1 | gfx1151 | - |
 | batched_gemm | 1 | gfx1151 | - |
+| cast | 1 | - | - |
+| cummax | 1 | - | - |
+| cumsum | 1 | - | - |
 | dct | 1 | - | - |
 | deepseek_sparse_attention | 1 | gfx1151 | - |
+| div | 1 | - | - |
 | einsum | 1 | gfx1151 | - |
 | es_low_rank_correction | 1 | - | - |
+| exp | 1 | - | - |
 | factorized_matmul | 1 | gfx1151 | - |
 | fft | 1 | - | - |
 | flash_attn | 4 | gfx1151, gfx1201 | gfx942, gfx950 |
@@ -45,6 +51,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | irfft | 1 | - | - |
 | istft | 1 | - | - |
 | kimi_delta_attention | 1 | gfx1151 | - |
+| kv_cache.read | 1 | - | - |
 | layer_norm | 1 | gfx1151 | - |
 | lightning_attention | 1 | gfx1151 | - |
 | linear_attn | 1 | gfx1151 | - |
@@ -57,11 +64,14 @@ The rollup reports where proof exists; it does not promote the family alias.
 | mqa_attention | 1 | gfx1151 | - |
 | msa_index_scores | 1 | gfx1151 | - |
 | multi_head_attention | 1 | gfx1151 | - |
+| mxfp4_folded_storage | 6 | - | - |
+| nvfp4_requantize | 6 | - | - |
 | qkv_projection | 1 | gfx1151 | - |
 | rfft | 1 | - | - |
 | rmsnorm | 1 | gfx1151 | - |
 | rmsnorm_safe | 1 | gfx1151 | - |
 | rope | 1 | gfx1151 | - |
+| scaled_matmul | 6 | - | gfx1151, gfx1200, gfx1250, gfx942, gfx950 |
 | score_combine | 1 | gfx1151 | - |
 | silu | 1 | gfx1151 | - |
 | silu_mul | 1 | gfx1151 | - |
@@ -69,6 +79,7 @@ The rollup reports where proof exists; it does not promote the family alias.
 | softmax_safe | 1 | gfx1151 | - |
 | spectral_conv | 1 | - | - |
 | spectral_filter | 1 | - | - |
+| sqrt | 1 | - | - |
 | stft | 1 | - | - |
 | varlen_sdpa | 1 | gfx1151 | - |
 
@@ -81,12 +92,18 @@ The rollup reports where proof exists; it does not promote the family alias.
 | gelu | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,fp6_e2m3,fp6_e3m2,fp4_e2m1,int8 |
 | softmax | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,fp6_e2m3,fp6_e3m2,fp4_e2m1,int8 |
 | flash_attn | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,fp6_e2m3,fp6_e3m2,fp4_e2m1,int8 |
+| mxfp4_folded_storage | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,fp6_e2m3,fp6_e3m2,fp4_e2m1,int8 |
+| nvfp4_requantize | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,fp6_e2m3,fp6_e3m2,fp4_e2m1,int8 |
+| scaled_matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,fp6_e2m3,fp6_e3m2,fp4_e2m1,int8 |
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,fp6_e2m3,fp6_e3m2,fp4_e2m1,int8 |
 
 ### `rocm_gfx1250` — MI455X
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
+| mxfp4_folded_storage | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,int8 |
+| nvfp4_requantize | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,int8 |
+| scaled_matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,int8 |
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,int8 |
 
 ### `rocm_gfx1201` — Radeon RX 9070 family / Radeon AI PRO R9700S, R9700, R9600D
@@ -95,15 +112,26 @@ The rollup reports where proof exists; it does not promote the family alias.
 |---|---|---|---|---|---|---|---|
 | softmax | device_verified_jit | complete | complete | complete | rocm_softmax_compiled | gfx1201 | fp32 |
 | flash_attn | device_verified_jit | complete | complete | complete | rocm_flash_attn_compiled | gfx1201 | bf16,fp16 |
+| add | ready | complete | missing | missing | - | - | fp32 |
+| cast | ready | complete | missing | missing | - | - | fp16,bf16 |
+| cummax | ready | complete | missing | missing | - | - | fp32 |
+| cumsum | ready | complete | missing | missing | - | - | fp32 |
 | dct | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
+| div | ready | complete | missing | missing | - | - | fp32 |
 | es_low_rank_correction | ready | complete | missing | missing | - | - | fp32 |
+| exp | ready | complete | missing | missing | - | - | fp32 |
 | fft | ready | complete | missing | missing | - | - | fp32,complex64 |
 | ifft | ready | complete | missing | missing | - | - | fp32,complex64 |
 | irfft | ready | complete | missing | missing | - | - | fp32,complex64 |
 | istft | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
+| kv_cache.read | ready | complete | missing | missing | - | - | fp32 |
+| mxfp4_folded_storage | ready | complete | missing | missing | - | - | uint8 |
+| nvfp4_requantize | ready | complete | missing | missing | - | - | uint8 |
 | rfft | ready | complete | missing | missing | - | - | fp32,complex64 |
+| scaled_matmul | ready | complete | missing | missing | - | - | uint8,fp8_e4m3 |
 | spectral_conv | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
 | spectral_filter | ready | complete | missing | missing | - | - | fp32,complex64 |
+| sqrt | ready | complete | missing | missing | - | - | fp32 |
 | stft | ready | complete | missing | missing | - | - | bf16,fp16,fp32,complex64 |
 | matmul | device_verified_jit | complete | complete | complete | rocm_compiled | gfx1201 | bf16,fp16,fp8_e4m3,fp8_e5m2,int8,int4 |
 
@@ -111,6 +139,9 @@ The rollup reports where proof exists; it does not promote the family alias.
 
 | op | status | compiler | runtime | numerical | path | evidence arch | dtypes |
 |---|---|---|---|---|---|---|---|
+| mxfp4_folded_storage | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| nvfp4_requantize | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
+| scaled_matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp8_e4m3,fp8_e5m2,int8,int32,int4 |
 
 ### `rocm_gfx1151` — Ryzen AI Max+ 395 / Radeon 8060S
@@ -142,6 +173,9 @@ The rollup reports where proof exists; it does not promote the family alias.
 | rmsnorm_safe | device_verified_jit | complete | complete | complete | rocm_norm_compiled | gfx1151 | fp32,fp16,bf16 |
 | memory_index_score | device_verified_jit | complete | complete | complete | rocm_composite_helper_compiled | gfx1151 | fp32 |
 | msa_index_scores | device_verified_jit | complete | complete | complete | rocm_composite_helper_compiled | gfx1151 | fp32 |
+| mxfp4_folded_storage | planned | complete | missing | missing | - | - |  |
+| nvfp4_requantize | planned | complete | missing | missing | - | - |  |
+| scaled_matmul | artifact_only | complete | missing | missing | - | - |  |
 | score_combine | device_verified_jit | complete | complete | complete | rocm_composite_helper_compiled | gfx1151 | fp32 |
 | varlen_sdpa | device_verified_jit | complete | complete | complete | rocm_composite_helper_compiled | gfx1151 | fp32 |
 | alibi | device_verified_jit | complete | complete | complete | rocm_alibi_compiled | gfx1151 | fp32,fp16,bf16 |
@@ -167,6 +201,9 @@ The rollup reports where proof exists; it does not promote the family alias.
 | gelu | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,int8 |
 | softmax | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,int8 |
 | flash_attn | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,int8 |
+| mxfp4_folded_storage | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,int8 |
+| nvfp4_requantize | unsupported | planned | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,int8 |
+| scaled_matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,int8 |
 | matmul | artifact_only | complete | missing | missing | - | - | bf16,fp16,fp32,fp64,fp8_e4m3,fp8_e5m2,int8 |
 
 ## FP8 numeric semantics (per arch)

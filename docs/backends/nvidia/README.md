@@ -25,3 +25,26 @@ generic compiler-emitted CUDA through the target-specific tensor-core lanes.
 decisions and execution deltas. [Blackwell execution plan](../../audit/backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md)
 is the active implementation plan; archival material stays under its audit
 folder.
+
+## Explicit asynchronous saved-LSE reverse execution
+
+An O/LSE program returned by compile_native_attention_vjp can capture resident Q/K/V
+and supported bias with asynchronous=True. The default remains synchronous.
+
+~~~python
+with program.capture(q, k, v, asynchronous=True) as frame:
+    output, lse = frame.primal
+    gradients = frame.backward((output_cotangent, lse_cotangent))
+    frame.wait_on(consumer.stream)
+    # Enqueue consumer reads on this stream before leaving the frame.
+    consumer.synchronize()
+~~~
+
+Async views advertise the private producer stream. Use wait_on to register
+external consumers; close waits for them before releasing buffers. Producer
+and consumer streams must remain alive until close; enqueue external reads
+before close. synchronize completes private work and releases source references.
+Inputs without producer streams are refused in asynchronous mode.
+This is the static f32 saved-LSE reverse envelope, not general dynamic,
+composed or higher-order attention AD. Evidence:
+[Owning packet](../../../benchmarks/baselines/nvidia_attention_async_owner_20261008/README.md).

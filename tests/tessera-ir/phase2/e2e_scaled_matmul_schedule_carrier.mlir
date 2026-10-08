@@ -8,12 +8,13 @@
 module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
   func.func @scaled_fp8(%a: tensor<64x128xf8E4M3FN>,
                         %b: tensor<128x64xf8E4M3FN>,
-                        %sa: tensor<64x4xf32>,
-                        %sb: tensor<4x64xf32>) -> tensor<64x64xf32> {
+                        %sa: tensor<64x4xi8>,
+                        %sb: tensor<4x64xi8>) -> tensor<64x64xf32> {
     %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
-      scale_layout = {granularity = "block", block = [64, 32], format = "e8m0"}
+      numeric_policy = {accum = "fp32", execution_mode = "exact_per_block"},
+      scale_layout = {granularity = "block", block = [1, 32], format = "e8m0"}
     } : (tensor<64x128xf8E4M3FN>, tensor<128x64xf8E4M3FN>,
-         tensor<64x4xf32>, tensor<4x64xf32>) -> tensor<64x64xf32>
+         tensor<64x4xi8>, tensor<4x64xi8>) -> tensor<64x64xf32>
     return %0 : tensor<64x64xf32>
   }
 

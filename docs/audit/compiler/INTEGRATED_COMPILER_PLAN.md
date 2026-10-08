@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-28
+last_updated: 2026-10-07
 audit_role: plan
 plan_state: open
 ---
@@ -94,7 +94,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: The expanded census includes x86 breadth packaging: 46 Graph inputs, 14 scheduled inputs and 14 raw/unclassified entries. Import-resolved caller candidates and local helper-to-emitter paths expose reconstruction paths; scope-aware import candidates now reject parameter/rebinding shadowing and sibling-scope leakage; indirect dispatch and per-envelope certificate joins still require review. Counts do not authorize constructor deletion.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--expanded-route-callers-and-f64-ownership)
+- Latest: [2026-09-10 — Route census and device profile attribution](INTEGRATED_COMPILER_LOG.md#2026-09-10--route-census-and-device-profile-attribution)
 
 ### COMPILER-DEVEX-1
 
@@ -104,7 +104,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: Tajasarus now has an assertions-enabled LLVM/MLIR 23.1.1 ROCm build; RX 9070 XT gfx1201 correctness commissioning is tracked under ROCM-2 in the backend queue. The unified scheduled closure accounts for the 90 rows skipped by ordinary non-ROCm/compiler-free CI and passes 95/95 with zero skips on Tajasarus; its recorder refuses a stale compiler, inventory drift, or any non-owning target. Assertions-enabled LLVM/MLIR 23.1.1 and a hardware-free all-target Tessera compiler now pass all 475 active lit fixtures on Super-Bear. Backend-owned fixtures declare their feature requirements, the data-only x86 execution input is outside lit discovery, and the union gate requires every active fixture to pass in at least one lane. The opt-in CI lit lane requests the same full portable target matrix. The 2026-09-29 `CI-LLVM-EXACT-2026-09-29` follow-up replaces hosted patch tolerance with the SHA256-checked official LLVM/MLIR/lld 23.1.1 bundle; CI now rejects a patch mismatch and matches the release's no-RTTI ABI. From 2026-09-27 until this correction (sync `FOUNDATION-BATCH-2-2026-09-27`), the hosted MLIR lanes (`lit`, `rocm-serialize`, `sanitizer`) accepted any recorded 23.1.x and failed rather than skipped when none was present; the fleet pin stayed exact. Installed drivers now pass relocated-prefix smoke on Super-Bear with loader overrides removed; the CI lane runs this check after installation. Preserve these regression gates; owning-device correctness and performance remain separate backend gates. A full unit sweep on Princess-Luna (2026-09-17) found 31 failures present on main and invisible to CI, whose unit lane has neither device toolchain: 28 are now fixed — a legality gate that asked the capability registry about the generic `rocm` name for a request the rest of the stack compiles for gfx1151, a link requirement the runtime archive never published to out-of-CMake consumers, one Python-driven data file failing `check-tessera-rocm` for the whole repository, `arith.select` with no transpose, and index arithmetic refused as non-differentiable. Owed: `AUTODIFF-SHAPE-WHILE-FORWARD-2026-09-17`, a pre-existing crash inside JIT-compiled code that the AD gate had been masking, and the fact that the x86 JIT AD lane those tests exercise has no host in any automated check.
 - Depends on: —
 - Start: host-free
-- Latest: [GitHub LLVM/MLIR patch pin corrected](INTEGRATED_COMPILER_LOG.md#2026-09-29--github-llvmmlir-patch-pin-corrected)
+- Latest: [2026-09-29 — GitHub LLVM/MLIR patch pin corrected](INTEGRATED_COMPILER_LOG.md#2026-09-29--github-llvmmlir-patch-pin-corrected)
 
 ### DIAG-PY-BACKLOG-1
 
@@ -124,7 +124,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: **CLOSED 2026-09-27 (sync `EVIDENCE-GOVERNANCE-GATES-2026-09-27`).** The eleven tags were declared with a meaning each on 2026-09-20 (`X86_INELIGIBILITY_REASONS`, still eleven: `test_x86_vocabulary_is_still_eleven` re-counts them from the producer) and the validator refuses an unknown tag. The closing slice routes producer and consumers through one `evidence_reasons.ReasonVocabulary` (the route split's `_ENVIRONMENT_TAGS` is checked against it; a declared tag nothing produces must be `reserved` with a reason), and applies the same rule to the four siblings that had the same shape: the ROCm profiler packet, the NVIDIA device-clock packet, the x86 PMU event map (its validator only type-checked its reasons and now re-derives them) and the calibration corpus (two legacy tags reserved; see [EVIDENCE-PACKET-1](#evidence-packet-1)). Tags that are registered diagnostics (the shared device-clock witness/window refusals, `DEVICE_CLOCK_PART_UNVALIDATED`) are borrowed by name, never redeclared, and none of the vocabulary tags was registered in `diagnostic_codes.py`. `profiler_cuda_window` carries prose reasons, not tags -- a different pattern, listed rather than changed. Drift gate: `tests/unit/test_x86_evidence_vocabulary.py` (producer vs declaration per family, read by AST over every append/extend/`+=`/literal style; fail-closed on committed packets doctored with an undeclared tag; every committed packet still validates except two that already failed the window rule, pinned to that reason). The gate as it stood (history): `profiler_x86_evidence.py` appends **eleven** reason tags to a `reasons` list that decides whether an x86 performance measurement is promotable — `CPU_NOT_EXACT_ZEN5`, `VIRTUALIZED_HOST`, `WSL_CLOCK_DOMAIN`, `SOURCE_WORKTREE_DIRTY`, `TIMING_PROOF_INCOMPLETE`, `SYMBOL_SAMPLING_MISSING`, `SYMBOL_SAMPLING_INVALID`, `IMAGE_BUILD_ID_MISSING`, `EVENT_MAP_MISSING`, `EVENT_MAP_NOT_PROMOTABLE`, `SAMPLING_AFFINITY_NOT_PINNED`. Nothing enumerates them, nothing drift-gates them, and no consumer can know the vocabulary is eleven items or that a twelfth was added — so a reader handling a subset silently treats an unknown reason as no reason, which under Decision #21a is a semantic key failing open. Found 2026-09-19 while classifying the diagnostic backlog: the shape scan saw exactly one of the eleven, by the accident of a concatenated colon. Gate: the vocabulary is declared in one place with a meaning per tag, its producer and every consumer read that declaration, and a drift test fails when a tag is added without it. These are **not** diagnostic codes and must not be answered by registering them in `diagnostic_codes.py`.
 - Depends on: —
 - Start: host-free
-- Latest: [Evidence governance gates: reason vocabularies, ODS consumers, corpus eligibility](INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility)
+- Latest: [2026-09-27 — Evidence governance gates: reason vocabularies, ODS consumers, corpus eligibility](INTEGRATED_COMPILER_LOG.md#2026-09-27--evidence-governance-gates-reason-vocabularies-ods-consumers-corpus-eligibility)
 
 ### ROCM-NVFP4-INGEST-1
 
@@ -134,7 +134,20 @@ the next action's host requirement; it is not a live fleet-availability claim.
 - Gate: An NVFP4 checkpoint (e2m1 elements, **e4m3 scale per 16**, fp32 scale per tensor) reaches `v_wmma_f32_16x16x16_fp8_fp8` through MXFP4 (e2m1, **e8m0 scale per 32**), and the chain has exactly one lossy step: the scale requantization. Measured relRMS against the bf16 original — NVFP4 as shipped 0.113 (19 dB), bf16→MXFP4 **direct** 0.112, NVFP4→MXFP4 requantized 0.158 (16 dB) — so **the ~3 dB is double rounding, not the format**, and where a bf16 original exists, quantizing once to MXFP4 beats ingesting NVFP4. That is a `numeric_policy` preference (Decision #15a) and the requantization is a declared information-loss point (Decision #32) with a measured cost, not an implicit load-time transform. Notably this is **not** a workaround for a weaker part: AMD's MI355 path dequantizes NVFP4 to BF16 because CDNA4 has no native NVFP4 execution either, so the gfx1201 route lands on the fp8 ceiling (383 TFLOP/s) rather than bf16's 191. Gate: `nvfp4` and `mxfp4` distinguishable below Graph IR (they are already distinct *names* — `dtype.py` says "do not alias" — but nothing below Graph IR can tell them apart until block-scale metadata exists), the requantization expressed as a policy-gated conversion carrying its SQNR, and two traps covered: block-exponent selection by squared error between the no-clip rule and one binade finer (not truncation), and merged linears (`gate_up_proj`) honouring **both** global scales rather than collapsing them, which fails silently. Depends on the scale contract from [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1) and the fold from [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1).
 - Depends on: [ROCM-MXFP4-W4A8-1](#rocm-mxfp4-w4a8-1)
 - Start: device
-- Latest: [gfx1201 NVFP4 projection ingest through scheduled W4A8](INTEGRATED_COMPILER_LOG.md#2026-10-01--gfx1201-nvfp4-projection-ingest-through-scheduled-w4a8)
+- Current increment: Tajasaurus gfx1201 passed the 17x19x64 and ragged
+  200x2048x1536 synthetic gate/up packages after vectorized ingest; CPU ingest
+  fell from 6.70 s to 487.31 ms on the larger case, with unchanged codes,
+  exponents, Target/Tile digests, and HSACO. The latest 12 host-side ingest
+  properties pass on Tajasaurus WSL2. A real Qwen3-8B q_proj now also traverses
+  NVFP4-to-MXFP4 ingest and the native Graph/Schedule/Tile/Target package.
+  Relative RMS against pinned BF16 is 9.50% for shipped NVFP4, 11.22% for
+  direct BF16-to-MXFP4, and 14.99% after ingest. Ingested MXFP4 is 11.29% from
+  shipped NVFP4 and 18.03% from direct BF16-to-MXFP4. Both the ingested and
+  direct MXFP4 values execute through the same native package and match their
+  decoded-weight references exactly. This one projection with synthetic FP8
+  activations exposes material added conversion error; broader quality and
+  selector promotion remain open.
+- Latest: [native real-checkpoint ingest integration](INTEGRATED_COMPILER_LOG.md#2026-10-07--native-real-checkpoint-ingest-integration)
 
 ### ROCM-SPLIT-K-1
 
@@ -148,7 +161,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
 **Updated 2026-09-27 -- the slice rule is measured, on the admitted device clock (sync `GFX1201-LANES-2026-09-27`).** `benchmarks/rocm/record_split_k_sweep.py` times every image between two compiler-built `--tessera-device-clock-span` markers. Each variant's windows become a `profiler_rocm_packet` whose `device_clock_witness` admission `build_rocm_profiler_packet` derives. The sweep covered 16 skinny shapes (router gates, MoE expert/decode GEMMs, M<=64) x {f16, bf16} x S in {1..32}. The 2026-09-26 rule (tiles < 32 WGPs, `S = ceil(32/tiles)`) was conservative everywhere it split, and it never split shapes that gain: 16x768x2048 (48 tiles) gains 2.43x at S=4, 64x512x2048 (128 tiles) 1.82x at S=2. **New rule, in `selectGfx1201SplitK` and the oracle together:** split when `2 x tiles <= 256`, and take the largest power-of-two `S <= min(32, 256/tiles)` whose slices are whole K blocks of >= 256. It was chosen because every selection it makes was measured positive in both storages, not because it hits each shape's peak. Router 16x256x2048 moves from S=2 to S=8: 2.18x -> 3.40x fp16 and 2.17x -> 3.37x bf16, 27/27 rounds. The negative side is measured. 32x1536x4096 (192 tiles) is neutral at S=2 and loses from S=8. tiles x S of 1024 / 4096 loses. The 256-per-slice guard is now measured at its boundary: K=256 into 128-wide slices loses at every S, and K=512 into 256-wide slices gains 1.16-1.18x. Caveats: 16x2048x768 S=2 (1.12-1.24x) is admitted in only 1-2 of 3 runs, because the marker-overhead gate is sporadic. Absolute times depend on window length, so ratios are compared within one sweep. Why splitting pays past one workgroup per WGP is unmeasured (no counters). Packet: `benchmarks/baselines/rocm_split_k_20260927/`.
 - Depends on: —
 - Start: device
-- Latest: [ROCM-SPLIT-K-1: device-clock slice sweep; measured 256-workgroup target](INTEGRATED_COMPILER_LOG.md#2026-09-27--rocm-split-k-1-device-clock-slice-sweep-measured-256-workgroup-target)
+- Latest: [2026-09-27 — ROCM-SPLIT-K-1: device-clock slice sweep; measured 256-workgroup target](INTEGRATED_COMPILER_LOG.md#2026-09-27--rocm-split-k-1-device-clock-slice-sweep-measured-256-workgroup-target)
 
 ### GOV-ODS-CONSUMER-1
 
@@ -161,7 +174,7 @@ Gate: a check that each op in the Tessera ODS files is referenced by at least on
   2026-09-28 (sync `ODS-WIRE-B-2026-09-28`): triage slices 2 and 3 landed -- `tessera.istft_jvp` is consumed by `GraphToSchedulePass` and the ISTFT JVP package builds from its hashed contract (the kwargs derivation is now a declared oracle); `tessera.cache.commit/rollback` lower through an x86 handle ABI. Three ops left the waiver (ceiling 76). sm_120 ISTFT proof owed.
 - Depends on: —
 - Start: host-free
-- Latest: [ODS wiring slices 2 and 3: `tessera.istft_jvp` gets its Schedule consumer; `cache.commit/rollback` lower through an x86 handle ABI](INTEGRATED_COMPILER_LOG.md#2026-09-28--ods-wiring-slices-2-and-3-tesseraistftjvp-gets-its-schedule-consumer-cachecommitrollback-lower-through-an-x86-handle-abi)
+- Latest: [2026-09-28 — ODS wiring slices 2 and 3: `tessera.istft_jvp` gets its Schedule consumer; `cache.commit/rollback` lower through an x86 handle ABI](INTEGRATED_COMPILER_LOG.md#2026-09-28--ods-wiring-slices-2-and-3-tesseraistftjvp-gets-its-schedule-consumer-cachecommitrollback-lower-through-an-x86-handle-abi)
 
 ### ROCM-FP8-BLOCKSCALE-1
 
@@ -192,7 +205,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **Open:** the remaining short-K / N = 1024 whole-M shapes and K = 1536 ragged rows; the `[K, N]` weight on the register panel; AITER's split-K buckets unmeasured; gfx1151 edge-row store before/after device-clock timing remains unavailable.
 - Depends on: —
 - Start: device
-- Latest: [ROCM-FP8-BLOCKSCALE-1: grouped LDS reads and uniform scale join on gfx1201](INTEGRATED_COMPILER_LOG.md#2026-09-28--rocm-fp8-blockscale-1-grouped-lds-reads-and-uniform-scale-join-on-gfx1201)
+- Latest: [2026-10-06 — gfx1201 native MXFP8 long-K selector trial](INTEGRATED_COMPILER_LOG.md#2026-10-06--gfx1201-native-mxfp8-long-k-selector-trial)
 
 ### ROCM-MXFP4-W4A8-1
 
@@ -214,19 +227,19 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
   **2026-09-28 diagnostic, sync `GFX1201-MXFP4-M256-SLOPE-2026-09-28`.** A fixed-K one-copy N scan at 8192/12288/17408 ablated selected schedule keys in two independent processes, with bitwise exact K32 agreement and device-clock/HIP-event windows. The selected marginal cost was 17.99-18.09 ns per added column against Radiance 13.43-13.60; removing the vector epilogue left 17.69-18.10, removing prefetch 18.62-18.82, and removing raster 17.83-17.93. These keys help absolute latency but do not explain the slope. The remaining mechanism is in the core loop or launch geometry; A restaging, LDS fragment traffic and issue remain unseparated without counters or a validated phase ablation. The source tree was dirty, so the packet is diagnostic and makes no promotion claim. [Packet](../../../benchmarks/baselines/gfx1201_mxfp4_m256_decomposition_20260928/README.md).
 - Depends on: [ROCM-FP8-BLOCKSCALE-1](#rocm-fp8-blockscale-1)
 - Start: device
-- Latest: [ROCM-MXFP4-W4A8-1: M256 A-restaging attribution](INTEGRATED_COMPILER_LOG.md#2026-09-28--rocm-mxfp4-w4a8-1-m256-a-restaging-attribution)
+- Latest: [2026-10-06 — gfx1201 packed vector-scale epilogue](INTEGRATED_COMPILER_LOG.md#2026-10-06--gfx1201-packed-vector-scale-epilogue)
 
 ### EVIDENCE-PACKET-1
 
-- Current slice (2026-09-29, sync `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`): gfx1151 f32/f16/bf16 physical-math `sum` now reloads a serialized native package and checks exact launch identity. The other 18 ROCm rows remain metadata probes; no selector promotion. [Evidence](../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
+- Current slice (2026-10-06, sync `ROCM-MATH-WIDENING-2026-10-06`): gfx1151 physical math reloads 21 serialized native Graph/Schedule/Tile/Target packages across f32/f16/bf16 inputs, with f32 output and exact launch identity. Zero metadata probes remain in this recorder. Ordinary JIT and portable cast-to-math products have independent gfx1151/gfx1201 numerical proof and 72-row packets per architecture. No selector promotion. [Evidence](../../../benchmarks/baselines/rocm_native_math_20261006/README.md).
 
 **Evidence packet consumers**
 
 - Owner: [EVALUATOR_PLAN.md](EVALUATOR_PLAN.md)
-- Gate: Unify missing packet consumers around artifact/image identity, clock validity and promotion eligibility; malformed or incomplete evidence must refuse. The [benchmark alignment review](../../../benchmarks/COMPILER_ALIGNMENT.md) maps six suites to actual callers: at that review point math was metadata-driven, GA/EBM composition lacked route receipts, and direct-IR AD probes needed paired public-frontend coverage. New diagnostic math/AD runs no longer inherit performance eligibility from target names or historical packets. The extended suite review retires synthetic SuperBench timing, labels DLOP dispatch counts as estimates and lattice timings as host-wall, and adds per-submission native guards for Apple policy-loss timing. Bounded CUDA/HIP ANN adapters now record driver-launch receipts; public SSD VJP has independent numerical comparisons. Dedicated CUDA SSD kernel/API attribution and serial/cooperative SSD adapters are validated; sequential synchronous mixed-artifact CUDA attribution and CUDA GEMM/attention adapters now pass. The ROCm matrix/unary generators now use LLVM 23 inherent kernel properties; assertions-enabled native compilation and bounded gfx1151/gfx1201 execution pass. Extend asynchronous attribution and clean performance admission; the slower gfx1201 LDS/pipelined diagnostic variants remain unpromoted. **2026-09-27 slice (sync `EVIDENCE-GOVERNANCE-GATES-2026-09-27`): calibration-corpus eligibility.** `target_perf.apply_corpus`, the consumer that turns a calibration corpus into selector authority, read `corpus.get("selector_eligible", True)` and never read `ineligibility_reasons`; `load_pruning_corpus` read neither. A corpus that omitted the field was trusted, and one stating eligibility beside its own reasons was believed. Both loaders now go through `corpus_selector_eligibility`, which refuses a missing or non-bool eligibility or malformed reasons (`CALIBRATION_CORPUS_ELIGIBILITY_INCOMPLETE`), eligibility the reasons contradict (`CALIBRATION_CORPUS_ELIGIBILITY_CONTRADICTED`) and an undeclared tag (`CALIBRATION_CORPUS_REASON_UNKNOWN`; `CALIBRATION_CORPUS_REASONS`, which the gfx1151 recorder checks before writing). The committed 2026-08-15 gfx1151 corpus still reads and still cannot promote. **2026-09-27 slice (sync `EVIDENCE-PACKET-1-2026-09-27`): shared envelope + GA/EBM route receipts.** `evidence_envelope.read_evidence_packet` is the one reader for the three measurement-packet families (x86 Zen 5 profiler v1/v2, ROCm gfx1151/gfx1201 profiler, NVIDIA sm_120 device clock): it runs the family validator unchanged, projects artifact/compiler identity, timing domain, clock validity, environment, source revision/worktree, sample ids, route and eligibility onto one envelope, refuses a missing or malformed field (`EVIDENCE_ENVELOPE_INCOMPLETE`) or an unregistered schema (`EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN`), and enforces what no family may waive (`EVIDENCE_ENVELOPE_CONTRADICTED`): eligible exactly when no refusal cause is named, and an eligible packet has a valid clock, a clean tree, a sample id and its measured image named by its timing sample (on every route; the family checked binding only on the device-clock route). The ROCm and x86 derivations read `worktree_dirty`/`virtualized`/`wsl` by truthiness, so an omitted field derived no blocker; both now require bools. SSD admission (ROCm and NVIDIA device-clock routes) reads its calibrations through the envelope, and a drift test refuses a production module that calls a family validator directly. 186 of 188 committed packets read (149 promotable, unchanged); the 2 refusals are the pre-existing window-rule pair below. `tessera/_route_receipts.py` gives GA/EBM per-call route receipts: all 32 `_try_<target>_*` native-lane helpers are `@native_attempt`, the 29 public callers `@public_route`, orphan native dispatch or an empty capture leaves a span `unattributed`, and `clifford_core`/`energy_core`/`visual_complex_core` rows carry `route` + `route_receipts` and derive `device`. Receipts recorded on Mac, Princess-Luna, Tajasarus and Super-Bear (`benchmarks/baselines/ga_ebm_route_receipts_20260927/`): the Zen 5 hosts run EBM energy/partition on x86 AVX-512 (the jit_bridge trace, Apple-only, would have called that no native dispatch), the Mac reaches the Apple GPU runtime, Super-Bear runs the reference, and no composition reaches a ROCm or CUDA GPU lane. **2026-09-28:** all seven x86 physical-math rows now reload serialized native packages and bind launch receipts to exact artifact/image/descriptor identities (16 focused tests and 31 samples per row on Princess-Luna). At that point ROCm math remained metadata-driven. **Still open after it:** ROCm math package consumers; paired public-frontend coverage for the direct-IR AD probes; asynchronous/multi-thread attribution; DLOP profiler receipts; clean performance admission; compiler build identity in the ROCm/NVIDIA packets (the envelope records it where x86 has it and does not require it); the CUDA activity-window calibration (`profiler_cuda_window`), the calibration corpus and E2E-spine packets as envelope families; and chip attribution for a `rocm` receipt (the lane is named, the chip is only the recording host's). A future bare-metal x86 profiler-route packet needs per-row timing witnesses naming its images before the envelope admits it as eligible (none exists; every fleet host is WSL2). Two committed diagnostic/superseded ROCm packets (`gfx1151_ssd_calibrated_pairs_interleaved_20260926/diagnostics/launches_probe/cooperative-100-calibration.json`, `gfx1201_ssd_calibrated_pairs_20260926/superseded/second_6e6904dc_short_window/`) do not validate under the current window rule (they derive `DEVICE_CLOCK_WINDOW_TOO_SHORT`); that predates this slice and they are retained history, not admitted evidence.
+- Gate: Unify missing packet consumers around artifact/image identity, clock validity and promotion eligibility; malformed or incomplete evidence must refuse. The [benchmark alignment review](../../../benchmarks/COMPILER_ALIGNMENT.md) maps six suites to actual callers: at that review point math was metadata-driven, GA/EBM composition lacked route receipts, and direct-IR AD probes needed paired public-frontend coverage. New diagnostic math/AD runs no longer inherit performance eligibility from target names or historical packets. The extended suite review retires synthetic SuperBench timing, labels DLOP dispatch counts as estimates and lattice timings as host-wall, and adds per-submission native guards for Apple policy-loss timing. Bounded CUDA/HIP ANN adapters now record driver-launch receipts; public SSD VJP has independent numerical comparisons. Dedicated CUDA SSD kernel/API attribution and serial/cooperative SSD adapters are validated; sequential synchronous mixed-artifact CUDA attribution and CUDA GEMM/attention adapters now pass. The ROCm matrix/unary generators now use LLVM 23 inherent kernel properties; assertions-enabled native compilation and bounded gfx1151/gfx1201 execution pass. Extend asynchronous attribution and clean performance admission; the slower gfx1201 LDS/pipelined diagnostic variants remain unpromoted. **2026-09-27 slice (sync `EVIDENCE-GOVERNANCE-GATES-2026-09-27`): calibration-corpus eligibility.** `target_perf.apply_corpus`, the consumer that turns a calibration corpus into selector authority, read `corpus.get("selector_eligible", True)` and never read `ineligibility_reasons`; `load_pruning_corpus` read neither. A corpus that omitted the field was trusted, and one stating eligibility beside its own reasons was believed. Both loaders now go through `corpus_selector_eligibility`, which refuses a missing or non-bool eligibility or malformed reasons (`CALIBRATION_CORPUS_ELIGIBILITY_INCOMPLETE`), eligibility the reasons contradict (`CALIBRATION_CORPUS_ELIGIBILITY_CONTRADICTED`) and an undeclared tag (`CALIBRATION_CORPUS_REASON_UNKNOWN`; `CALIBRATION_CORPUS_REASONS`, which the gfx1151 recorder checks before writing). The committed 2026-08-15 gfx1151 corpus still reads and still cannot promote. **2026-09-27 slice (sync `EVIDENCE-PACKET-1-2026-09-27`): shared envelope + GA/EBM route receipts.** `evidence_envelope.read_evidence_packet` is the one reader for the three measurement-packet families (x86 Zen 5 profiler v1/v2, ROCm gfx1151/gfx1201 profiler, NVIDIA sm_120 device clock): it runs the family validator unchanged, projects artifact/compiler identity, timing domain, clock validity, environment, source revision/worktree, sample ids, route and eligibility onto one envelope, refuses a missing or malformed field (`EVIDENCE_ENVELOPE_INCOMPLETE`) or an unregistered schema (`EVIDENCE_ENVELOPE_SCHEMA_UNKNOWN`), and enforces what no family may waive (`EVIDENCE_ENVELOPE_CONTRADICTED`): eligible exactly when no refusal cause is named, and an eligible packet has a valid clock, a clean tree, a sample id and its measured image named by its timing sample (on every route; the family checked binding only on the device-clock route). The ROCm and x86 derivations read `worktree_dirty`/`virtualized`/`wsl` by truthiness, so an omitted field derived no blocker; both now require bools. SSD admission (ROCm and NVIDIA device-clock routes) reads its calibrations through the envelope, and a drift test refuses a production module that calls a family validator directly. 186 of 188 committed packets read (149 promotable, unchanged); the 2 refusals are the pre-existing window-rule pair below. `tessera/_route_receipts.py` gives GA/EBM per-call route receipts: all 32 `_try_<target>_*` native-lane helpers are `@native_attempt`, the 29 public callers `@public_route`, orphan native dispatch or an empty capture leaves a span `unattributed`, and `clifford_core`/`energy_core`/`visual_complex_core` rows carry `route` + `route_receipts` and derive `device`. Receipts recorded on Mac, Princess-Luna, Tajasarus and Super-Bear (`benchmarks/baselines/ga_ebm_route_receipts_20260927/`): the Zen 5 hosts run EBM energy/partition on x86 AVX-512 (the jit_bridge trace, Apple-only, would have called that no native dispatch), the Mac reaches the Apple GPU runtime, Super-Bear runs the reference, and no composition reaches a ROCm or CUDA GPU lane. **2026-09-28:** all seven x86 physical-math rows now reload serialized native packages and bind launch receipts to exact artifact/image/descriptor identities (16 focused tests and 31 samples per row on Princess-Luna). At that point ROCm math remained metadata-driven. **2026-10-06:** the 21 gfx1151 math package consumers are migrated; explicit narrow Graph casts feed native f32 math. **Still open:** paired public-frontend coverage for the direct-IR AD probes; asynchronous/multi-thread attribution; DLOP profiler receipts; clean performance admission; compiler build identity in the ROCm/NVIDIA packets (the envelope records it where x86 has it and does not require it); the CUDA activity-window calibration (`profiler_cuda_window`), the calibration corpus and E2E-spine packets as envelope families; and chip attribution for a `rocm` receipt (the lane is named, the chip is only the recording host's). A future bare-metal x86 profiler-route packet needs per-row timing witnesses naming its images before the envelope admits it as eligible (none exists; every fleet host is WSL2). Two committed diagnostic/superseded ROCm packets (`gfx1151_ssd_calibrated_pairs_interleaved_20260926/diagnostics/launches_probe/cooperative-100-calibration.json`, `gfx1201_ssd_calibrated_pairs_20260926/superseded/second_6e6904dc_short_window/`) do not validate under the current window rule (they derive `DEVICE_CLOCK_WINDOW_TOO_SHORT`); that predates this slice and they are retained history, not admitted evidence.
 - Depends on: —
 - Start: host-free
-- Latest: [2026-09-29 measured slice](INTEGRATED_COMPILER_LOG.md#2026-09-29--evidence-consumers-nvidia-fragments-and-public-residuals)
+- Latest: [2026-09-29 — evidence consumers, NVIDIA fragments, and public residuals](INTEGRATED_COMPILER_LOG.md#2026-09-29--evidence-consumers-nvidia-fragments-and-public-residuals)
 
 ### TPROF-NATIVE-1
 
@@ -236,7 +249,7 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 - Gate: The CUDA adapter now calibrates seven launch-inclusive event windows against exact Nsight product-kernel spans, checks captured device identity and rejects excessive profiler overhead. After removing SSD's unrelated 1024-element tape-parser cap, a 512x2x32x8 cooperative workload agrees within 0.51% with 0.24% profiler overhead. The source remains dirty and the host WSL. A nine-pair collector now binds fresh process nonces and Nsight PIDs and refuses unqualified hosts before production collection. Validate per-process clean-image calibration and counter attribution on each owning host; WSL regression evidence is not clean timing.
 - Depends on: —
 - Start: device
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-11--program-retirement-and-declared-slot-discovery)
+- Latest: [2026-09-05 — Real asynchronous GEMM comparison](INTEGRATED_COMPILER_LOG.md#2026-09-05--real-asynchronous-gemm-comparison)
 
 ### DISPATCH-BREAKER
 
@@ -247,13 +260,57 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 - Next architecture gate: [gated owner and isolated recovery](HEAP_BARRIER_ARCHITECTURE_REVIEW.md#gated-metadata-owner-and-isolated-recovery-2026-09-11): every admitted metadata operation in the opt-in gated owner has replay/device proof; live metadata and legacy import/snapshot paths refuse. Process-owned heap recovery requires confirmed death. Since 2026-09-15 ([probed admission and replacement](HEAP_BARRIER_ARCHITECTURE_REVIEW.md#probed-admission-and-health-checked-replacement-2026-09-15)) a worker is admitted only after its in-process device probe verifies the admitted producers, and a replacement is admitted only after confirmed predecessor death plus its own probe (RTX 5070 and gfx1151). Next: migrate legacy snapshot/import callers to a gated producer and validate actual driver-failure behavior (the recorded fault is an injected stall). Epoch ordering remains; no measured overlap or promotion.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded exploration](INTEGRATED_COMPILER_LOG.md#2026-09-11--gated-metadata-owner-and-isolated-recovery)
+- Latest: [Pinned gfx1201 checkpoint format decision gate](INTEGRATED_COMPILER_LOG.md#2026-10-03--pinned-gfx1201-checkpoint-format-decision-gate)
 
 ## F2
 
 ### E2E-REAL-6
 
+- Current increment (2026-10-05, sync ROCM-MOVEMENT-SPINE-2026-10-05):
+  canonical static paged reads on gfx1151/gfx1201 and explicit MoE token gather
+  on gfx1151 retain adjacent native Graph/Schedule/Tile/Target/backend ancestry.
+  Exact capabilities, numerical fixtures and checked execution rows agree.
+  Nine retained-route host comparisons pass bit-exactly and clear the 10%
+  non-regression gate. General public tensor semantics/layouts/asynchronous
+  movement and resident-kernel admission remain open.
+  [Packet](../../../benchmarks/baselines/rocm_movement_admission_20261005/README.md).
+
+- Current increment (2026-10-05, sync ROCM-NATIVE-MOVEMENT-2026-10-05):
+  native HIP host orchestration and context-owned staging execute unchanged
+  compiled paged-KV images on gfx1151/gfx1201 and MoE images on gfx1151.
+  Nine bit-exact rows retain separate host/event timings and zero warm
+  allocations. General layouts, asynchronous movement and retained-route
+  performance admission remain open.
+  [Packet](../../../benchmarks/baselines/rocm_native_movement_20261005/README.md).
+
+- Current increment (2026-10-03, sync NVIDIA-BROADCAST-CHECKPOINT-CORE-2026-10-03):
+  rank-four broadcast checkpoint native arithmetic passes 12 RTX5070 rows with
+  physical-shaped deterministic dBias and output capacity guards. Public paired
+  AD export/replay retains the physical shape. Checked broadcast package/tape
+  ABI remains landing; dense-copy descriptor admission is guarded until host
+  copy extents, saved-state capture and backward allocations are integrated.
+  [Core packet](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_core_20261003/README.md).
+
 **Remaining Graph-owned packaging and frontend retirement**
+
+- Current slice (2026-10-01, sync COMPILER-NEXT-FIVE-2026-10-01): the
+  public SM120 RMSNorm -> matmul edge again passed with a four-iteration typed
+  accumulator; 21-sample timings remain noisy. Saved-LSE attention passed
+  eight full/causal, fp16/fp32 regular/ragged forward rows and the checkpoint
+  suite; backward device-event median was 1.0871 ms with stable event timing,
+  while host E2E was noisy. On gfx1201, synthetic NVFP4 ingest passed ten
+  focused tests and reused the same native image; three static matmul shapes
+  reused one shape-free image with max absolute error below 3.6e-7 and 31
+  focused cache tests passed. These are correctness/attribution results only.
+  Open: generic tensor-valued W1.1 producers on direct legacy Tile input; the
+  canonical SM120 Graph pipeline lowers before those patterns. NVIDIA saved-output
+  row-delta backward now passes independent-oracle checks at [1,4,2,16,16,32,32]
+  and [1,4,2,128,128,64,64], with a 2.378 ms device median at shape 128 versus
+  183.179 ms for the prior saved-LSE path; default selection is unchanged. Wider
+  dynamic/dtype/checkpoint envelopes, model-scale/source-BF16 NVFP4 comparison,
+  and broader ROCm cache envelopes remain open.
+  [Evidence log](INTEGRATED_COMPILER_LOG.md#2026-10-01--five-compiler-slice-rechecks).
+
 
 - Current slice (2026-09-29, sync E2E-REAL-6-ALIBI-SHAPE-2026-09-29): the public explicit-slopes ALiBi trace now infers f32 [H,S,S] from num_heads/seq_len rather than inheriting slopes[H]. Princess-Luna traces, packages, launches and matches NumPy through the checked AVX-512 ABI. Apple, ROCm and NVIDIA follow-ups remain target-owned.
 
@@ -288,11 +345,13 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [paired bounded dynamic M/N/K resident edge](INTEGRATED_COMPILER_LOG.md#2026-09-30--paired-bounded-dynamic-mnk-resident-rmsnorm-to-matmul)
+- Latest: [2026-10-07 — native paged-KV flat-token indexing](INTEGRATED_COMPILER_LOG.md#2026-10-07--native-paged-kv-flat-token-indexing)
+
+Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 
 ### W1.1
 
-- Current slice (2026-09-29, sync `COMPILER-EVIDENCE-FRAGMENT-RESIDUAL-2026-09-29`): sm_120 now refuses the two legacy tensor-valued TileIRLoweringPass MMA forms at NVIDIA lowering before an async token can become an invalid MMA data operand. Typed accumulator lowering still passes; tensor-to-fragment migration remains open. [Evidence](../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
+- Historical slice (2026-09-29): sm_120 refused the two legacy tensor-valued TileIRLoweringPass MMA forms at NVIDIA lowering before an async token could become an invalid MMA data operand. That stop-sign behavior is superseded for registered static matmuls by the 2026-10-01 named PM pipeline integration recorded below. Generic tensor-to-fragment producer migration remains open. [Evidence](../../../benchmarks/baselines/compiler_evidence_fragment_residual_20260929/README.md).
 
 **NVIDIA typed-fragment closure**
 
@@ -300,7 +359,24 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Reconcile remaining NVIDIA fragment producers and Target proof against current typed routes; retain uncovered dtype/architecture obligations and exact-device gates.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [2026-09-29 measured slice](INTEGRATED_COMPILER_LOG.md#2026-09-29--evidence-consumers-nvidia-fragments-and-public-residuals)
+- Current slice (2026-10-01): public affine-free fp16/bf16 LayerNorm now
+  feeds a resident scheduled SM120 matmul through Graph -> Schedule -> Tile.
+  Exact RTX 5070 tests passed both dtypes; the fp16 256x256x256 packet records
+  independent parity, allocation ownership, zero spills, and separate
+  producer/consumer event times. Generic legacy tensor-valued Tile producers
+  remain open.
+- Latest: [2026-10-07 — native compiler regression repair](INTEGRATED_COMPILER_LOG.md#2026-10-07--native-compiler-regression-repair)
+- Integration follow-through: zero-error Python type gate restored; bounded frontend lifetime, strict metadata and native stage lineage guards have 125 focused WSL regressions. General producer composition and wider dtype/layout/AD envelopes remain open.
+- Current RHS increment: static fp16/BF16 RMSNorm KxN output feeds typed matmul B through checked row-major packages. Exact RTX 5070 complete/ragged cases validate private resident lifetime and separate producer/consumer dispatch windows. FP8, MXFP8 and MXFP4 remain mandatory before strategy/default selection.
+- Census recheck (2026-10-02): both historical tensor/async-copy constructors
+  remain registered only for sm<120. Explicit SM120 static canonical tensor
+  M/N/K loop functions now recover their semantic Graph contraction after
+  whole-function tiling replay equality, then use native Schedule/Tile storage
+  and typed fragments. Exact RTX 5070 fp16/BF16 plain and bias/ReLU/residual
+  packages pass. Arbitrary producer graphs, noncanonical accumulator semantics,
+  dynamic generic reconstruction and older-target device proof remain open.
+
+- Current physical increment: native Schedule/Tile row-major RHS views gather into typed B fragments on SM120. Named LHS normalization/softmax producers preserve C/F RHS storage through ordinary JIT, resident execution and portable replay with FP16/BF16 exact-device proof. General producer/layout integration remains open. [Evidence](../../../benchmarks/baselines/nvidia_lhs_rhs_layout_20261006/README.md).
 
 ### W3.3
 
@@ -310,7 +386,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Reassess surviving Tile primitive/kernel/domain/solver ownership before any dialect split; move only consumed semantics with parse/lower/execute regression gates.
 - Depends on: [E2E-REAL-6F](#e2e-real-6f): census and proof requirements for the selected route, not all certificates.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
+- Latest: [2026-09-05 — Deleted functionality reassessment](INTEGRATED_COMPILER_LOG.md#2026-09-05--deleted-functionality-reassessment)
 
 ## F3
 
@@ -325,7 +401,15 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Current increment: Broadcast additive masks now pass on every axis: batch/head, key-padding (`[1,1,1,K]`) and per-query (`[B,Hq,Q,1]`) forms pass source recognition, symbolic bucket instantiation, native Schedule/Tile replay (the physical block survives Tile lowering) and SM120 indexing. The v3 f32 runtime ABI carries all four physical bias extents, copies only that storage and retains the seven logical kernel extents; empty-row refusal judges the logical broadcast view. Six B=2 ragged causal/GQA/window cases pass device comparison and empty-row refusal on the RTX 5070; ROCm refuses a broadcast score-bias block. Boolean/padding masks as an operand, sibling-target consumers, f16/bf16 broadcast storage and performance admission remain open.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: host-free
-- Latest: [2026-09-29 measured slice](INTEGRATED_COMPILER_LOG.md#2026-09-29--evidence-consumers-nvidia-fragments-and-public-residuals)
+- Current slice (2026-10-01): public affine-free fp16/bf16 LayerNorm now
+  feeds a resident scheduled SM120 matmul through Graph -> Schedule -> Tile.
+  Exact RTX 5070 tests passed both dtypes; the fp16 256x256x256 packet records
+  independent parity, allocation ownership, zero spills, and separate
+  producer/consumer event times. Generic legacy tensor-valued Tile producers
+  remain open.
+- Current increment (2026-10-05, sync NVIDIA-JVP-NATIVE-SCHEDULE-2026-10-05): bounded static f32 SM120 saved-LSE JVP now lowers the actual native AD Graph through replay-sealed C++ Schedule/Tile, native arena and NVVM/LLVM. Python GPU arithmetic construction and inactive-load string rewriting are retired. Ten ordinary JIT oracle cases, direct/automatic saved-state products and separate dispatch/wall measurements are retained; general dynamic/composed/bias/dropout/value-only AD and sibling routes remain open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_native_schedule_20261005/README.md).
+- Current compiler overhead increment (2026-10-05, sync NATIVE-COMPILE-ORCHESTRATION-2026-10-05): native JVP passes retain SSA in one MLIR pass manager; GPU packaging reuses exact tool SHA-256 for stable file identities and rejects read-time rebuilds. Image/arena bytes remain identical in balanced A/B packages; cold and warm identities are measured separately. Native persistent compiler sessions and image-validator overhead remain open. [Evidence](../../../benchmarks/baselines/native_compile_orchestration_20261005/README.md).
+- Latest: [native scale transpose wave candidate](INTEGRATED_COMPILER_LOG.md#2026-10-07--native-scale-transpose-wave-candidate)
 
 ### MSW-9
 
@@ -335,7 +419,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Terminal square now has explicit analytic error amplification and intermediate-overflow refusal alongside ReLU/absolute-value consumers. Proved row-private mutable temporaries now admit the 64x8 square workload within the unchanged 4096-byte limit; constants and nested generations stay fully allocated. Extend measured nonlinear families and physical schedules. Admit only exact-artifact scoped candidates passing the measured lower-bound gate; retain incumbents when evidence is insufficient.
 - Depends on: [FRONTEND-IR-MEDIUM-1](#frontend-ir-medium-1): recipe/native identity for the candidate; broader raising is independent.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-10--dynamic-reader-fanout-and-row-private-ann)
+- Latest: [2026-09-08 — Broader ANN workload evidence](INTEGRATED_COMPILER_LOG.md#2026-09-08--broader-ann-workload-evidence)
 
 ### W5.2
 
@@ -345,7 +429,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Connect remaining producers and target calibration to measured schedule selection; preserve inferred dependencies and select only with eligible exact-device evidence. Every arbiter candidate now carries a code identity (sync `AUTOTUNE-EMITTED-IDENTITY-2026-09-27`); the sm_120 registry rows were re-recorded on Super-Bear. Follow-ups (sync `SM120-AUTOTUNE-FOLLOWUPS-2026-09-27`): the stale-error rule now holds in emitted CUDA, the scalar lanes have device timers (no registry row races an untimed candidate), and `_infer_dims` has a gated rule; after the re-record 13 rows are served. Launch integrity (sync `AUTOTUNE-LAUNCH-INTEGRITY-2026-09-27`): every emitted CUDA/HIP launch is checked through the slot, the missing route resources were captured (91 registry rows selector-eligible), the shipped GEMM is byte-reproducible, and the non-registry rows carry route identities; after the re-record 20 sm_120 registry rows are served. The remaining serving blocker is unseparated device-event verdicts.
 - Depends on: [EVIDENCE-PACKET-1](#evidence-packet-1)
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-27--autotune-launch-integrity)
+- Latest: [2026-09-27 — Autotune launch integrity](INTEGRATED_COMPILER_LOG.md#2026-09-27--autotune-launch-integrity)
 
 ### W5.5
 
@@ -355,7 +439,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Checked permutation composition, matrix-transpose flag folding, attribute-bearing cast retention and fusion guards now share legality across generic/custom canonicalization and direct transpose lowering. Extend live consumer coverage and measure candidate effects before promotion; equality saturation still requires a demonstrated ordering problem.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--four-canonicalization-legality-improvements)
+- Latest: [2026-09-09 — Four canonicalization legality improvements](INTEGRATED_COMPILER_LOG.md#2026-09-09--four-canonicalization-legality-improvements)
 
 ## F4
 
@@ -369,7 +453,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Depends on: —
 - Start: host-free
 - AD gate: [native composed HVP execution](AUTODIFF_EXECUTION_PLAN.md#native-composed-hvp-execution-2026-09-14) adds static CPU saved-product tangents and bounded gfx1201 HVP execution; arbitrary CFG/effects, dynamic results, higher orders and general GPU binding remain open. The energy-as-typed-program acceptance's first clause is met on the CPU lane (2026-09-16, `EBM-NATIVE-QUADRATIC-2026-09-16`): the quadratic energy is a Graph IR function, its gradient is the compiler's, the K-step Langevin loop with on-device Philox noise compiles as one function and is bit-exact with the declared policy on the M1 Max, Zen 5 and Zen 2; the device clause followed the same day (`EBM-NATIVE-GPU-2026-09-16`): the row-program emitter lowers the compiler-derived gradient inside one cooperative kernel (one block per row, lanes per feature, the K-step loop and Philox in registers, ordered reductions), bit-exact on gfx1151, gfx1201 and sm_120 with one launch per loop and one `tessera-opt` invocation for the whole chain; the nonlinear energies and the sphere integrator followed the same day (`EBM-NONLINEAR-MANIFOLD-2026-09-16`): three energies run through the one integrator with no host VJP left (softplus gained its native adjoint) and `manifold = "sphere"` lowers natively with a per-row status word for its two singularities, on the CPU lane and all three GPUs; the bivector integrator and the overhead measurement closed the same day (`EBM-BIVECTOR-OVERHEAD-2026-09-16`): the grade projection rides the Clifford dialect's own op, and the measurement shows the native route flat in K (one launch per loop) against about 1.8 ms per step for the Python-emitted lane — a dispatch result that promotes nothing, since kernel-time attribution needs a box no WSL2 ROCm host can provide — [the EBM native loop architecture](../domain/EBM_NATIVE_LOOP_ARCHITECTURE.md) records what shipped and why the scoped Tile contract was not needed; four of that stream's remaining gaps closed the same day (`EBM-GA-GAPCLOSE-2026-09-16`): Clifford `exp`/`log` and `rotor_from_axis` lower to their closed forms on Cl(3, 0) so rotor sampling happens on the group, ragged batches take their loop bound from `tensor.dim` with the operands' agreement asserted rather than assumed, an annealing schedule runs as one cooperative kernel with the temperature carried in registers (a ratio of 1.0 reproducing the constant chain bit for bit), and an opaque energy adjoint is refused by name. The row-program emitter now admits only `math.*` ops whose accuracy was measured on the owning device — the sweep that established those bounds is what found `math.tanh` shipping a kernel with no body at all on gfx1151, so the packager refuses an image whose kernel stores nothing. Still open: the Clifford field ops, the 1024-feature ceiling, Apple, and promotion.
-- Latest: [the math a kernel is allowed to contain, and four closed domain gaps](INTEGRATED_COMPILER_LOG.md#2026-09-16--the-math-a-kernel-is-allowed-to-contain-and-four-closed-domain-gaps)
+- Latest: [2026-09-16 — the math a kernel is allowed to contain, and four closed domain gaps](INTEGRATED_COMPILER_LOG.md#2026-09-16--the-math-a-kernel-is-allowed-to-contain-and-four-closed-domain-gaps)
 
 ### AD-RESIDUAL-EVAL-1
 
@@ -381,7 +465,18 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Paired source VJP retirement resumes only children that have not submitted frees after a dependency failure, on the original stream. Native AD products now bind bounded dynamic GPU inputs and scalar through rank-four floating/i8/i64 results using checked capacity/shape sidecars. A synchronous checked source VJP retains device snapshots and the matching forward residuals; exception completion is checked before backward and completion metadata receives zero seeds. Same-stream asynchronous snapshots and forward-gated backward submission now expose derivatives only after successful completion. Scoped source VJP now supports reader-aware retire/poll without a context wait on the healthy path. Explicit close can still synchronize; failed-free quarantine, deferred module unload, cross-queue writer ownership and broader product bindings remain open. Exact dominating SSA product guards now tighten joint temporary capacities. Extend relational/aliased volume proofs, saved heterogeneous products, general layout envelopes and automatic frontend wiring; exported shapes do not establish arbitrary Python CFG capture.
 - Depends on: [W4-PRODUCT-1](#w4-product-1): existing bounded product carrier; arbitrary source CFG closure is not a prerequisite.
 - Start: host-free
-- Latest: [2026-09-29 measured slice](INTEGRATED_COMPILER_LOG.md#2026-09-29--evidence-consumers-nvidia-fragments-and-public-residuals)
+- Current slice (2026-10-01): public affine-free fp16/bf16 LayerNorm now
+  feeds a resident scheduled SM120 matmul through Graph -> Schedule -> Tile.
+  Exact RTX 5070 tests passed both dtypes; the fp16 256x256x256 packet records
+  independent parity, allocation ownership, zero spills, and separate
+  producer/consumer event times. Generic legacy tensor-valued Tile producers
+  remain open.
+- Current increment (2026-10-05, sync NVIDIA-VALUE-JVP-2026-10-05): isolated native AD export now carries value-only attention through the paired saved-LSE Schedule/Tile package. The linear materializer removes irrelevant V/O reads and uses one 512-byte shared reduction. Public V-only JVP passes RTX 5070 finite-difference and finite/Inf/NaN primal-V linearity checks. General composed/dynamic/bias/dropout/higher AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_value_only_jvp_20261005/README.md).
+- Current increment (2026-10-05, sync NVIDIA-VJP-ACTIVITY-2026-10-05): public isolated reverse attention now derives requested gradient activity in native paired AD, seals it through Schedule and removes inactive Target arithmetic while zero-filling complete ABI outputs. RTX 5070 numerical/performance and matching gfx1201 shared regression evidence are retained; compact output allocation and general AD remain open. [Evidence](../../../benchmarks/baselines/nvidia_vjp_activity_20261005/README.md).
+- Current increment (2026-10-06, sync NVIDIA-COMPACT-GRADIENTS-2026-10-06): native paired AD/Schedule/Tile now preserves complete logical results while exporting only requested physical gradient buffers. Checked static SM120 host/resident packages, private capture and repeated gradients are proved on RTX 5070. Preserved logical ranges with explicit 64/128-thread geometry address the measured packed-range loss; no universal policy/default promotion follows. Matching gfx1201 shared compiler/norm regressions pass, without HIP compact-gradient execution claims. General composed/dynamic/higher AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_compact_gradients_20261005/README.md).
+- Current increment (2026-10-06, sync NVIDIA-JVP-ARGUMENT-ORDER-2026-10-06): native forward export now verifies distinct frontend Q/K/V permutations; automatic private capture and tangent requests follow verified physical roles and activity. All six orders have owning RTX 5070 finite-difference/mutation/repeated-direction proof, with unchanged native images within each semantic envelope. Shared gfx1201 compiler/norm regressions pass without HIP tangent claims. General composed/dynamic/bias/higher AD remains open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_argument_order_20261006/README.md).
+- Current increment (2026-10-06, sync NVIDIA-JVP-PORTABLE-2026-10-06): pinned canonical program JSON retains native images, sizing library, roles and manifests; capture validates them before CUDA allocation. Seventy-two restored-program RTX 5070 cases and three compiler-forbidden fresh-process replays pass. Public native-JVP family/runtime integration, unused reverse-image retirement, general AD and sibling physical consumers remain open. [Evidence](../../../benchmarks/baselines/nvidia_jvp_portable_20261006/README.md).
+- Latest: [2026-10-06 — Native score-bias attention JVP](INTEGRATED_COMPILER_LOG.md#2026-10-06--native-score-bias-attention-jvp)
 
 ### W2.4a
 
@@ -393,7 +488,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Current increment: Snapshot retirement now closes reader admission, including previously created leases, and polls every completion edge without a wait or free. Eventless readers retain storage for explicit recovery. Allocation teardown remains synchronous; next extend allocator/module retirement only with separate completion and uncertain-driver ownership proof.
 - Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
 - Start: host-free
-- Latest: [reconciliation and wave start](INTEGRATED_COMPILER_LOG.md#2026-09-12--reconciliation-and-wave-start)
+- Latest: [2026-09-10 — Dynamic reader fanout and row-private ANN](INTEGRATED_COMPILER_LOG.md#2026-09-10--dynamic-reader-fanout-and-row-private-ann)
 
 ### NUMPOL-CARRIER-1
 
@@ -404,7 +499,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Current increment: The Apple arena now consumes explicit gradual/FTZ policy. Integer-significand f32 add/sub/mul/div with one ties-to-even rounding step passes 133,376 input pairs per operation on M1 Max; explicit input/output FTZ around the same arithmetic also passes. Legacy unspecified arithmetic retains its historical boundary. Other floating operations, vectors/dtypes and optimized performance remain open. CUDA/HIP generic storage refuses this unconsumed policy. See the [policy contract](../../spec/APPLE_ARENA_NUMERICAL_POLICY.md).
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-13--rdna4-wmma-operand-and-accumulator-audit)
+- Latest: [2026-09-13 — RDNA4 WMMA operand and accumulator audit](INTEGRATED_COMPILER_LOG.md#2026-09-13--rdna4-wmma-operand-and-accumulator-audit)
 
 ### LAYOUT-ALG-1
 
@@ -414,7 +509,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Preserve proved static/dynamic layout consumers; extend only unresolved nonseparable tuple/layout envelopes with capacity, alias and lifetime proof. Matrix acceleration additionally needs operand packing, signedness, accumulator type, fragment shape, scale layout and target instruction witnesses; Zen 5 VNNI/vector GEMM does not establish AMX support.
 - Depends on: —
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--descriptor-projection-and-seven-program-continuation)
+- Latest: [2026-09-06 — Descriptor projection and seven-program continuation](INTEGRATED_COMPILER_LOG.md#2026-09-06--descriptor-projection-and-seven-program-continuation)
 
 ### AD-SOLVER-IFT-1
 
@@ -425,7 +520,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Current increment: The first EBM energy differentiates through the compiler (2026-09-16, `EBM-NATIVE-QUADRATIC-2026-09-16`): `tessera.sub` gained its adjoint and the sum-reduce adjoint's `unsqueeze`/`broadcast` gained linalg lowerings, so the paired autodiff pass now carries a quadratic energy to a native gradient the EBM Langevin lowering consumes; implicit differentiation and OT primitives are untouched.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
+- Latest: [2026-09-06 — Functional-analysis contracts — consolidated ownership](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
 
 ### AD-HIGHER-1
 
@@ -435,7 +530,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Extend composed attention and broader native AD families, higher-order products, real batching, structural sparse derivatives and native jets through the existing AD owners; retain oracle, structural-zero and conditioning gates.
 - Depends on: [AD-RESIDUAL-EVAL-1](#ad-residual-eval-1): the selected product's residual and ownership ABI; independent static slices may proceed.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--domain-and-autodiff-documentation-consolidation)
+- Latest: [2026-09-06 — domain and autodiff documentation consolidation](INTEGRATED_COMPILER_LOG.md#2026-09-06--domain-and-autodiff-documentation-consolidation)
 
 ### DIST-NATIVE-1
 
@@ -445,7 +540,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Extend bounded MPI proof beyond two ranks and proper-subgroup participants; add native NCCL/RCCL and other transports with process ownership and real multi-rank packets.
 - Depends on: [EVIDENCE-PACKET-1](#evidence-packet-1)
 - Start: device
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-09--architecture-sweep-and-failure-boundary-reconciliation)
+- Latest: [2026-09-07 — Status, native GELU and recipe instantiation](INTEGRATED_COMPILER_LOG.md#2026-09-07--status-native-gelu-and-recipe-instantiation)
 
 ## F5
 
@@ -457,7 +552,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: The registered internal `schedule.ssd` now owns a static f32 scalar-decay recurrence, immutable initial/final carry and chunk-end checkpoints. Schedule-to-Tile lowers it to structured tensor loops, numerically executed through the native CPU JIT including partial chunks. Replay-bound serial CUDA SM120 and ROCm gfx1151 packages now execute three chunk sizes with output/carry/checkpoint and immutable-input checks. Opt-in cooperative CUDA/HIP kernels now assign each head/value column to a block, keep one state element per active lane, and reduce in state-index order through shared memory and barriers. Both owning devices pass correctness. Nine independent paired process runs per backend now retain exact artifact identities and resident event-window confidence bounds; native clock calibration still prevents promotion; explicit measured binding is now wired. Checkpoint VJP differentiates all five inputs and all three result cotangents, recomputes within chunks, and now executes on CUDA/HIP using checkpoints from the cooperative forward. A scoped native CPU owner integrates Y with automatic host-tape grad and private checkpoints. Exact-artifact measured binding now recomputes policy and retains incumbents without native clock calibration. ResidentSSDProgram now automatically pairs GPU forward/VJP packages, snapshots inputs device-to-device, owns checkpoints and all five gradients, and exposes a synchronous first-order value_and_grad API with scoped lifetime. Asynchronous SSD gradients now compose through projected scoped generations on distinct CUDA/HIP streams and retire after external readers. Public vjp now dispatches explicitly owned resident SSD programs. Capture, VJP and whole-frame retirement use stream events and async allocation/free; scoped forward and derivative readers delay reclamation. Explicit close remains synchronous; program retire_async/poll_close now orders all frame/reader retirements before bounded-admission off-thread module unload. Partial queueing is retryable and new capture stays closed. CUDA/HIP both validate two public-VJP frames without context synchronization; driver unload itself is not cancellable or latency-bounded. SSD packages now use a separate checked 64 MiB per-buffer bound; both GPUs validate a larger cooperative workload. ResidentSSDTrace now traces connected acyclic SSD compositions before submitting work, automatically captures forward/checkpoint frames and runs reverse calls with scoped readers. Fan-out and shared public inputs accumulate cotangents through replay-validated native f32 addition kernels. A three-call DAG and all five shared public input gradients pass an independent float64 finite-difference oracle on CUDA/HIP; addition allocations and modules participate in frame/program retirement. This is host orchestration of replay-bound packages, not a fused or canonical whole-program IR. Serializing composition into the compiler foundation, unused-input zeros, same-call input alias admission, effectful/data-dependent traces and additional operation families remain open. Next: arbitrary traced public tape integration, broader owner adoption and uncertain-unload isolation recovery, broader tiling/reduction tuning, public mixer/frontend integration, broader mutation/alias lineage, ReplaySSM comparison and selector-grade promotion.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-11--resident-dag-accumulation-and-snapshot-readers)
+- Latest: [2026-09-11 — Resident DAG accumulation and snapshot readers](INTEGRATED_COMPILER_LOG.md#2026-09-11--resident-dag-accumulation-and-snapshot-readers)
 
 ### TSOL-POLICY-PHYS-1
 
@@ -467,7 +562,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Reconcile current spectral policy envelopes, then close remaining target-specific strides/full-spectrum/window, broadcasting and streaming execution gaps with independent adjoint proof.
 - Depends on: [E2E-REAL-6](#e2e-real-6): canonical artifact boundary for this workload, not every family migration.
 - Start: device
-- Latest: [ROCm spectral image survives a stale HIP error; streaming STFT names the chip that ran](INTEGRATED_COMPILER_LOG.md#2026-09-27--spectral-image-survives-a-stale-hip-error-streaming-stft-names-the-chip-that-ran)
+- Latest: [2026-09-27 — Spectral image survives a stale HIP error; streaming STFT names the chip that ran](INTEGRATED_COMPILER_LOG.md#2026-09-27--spectral-image-survives-a-stale-hip-error-streaming-stft-names-the-chip-that-ran)
 
 ### TSOL-SCALE-1
 
@@ -508,7 +603,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Current increment: The batched geometric product is native (2026-09-16): `ExpandProductTable` lowers any static `[..., dim]` rank to an scf.for nest over the compile-time table with grade pruning, and `libtessera_jit` runs GradeFusion + ExpandProductTable so a `tessera_clifford.geo_product` executes through MLIR/LLVM (execution-matrix row `cpu` / `cpu_clifford_llvm_jit`; parity on M1 Max, Zen 5 and Zen 2). Same day, the whole product family (wedge, left contraction, inner, norm, reverse/involution/conjugate, Hodge star, grade projection, rotor sandwich) lowers through the same table and executes behind the JIT (`cpu` / `cpu_clifford_llvm_jit`, nine ops × three shapes against the GA reference on M1 Max, Zen 5, Zen 2). The GPU package route is closed for the family the same day: the kernel skeleton carries a rank-1 Clifford op, `ts-clifford-opt` expands it through the same lowering, the arena pipeline folds it to scalar device code (64 → 24 products under a grade-2 restriction, visible in the IR) and the native storage package launches it — ten ops × three shapes match the reference on gfx1151, gfx1201 and sm_120 (`rocm` / `rocm_clifford_native_compiled`, `nvidia_sm120` / `nvidia_clifford_native_compiled`). Open: exp/log and the field ops, ragged batches, and the acceptance's separate overhead/traffic/kernel-time measurements (the device lanes are still the Python-emitted kernels until measured against this route). **Corrected 2026-09-25 against [W4-PRODUCT-1](#w4-product-1)'s record of the same day (`EBM-GA-GAPCLOSE-2026-09-16`, `EBM-BIVECTOR-OVERHEAD-2026-09-16`):** Clifford `exp`/`log` (and `rotor_from_axis`) now lower to closed forms **on Cl(3, 0) only** — other signatures still need the gate's independent semantic/AD/device proof; ragged batches are closed (loop bound from `tensor.dim`); the dispatch-overhead measurement is recorded and promotes nothing, while kernel-time attribution stays blocked on a non-WSL2 host. Still open: the field ops (`ext_deriv`, `codiff`, `vec_deriv`, `integral`), exp/log beyond Cl(3, 0), the 1024-feature row-program ceiling, Apple, and measuring the native route against the Python-emitted `x86_`/`rocm_clifford` kernels.
 - Depends on: [AD-HIGHER-1](#ad-higher-1)
 - Start: host-free
-- Latest: [GPU package route](INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline)
+- Latest: [2026-09-16 — the Clifford family reaches ROCm and sm_120 through the arena pipeline](INTEGRATED_COMPILER_LOG.md#2026-09-16--the-clifford-family-reaches-rocm-and-sm120-through-the-arena-pipeline)
 
 ### RIEMANNIAN-OT
 
@@ -518,7 +613,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 - Gate: Retain missing geometric primitives and constrained/KKT hypotheses under shared solver/AD owners; validate the OT workload without creating another solver stack.
 - Depends on: [AD-SOLVER-IFT-1](#ad-solver-ift-1)
 - Start: host-free
-- Latest: [recorded increment](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
+- Latest: [2026-09-06 — Functional-analysis contracts — consolidated ownership](INTEGRATED_COMPILER_LOG.md#2026-09-06--functional-analysis-contracts--consolidated-ownership)
 
 ## Reconciliation before archival
 
@@ -706,3 +801,21 @@ and end-to-end timings. No performance promotion follows the small-shape
 measurements. Sibling-backend outcomes and evidence are recorded in each
 backend todo. Packet:
 benchmarks/baselines/nvidia_sm120_nvfp4_scheduled_20260930/.
+
+
+
+Current slice (2026-10-01, sync
+`W1.1-SM120-GRAPH-SCHEDULE-TILE-PIPELINE-2026-10-01`): the registered named
+SM120 compiler pipeline now invokes PM verification, Graph-to-Schedule, and
+Schedule-to-Tile before residual lowering. A lit fixture asserts typed
+fragment producers and compatibility aliases; exact RTX 5070 fp16
+RMSNorm-to-matmul execution proves one resident package envelope and its
+NVVM/PTX MMA output. This closes the formerly skipped PM route for registered
+static SM120 matmuls. Generic tensor-valued Tile constructors and the broader
+producer census remain open, and timing CV does not support promotion.
+
+
+- Current slice (2026-10-02, sync `E2E-REAL-6-GFX1201-MATMUL-CACHE-WARMED-2026-10-02`): static gfx1201 f16 scheduled matmul now has warmed exact-device shape-reuse evidence across 16^3 through 512^3. One HSACO/entry serves six shapes with per-shape guards; the full focused cache suite passed on Tajasaurus and the independent fp32 oracle error stayed below 1.10e-5. Kernel-event CV was 0.74–1.45%. This closes only the measured static register route on gfx1201. Princess-Luna/gfx1151, dynamic K, split-K, fused epilogues, LDS staging, and other dtype/layout keys remain open. [Evidence](../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/README.md).
+
+
+- Current slice (2026-10-02, sync `E2E-REAL-6-ROCM-CACHE-GFX1151-PARITY-2026-10-02`): Princess-Luna gfx1151 now has exact-device shape-free cache parity for softmax, reduction, and scheduled attention. All three tests passed with one native image/entry reused across runtime shapes, distinct package guards, and reference-checked outputs. This closes those tested gfx1151 envelopes alongside the static register gfx1201 matmul evidence. Other ROCm families/layouts and stable separate timings remain open. [Evidence](../../../benchmarks/baselines/rocm_gfx1151_cache_20261002/README.md).

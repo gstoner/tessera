@@ -69,10 +69,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `cos` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `cosh` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `digamma` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `div` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `div` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `erf` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `erfc` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `exp` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `exp` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `expm1` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `floor_div` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `gelu` | elementwise | public | public | registered | complete | fused | device_verified_abi | ready | none |
@@ -93,7 +93,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `sinh` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `softcap` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `softplus` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `sqrt` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `sqrt` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `sub` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `tan` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `tanh` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
@@ -166,6 +166,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `mor_partition` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `mor_router` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
 | `mor_scatter` | layout_transform | public | public | registered | complete | not_applicable | not_applicable | ready | none |
+| `mxfp4_folded_storage` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `pack` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `pad` | layout_transform | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `permute` | layout_transform | public | public | registered | complete | fused | fused | ready | benchmarked |
@@ -222,6 +223,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `matmul` | loop_nest | public | public | registered | complete | fused | device_verified_abi | ready | benchmarked |
 | `moe_swiglu_block` | loop_nest | public | public | registered | complete | fused | fused | ready | benchmarked |
 | `quantized_matmul` | loop_nest | public | public | registered | complete | fused | device_verified_abi | ready | none |
+| `scaled_matmul` | loop_nest | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `tridiagonal_solve` | loop_nest | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `asymmetric_bce` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -282,6 +284,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `dequantize_fp6` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dequantize_fp8` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `dequantize_nvfp4` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `nvfp4_requantize` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `quantize_fp4` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `quantize_fp6` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `quantize_fp8` | quantize | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -296,10 +299,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `argmax` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `argmin` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `count_nonzero` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `cummax` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `cummax` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `cummin` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `cumprod` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
-| `cumsum` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `cumsum` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `max` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `mean` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `min` | reduction | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -379,19 +382,19 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | collective | 4 | PPGCCRNB PPGCCRNB PPGCCRNB PPGCCRNB |
 | comparison | 6 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | contraction | 4 | PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· |
-| elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB |
+| elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB |
 | energy_based_models | 11 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 11 | PPGCpRN· PPGCFCNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCFCN· |
 | geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
-| layout_transform | 32 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCpRN· PPGCnnN· |
+| layout_transform | 33 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCpRN· PPGCnnN· |
 | linalg_decomposition | 5 | PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | linalg_function | 5 | PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | linalg_multilinear | 2 | PPGCpRN· PPGCpRN· |
 | linalg_solver | 3 | PPGCFCN· PPGCpRN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
-| loop_nest | 14 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· PPGCFCN· |
+| loop_nest | 15 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· PPGCFCNB PPGCFCN· |
 | loss | 20 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |
@@ -401,10 +404,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | optimizer | 2 | PPGCFCN· PPGCFCN· |
 | position_encoding | 2 | PPGCFCN· PPGCpRN· |
 | projection | 1 | PPGCFCN· |
-| quantize | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| quantize | 9 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | random_mask | 1 | PPGCFHN· |
 | random_source | 4 | PPGCFHN· PPGCFHN· PPGCFHN· PPGCFHN· |
-| reduction | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| reduction | 15 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rl_loss | 4 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | rotary_embedding | 1 | PPGCFHN· |
 | segment_reduce | 2 | PPGCpRN· PPGCnnN· |

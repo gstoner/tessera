@@ -96,6 +96,7 @@ from tessera.compiler.rocm_mxfp4_folded import (
 from tessera.compiler.rocm_mxfp4_native import _extract_gfx1201_hsaco, _rocm_hipcc
 from tessera.compiler.rocm_native import _rocm_path
 from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
+from benchmarks.rocm.folded_launch_arguments import folded_launch_values
 from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
     selected_symbol_isa_evidence,
 )
@@ -439,16 +440,15 @@ def package_engine(
         hip.hipModuleUnload(module)
         raise
 
-    def launch(bundle: base._DeviceArrays) -> None:
-        values: list[Any] = [
-            *(ctypes.c_void_p(pointer.value) for pointer in bundle.device),
-            ctypes.c_int64(case.m), ctypes.c_int64(case.n), ctypes.c_int64(case.k),
-        ]
+    def launch(bundle: base._DeviceArrays, stream=None) -> None:
+        values = folded_launch_values(
+            package, bundle.device, arrays, (case.m, case.n, case.k),
+        )
         arguments = (ctypes.c_void_p * len(values))(
             *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
         )
         rc = hip.hipModuleLaunchKernel(
-            function, *grid, *workgroup, 0, None, arguments, None,
+            function, *grid, *workgroup, 0, stream, arguments, None,
         )
         if rc != 0:
             raise RuntimeError(f"folded engine {name} launch failed rc={rc}")
@@ -466,6 +466,12 @@ def package_engine(
             **base._code_object_evidence(payload),
         },
     )
+    def launch_on_stream(stream):
+        bundle = engine.copies[engine._next]
+        engine._next = (engine._next + 1) % len(engine.copies)
+        launch(bundle, stream)
+
+    engine.launch_on_stream = launch_on_stream
     original_close = engine.close
 
     def close() -> None:

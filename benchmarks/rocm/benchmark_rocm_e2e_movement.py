@@ -136,9 +136,9 @@ class _ResidentDescriptor:
             self.arguments[index] = ctypes.cast(ctypes.byref(value), ctypes.c_void_p)
         self.grid = max((work + 255) // 256, 1)
 
-    def launch(self) -> None:
+    def launch(self, stream=None) -> None:
         rc = self.hip.hipModuleLaunchKernel(
-            self.function, self.grid, 1, 1, 256, 1, 1, 0, None,
+            self.function, self.grid, 1, 1, 256, 1, 1, 0, stream,
             self.arguments, None,
         )
         if rc:

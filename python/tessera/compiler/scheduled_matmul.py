@@ -64,6 +64,7 @@ def with_bounded_dynamic_m(matmul_module: GraphIRModule, bound: int) -> GraphIRM
     op.operand_types[0] = str(dynamic_lhs)
     op.result_type = str(dynamic_output)
     op.inferred_type = dynamic_output
+    op.inferred_types = (dynamic_output,)
     op.kwargs["shape_bounds"] = [bound, n, k]
     return module
 
@@ -110,6 +111,7 @@ def with_bounded_dynamic_mk(
     op.operand_types = [str(dynamic_lhs), str(dynamic_rhs)]
     op.result_type = str(dynamic_output)
     op.inferred_type = dynamic_output
+    op.inferred_types = (dynamic_output,)
     op.kwargs["shape_bounds"] = [m_bound, n, k_bound]
     return module
 
@@ -127,8 +129,8 @@ def with_bounded_dynamic_axes(
     if len(module.functions) != 1:
         raise ValueError("bounded dynamic axes require one Graph function")
     function = module.functions[0]
-    if len(function.args) != 2 or len(function.result_types) != 1:
-        raise ValueError("bounded dynamic axes require a two-input, one-result matmul")
+    if not 2 <= len(function.args) <= 4 or len(function.result_types) != 1:
+        raise ValueError("bounded dynamic axes require A/B with optional bias/residual and one result")
     matmuls = [op for op in function.body if op.op_name == "tessera.matmul"]
     if len(matmuls) != 1:
         raise ValueError("bounded dynamic axes require one Graph matmul operation")
@@ -162,9 +164,32 @@ def with_bounded_dynamic_axes(
     function.args[1].ir_type = dynamic_rhs
     function.result_types[0] = dynamic_output
     op = matmuls[0]
-    op.operand_types = [str(dynamic_lhs), str(dynamic_rhs)]
+    args = {arg.name:arg for arg in function.args}
+    roles = []
+    for role in ("bias","residual"):
+        value = op.kwargs.get(role)
+        if value in (None,False):
+            continue
+        if not isinstance(value,str) or value.removeprefix("%") not in args:
+            raise ValueError("bounded dynamic epilogue must name a Graph argument")
+        arg = args[value.removeprefix("%")]
+        expected = (str(n),) if role == "bias" else (str(m),str(n))
+        if tuple(str(dim) for dim in arg.ir_type.shape) != expected or arg.ir_type.dtype != "fp32":
+            raise ValueError("bounded dynamic epilogue must match static fp32 capacities")
+        shape = (("?" if "N" in dynamic_axes else str(n)),) if role == "bias" else (
+            "?" if "M" in dynamic_axes else str(m),
+            "?" if "N" in dynamic_axes else str(n))
+        arg.ir_type = tensor_ir_type(shape,arg.ir_type.dtype,layout=arg.ir_type.layout)
+        roles.append(arg.name)
+    expected_names = [function.args[0].name,function.args[1].name,*roles]
+    if [name.removeprefix("%") for name in op.operands] != expected_names or (
+        [arg.name for arg in function.args] != expected_names
+    ):
+        raise ValueError("bounded dynamic matmul requires ordered A/B/bias/residual inputs")
+    op.operand_types = [str(args[name].ir_type) for name in expected_names]
     op.result_type = str(dynamic_output)
     op.inferred_type = dynamic_output
+    op.inferred_types = (dynamic_output,)
     op.kwargs["shape_bounds"] = [m, n, k]
     return module
 
@@ -204,6 +229,7 @@ class ScheduledMatmulArtifact:
     #: exactly this pair.
     split_k: int = 1
     split_k_reduction: str = ""
+    b_layout: str = "col_major"
 
     @property
     def graph_digest(self) -> str:
@@ -481,18 +507,8 @@ def schedule_split_k(schedule_ir: str) -> tuple[int, str]:
     return int(splits[0]), reductions[0]
 
 
-def lower_scheduled_matmul(
-    module: GraphIRModule,
-    *,
-    target: str,
-) -> ScheduledMatmulArtifact:
-    """Lower one bounded Graph matmul through the production C++ boundaries."""
-
-    contract = _graph_contract(module, target)
-    tool = find_tessera_opt()
-    if tool is None:
-        raise RuntimeError("scheduled matmul lowering requires production tessera-opt")
-
+def _canonical_matmul_graph_ir(module: GraphIRModule, target: str, contract: tuple) -> str:
+    """Normalize frontend target/name spelling without lowering physical IR."""
     targeted = copy.deepcopy(module)
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
@@ -514,7 +530,22 @@ def lower_scheduled_matmul(
         for arg in fn.args:
             arg.ir_type = tensor_ir_type(tuple(arg.ir_type.shape), arg.ir_type.dtype)
         fn.body[0].operand_types = [str(arg.ir_type) for arg in fn.args]
-    graph_ir = targeted.to_mlir(target=target, canonical=True)
+    return targeted.to_mlir(target=target, canonical=True)
+
+
+def lower_scheduled_matmul(
+    module: GraphIRModule,
+    *,
+    target: str,
+) -> ScheduledMatmulArtifact:
+    """Lower one bounded Graph matmul through the production C++ boundaries."""
+
+    contract = _graph_contract(module, target)
+    tool = find_tessera_opt()
+    if tool is None:
+        raise RuntimeError("scheduled matmul lowering requires production tessera-opt")
+
+    graph_ir = _canonical_matmul_graph_ir(module, target, contract)
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     hashes = _HASH_RE.findall(tile_ir)
@@ -545,12 +576,23 @@ def lower_scheduled_matmul(
         dynamic_n,
         dynamic_k,
     ) = contract
+    if compiler_target == "nvidia_sm120":
+        # Schedule-to-Tile owns the physical producer and its launch symbol.
+        # Project that native product instead of duplicating the macro/typed
+        # dispatch in Python (which drifts when a new tail route is admitted).
+        entries = re.findall(r'\bllvm.func @(\w+)\(', tile_ir)
+        if len(entries) != 1:
+            raise RuntimeError("scheduled SM120 matmul requires one native Tile entry")
+        function_name = entries[0]
     # ROCM-SPLIT-K-1: the artifact states what the AUTHORITY decided -- the C++
     # Schedule -- never what the Python oracle predicts. The oracle is compared
     # against it in `verify_matmul_projection`, so a disagreement reports as
     # oracle-vs-authority instead of as a Tile artifact that "dropped" a
     # contract it never carried.
     split_k, split_k_reduction = schedule_split_k(schedule_ir)
+    layout_match = re.search(r'\bb_layout = "(row_major|col_major)"', schedule_ir)
+    if layout_match is None:
+        raise RuntimeError("scheduled matmul lowering lost its RHS layout contract")
     artifact = ScheduledMatmulArtifact(
         graph_ir=graph_ir,
         schedule_ir=schedule_ir,
@@ -572,6 +614,7 @@ def lower_scheduled_matmul(
         macro_tile_m=macro_tile_m,
         macro_tile_n=macro_tile_n,
         schedule_digest=hashes[0],
+        b_layout=layout_match[1],
         bias_name=bias_name,
         residual_name=residual_name,
         activation=activation,
@@ -606,7 +649,10 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     if ((op.op_name != "tessera.matmul" and not int4_gemm and not nvfp4_scaled)
             or not 2 <= len(op.operands) <= 4):
         raise ValueError("scheduled matmul requires one supported Graph matmul")
-    if op.kwargs.get("transposeA", False) or op.kwargs.get("transposeB", False):
+    transpose_a, transpose_b = (op.kwargs.get(name, False) for name in ("transposeA", "transposeB"))
+    if type(transpose_a) is not bool or type(transpose_b) is not bool:
+        raise ValueError("scheduled matmul transpose flags must be boolean")
+    if (transpose_a or transpose_b) and not nvfp4_scaled:
         raise ValueError("scheduled matmul does not support transpose")
     args = {arg.name: arg for arg in function.args}
     a_name, b_name = (value.removeprefix("%") for value in op.operands[:2])
@@ -624,8 +670,35 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     a_shape = tuple(extent(value) for value in args[a_name].ir_type.shape)
     b_shape = tuple(extent(value) for value in args[b_name].ir_type.shape)
     out_shape = tuple(extent(value) for value in function.result_types[0].shape)
+    if transpose_a: a_shape = (*a_shape[:-2], a_shape[-1], a_shape[-2])
+    if transpose_b: b_shape = (*b_shape[:-2], b_shape[-1], b_shape[-2])
+    batch_shape: tuple[int, ...] | None = None
+    independent_rhs = nvfp4_scaled and op.kwargs.get("batching") == "independent_rhs"
+    shared_lhs = nvfp4_scaled and op.kwargs.get("batching") == "shared_lhs"
+    if nvfp4_scaled and op.kwargs.get("batching") in {"shared_rhs_rows", "independent_rhs", "shared_lhs"}:
+        rhs_batched = independent_rhs or shared_lhs
+        if (len(out_shape) < 3 or len(a_shape) != (2 if shared_lhs else len(out_shape))
+                or len(b_shape) != (len(out_shape) if rhs_batched else 2)
+                or any(value is None or value <= 0 for value in (*a_shape, *b_shape, *out_shape))):
+            raise ValueError("NVFP4 Schedule requires matching static batch/matrix dimensions")
+        prefix = b_shape[:-2] if shared_lhs else a_shape[:-2]
+        import math
+        batch = math.prod(prefix)
+        rows, logical_k = a_shape[-2:]
+        assert batch is not None and rows is not None and logical_k is not None
+        if out_shape[:-2] != prefix or out_shape[-2] != rows:
+            raise ValueError("NVFP4 output batch/row dimensions differ")
+        if batch * rows > 2**63 - 1:
+            raise ValueError("shared-RHS NVFP4 row product overflows int64")
+        if rhs_batched:
+            if b_shape[:-2] != prefix:
+                raise ValueError("independent RHS batch count differs")
+            b_shape = b_shape[-2:]
+        batch_shape = (*prefix, rows)
+        a_shape = (batch * rows, logical_k)
+        out_shape = (batch * rows, out_shape[-1])
     if len(a_shape) != 2 or len(b_shape) != 2 or len(out_shape) != 2:
-        raise ValueError("scheduled matmul requires rank-2 tensors")
+        raise ValueError("scheduled matmul requires rank-2 tensors or named shared-RHS rows")
     m_value, k_value = a_shape
     kb_value, n_value = b_shape
     # M, N, and K are equality-linked across the three tensor types. Preserve
@@ -674,6 +747,15 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     residual_name = (
         residual_value.removeprefix("%") if isinstance(residual_value, str) else None
     )
+    # The canonical tracer records optional operand role markers, with the
+    # actual SSA edge in operands. Preserve explicitly named argument intent;
+    # only an unbound role marker resolves through the declared ABI position.
+    if bias_value == "bias" and "bias" not in args and len(op.operands) > 2:
+        bias_name = op.operands[2].removeprefix("%")
+    residual_position = 2 + int(bias_name is not None)
+    if (residual_value == "residual" and "residual" not in args
+            and len(op.operands) > residual_position):
+        residual_name = op.operands[residual_position].removeprefix("%")
     if bias_value not in {None, False} and bias_name is None:
         raise ValueError("scheduled matmul bias must name a Graph argument")
     if residual_value not in {None, False} and residual_name is None:
@@ -688,9 +770,14 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             raise ValueError("NVFP4 Schedule requires static scaled NVFP4 Graph inputs and f32 output")
         scale_a_name, scale_b_name = (v.removeprefix("%") for v in op.operands[2:4])
         scale_k = (k + 15) // 16
+        expected_sa = ((batch_shape[-1], scale_k) if shared_lhs and batch_shape else
+                       (*batch_shape, scale_k) if batch_shape else (m, scale_k))
+        expected_sb = (*batch_shape[:-1], scale_k, n) if (independent_rhs or shared_lhs) and batch_shape else (scale_k, n)
+        if transpose_a: expected_sa = (*expected_sa[:-2], expected_sa[-1], expected_sa[-2])
+        if transpose_b: expected_sb = (*expected_sb[:-2], expected_sb[-1], expected_sb[-2])
         if (scale_a_name not in args or scale_b_name not in args
-                or tuple(args[scale_a_name].ir_type.shape) != (str(m), str(scale_k))
-                or tuple(args[scale_b_name].ir_type.shape) != (str(scale_k), str(n))
+                or tuple(args[scale_a_name].ir_type.shape) != tuple(map(str, expected_sa))
+                or tuple(args[scale_b_name].ir_type.shape) != tuple(map(str, expected_sb))
                 or args[scale_a_name].ir_type.dtype != "uint8"
                 or args[scale_b_name].ir_type.dtype != "uint8"
                 or op.kwargs.get("scale_layout") != {"granularity": "block", "block": [1, 16], "format": "ue4m3"}
@@ -709,14 +796,18 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         )
     if bias_name is not None:
         bias = args.get(bias_name)
-        if bias is None or tuple(bias.ir_type.shape) != (str(n),) or bias.ir_type.dtype != "fp32":
+        if (bias is None or bias.ir_type.dtype != "fp32"
+                or len(bias.ir_type.shape) != 1
+                or extent(bias.ir_type.shape[0]) not in ((None,n) if dynamic_n else (n,))):
             raise ValueError("scheduled matmul bias must be an fp32 [N] argument")
     if residual_name is not None:
         residual = args.get(residual_name)
         if (
             residual is None
-            or tuple(residual.ir_type.shape) != (str(m), str(n))
             or residual.ir_type.dtype != "fp32"
+            or len(residual.ir_type.shape) != 2
+            or extent(residual.ir_type.shape[0]) not in ((None,m) if dynamic_m else (m,))
+            or extent(residual.ir_type.shape[1]) not in ((None,n) if dynamic_n else (n,))
         ):
             raise ValueError("scheduled matmul residual must be an fp32 [M,N] argument")
     # The fused bias/activation epilogue is a launch-contract field on NVIDIA
@@ -841,37 +932,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             128,
             128,
         )
-        # Schedule->Tile replaces the Graph tensor wrapper with this explicit
-        # raw-pointer launch entry.  Keeping the suffix here makes the
-        # package descriptor name the same canonical kernel that Tile IR
-        # carries, rather than a Python-side substitute.
-        fused = bias_name is not None or residual_name is not None or activation != "none"
-        reduced = output_dtype == "fp16"
-        suffix = (
-            f"_fused_{storage}_{activation}_b{int(bias_name is not None)}"
-            f"_r{int(residual_name is not None)}"
-            if fused or reduced
-            else ""
-        )
-        if reduced:
-            suffix += "_outf16"
-        # The runtime dispatches scheduled sm_120 matmuls by NAME PREFIX
-        # (kScheduledSm120MatmulPrefix in tessera_nvidia_ptx_launch.cpp). Naming
-        # the kernel after the caller's Graph function made that dispatch depend
-        # on what the user happened to call their function: every name without
-        # the prefix fell through the runtime's strcmp chain and the launch
-        # returned rc=5. Exactly one place in the tree — a benchmark — named a
-        # function to satisfy it; every other caller silently could not launch.
-        # The prefix is part of the ABI, so the compiler emits it rather than
-        # asking the frontend to spell it.
-        base_name = function.name
-        if not base_name.startswith(_SM120_SCHEDULED_MATMUL_PREFIX):
-            base_name = f"{_SM120_SCHEDULED_MATMUL_PREFIX}{base_name}"
-        function_name = f"{base_name}{suffix}" + (
-            "_macro_kernel"
-            if _uses_sm120_macro_cta(m, n, k, storage, accum)
-            else "_kernel"
-        )
+        # The eventual native entry is projected from Schedule-to-Tile
+        # after lowering; the Graph contract has no physical symbol authority.
     elif target == "apple_gpu" and (a_dtype, b_dtype, output_dtype) == (
         "fp32",
         "fp32",
@@ -945,29 +1007,6 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         dynamic_m,
         dynamic_n,
         dynamic_k,
-    )
-
-
-def _uses_sm120_macro_cta(
-    m: int, n: int, k: int, storage: str, accum: str
-) -> bool:
-    """Mirror the measured target-owned 32x32/four-warp admission contract.
-
-    SuperBear's retained WSL pruning packet found staging/barrier overhead at
-    small sizes and timing variance through 33.6M FLOPs.  Every measured
-    67.1M+ case is both low-variance and materially faster. WSL evidence is
-    deliberately ineligible for the global performance registry, but it is
-    sufficient to keep the explicit scheduled route from selecting an
-    unproven crossover while bare-metal selector evidence remains open.
-    """
-    work = 2 * m * n * k
-    return (
-        m >= 32
-        and n >= 32
-        and k >= 16
-        and storage in {"f16", "bf16"}
-        and accum == "f32"
-        and work >= 67_108_864
     )
 
 
@@ -1060,11 +1099,29 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     inputs = [tensor(t) for t in re.findall(r'tensor<[^>]+>', args)]
     out_shape, out_storage = tensor(output)
     bias, residual = boolean('bias'), boolean('residual')
-    if len(inputs) != 2 + bias + residual or any(len(shape) != 2 for shape, _ in inputs[:2]) or len(out_shape) != 2:
+    if len(inputs) != 2 + bias + residual or len(out_shape) != 2:
         raise ValueError('matmul native input arity/rank disagrees')
     m, n, k = map(int, keys[0][:3])
     storage = keys[0][3]
+    if artifact.target == "nvidia_sm120":
+        # MLIR replay above verifies the retained Graph and its canonical Tile
+        # ABI. Project types by semantic operand role, not frontend arg order.
+        # This reads the contract; it does not reconstruct/lower a Graph.
+        argument_records = re.findall(r"(%[A-Za-z0-9_]+): (tensor<[^>]+>)", args)
+        operands = re.findall(
+            r"^\s*%[A-Za-z0-9_]+ = tessera\.matmul "
+            r"((?:%[A-Za-z0-9_]+(?:,\s*)?)+)", parent, re.MULTILINE)
+        if (len(argument_records) != len(inputs) or len(operands) != 1):
+            raise ValueError("matmul native frontend role binding is ambiguous")
+        by_name = {name: tensor(type_text) for name, type_text in argument_records}
+        roles = re.findall(r"%[A-Za-z0-9_]+", operands[0])
+        if (len(by_name) != len(inputs) or len(roles) != len(inputs)
+                or len(set(roles)) != len(roles) or set(roles) != set(by_name)):
+            raise ValueError("matmul native frontend role binding disagrees")
+        inputs = [by_name[name] for name in roles]
     a, b = inputs[:2]
+    if len(a[0]) != 2 or len(b[0]) != 2:
+        raise ValueError("matmul native input arity/rank disagrees")
     for actual, bound in zip((*a[0], *b[0], *out_shape), (m, k, k, n, m, n)):
         if actual is not None and actual != bound:
             raise ValueError('matmul native shape bound disagrees with its signature')
@@ -1081,7 +1138,10 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
         dynamic_m=a[0][0] is None or out_shape[0] is None,
         dynamic_n=b[0][1] is None or out_shape[1] is None,
         dynamic_k=a[0][1] is None or b[0][0] is None)
-    if string('storage') != storage or string('output') != out_storage or string('a_layout') != 'row_major' or string('b_layout') != 'col_major':
+    expected['b_layout'] = string('b_layout')
+    if (string('storage') != storage or string('output') != out_storage or string('a_layout') != 'row_major'
+            or expected['b_layout'] not in {'row_major', 'col_major'}
+            or (expected['b_layout'] == 'row_major' and artifact.target != 'nvidia_sm120')):
         raise ValueError('matmul native storage/layout disagrees')
     for key in ('macro_tile_m', 'macro_tile_n'):
         matches = re.findall(r'(?:^|, )'+key+r' = (\d+) : i64(?:,|$)', attrs)

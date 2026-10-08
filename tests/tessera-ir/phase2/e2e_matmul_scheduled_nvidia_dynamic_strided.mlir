@@ -4,7 +4,7 @@
 module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
   func.func @nvidia_sm120_scheduled_dynamic(
       %a: tensor<?x?xf16>, %b: tensor<?x?xf16>) -> tensor<?x?xf32> {
-    %d = tessera.matmul %a, %b {shape_bounds = [32, 24, 32]}
+    %d = tessera.matmul %a, %b {shape_bounds = [32, 24, 32], rhs_storage_order = "col_major"}
       : (tensor<?x?xf16>, tensor<?x?xf16>) -> tensor<?x?xf32>
     return %d : tensor<?x?xf32>
   }

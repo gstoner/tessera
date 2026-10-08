@@ -41,7 +41,9 @@ from .native_artifact import (
     ScalarArgument,
     ShapeGuard,
 )
-from .rocm_native import ROCMNativePackage, _compile_native_tile_ir
+from .rocm_native import ROCMNativePackage, _compile_native_tile_ir, _run_opt, _tessera_opt
+from .rocm_pipeline import ROCMExecutablePipeline, ROCMInputLevel, ROCMOutputLevel
+from .rocm_native import _shape_free_target_ir, _directive_symbol, _tool_digest
 from .rocm_target import AMDArch, compute_units
 from .scheduled_matmul import find_tessera_opt, run_tessera_opt
 
@@ -292,7 +294,20 @@ class CheckedDirective(TypedDict):
     pipeline_depth: int
 
 
-def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: str) -> CheckedDirective:
+def _scale_profile(shape: BlockScaleShape, scale_format: str):
+    """The semantic profile; never substitute one scale interpretation for another."""
+    if scale_format == "fp32":
+        return WEIGHT_LAYOUTS[shape.weight_layout][0], PACKAGE_ABIS[(shape.weight_layout, shape.output)]
+    if scale_format == "e8m0":
+        if shape.scale_k != 32 or shape.scale_n != 1:
+            raise ValueError("MXFP8 requires K32 groups and per-column scales")
+        from .rocm_mxfp8_blockscale import MXFP8_CONTRACTS, MXFP8_PACKAGE_ABIS
+        return MXFP8_CONTRACTS[shape.weight_layout], MXFP8_PACKAGE_ABIS[(shape.weight_layout, shape.output)]
+    raise ValueError(f"unsupported block scale format {scale_format!r}")
+
+
+def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: str,
+                               *, scale_format: str = "fp32") -> CheckedDirective:
     """Validate the Target directive against the requested contract.
 
     Every semantic field is compared; nothing is defaulted. Returns the
@@ -300,13 +315,13 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     """
     directive = _one_line(target_ir, _DIRECTIVE, _DIRECTIVE + " directive")
     carrier = _one_line(tile_ir, "tile.scaled_matmul_kernel", "tile.scaled_matmul_kernel carrier")
-    contract, _, pointer_abi = WEIGHT_LAYOUTS[shape.weight_layout]
-    package_abi = PACKAGE_ABIS[(shape.weight_layout, shape.output)]
+    contract, package_abi = _scale_profile(shape, scale_format)
+    pointer_abi = WEIGHT_LAYOUTS[shape.weight_layout][2]
     expected_strings = {
         "abi": pointer_abi,
         "physical_contract": contract,
         "package_abi": package_abi,
-        "scale_format": "fp32",
+        "scale_format": scale_format,
         "partial_combine": "scale_outer_product_then_add",
         "k_step_schedule": "isolated_scale_group",
         "output": shape.output,
@@ -332,6 +347,13 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
     staging = _string_attr(directive, "staging")
     warps = _int_attr(directive, "warps")
     pipeline_depth = _int_attr(directive, "pipeline_depth")
+    if scale_format == "e8m0":
+        from .rocm_mxfp8_blockscale import mxfp8_schedule_is_supported
+        if not mxfp8_schedule_is_supported(
+            layout=shape.weight_layout, staging=staging, block_m=block_m,
+            block_n=block_n, macro_k=macro_k, warps=warps, pipeline_depth=pipeline_depth,
+        ) or (macro_k == 64 and shape.k % 64):
+            raise ValueError("MXFP8 requires a checked K32 scale profile with whole physical slabs")
     if staging not in ("global", "lds"):
         raise ValueError("W8A8 Target IR staging must be global or lds")
     if staging == "global" and warps != 1:
@@ -361,6 +383,14 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
             raise ValueError(f"W8A8 Tile IR requires {name}={expected!r}")
     if _int_attr(carrier, "tessera.scale_block_n") != shape.scale_n:
         raise ValueError("W8A8 Tile IR tessera.scale_block_n disagrees with the request")
+    for tile_attr, target_attr, integer in (
+        ("tessera.raster_order", "schedule_raster_order", False),
+        ("tessera.raster_group", "schedule_raster_group", True),
+    ):
+        if re.search(r"(?<![\w.])" + re.escape(tile_attr) + r"\s*=", carrier):
+            get = _int_attr if integer else _string_attr
+            if get(carrier, tile_attr) != get(directive, target_attr):
+                raise ValueError(f"W8A8 Tile/Target {target_attr} mismatch")
     tile_hash = _string_attr(carrier, "tessera.schedule_hash")
     if _string_attr(directive, "tessera.schedule_hash") != tile_hash:
         raise ValueError("W8A8 Tile/Target tessera.schedule_hash mismatch")
@@ -369,10 +399,15 @@ def check_blockscale_target_ir(shape: BlockScaleShape, tile_ir: str, target_ir: 
                             pipeline_depth=pipeline_depth)
 
 
+_blockscale_target_cache: dict[str, tuple[str, str]] = {}
+
+
 def package_blockscale(
     program: BlockScaleProgram, *, pipeline_name: str = "tessera-lower-to-rocm", k_unroll: int = 1,
     scale_group_panels: int = -1, blockscale_stage_k: int = -1,
     blockscale_lds_pad_bytes: int = -1, blockscale_prefetch: int = -1,
+    project_image_identity: bool = True, lds_runtime_k: bool = True,
+    scale_format: str = "fp32",
 ) -> ROCMNativePackage:
     """Compile the Tile program to a gfx1201 HSACO and bind its launch ABI.
 
@@ -382,13 +417,53 @@ def package_blockscale(
     LDS-staged multi-wave body the Schedule selects at large M. None changes
     what a group computes. -1 keeps the generator's measured default (and,
     for ``blockscale_prefetch``, the carrier's pipeline depth)."""
+    if not isinstance(lds_runtime_k, bool):
+        raise ValueError("lds_runtime_k must be a bool")
+    if not isinstance(project_image_identity, bool):
+        raise ValueError("project_image_identity must be a bool")
     shape = program.shape
-    contract = WEIGHT_LAYOUTS[shape.weight_layout][0]
-    package_abi = PACKAGE_ABIS[(shape.weight_layout, shape.output)]
+    contract, package_abi = _scale_profile(shape, scale_format)
+    scale_dtype, scale_bytes = ("uint8", 1) if scale_format == "e8m0" else ("fp32", 4)
     _, out_dtype, out_bytes = OUTPUT_STORAGES[shape.output]
+    # Materialize and check the native Target boundary before binary generation.
+    # The Target consumer delegates to the same typed WMMA producer; Python
+    # only binds the verified artifact and never constructs a kernel.
+    tool = _tessera_opt()
+    if tool is None:
+        raise RuntimeError("tessera-opt is required for W8A8 native packaging")
+    config = ROCMExecutablePipeline(
+        family="matmul", arch="gfx1201", input_level=ROCMInputLevel.TILE,
+        k_unroll=int(k_unroll), scale_group_panels=int(scale_group_panels),
+        blockscale_stage_k=int(blockscale_stage_k),
+        blockscale_lds_pad_bytes=int(blockscale_lds_pad_bytes),
+        blockscale_prefetch=int(blockscale_prefetch))
+    target_key = hashlib.sha256("\x1f".join(
+        ("rocm.w8a8.native_target.v3", str(project_image_identity), str(lds_runtime_k),
+         program.tile_ir, _tool_digest(tool))
+        + config.cache_key()).encode()).hexdigest()
+    cached_target = _blockscale_target_cache.get(target_key)
+    if cached_target is None:
+        checked_target = _run_opt(tool, program.tile_ir,
+            config.pass_pipeline(output=ROCMOutputLevel.TARGET))
+        checked = check_blockscale_target_ir(shape, program.tile_ir, checked_target, scale_format=scale_format)
+        runtime_shape = project_image_identity and checked["staging"] == "global"
+        runtime_mn = project_image_identity and checked["staging"] == "lds"
+        image_target = (_shape_free_target_ir(
+            checked_target, family="scaled_matmul" if runtime_shape else "scaled_matmul_lds",
+            directive=_DIRECTIVE, runtime_k=bool(runtime_mn and lds_runtime_k))
+            if project_image_identity else checked_target)
+        if len(_blockscale_target_cache) >= 128:
+            _blockscale_target_cache.pop(next(iter(_blockscale_target_cache)))
+        _blockscale_target_cache[target_key] = (checked_target, image_target)
+    else:
+        checked_target, image_target = cached_target
+        checked = check_blockscale_target_ir(shape, program.tile_ir, checked_target, scale_format=scale_format)
+        runtime_shape = project_image_identity and checked["staging"] == "global"
+        runtime_mn = project_image_identity and checked["staging"] == "lds"
     target_ir, backend_ir, payload, compiler_fp, toolchain_fp, libraries, compile_state = (
         _compile_native_tile_ir(
-            program.tile_ir, directive=_DIRECTIVE, family="matmul", architecture="gfx1201",
+            image_target, directive=_DIRECTIVE, family="matmul", architecture="gfx1201",
+            input_level=ROCMInputLevel.DIRECTIVE,
             staging="register", k_unroll=int(k_unroll),
             scale_group_panels=int(scale_group_panels),
             blockscale_stage_k=int(blockscale_stage_k),
@@ -396,7 +471,9 @@ def package_blockscale(
             blockscale_prefetch=int(blockscale_prefetch),
         )
     )
-    checked = check_blockscale_target_ir(shape, program.tile_ir, target_ir)
+    if not project_image_identity:
+        check_blockscale_target_ir(shape, program.tile_ir, target_ir, scale_format=scale_format)
+    entry = _directive_symbol(target_ir, _DIRECTIVE)
     image = NativeImageArtifact(
         target="rocm_gfx1201",
         architecture="gfx1201",
@@ -406,7 +483,7 @@ def package_blockscale(
         target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
         binary_format="hsaco",
         payload=payload,
-        entry_points=(NativeEntryPoint(program.entry, package_abi),),
+        entry_points=(NativeEntryPoint(entry, package_abi),),
         compile_state=compile_state,
         device_libraries=libraries,
     )
@@ -415,13 +492,13 @@ def package_blockscale(
     bindings = (
         BufferBinding(0, "a", "input", "fp8_e4m3", 2, "row_major", 1),
         BufferBinding(1, "b", "input", "fp8_e4m3", 2, "row_major", 1),
-        BufferBinding(2, "a_scale", "input", "fp32", 2, "row_major", 4),
-        BufferBinding(3, "b_scale", "input", "fp32", 2, "row_major", 4),
+        BufferBinding(2, "a_scale", "input", scale_dtype, 2, "row_major", scale_bytes),
+        BufferBinding(3, "b_scale", "input", scale_dtype, 2, "row_major", scale_bytes),
         BufferBinding(4, "o", "output", out_dtype, 2, "row_major", out_bytes),
     )
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
-        entry_symbol=program.entry,
+        entry_symbol=entry,
         abi_id=package_abi,
         buffers=bindings,
         scalars=(ScalarArgument(5, "M", "int64"), ScalarArgument(6, "N", "int64"),
@@ -441,6 +518,12 @@ def package_blockscale(
             "work_item": "ROCM-FP8-BLOCKSCALE-1",
             "sync_key": "GFX1201-LANES-2026-09-27",
             "route": "canonical_scheduled_tile_consumer",
+            "image_input_level": "target",
+            "runtime_shape_image": runtime_shape,
+            "runtime_mn_image": runtime_mn,
+            "lds_runtime_k": runtime_mn and lds_runtime_k,
+            "lds_whole_m": runtime_mn and shape.m % checked["block_m"] == 0,
+            "lds_whole_n": runtime_mn and shape.n % checked["block_n"] == 0,
             "physical_contract": contract,
             "materializer": "generate-wmma-gemm-kernel",
             "b_layout": shape.weight_layout,
@@ -461,6 +544,7 @@ def package_blockscale(
                  f"{checked['block_n'] // 16}_k{checked['macro_k']}"
                  + (f"_u{k_unroll}" if k_unroll > 1 else ""))),
             "shape": [m, n, k],
+            "scale_format": scale_format,
             "scale_k": shape.scale_k,
             "scale_n": shape.scale_n,
             "macro_k": checked["macro_k"],

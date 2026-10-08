@@ -1,0 +1,674 @@
+{
+  "architecture": "gfx1201",
+  "rows": [
+    {
+      "image_cache_mode": "empty_image_caches",
+      "shape": [
+        5,
+        32
+      ],
+      "dtype": "fp16",
+      "samples_ms": {
+        "uncached_versions": [
+          99.20466807670891,
+          96.28102486021817,
+          95.69208114407957,
+          97.41424699313939,
+          98.95165613852441,
+          97.27258794009686,
+          96.52622300200164
+        ],
+        "cached_versions": [
+          77.73607084527612,
+          79.37184092588723,
+          77.94981799088418,
+          82.58193591609597,
+          78.48951709456742,
+          78.31097696907818,
+          77.98290997743607
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ],
+        "cached_versions": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 97.27258794009686,
+        "cached_versions": 78.31097696907818
+      },
+      "uncached_over_cached": 1.242132223411104,
+      "max_abs_error": 0.0009466497291845677,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "empty_image_caches",
+      "shape": [
+        5,
+        32
+      ],
+      "dtype": "fp32",
+      "samples_ms": {
+        "uncached_versions": [
+          96.82016400620341,
+          97.78840211220086,
+          95.99886694923043,
+          97.1897691488266,
+          96.60099493339658,
+          93.81871717050672,
+          96.68893879279494
+        ],
+        "cached_versions": [
+          76.11797307617962,
+          79.26212204620242,
+          78.32624088041484,
+          77.70474115386605,
+          78.18548800423741,
+          78.17272306419909,
+          77.93852197937667
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ],
+        "cached_versions": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 96.68893879279494,
+        "cached_versions": 78.17272306419909
+      },
+      "uncached_over_cached": 1.2368628724035808,
+      "max_abs_error": 2.6064152081062275e-07,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "empty_image_caches",
+      "shape": [
+        17,
+        128
+      ],
+      "dtype": "fp16",
+      "samples_ms": {
+        "uncached_versions": [
+          96.02037793956697,
+          98.31112390384078,
+          97.04356594011188,
+          98.11653778888285,
+          96.37115686200559,
+          97.85207314416766,
+          95.73603980243206
+        ],
+        "cached_versions": [
+          78.56586808338761,
+          78.96978408098221,
+          79.78339702822268,
+          80.28245903551579,
+          77.82500004395843,
+          79.7620068769902,
+          79.33901995420456
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ],
+        "cached_versions": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 97.04356594011188,
+        "cached_versions": 79.33901995420456
+      },
+      "uncached_over_cached": 1.2231505505881797,
+      "max_abs_error": 0.0009742177555081,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "empty_image_caches",
+      "shape": [
+        17,
+        128
+      ],
+      "dtype": "fp32",
+      "samples_ms": {
+        "uncached_versions": [
+          98.26028207316995,
+          96.7632147949189,
+          94.81854387558997,
+          95.05421901121736,
+          97.41084091365337,
+          97.57016506046057,
+          95.0005678460002
+        ],
+        "cached_versions": [
+          78.33438203670084,
+          77.56575988605618,
+          78.37579608894885,
+          78.79174500703812,
+          78.31006101332605,
+          79.32414510287344,
+          76.91120612435043
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ],
+        "cached_versions": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 96.7632147949189,
+        "cached_versions": 78.33438203670084
+      },
+      "uncached_over_cached": 1.2352585452143334,
+      "max_abs_error": 3.1844885928222766e-07,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "empty_image_caches",
+      "shape": [
+        200,
+        1024
+      ],
+      "dtype": "fp16",
+      "samples_ms": {
+        "uncached_versions": [
+          99.81106105260551,
+          98.58832694590092,
+          98.18760701455176,
+          97.73515397682786,
+          96.51059797033668,
+          99.75880500860512,
+          97.61635796166956
+        ],
+        "cached_versions": [
+          80.62711101956666,
+          78.79343419335783,
+          78.69548699818552,
+          81.04465785436332,
+          76.87757210806012,
+          81.65224804542959,
+          79.9573790282011
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ],
+        "cached_versions": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 98.18760701455176,
+        "cached_versions": 79.9573790282011
+      },
+      "uncached_over_cached": 1.227999319236325,
+      "max_abs_error": 0.0019494570934517341,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "empty_image_caches",
+      "shape": [
+        200,
+        1024
+      ],
+      "dtype": "fp32",
+      "samples_ms": {
+        "uncached_versions": [
+          96.82065597735345,
+          98.3457409311086,
+          95.67063511349261,
+          97.89468999952078,
+          96.88190696761012,
+          99.50796701014042,
+          99.57321011461318
+        ],
+        "cached_versions": [
+          78.64138297736645,
+          80.30549786053598,
+          79.8336670268327,
+          80.06521011702716,
+          79.12733987905085,
+          80.65911219455302,
+          79.53150104731321
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          7,
+          7,
+          7,
+          7,
+          7,
+          7,
+          7
+        ],
+        "cached_versions": [
+          5,
+          5,
+          5,
+          5,
+          5,
+          5,
+          5
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 97.89468999952078,
+        "cached_versions": 79.8336670268327
+      },
+      "uncached_over_cached": 1.2262331625906353,
+      "max_abs_error": 5.875448563230634e-07,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "reused_image_caches",
+      "shape": [
+        5,
+        32
+      ],
+      "dtype": "fp16",
+      "samples_ms": {
+        "uncached_versions": [
+          32.80745889060199,
+          32.113154185935855,
+          31.32064687088132,
+          32.02671906910837,
+          31.545420875772834,
+          30.425108037889004,
+          31.155942007899284
+        ],
+        "cached_versions": [
+          31.542920973151922,
+          33.62754313275218,
+          32.00403694063425,
+          31.086159870028496,
+          31.882328912615776,
+          31.415682984516025,
+          31.04710509069264
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "cached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 31.545420875772834,
+        "cached_versions": 31.542920973151922
+      },
+      "uncached_over_cached": 1.0000792539987986,
+      "max_abs_error": 0.0009466497291845677,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "reused_image_caches",
+      "shape": [
+        5,
+        32
+      ],
+      "dtype": "fp32",
+      "samples_ms": {
+        "uncached_versions": [
+          32.10039413534105,
+          30.757718021050096,
+          31.624646857380867,
+          34.51918996870518,
+          31.546917976811528,
+          32.11223194375634,
+          32.52851706929505
+        ],
+        "cached_versions": [
+          30.390015803277493,
+          30.947044026106596,
+          31.61673084832728,
+          31.621519941836596,
+          30.507400166243315,
+          31.360912835225463,
+          31.544378958642483
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "cached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 32.10039413534105,
+        "cached_versions": 31.360912835225463
+      },
+      "uncached_over_cached": 1.0235797122360857,
+      "max_abs_error": 2.6064152081062275e-07,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "reused_image_caches",
+      "shape": [
+        17,
+        128
+      ],
+      "dtype": "fp16",
+      "samples_ms": {
+        "uncached_versions": [
+          31.488597160205245,
+          31.66987281292677,
+          30.66697996109724,
+          30.5858941283077,
+          31.32634307257831,
+          31.62986203096807,
+          30.294459080323577
+        ],
+        "cached_versions": [
+          30.427237041294575,
+          31.700080959126353,
+          31.511490000411868,
+          31.5247958060354,
+          30.03399190492928,
+          31.013531144708395,
+          33.14120112918317
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "cached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 31.32634307257831,
+        "cached_versions": 31.511490000411868
+      },
+      "uncached_over_cached": 0.994124462923488,
+      "max_abs_error": 0.0009742177555081,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "reused_image_caches",
+      "shape": [
+        17,
+        128
+      ],
+      "dtype": "fp32",
+      "samples_ms": {
+        "uncached_versions": [
+          31.545646023005247,
+          31.532479915767908,
+          30.911074951291084,
+          31.729156151413918,
+          30.157006112858653,
+          32.369352877140045,
+          32.10029401816428
+        ],
+        "cached_versions": [
+          30.933147994801402,
+          31.50559007190168,
+          31.497723888605833,
+          31.734255142509937,
+          31.541042029857635,
+          31.806954881176353,
+          32.39525202661753
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "cached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 31.545646023005247,
+        "cached_versions": 31.541042029857635
+      },
+      "uncached_over_cached": 1.0001459683273386,
+      "max_abs_error": 3.1844885928222766e-07,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "reused_image_caches",
+      "shape": [
+        200,
+        1024
+      ],
+      "dtype": "fp16",
+      "samples_ms": {
+        "uncached_versions": [
+          32.658273819833994,
+          31.900968868285418,
+          31.965431990101933,
+          30.532878125086427,
+          31.906578922644258,
+          31.590607948601246,
+          32.032510032877326
+        ],
+        "cached_versions": [
+          31.343925977125764,
+          30.600799014791846,
+          32.2607948910445,
+          31.45318408496678,
+          31.427705893293023,
+          32.37798996269703,
+          31.976813916116953
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "cached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 31.906578922644258,
+        "cached_versions": 31.45318408496678
+      },
+      "uncached_over_cached": 1.0144149106320266,
+      "max_abs_error": 0.0019494570934517341,
+      "fingerprints_and_images_match": true
+    },
+    {
+      "image_cache_mode": "reused_image_caches",
+      "shape": [
+        200,
+        1024
+      ],
+      "dtype": "fp32",
+      "samples_ms": {
+        "uncached_versions": [
+          32.53938793204725,
+          31.156138982623816,
+          31.542466022074223,
+          32.885539112612605,
+          33.19265507161617,
+          33.436240162700415,
+          32.16773900203407
+        ],
+        "cached_versions": [
+          31.244958052411675,
+          32.969649182632565,
+          32.03978482633829,
+          31.59787179902196,
+          31.92697884514928,
+          32.28070493787527,
+          32.334096962586045
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ],
+        "cached_versions": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3
+        ]
+      },
+      "medians_ms": {
+        "uncached_versions": 32.53938793204725,
+        "cached_versions": 32.03978482633829
+      },
+      "uncached_over_cached": 1.0155932103919205,
+      "max_abs_error": 5.875448563230634e-07,
+      "fingerprints_and_images_match": true
+    }
+  ],
+  "measurement": "native package wall time; version metadata varied within explicit image-cache modes",
+  "source_sha256": "bb54f9769d91e1efa35a52d142273fd82aca8d984bac1ca4820ffc02b013d17b",
+  "compiler_sha256": "e4e33848bc4b1b9378789dc2c47539a1f1c405ac0c93ec0e2df9713fdfe071d6",
+  "recorder_sha256": "e291ceec0a2921024040139f6441dd75d7ffa2f1ccf3ab20cc3995f924f45375",
+  "limitations": [
+    "not kernel timing",
+    "existing RMSNorm profile only",
+    "compiler binary comes from five-slice integration build, adapter from isolated PR"
+  ]
+}

@@ -3,8 +3,22 @@ audit_role: plan
 plan_state: landing
 owner: Apple backend
 target: apple_gpu
-last_updated: 2026-09-30
+last_updated: 2026-10-07
 ---
+
+## ROCM-LINKED-TOOL-IDENTITY-2026-10-07
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Shared contract: bounded ROCm compiler metadata reuse and image-cache identity
+now include loaded ELF dependencies and loader search-path changes. Static
+ELF and non-ELF executable content semantics are preserved. Runtime ABI,
+Graph/Schedule/Tile semantics and physical schedules are unchanged.
+Focused host validation passes 372 checks with four hardware skips.
+gfx1201 owning-device validation and existing RMSNorm package A/B receipts
+are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/.
+This is a cache-contract slice; wider five-slice compiler closure remains open.
+
+Not applicable: Mach-O/Metal image identities do not use this ROCm adapter.
 
 ## `NVIDIA-NVFP4-SCHEDULE-2026-09`: sibling assessment
 

@@ -1,0 +1,4 @@
+{
+  "benchmarks/baselines/nvidia_jvp_portable_20261006/artifacts/qkv_v_5_0.program.json": "d27f417fe5e40d3d5935bb8d6937abe5273b29fc1b1a27f83127852f39e7927e",
+  "benchmarks/baselines/nvidia_public_attention_vjp_20261006/artifacts/qkv_v_5_0.json": "8f2752b034ebcf59283d4bf8b1a4d69be734e5473f5e32c390b03c52bd681bb7"
+}

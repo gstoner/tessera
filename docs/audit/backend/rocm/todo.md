@@ -12568,3 +12568,5 @@ active M/N/K of (3,7,13), (5,15,21), and (8,24,32), with padded host views,
 numerical checks, and package/allocation reuse. The 100-sample fp16 and bf16 packets cover (64,128,128), (96,192,192), and
 (128,256,256) under bound (128,256,256). Several event CVs are high, especially
 for bf16; these measurements support attribution only. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+
+Matching-source x86-enabled full validation passes: 20,419 passed, 7,387 skipped, 874 deselected. Final drift gates pass 287 checks; generated-document checks pass. Historical build/fixture failures and repairs are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/README.md. Owning-device evidence remains architecture-specific.

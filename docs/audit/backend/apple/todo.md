@@ -10323,3 +10323,5 @@ host-free shape-contract tests and exact gfx1201 / sm_120 consumer evidence.
 Apple has no corresponding resident Metal package or execution ABI. Follow-up
 is required before any Apple consumer or parity claim; this GPU evidence does
 not transfer to Metal.
+
+Matching-source x86-enabled full validation passes: 20,419 passed, 7,387 skipped, 874 deselected. Final drift gates pass 287 checks; generated-document checks pass. Historical build/fixture failures and repairs are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/README.md. Owning-device evidence remains architecture-specific.

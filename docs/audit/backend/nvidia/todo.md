@@ -10163,3 +10163,5 @@ attribution only, with no performance promotion. The standalone CUDA
 `strided` uploader rejects noncompact 2-D host views before allocation;
 the public resident-program path packs accepted padded views to compact
 storage. Physical device pitches remain out of scope. [Packet](../../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
+
+Matching-source x86-enabled full validation passes: 20,419 passed, 7,387 skipped, 874 deselected. Final drift gates pass 287 checks; generated-document checks pass. Historical build/fixture failures and repairs are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/README.md. Owning-device evidence remains architecture-specific.

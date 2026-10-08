@@ -6730,3 +6730,5 @@ The shared Graph projection is exercised for all three bounded axes, but this
 slice adds only gfx1201 HIP and sm_120 CUDA resident package consumers. x86 has
 no resident package/runtime consumer for this edge. Any such consumer needs its
 own ABI, native Schedule/Tile route, numerical proof, and exact-CPU evidence.
+
+Matching-source x86-enabled full validation passes: 20,419 passed, 7,387 skipped, 874 deselected. Final drift gates pass 287 checks; generated-document checks pass. Historical build/fixture failures and repairs are recorded in benchmarks/baselines/rocm_linked_tool_identity_pr_20261007/README.md. Owning-device evidence remains architecture-specific.

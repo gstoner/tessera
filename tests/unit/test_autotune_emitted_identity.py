@@ -94,6 +94,8 @@ def _bridge(tmp_path, monkeypatch, content=b"ptx-launch-bridge-v1"):
 
     lib = tmp_path / "libtessera_nvidia_ptx_launch.so"
     lib.write_bytes(content)
+    # Exercise discovery regardless of prior suite GPU initialization.
+    monkeypatch.setattr(rt, "_nvidia_ptx_launch_lib", None)
     monkeypatch.setattr(rt, "_nvidia_ptx_launch_lib_path", lambda: lib)
     return lib
 
@@ -103,6 +105,8 @@ def _gemm_lib(tmp_path, monkeypatch, content=b"shipped-gemm-v1"):
 
     lib = tmp_path / "libtessera_nvidia_gemm.so"
     lib.write_bytes(content)
+    # Exercise discovery regardless of prior suite GPU initialization.
+    monkeypatch.setattr(rt, "_nvidia_gemm_runtime", None)
     monkeypatch.setattr(rt, "_nvidia_gemm_lib_path", lambda: lib)
     return lib
 

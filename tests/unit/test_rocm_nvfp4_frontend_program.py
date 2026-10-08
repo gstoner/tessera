@@ -25,7 +25,7 @@ def test_declared_generic_scaled_shape_and_nvfp4_nk_shape_are_distinct():
 
 @pytest.mark.parametrize("change",["policy","edge","result","target","bindings","argument_layout","function_contract"])
 def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch):
-    from tessera.compiler import rocm_nvfp4_program as program
+    from tessera.compiler import native_nvfp4_program as native_export
     module=_full_graph(128,32,256,[0,16,32],(0,1,2,3,4))
     fn=module.functions[0]
     if change=="policy":
@@ -42,7 +42,8 @@ def test_frontend_rejects_semantic_mutations_before_compiler(change,monkeypatch)
         fn.fn_attrs["tessera.aliasing"]='"in_place"'
     else:
         fn.body[0].operands[2]=fn.body[0].operands[0]
-    monkeypatch.setattr(program,"find_tessera_opt",lambda:pytest.fail("invalid Graph reached compiler"))
+    monkeypatch.setattr(native_export,"export_native_nvfp4_program",
+                        lambda *args,**kwargs:pytest.fail("invalid Graph reached compiler"))
     with pytest.raises(ValueError):
         package_traced_resident(module)
 

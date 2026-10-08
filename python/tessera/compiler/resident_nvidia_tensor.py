@@ -91,6 +91,7 @@ class ResidentTensorCall:
         self.component_receipts = tuple(receipts)
     def _check(self, status):
         if status:
+            assert self.lib is not None
             reason = self.lib.tessera_nvidia_matmul_last_error()
             raise RuntimeError(reason.decode() if reason else "native resident tensor failure")
 
@@ -132,6 +133,7 @@ class ResidentTensorCall:
             view.rank = len(shape)
             for axis in range(len(shape)):
                 view.shape[axis], view.strides[axis] = shape[axis], strides[axis]
+        assert self.lib is not None
         self._check(self.lib.tessera_nvidia_matmul_invoke_resident(
             self.handle, views, len(values), ct.c_void_p(stream)))
         return tuple(dict(receipt) for receipt in self.component_receipts)

@@ -12,7 +12,6 @@ from .rocm_mxfp4_storage_native import build_mxfp4_storage_graph,package_mxfp4_s
 from .rocm_nvfp4_ingest import nvfp4_requantization_policy
 from .rocm_nvfp4_ingest_native import build_nvfp4_ingest_graph,package_nvfp4_ingest_graph
 from .rocm_nvfp4_resident import NVFP4ResidentProgram,_program_digest,package_resident_packed_consumer
-from .scheduled_matmul import find_tessera_opt,run_tessera_opt
 
 
 def packed_consumer_attrs(k):

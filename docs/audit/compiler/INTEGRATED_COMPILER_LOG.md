@@ -7763,7 +7763,7 @@ static register, k_unroll=1, split_k=1, unfused envelope; broader cache keys
 and dynamic/split/fused/LDS routes remain open. No sibling backend or shared
 IR contract changed.
 
-[Packet](../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/gfx1201_recheck_20261002.json).
+[Packet](../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/gfx1201_recheck_20261002.json).
 
 
 
@@ -7795,7 +7795,7 @@ from end-to-end timings (2.20–6.51 ms), and records Schedule/package costs.
 No performance promotion follows. Dynamic, split-K, fused, LDS-staged, and
 other dtype/layout cache routes remain open.
 
-[Packet](../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/gfx1201_representative_recheck_final_20261002.json).
+[Packet](../../../benchmarks/baselines/rocm_gfx1201_matmul_shape_key_20261002/gfx1201_representative_recheck_final_20261002.json).
 
 
 
@@ -7833,7 +7833,7 @@ scalar dot-product reductions inside per-key scans, a concrete lead for
 tiled-kernel work. This is correct-route evidence, not a performance closure
 or selector promotion.
 
-[Source-fingerprinted exact-device packet](../../benchmarks/baselines/nvidia_attention_lse_e2e_20261001/saved_lse_extended_recheck_20261002.json).
+[Source-fingerprinted exact-device packet](../../../benchmarks/baselines/nvidia_attention_lse_e2e_20261001/saved_lse_extended_recheck_20261002.json).
 
 
 ### 2026-10-02 — saved-LSE delta experiment and paged-KV recheck
@@ -7870,8 +7870,8 @@ permuted-page correctness cases. With only three samples and ten device-event
 repetitions, every row failed the 4% stability gate, so the packet does not
 change the higher-sample retain-existing disposition or selector.
 
-[Saved-LSE five-shape packet](../../benchmarks/baselines/nvidia_attention_lse_e2e_20261001/saved_lse_abi_recheck_20261002.json).
-[Paged-KV diagnostic packet](../../benchmarks/baselines/nvidia_sm120_paged_kv_recheck_20261002/paged_kv_recheck.json).
+[Saved-LSE five-shape packet](../../../benchmarks/baselines/nvidia_attention_lse_e2e_20261001/saved_lse_abi_recheck_20261002.json).
+[Paged-KV diagnostic packet](../../../benchmarks/baselines/nvidia_sm120_paged_kv_recheck_20261002/paged_kv_recheck.json).
 
 
 ## NVIDIA attention forward timing refresh — 2026-10-02

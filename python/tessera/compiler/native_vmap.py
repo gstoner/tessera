@@ -325,6 +325,8 @@ def certify_typed_batch_frontends(owner, values, *, rtol, atol):
         if first is None:
             first = scalar_values
         outputs.append(owner._fn(*scalar_values))
+    if first is None:
+        raise ValueError("native batch certification requires a nonempty batch")
     legacy = specialize_module_from_values(
         owner._ensure_legacy_graph_ir(), dict(zip(owner.arg_names, first, strict=True)))
     legacy = project_batch(legacy, values, axes, depth=depth, scale_transpose=scale_transpose, broadcast_prefix=mixed)

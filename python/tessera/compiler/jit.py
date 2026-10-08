@@ -416,6 +416,8 @@ class JitFn:
         lowering_diagnostics: developer-facing lowering decision diagnostics
     """
 
+    _frontend_batch_policies: tuple[tuple[int | None, ...], ...]
+
     def __init__(
         self,
         fn: Callable,
@@ -1912,18 +1914,18 @@ class JitFn:
                        if info["family"] == "scan" else {"N":info["elements"]})
         elif softmax:
             import math
-            expected_abi = GFX_SOFTMAX_F32_ABI
+            softmax_expected_abi: str | None = GFX_SOFTMAX_F32_ABI
             if nvidia_softmax:
                 from .nvidia_native import (
                     SM120_SOFTMAX_F16_ABI, SM120_SOFTMAX_BF16_ABI,
                     SM120_SOFTMAX_F32_ABI,
                 )
-                expected_abi = {
+                softmax_expected_abi = {
                     "fp16": SM120_SOFTMAX_F16_ABI,
                     "bf16": SM120_SOFTMAX_BF16_ABI,
                     "fp32": SM120_SOFTMAX_F32_ABI,
-                }.get(module.functions[0].args[0].ir_type.dtype)
-            if expected_abi is None or descriptor.abi_id != expected_abi or len(ordered) != 1:
+                }.get(module.functions[0].args[0].ir_type.dtype or "")
+            if softmax_expected_abi is None or descriptor.abi_id != softmax_expected_abi or len(ordered) != 1:
                 raise ValueError("public native row-softmax requires its checked storage ABI")
             shape = ordered[0].shape
             rows, columns = math.prod(shape[:-1]), shape[-1]
@@ -2643,7 +2645,10 @@ class JitFn:
         )
         from .native_vmap import mixed_batch_policies, normalize_mixed_batch_inputs
         if mixed_batch_policies(self):
-            seed_values = list(self._ordered_inputs(args, kwargs, normalize_batch=False))
+            raw_seed_values = self._ordered_inputs(args, kwargs, normalize_batch=False)
+            if raw_seed_values is None:
+                raise TesseraJitError("native JVP requires all primal arguments")
+            seed_values = list(raw_seed_values)
             for index, value in zip(request.wrt_indices, tangent_values, strict=True):
                 if tuple(value.shape) != tuple(seed_values[index].shape):
                     raise TesseraJitError("native JVP primal and tangent shapes must match")
@@ -2922,6 +2927,8 @@ class JitFn:
                 from .native_vmap import mixed_batch_policies
                 if mixed_batch_policies(self):
                     raw = self._ordered_inputs(args, kwargs, normalize_batch=False)
+                    if raw is None:
+                        raise TesseraJitError("native VJP requires all primal arguments")
                     return tuple(gradient.reshape(raw[index].shape) for gradient, index in
                                  zip(plugin_result.gradients, request.wrt_indices, strict=True))
                 return plugin_result.gradients

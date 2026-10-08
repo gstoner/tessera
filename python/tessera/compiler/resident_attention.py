@@ -8,6 +8,7 @@ from __future__ import annotations
 import ctypes as ct
 import math
 import threading
+from typing import Any, cast
 import numpy as np
 from .native_device_tape import _Buffer
 
@@ -38,9 +39,9 @@ def checkpoint_shapes(pair, *, runtime_dims=None):
         image = NativeImageArtifact.from_dict(package.image.to_dict())
         desc = LaunchDescriptor.from_dict(package.descriptor.to_dict())
         desc.validate_image(image)
-        p = desc.provenance
+        p: dict[str, Any] = dict(desc.provenance)
         dims = p.get('shape')
-        symbolic_dims = dims
+        symbolic_dims = cast(tuple[int, ...], dims)
         shape_bounds = p.get("shape_bounds",())
         from .attention_shape_contract import attention_dimensions,descriptor_attention_shapes
         dims = attention_dimensions(symbolic_dims,shape_bounds,runtime_dims)
@@ -209,7 +210,7 @@ class ResidentAttentionTape:
             if any(not isinstance(spec,dict) or not isinstance(spec.get("shape"),(tuple,list))
                    or len(spec["shape"])!=4 for spec in interfaces):
                 raise ValueError("bounded attention capture requires rank-four CUDA inputs")
-            qs,ks,vs = (spec["shape"] for spec in interfaces)
+            qs,ks,vs = (cast(dict[str, Any], spec)["shape"] for spec in interfaces)
             actual = (qs[0],qs[1],ks[1],qs[2],ks[2],qs[3],vs[3])
             self.dims,self.shapes = checkpoint_shapes(pair,runtime_dims=actual)
         else:
@@ -402,7 +403,7 @@ class ResidentAttentionTape:
     def _resident_group(self, values, shapes):
         # One dependency after validating the entire group covers all previously
         # submitted writes on each producer stream. Never reuse across calls.
-        streams = []
+        streams: list[int | None] = []
         pointers = [self._resident(value,shape,producer_streams=streams)
                     for value,shape in zip(values,shapes,strict=True)]
         if self.asynchronous and any(stream is None for stream in streams):

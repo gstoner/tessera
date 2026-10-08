@@ -3057,7 +3057,7 @@ def _nvfp4_logical_batch_prefix(descriptor: LaunchDescriptor) -> tuple[int, ...]
     if "logical_batch_shape" in descriptor.provenance:
         output=descriptor.buffers[4]
         shape=descriptor.provenance.get("shape",())
-        expected=(*prefix,rows,shape[1]) if len(shape)==3 else ()
+        expected=(*prefix,rows,shape[1]) if isinstance(shape,(list,tuple)) and len(shape)==3 else ()
         guards={(g.dimension,g.predicate,g.value) for g in descriptor.shape_guards if g.binding==output.name}
         if (output.rank!=len(expected) or
                 guards!={(i,"eq",extent) for i,extent in enumerate(expected)}):
@@ -3287,12 +3287,12 @@ def _submit_nvidia_sm120_native(
         raise RuntimeError("SM120 PTX native image is not ASCII") from exc
     entry = descriptor.entry_symbol
     from tessera.compiler.native_artifact import LaunchGeometry
-    softmax_abis = {
+    softmax_storage_abis = {
         "f16": SM120_SOFTMAX_F16_ABI,
         "bf16": SM120_SOFTMAX_BF16_ABI,
         "f32": SM120_SOFTMAX_F32_ABI,
     }
-    if descriptor.abi_id in softmax_abis.values():
+    if descriptor.abi_id in softmax_storage_abis.values():
         storage = descriptor.provenance.get("storage")
         strategy = descriptor.provenance.get("schedule")
         # Existing serialized serial softmax ABI packages name the physical
@@ -3304,8 +3304,8 @@ def _submit_nvidia_sm120_native(
             "_cooperative_128" if cooperative else "")
         geometry = ("sm120_softmax_cooperative_128_rows" if cooperative
                     else "sm120_softmax_thread_per_row_128")
-        if (storage not in softmax_abis or strategy not in {"serial", "cooperative_128"}
-                or descriptor.abi_id != softmax_abis[storage]
+        if (storage not in softmax_storage_abis or strategy not in {"serial", "cooperative_128"}
+                or descriptor.abi_id != softmax_storage_abis[storage]
                 or entry != expected_entry
                 or descriptor.geometry != LaunchGeometry(policy=geometry)):
             raise RuntimeError("SM120 softmax schedule/entry/geometry ABI mismatch")
@@ -3320,7 +3320,7 @@ def _submit_nvidia_sm120_native(
                 or stream is None):
             raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
         is_rmsnorm = entry.startswith("tessera_tile_norm_")
-        is_resident_softmax = descriptor.abi_id in softmax_abis.values()
+        is_resident_softmax = descriptor.abi_id in softmax_storage_abis.values()
         epilogue = descriptor.provenance.get("epilogue", {})
         if not isinstance(epilogue, Mapping):
             raise RuntimeError("resident SM120 epilogue policy must be a mapping")
@@ -4911,12 +4911,15 @@ def _submit_rocm_gfx1151_native(
             raise ValueError("native scaled primal descriptor has a non-primal program")
         names = descriptor.provenance["native_program_arg_names"]
         output_name = descriptor.provenance["native_program_output_name"]
+        if (not isinstance(names,(list,tuple)) or any(not isinstance(name,str) for name in names)
+                or not isinstance(output_name,str)):
+            raise ValueError("native scaled primal argument roles differ")
         if len(names) != program["argument_count"] or len(set(names)) != len(names):
             raise ValueError("native scaled primal argument roles differ")
         if len(program["steps"]) != 1:
             raise ValueError("typed primal descriptor requires one native scaled product")
-        dimensions = json.loads(package.members_json[0])["scalars"]
-        if [int(scalars[name]) for name in ("M", "N", "K")] != dimensions:
+        primal_dimensions = json.loads(package.members_json[0])["scalars"]
+        if [int(cast(int,scalars[name])) for name in ("M", "N", "K")] != primal_dimensions:
             raise ValueError("native primal scalar extents differ from compiler program")
         lib = _load_rocm_native_movement_runtime()
         if lib is None:

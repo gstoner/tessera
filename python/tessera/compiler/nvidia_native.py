@@ -536,7 +536,6 @@ class NVIDIANativeTensorProgram:
         """
         self.validate()
         import numpy as np
-        from tessera import runtime as rt
         from .emit.nvidia_cuda import NvidiaDeviceSession
 
         source = np.asarray(producer_input)
@@ -2733,7 +2732,7 @@ def supports_nvfp4_matmul(module: GraphIRModule) -> bool:
         rhs_batched = op.kwargs["batching"] != "shared_rhs_rows"
         if not a_shape or not b_shape or not fn.result_types:return False
         rank=fn.result_types[0].rank
-        if (rank < 3 or len(a_shape) != (2 if shared_lhs else rank)
+        if (rank is None or rank < 3 or len(a_shape) != (2 if shared_lhs else rank)
                 or len(b_shape) != (rank if rhs_batched else 2)):
             return False
         prefix=b_shape[:-2] if shared_lhs else a_shape[:-2]

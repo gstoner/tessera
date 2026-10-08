@@ -58,7 +58,7 @@ def contract(module, *, semantic_only=False):
         [x.removeprefix("%") for x in fn.return_values]!=op.result_names or
         type(op.kwargs.get("transposeA",False)) is not bool or
         (op.kwargs.get("transposeA",False) is not False and
-         not (op.kwargs.get("batching") in (None,"broadcast"))) or
+         op.kwargs.get("batching") not in (None,"broadcast")) or
         type(op.kwargs.get("transposeB",False)) is not bool or
         op.kwargs.get("batching") not in (None,"shared_rhs_rows","independent_rhs","shared_lhs","broadcast") or
         op.kwargs.get("numeric_policy")!={"accum":"fp32","execution_mode":"exact_per_block"}):
@@ -180,7 +180,8 @@ def package_typed_scaled(module,program,*,pipeline_name):
 
 def _package_native_typed(module,program,*,pipeline_name):
     """Bind the compiler-owned member image; do not compile a second kernel."""
-    import hashlib,json
+    import hashlib
+    import json
     from .native_scaled_program import package_native_scaled_primal_artifacts
     from .native_artifact import (BufferBinding,LaunchDescriptor,LaunchGeometry,
         NativeEntryPoint,NativeImageArtifact,OrderingSemantics,ScalarArgument,ShapeGuard)
@@ -246,8 +247,8 @@ def supports_composed_scale_jvp(module, wrt_indices):
         return False
     names = {arg.name: arg for arg in fn.args}
     values = {("%" + name): arg.ir_type for name, arg in names.items()}
-    scales = set()
-    used = set()
+    scales: set[str] = set()
+    used: set[str] = set()
     expected = fn.result_types[0]
     if expected.dtype != "fp32":
         return False

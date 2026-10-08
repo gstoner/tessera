@@ -4219,25 +4219,25 @@ def _shape_scaled_matmul(operands, attrs):
             raise ValueError("NVFP4 batching requires declared logical matrix/scale batch storage")
         effective_a = (*a.shape[:-2], a.shape[-1], a.shape[-2]) if transpose_a else a.shape
         effective_b = (*b.shape[:-2], b.shape[-1], b.shape[-2]) if transpose_b else b.shape
-        prefix = tuple(map(int,effective_b[:-2] if shared_lhs else effective_a[:-2]))
+        nvfp4_prefix = tuple(map(int,effective_b[:-2] if shared_lhs else effective_a[:-2]))
         import math
-        batch = math.prod(prefix)
+        batch = math.prod(nvfp4_prefix)
         m, k = map(int, effective_a[-2:])
         kb, n = map(int, effective_b[-2:])
-        if rhs_batched and tuple(map(int,effective_b[:-2])) != prefix:
+        if rhs_batched and tuple(map(int,effective_b[:-2])) != nvfp4_prefix:
             raise ValueError("independent RHS batch count differs")
         scale_k = (k + 15) // 16
         expected_sa: tuple[str, ...] = (str(m), str(scale_k))
         expected_sb: tuple[str, ...] = (str(scale_k), str(n))
-        if lhs_batched: expected_sa = (*map(str,prefix), *expected_sa)
-        if rhs_batched: expected_sb = (*map(str,prefix), *expected_sb)
+        if lhs_batched: expected_sa = (*map(str,nvfp4_prefix), *expected_sa)
+        if rhs_batched: expected_sb = (*map(str,nvfp4_prefix), *expected_sb)
         if transpose_a: expected_sa = (*expected_sa[:-2], expected_sa[-1], expected_sa[-2])
         if transpose_b: expected_sb = (*expected_sb[:-2], expected_sb[-1], expected_sb[-2])
-        if (min(*prefix, m, k, n) <= 0 or batch * m > 2**63 - 1 or k != kb
+        if (min(*nvfp4_prefix, m, k, n) <= 0 or batch * m > 2**63 - 1 or k != kb
                 or sa.dtype != "uint8" or sb.dtype != "uint8"
                 or sa.shape != expected_sa or sb.shape != expected_sb):
             raise ValueError("NVFP4 batch shapes/scales differ")
-        return tensor_ir_type((*prefix, m, n), "fp32")
+        return tensor_ir_type((*nvfp4_prefix, m, n), "fp32")
     if attrs.get("batching") is not None:
         raise ValueError("scaled_matmul batching policy is unknown")
     if a.rank!=2 or b.rank!=2:

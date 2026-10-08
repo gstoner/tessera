@@ -61,8 +61,8 @@ def attention_buffer_shapes(dims, *, backward=False,bias=False,bias_shape=(),
     q,k,v=(b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv)
     o,lse=(b,hq,sq,dv),(b,hq,sq)
     physical=physical_attention_bias_shape(dims,bias_shape)
-    inputs=[o,q,k,v,o,lse] if backward else [q,k,v]
-    outputs=[q,k,v] if backward else [o,lse]
+    inputs: list[tuple[int, ...]] = [o,q,k,v,o,lse] if backward else [q,k,v]
+    outputs: list[tuple[int, ...]] = [q,k,v] if backward else [o,lse]
     if bias:inputs.insert(5 if backward else 3,physical)
     if lse_cotangent:inputs.insert(6+int(bias),lse)
     if bias_gradient:outputs.append(physical)
@@ -74,7 +74,7 @@ def attention_guards(buffers,dims,bounds=(),**policies):
     symbolic=attention_buffer_shapes(dims,**policies)
     capacity=attention_buffer_shapes(caps,**policies)
     if len(buffers)!=len(symbolic):raise ValueError("attention buffer role count disagrees")
-    guards=[]
+    guards: list[ShapeGuard] = []
     for binding,shape,limit in zip(buffers,symbolic,capacity,strict=True):
         for axis,(extent,cap) in enumerate(zip(shape,limit,strict=True)):
             if extent==DYNAMIC_DIM:

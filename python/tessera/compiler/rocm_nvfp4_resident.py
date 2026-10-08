@@ -408,7 +408,8 @@ class NVFP4ResidentProgram:
             restored.append((stage["graph_ir"], stage["schedule_ir"], native))
         program = cls(
             NVFP4IngestPackage(*restored[0]), MXFP4StoragePackage(*restored[1]),
-            ResidentPackedConsumer(*restored[2], *shape, data.get("native_plan_json")),
+            ResidentPackedConsumer(restored[2][0], restored[2][1], restored[2][2],
+                                   shape[0], shape[1], shape[2], data.get("native_plan_json")),
             data.get("native_plan_json"))
         program.validate()
         return program

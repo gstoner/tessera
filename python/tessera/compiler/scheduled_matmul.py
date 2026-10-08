@@ -10,7 +10,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from pathlib import Path
 
 from .graph_ir import GraphIRModule
@@ -681,7 +681,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
                 or len(b_shape) != (len(out_shape) if rhs_batched else 2)
                 or any(value is None or value <= 0 for value in (*a_shape, *b_shape, *out_shape))):
             raise ValueError("NVFP4 Schedule requires matching static batch/matrix dimensions")
-        prefix = b_shape[:-2] if shared_lhs else a_shape[:-2]
+        prefix = cast(tuple[int, ...], b_shape[:-2] if shared_lhs else a_shape[:-2])
         import math
         batch = math.prod(prefix)
         rows, logical_k = a_shape[-2:]

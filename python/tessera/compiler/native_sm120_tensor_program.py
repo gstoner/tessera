@@ -4,6 +4,7 @@ import base64
 import json
 import re
 import struct
+from pathlib import Path
 
 from .rocm_native import _tool_digest
 from .scheduled_matmul import (find_tessera_opt,run_tessera_opt, ScheduledMatmulArtifact,
@@ -36,7 +37,7 @@ class NativeSM120TensorGraph:
     source_ir:str
     outlined_ir:str
     plan_json:str
-    tool:object
+    tool:Path
     compiler_identity:str
 
     @property
@@ -69,6 +70,7 @@ class NativeSM120TensorGraph:
             lhs=buffers[inputs[0]]
             storage=lhs["storage"]
             dtype={"f16":"fp16","bf16":"bf16"}[storage]
+            artifact: ScheduledKernelArtifact | ScheduledMatmulArtifact
             if index<len(plan["steps"])-1:
                 operation=plan["steps"][index]["operation"]
                 softmax=operation=="tessera.softmax"

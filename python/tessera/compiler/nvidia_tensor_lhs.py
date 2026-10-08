@@ -6,10 +6,11 @@ import inspect
 import json
 import math
 import struct
+from typing import cast
 
 from . import nvidia_native as native
 from .graph_ir import GraphIRModule,GraphIRFunction,IRArg,IROp,tensor_ir_type
-from .scheduled_matmul import find_tessera_opt,run_tessera_opt,_SM120_SCHEDULED_MATMUL_PREFIX
+from .scheduled_matmul import find_tessera_opt,_SM120_SCHEDULED_MATMUL_PREFIX
 
 PRODUCERS={"tessera.rmsnorm":"rmsnorm","tessera.layer_norm":"layernorm","tessera.softmax":"softmax"}
 
@@ -377,7 +378,7 @@ class TracedLhsProgram:
             raise ValueError("native LHS output shape differs")
         for index,package in enumerate((*producers,self.edge.consumer)):
             if package.descriptor.provenance.get("native_tensor_program_digest")!=hashlib.sha256(
-                    self.native_plan_json.encode()).hexdigest():
+                    cast(str, self.native_plan_json).encode()).hexdigest():
                 raise ValueError("native LHS program provenance differs")
             package.descriptor.validate_image(package.image)
             if hashlib.sha256(package.target_ir.encode()).hexdigest()!=package.image.target_ir_digest:
@@ -393,11 +394,14 @@ class TracedLhsProgram:
             if p["kind"]!="softmax" and p.get("epsilon")!=struct.unpack("f",struct.pack("f",policy["producer_attrs"].get("eps",1e-5)))[0]:
                 raise ValueError("LHS producer epsilon differs")
         cp=self.edge.consumer.descriptor.provenance
+        epilogue=cp.get("epilogue")
+        if not isinstance(epilogue,dict):
+            raise ValueError("native LHS consumer policy differs")
         if (cp.get("epilogue")!={"bias":"bias" in roles,"activation":ca.get("activation","none"),
                 "residual":"residual" in roles,"order":["matmul","bias","activation","residual"],
                 "output":"f16" if ca.get("output_dtype","fp32")=="fp16" else "f32"}
                 or cp.get("b_layout")!=ca.get("rhs_storage_order","col_major")
-                or buffers[plan["output"]]["storage"]!=cp["epilogue"]["output"]):
+                or buffers[plan["output"]]["storage"]!=epilogue["output"]):
             raise ValueError("native LHS consumer policy differs")
         if (self.edge.producer_input_name,self.edge.intermediate_name,
             self.edge.consumer_input_name,self.edge.consumer_rhs_name,self.edge.output_name)!=(

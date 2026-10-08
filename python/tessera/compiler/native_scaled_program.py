@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import numpy as np
+from typing import Any
 
 def _manifest(text: str, name: str) -> dict:
     values = re.findall(r'\b' + re.escape(name) + r'\s*=\s*"([A-Za-z0-9+/=]+)"', text)
@@ -323,7 +324,7 @@ def package_native_scaled_primal(graph_ir: str, *, target: str = "rocm_gfx1201",
 
 def package_native_scaled_primal_artifacts(graph_ir: str, *, target: str = "rocm_gfx1201"):
     """Return the actual single member image with its Target/backend receipts."""
-    artifacts=[]
+    artifacts: list[Any] = []
     program=_package_native_scaled(graph_ir,target=target,primal=True,
         project_image_identity=True,profile_policy=True,artifacts=artifacts)
     if len(program.images)!=1 or len(artifacts)!=1:

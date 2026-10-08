@@ -68,7 +68,7 @@ class Tensor:
             if dtype is not None:
                 dims = dims[:-1]
         label = ", ".join(str(d) for d in dims) + (f", {dtype}" if dtype else "")
-        attrs = {"__dims__": dims}
+        attrs: dict[str, object] = {"__dims__": dims}
         from ..dtype import Dtype
         token = shape[-1] if isinstance(shape, tuple) and shape else shape
         if isinstance(token, Dtype):

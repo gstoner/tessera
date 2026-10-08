@@ -1,0 +1,250 @@
+[
+  {
+    "kind": "sqrt",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.006120309829711914,
+    "wall_ms": 2.089816
+  },
+  {
+    "kind": "exp",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.003679409921169281,
+    "wall_ms": 2.439834
+  },
+  {
+    "kind": "add",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.0035956400632858277,
+    "wall_ms": 2.670554
+  },
+  {
+    "kind": "add",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": true,
+    "device_ms": 0.0036044499278068544,
+    "wall_ms": 2.743373
+  },
+  {
+    "kind": "div",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.0036748498678207397,
+    "wall_ms": 2.727031
+  },
+  {
+    "kind": "div",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": true,
+    "device_ms": 0.003678469955921173,
+    "wall_ms": 2.659733
+  },
+  {
+    "kind": "cumsum",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.004577569961547852,
+    "wall_ms": 2.498927
+  },
+  {
+    "kind": "cummax",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.004513950049877167,
+    "wall_ms": 2.503324
+  },
+  {
+    "kind": "sqrt",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.0036852699518203735,
+    "wall_ms": 2.557539
+  },
+  {
+    "kind": "exp",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.0035924699902534483,
+    "wall_ms": 2.507728
+  },
+  {
+    "kind": "add",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.003575870096683502,
+    "wall_ms": 2.638563
+  },
+  {
+    "kind": "add",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": true,
+    "device_ms": 0.0035415700078010558,
+    "wall_ms": 2.677512
+  },
+  {
+    "kind": "div",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.003674879968166351,
+    "wall_ms": 2.620223
+  },
+  {
+    "kind": "div",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": true,
+    "device_ms": 0.0036648699641227724,
+    "wall_ms": 2.621691
+  },
+  {
+    "kind": "cumsum",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.005895149707794189,
+    "wall_ms": 2.489163
+  },
+  {
+    "kind": "cummax",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.006056060194969177,
+    "wall_ms": 2.378477
+  },
+  {
+    "kind": "sqrt",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.00821274995803833,
+    "wall_ms": 4.069076
+  },
+  {
+    "kind": "exp",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.007551169991493225,
+    "wall_ms": 4.492735
+  },
+  {
+    "kind": "add",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.004950479865074158,
+    "wall_ms": 4.958788
+  },
+  {
+    "kind": "add",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": true,
+    "device_ms": 0.007017959952354431,
+    "wall_ms": 6.145998
+  },
+  {
+    "kind": "div",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.007821270227432252,
+    "wall_ms": 5.58043
+  },
+  {
+    "kind": "div",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": true,
+    "device_ms": 0.007779859900474548,
+    "wall_ms": 6.119478
+  },
+  {
+    "kind": "cumsum",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.01810521960258484,
+    "wall_ms": 3.717015
+  },
+  {
+    "kind": "cummax",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.01595881938934326,
+    "wall_ms": 4.020879
+  }
+]

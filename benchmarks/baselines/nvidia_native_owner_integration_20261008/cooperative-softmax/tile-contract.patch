@@ -1,0 +1,20 @@
+--- /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TileOps.cpp
++++ /home/angstorms/scratch/nvidia-cooperative-softmax-candidate-20261008/TileOps.cpp
+@@ -1541,6 +1541,17 @@
+     return emitOpError("requires an explicit exp_mode");
+   if (!getOperation()->getAttrOfType<BoolAttr>("ftz"))
+     return emitOpError("requires an explicit ftz boolean");
++  if (auto schedule = getOperation()->getAttrOfType<StringAttr>("schedule")) {
++    if (schedule.getValue() != "serial" && schedule.getValue() != "cooperative_128")
++      return emitOpError("softmax schedule must be serial|cooperative_128");
++    if (schedule.getValue() == "cooperative_128") {
++      auto function = getOperation()->getParentOfType<LLVM::LLVMFuncOp>();
++      auto workgroup = getOperation()->getAttrOfType<IntegerAttr>("tessera.workgroup_size");
++      if (!function || !function->hasAttr("nvvm.kernel") ||
++          !workgroup || workgroup.getInt() != 128)
++        return emitOpError("cooperative softmax requires an NVVM kernel with workgroup size 128");
++    }
++  }
+   return success();
+ }
+ 

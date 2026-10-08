@@ -1,0 +1,401 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "source_sha256": {
+    "python/tessera/compiler/native_resident_nvfp4.py": "d46aeea01b8e0dbd4e6230ab4f6b3131ef4af7d251e2d3dd302d82d1136d8acc",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "64f739cc7cd06ebbfe26676ab9631b28c557d2663297901a43c0f4ce59f43492"
+  },
+  "native_library_sha256": "9d6a09a3917c3e84afcbd1c2f4739d7ede60328ad04bdd50362738708a5ea073",
+  "ownership": "native private stream, 11 allocations, three image leases, native argument binding/copy/readiness/events/close",
+  "scope": "explicit native_session; ordinary session and graph replay integration remain open",
+  "rows": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "component_image_digests": [
+        "f0ccb4bc8b203eee5296c4183927b7ae864fca9eeacb76e18a7273aac6233a15",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "33f2acfb97d84b059903cc3d97786b5697587c0b8202cbdc773cf05afd4c8ccc"
+      ],
+      "correctness": "independent conversion, lossless storage and folded output before/after timing",
+      "timing_scope": "same compiler images; resident/reuse walls include output readback; allocating walls also own images, storage and upload; stage events include dispatch gaps",
+      "arms": {
+        "python": {
+          "warm_combined_wall_ms": [
+            0.296345,
+            0.333056,
+            0.292267,
+            0.317396,
+            0.287548,
+            0.329068,
+            0.349376
+          ],
+          "weight_reuse_wall_ms": [
+            0.205592,
+            0.195092,
+            0.215842,
+            0.208507,
+            0.18382,
+            0.184632,
+            0.204711
+          ],
+          "allocating_combined_wall_ms": [
+            18.866171,
+            11.556397,
+            11.297041,
+            11.451506,
+            11.448655,
+            11.594685,
+            11.436807
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.10838406533002853,
+              0.10537219047546387,
+              0.10614968836307526
+            ],
+            "storage": [
+              0.004243750125169754,
+              0.0023674999829381704,
+              0.003129374934360385
+            ],
+            "consumer": [
+              0.025600561872124672,
+              0.023627374321222305,
+              0.024720562621951103
+            ],
+            "combined": [
+              0.13408643007278442,
+              0.13386018574237823,
+              0.13079588115215302
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.317396,
+          "weight_reuse_wall_median_ms": 0.204711,
+          "allocating_combined_wall_median_ms": 11.451506
+        },
+        "native": {
+          "warm_combined_wall_ms": [
+            0.347513,
+            0.323607,
+            0.349868,
+            0.316805,
+            0.339468,
+            0.358113,
+            0.373562
+          ],
+          "weight_reuse_wall_ms": [
+            0.159555,
+            0.158071,
+            0.196735,
+            0.184833,
+            0.159464,
+            0.159905,
+            0.1991
+          ],
+          "allocating_combined_wall_ms": [
+            13.258272,
+            6.439845,
+            6.33246,
+            6.328553,
+            6.336017,
+            6.344353,
+            6.457358
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.10325343906879425,
+              0.09980468451976776,
+              0.09864968806505203
+            ],
+            "storage": [
+              0.004679374862462282,
+              0.0021025000605732203,
+              0.0021299999207258224
+            ],
+            "consumer": [
+              0.023111186921596527,
+              0.020577438175678253,
+              0.020599937066435814
+            ],
+            "combined": [
+              0.12254899740219116,
+              0.12014712393283844,
+              0.12111025303602219
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.347513,
+          "weight_reuse_wall_median_ms": 0.159905,
+          "allocating_combined_wall_median_ms": 6.344353
+        }
+      },
+      "native_over_python": {
+        "warm_combined_wall_median_ms": 1.0948877742630656,
+        "weight_reuse_wall_median_ms": 0.7811255868028586,
+        "allocating_combined_wall_median_ms": 0.5540190958289678
+      }
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "component_image_digests": [
+        "5beb1458e38ddee1de15014ef995013ad33885087d7b787cb3fb64e0eea03ce8",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "e5696fb748f98b681e9749f738bd29f38df1f40fa622dd430027014854efc5e5"
+      ],
+      "correctness": "independent conversion, lossless storage and folded output before/after timing",
+      "timing_scope": "same compiler images; resident/reuse walls include output readback; allocating walls also own images, storage and upload; stage events include dispatch gaps",
+      "arms": {
+        "python": {
+          "warm_combined_wall_ms": [
+            0.545521,
+            0.548947,
+            0.545731,
+            0.558406,
+            0.55023,
+            0.535712,
+            0.669588
+          ],
+          "weight_reuse_wall_ms": [
+            0.276758,
+            0.328397,
+            0.309601,
+            0.282909,
+            0.27805,
+            0.293911,
+            0.31977
+          ],
+          "allocating_combined_wall_ms": [
+            14.283527,
+            13.189821,
+            13.323958,
+            13.748136,
+            13.065696,
+            13.773075,
+            14.308426
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.2099045068025589,
+              0.2101869434118271,
+              0.20981194078922272
+            ],
+            "storage": [
+              0.005014999769628048,
+              0.005769937299191952,
+              0.004987500142306089
+            ],
+            "consumer": [
+              0.09161724895238876,
+              0.08410225063562393,
+              0.08443981409072876
+            ],
+            "combined": [
+              0.29254430532455444,
+              0.2950248718261719,
+              0.23883812129497528
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.548947,
+          "weight_reuse_wall_median_ms": 0.293911,
+          "allocating_combined_wall_median_ms": 13.748136
+        },
+        "native": {
+          "warm_combined_wall_ms": [
+            0.578914,
+            0.509873,
+            0.556452,
+            0.510383,
+            0.546884,
+            0.556972,
+            0.580177
+          ],
+          "weight_reuse_wall_ms": [
+            0.31496,
+            0.243123,
+            0.338465,
+            0.295915,
+            0.297237,
+            0.337574,
+            0.344207
+          ],
+          "allocating_combined_wall_ms": [
+            7.678989,
+            7.510519,
+            7.776195,
+            7.572856,
+            7.919247,
+            7.777767,
+            7.787656
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.13319531083106995,
+              0.14379212260246277,
+              0.14410711824893951
+            ],
+            "storage": [
+              0.0037943124771118164,
+              0.0028800000436604023,
+              0.0028699999675154686
+            ],
+            "consumer": [
+              0.04273487627506256,
+              0.026047436520457268,
+              0.025922438129782677
+            ],
+            "combined": [
+              0.1487521231174469,
+              0.14813712239265442,
+              0.14827212691307068
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.556452,
+          "weight_reuse_wall_median_ms": 0.31496,
+          "allocating_combined_wall_median_ms": 7.776195
+        }
+      },
+      "native_over_python": {
+        "warm_combined_wall_median_ms": 1.013671629501573,
+        "weight_reuse_wall_median_ms": 1.0716169180466197,
+        "allocating_combined_wall_median_ms": 0.565618131796194
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "component_image_digests": [
+        "025492857bf2cca4f126e7f10ff5e96e2a116365d7e881140ba7108bf7bbc97d",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "da2b532373cdc4f1d65ba88f73633a457a0758719cbe041d2537cf628dda2084"
+      ],
+      "correctness": "independent conversion, lossless storage and folded output before/after timing",
+      "timing_scope": "same compiler images; resident/reuse walls include output readback; allocating walls also own images, storage and upload; stage events include dispatch gaps",
+      "arms": {
+        "python": {
+          "warm_combined_wall_ms": [
+            0.557203,
+            0.605515,
+            0.622698,
+            0.641364,
+            0.624621,
+            0.61305,
+            0.517177
+          ],
+          "weight_reuse_wall_ms": [
+            0.280585,
+            0.283962,
+            0.363674,
+            0.280886,
+            0.286146,
+            0.36175,
+            0.289162
+          ],
+          "allocating_combined_wall_ms": [
+            13.253093,
+            13.001583,
+            13.014789,
+            12.885021,
+            13.200683,
+            13.138945,
+            13.197456
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.20633424818515778,
+              0.20396174490451813,
+              0.20543675124645233
+            ],
+            "storage": [
+              0.005687499884516001,
+              0.004464937373995781,
+              0.004357500001788139
+            ],
+            "consumer": [
+              0.03392987325787544,
+              0.033057376742362976,
+              0.03392487391829491
+            ],
+            "combined": [
+              0.24060168862342834,
+              0.24297162890434265,
+              0.24260349571704865
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.61305,
+          "weight_reuse_wall_median_ms": 0.286146,
+          "allocating_combined_wall_median_ms": 13.138945
+        },
+        "native": {
+          "warm_combined_wall_ms": [
+            0.602649,
+            0.587742,
+            0.612588,
+            0.605866,
+            0.589345,
+            0.4981,
+            0.580727
+          ],
+          "weight_reuse_wall_ms": [
+            0.304541,
+            0.339818,
+            0.289853,
+            0.349566,
+            0.284483,
+            0.252121,
+            0.278431
+          ],
+          "allocating_combined_wall_ms": [
+            6.655977,
+            6.593738,
+            6.566276,
+            6.600001,
+            6.794483,
+            6.672008,
+            6.73521
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.20572425425052643,
+              0.1439719945192337,
+              0.14223693311214447
+            ],
+            "storage": [
+              0.006142499856650829,
+              0.00259750010445714,
+              0.0026924998965114355
+            ],
+            "consumer": [
+              0.01753431186079979,
+              0.014274937100708485,
+              0.014402437023818493
+            ],
+            "combined": [
+              0.1605338156223297,
+              0.15714693069458008,
+              0.15687943994998932
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.589345,
+          "weight_reuse_wall_median_ms": 0.289853,
+          "allocating_combined_wall_median_ms": 6.655977
+        }
+      },
+      "native_over_python": {
+        "warm_combined_wall_median_ms": 0.961332680858005,
+        "weight_reuse_wall_median_ms": 1.0129549251081615,
+        "allocating_combined_wall_median_ms": 0.506583823891492
+      }
+    }
+  ]
+}

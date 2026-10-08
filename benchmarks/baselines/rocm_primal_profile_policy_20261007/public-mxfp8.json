@@ -1,0 +1,255 @@
+{
+  "architecture": "gfx1201",
+  "rocminfo": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "rows": [
+    {
+      "native_owner_image_sha256": [
+        "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992"
+      ],
+      "scale_format": "e8m0",
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "rhs_layout": "KN",
+      "cold_public_ms": 501.9793401006609,
+      "public_warm_ms": [
+        1.8726932117715478,
+        0.906341290101409,
+        0.9049245854839683,
+        0.8928325958549976,
+        0.899695698171854,
+        0.9058054070919752,
+        0.905730202794075
+      ],
+      "public_warm_median_ms": 0.905730202794075,
+      "native_image_event_ms": [
+        0.04997305944561958,
+        0.05547620728611946,
+        0.053586069494485855,
+        0.05226749926805496,
+        0.053406666964292526,
+        0.05355745926499367,
+        0.05267238989472389,
+        0.052721891552209854,
+        0.05086703598499298,
+        0.05302748084068298,
+        0.052446600049734116
+      ],
+      "native_image_event_median_ms": 0.052721891552209854,
+      "execution": {
+        "ok": true,
+        "runtime_status": "success",
+        "compiler_path": "rocm_gfx1201_native_descriptor",
+        "execution_kind": "native_gpu",
+        "execution_mode": "descriptor",
+        "artifact_hash": "e687f22cdab5fe97304d50309389111bc81497dd2016d4d69fadce93e621b47b",
+        "image_digest": "86055babc17ca3e4e42cc39247691cb5515d38e42ea6cc59bbb6d96c6767d253",
+        "launch_descriptor_digest": "85636b98f30ef157924c2f668e7d3b03006dcce169cf045550d7fdaa33e6b82a",
+        "output": "[[ 4.98125000e+01 -8.81250000e+00  1.69187500e+02  1.35312500e+01\n  -1.50234375e+01  5.81328125e+01 -3.44375000e+01 -4.72187500e+01\n   2.14671875e+02  5.82812500e+00  1.34687500e+01  1.69609375e+01\n  -2.53750000e+01  1.13593750e+01  3.61328125e+01  7.96875000e+00\n   1.66406250e+00  1.56484375e+01  2.38750000e+01]\n [ 5.97500000e+01  4.27500000e+01  1.19789062e+02  5.99687500e+01\n   2.89765625e+01  3.07031250e+01  1.76562500e+00  8.62812500e+01\n   2.19375000e+01  7.89375000e+01  6.00156250e+01  3.58125000e+01\n   9.37500000e-01  1.18218750e+02 -2.11718750e+00  1.47343750e+01\n   2.58984375e+01  8.88437500e+01  1.27062500e+02]\n [ 1.57687500e+02  4.85312500e+01  2.62109375e+01  6.24218750e+01\n   2.76250000e+01  1.18750000e+01  2.56562500e+01  3.56093750e+01\n   7.49687500e+01  4.32812500e+01  7.85468750e+01  4.39609375e+01\n   1.70937500e+02  5.09843750e+01  3.06640625e+01 -4.56250000e+00\n   2.62812500e+01  8.86250000e+01 -2.81250000e+01]\n [ 4.47500000e+01  1.05000000e+01 -1.37812500e+01 -4.25625000e+01\n   5.45937500e+01  3.38437500e+01  4.47656250e+01  3.27500000e+01\n   1.54531250e+01  4.34062500e+01  1.87500000e-01  1.64375000e+01\n   3.87500000e+00  9.81250000e+00  6.59375000e+00  7.90937500e+01\n   1.43125000e+01  1.80000000e+01  1.23375000e+02]\n [ 2.50625000e+02  2.73750000e+01  3.88203125e+01  9.42187500e+00\n   1.51875000e+01  1.65625000e+01  1.82500000e+01  3.10000000e+01\n   3.26250000e+01  6.34218750e+01  6.58437500e+01  2.95000000e+01\n   4.04375000e+01  1.28093750e+02  3.59375000e+01  1.15625000e+01\n   3.33750000e+01  2.67500000e+01  4.27500000e+01]\n [ 1.45625000e+01  3.75000000e-01  2.93515625e+01  1.50390625e+01\n  -2.39062500e+00  1.74453125e+01  2.80937500e+01  9.39062500e+00\n   4.02968750e+01  1.96562500e+01  9.29687500e-01  1.57968750e+01\n   2.43125000e+01  4.90625000e+01  1.24843750e+01  4.18593750e+01\n   1.10937500e+01  2.31250000e+01  6.34062500e+01]\n [ 1.06187500e+02  3.46250000e+01  1.36250000e+01  3.17187500e+00\n   3.67421875e+01  2.50546875e+01  2.79375000e+01  4.84375000e+01\n   3.51250000e+01  3.94375000e+01  5.64687500e+01  3.95000000e+01\n   1.59375000e+01  1.27859375e+02  9.08437500e+01  1.70156250e+01\n   1.92578125e+01  3.62656250e+01  1.82062500e+02]\n [ 7.65000000e+01  2.45000000e+01  2.83671875e+01  2.28023438e+02\n   2.30468750e+01  2.10703125e+01  5.80468750e+01  1.46718750e+01\n   1.00312500e+01 -1.20390625e+01  6.66171875e+01  3.61250000e+01\n   3.99375000e+01  4.75781250e+00  4.18828125e+01  2.78906250e+01\n   2.85000000e+01  5.62109375e+01  8.18750000e+01]\n [ 6.93750000e+01  8.11015625e+01  8.36015625e+01  3.07031250e+01\n   2.99453125e+01  6.86875000e+01  1.47031250e+01  1.02437500e+02\n   8.00000000e+01 -1.67187500e+00 -3.43750000e-01  3.73046875e+01\n   7.81250000e+00  4.80000000e+01  3.22031250e+01  4.65937500e+01\n  -9.70312500e+00  2.73984375e+01  3.81250000e+01]\n [ 1.35703125e+02  6.18593750e+01  4.71484375e+01  4.51250000e+01\n   5.24531250e+01 -3.29062500e+01  7.10781250e+01  1.19312500e+02\n   1.00437500e+02 -6.70312500e+00  8.75000000e+00 -9.75000000e+00\n   6.87500000e+00  2.01875000e+01 -1.27656250e+01  4.06250000e+00\n  -2.15468750e+01  3.25156250e+01  3.27437500e+02]\n [ 1.94156250e+02  3.09531250e+01 -3.73046875e+01  1.00820312e+02\n   7.16562500e+01  2.55468750e+01  6.08906250e+01  6.72343750e+01\n   5.74296875e+01  7.45390625e+01  3.55312500e+01  1.47796875e+02\n   1.24125000e+02  4.77343750e+00  3.58750000e+01  7.38593750e+01\n   2.69062500e+01 -9.73437500e+00  1.47125000e+02]\n [ 4.74375000e+01  4.76250000e+01  1.12562500e+02  1.25312500e+01\n  -1.33984375e+01 -2.17968750e+00 -5.72812500e+01  5.60625000e+01\n   2.40625000e+00  3.37656250e+01 -1.07500000e+01  4.64843750e+01\n  -1.40000000e+01  8.78125000e+00  6.39531250e+01 -1.25781250e+01\n   9.92968750e+00  3.51250000e+01  1.43531250e+02]\n [ 1.51296875e+02  1.29062500e+01  5.62734375e+01  3.81562500e+01\n   5.79062500e+01  2.09375000e+01 -1.25156250e+01  8.39687500e+01\n   3.57812500e+01  2.13125000e+01  7.15625000e+00  1.00937500e+02\n   6.58125000e+01  9.61093750e+01  1.81875000e+01 -6.31250000e+00\n   1.36250000e+01  1.14250000e+02  6.51250000e+01]\n [ 2.18937500e+02  5.26250000e+01  3.36093750e+01  1.20765625e+02\n   2.91093750e+01  4.20937500e+01  1.60625000e+01 -1.18125000e+01\n  -1.86875000e+01  1.52312500e+02  8.15390625e+01  6.09375000e+01\n   3.05000000e+01  1.82343750e+02  2.08125000e+01  3.78750000e+01\n   4.20781250e+01  7.94375000e+01  1.43875000e+02]\n [ 9.88750000e+01  6.14296875e+01  9.10937500e+00 -6.25000000e-01\n  -6.12500000e+00  1.98515625e+01  5.09375000e+01 -1.42187500e+01\n  -1.90781250e+01 -2.42500000e+01  3.91875000e+01  7.04062500e+01\n   1.80625000e+01  1.29375000e+01  2.14843750e+00  4.27500000e+01\n  -1.10625000e+01  1.67109375e+01  2.12187500e+02]\n [ 7.23750000e+01  4.71796875e+01  4.38281250e+01  1.75468750e+02\n   2.47968750e+01  1.47500000e+01 -3.82812500e+01  1.96171875e+01\n   4.01328125e+01  1.45312500e+00  1.24062500e+01 -1.24062500e+01\n   3.65625000e+01  3.38125000e+01  2.28906250e+01  2.22500000e+01\n   3.49843750e+01  2.84531250e+01  1.08750000e+01]\n [ 5.38593750e+01  2.79062500e+01  7.08437500e+01  4.62500000e+01\n   4.91875000e+01  6.78125000e+00 -6.04687500e+00  2.91562500e+01\n   5.97656250e+01 -4.12343750e+01  6.20312500e+00 -2.48437500e+01\n   6.62500000e+00  5.18125000e+01  2.24375000e+01 -1.75000000e+00\n   4.03125000e+00 -4.91562500e+01  3.62500000e+01]]",
+        "profile": {
+          "launch_overhead_ms": 0.648848,
+          "kernel_elapsed_ms": 0.648848,
+          "cpu_wall_ms": null
+        }
+      },
+      "image_sha256": "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992",
+      "ir_sha256": {
+        "graph": "bc3dfc28a204e1212d2c38901a354cbcfde4a985185a286b26f0b6073e70a434",
+        "schedule": "6198cdbe1c43b1d5e27fa2bf6cfa95a4f8faf33f1da6763aa61df94a1a4a0cea",
+        "tile": "f6dd44474e46c84de88a27675e3332fde3e595bd6d9539a83fcfeb6b19cce22d",
+        "target": "e7fdaaca183e13bb26816302427e8f61eb31b0b44f9aed09dd22abec9cff63ea"
+      },
+      "correctness": "independent_float64_block_oracle_and_bitwise_native_owner_parity",
+      "warm_compiler_subprocess_forbidden": true
+    },
+    {
+      "native_owner_image_sha256": [
+        "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef"
+      ],
+      "scale_format": "e8m0",
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "rhs_layout": "NK",
+      "cold_public_ms": 389.196994015947,
+      "public_warm_ms": [
+        0.9334911126643419,
+        0.8925138972699642,
+        0.8921863976866007,
+        0.8620559005066752,
+        0.8730728877708316,
+        0.868349801748991,
+        0.8690161164849997
+      ],
+      "public_warm_median_ms": 0.8730728877708316,
+      "native_image_event_ms": [
+        0.013635699637234211,
+        0.013326100073754787,
+        0.013694600202143192,
+        0.013271410018205643,
+        0.013424700126051903,
+        0.013483400456607342,
+        0.013612199574708939,
+        0.01337829977273941,
+        0.013436599634587765,
+        0.013431400060653687,
+        0.013098210096359253
+      ],
+      "native_image_event_median_ms": 0.013431400060653687,
+      "execution": {
+        "ok": true,
+        "runtime_status": "success",
+        "compiler_path": "rocm_gfx1201_native_descriptor",
+        "execution_kind": "native_gpu",
+        "execution_mode": "descriptor",
+        "artifact_hash": "03da25615699349a2ad20c2b3c2dfa5a20098e6e285f4160b0f66408b1dae599",
+        "image_digest": "4473b70c2fe73d12862c6bd464feba696610999064e9ef30d5cd6f996c7c0bfb",
+        "launch_descriptor_digest": "35664ba8495d61cdb1cb69c6c963870957ce38860496dfd803bed5d8e51037a3",
+        "output": "[[ 4.98125000e+01 -8.81250000e+00  1.69187500e+02  1.35312500e+01\n  -1.50234375e+01  5.81328125e+01 -3.44375000e+01 -4.72187500e+01\n   2.14671875e+02  5.82812500e+00  1.34687500e+01  1.69609375e+01\n  -2.53750000e+01  1.13593750e+01  3.61328125e+01  7.96875000e+00\n   1.66406250e+00  1.56484375e+01  2.38750000e+01]\n [ 5.97500000e+01  4.27500000e+01  1.19789062e+02  5.99687500e+01\n   2.89765625e+01  3.07031250e+01  1.76562500e+00  8.62812500e+01\n   2.19375000e+01  7.89375000e+01  6.00156250e+01  3.58125000e+01\n   9.37500000e-01  1.18218750e+02 -2.11718750e+00  1.47343750e+01\n   2.58984375e+01  8.88437500e+01  1.27062500e+02]\n [ 1.57687500e+02  4.85312500e+01  2.62109375e+01  6.24218750e+01\n   2.76250000e+01  1.18750000e+01  2.56562500e+01  3.56093750e+01\n   7.49687500e+01  4.32812500e+01  7.85468750e+01  4.39609375e+01\n   1.70937500e+02  5.09843750e+01  3.06640625e+01 -4.56250000e+00\n   2.62812500e+01  8.86250000e+01 -2.81250000e+01]\n [ 4.47500000e+01  1.05000000e+01 -1.37812500e+01 -4.25625000e+01\n   5.45937500e+01  3.38437500e+01  4.47656250e+01  3.27500000e+01\n   1.54531250e+01  4.34062500e+01  1.87500000e-01  1.64375000e+01\n   3.87500000e+00  9.81250000e+00  6.59375000e+00  7.90937500e+01\n   1.43125000e+01  1.80000000e+01  1.23375000e+02]\n [ 2.50625000e+02  2.73750000e+01  3.88203125e+01  9.42187500e+00\n   1.51875000e+01  1.65625000e+01  1.82500000e+01  3.10000000e+01\n   3.26250000e+01  6.34218750e+01  6.58437500e+01  2.95000000e+01\n   4.04375000e+01  1.28093750e+02  3.59375000e+01  1.15625000e+01\n   3.33750000e+01  2.67500000e+01  4.27500000e+01]\n [ 1.45625000e+01  3.75000000e-01  2.93515625e+01  1.50390625e+01\n  -2.39062500e+00  1.74453125e+01  2.80937500e+01  9.39062500e+00\n   4.02968750e+01  1.96562500e+01  9.29687500e-01  1.57968750e+01\n   2.43125000e+01  4.90625000e+01  1.24843750e+01  4.18593750e+01\n   1.10937500e+01  2.31250000e+01  6.34062500e+01]\n [ 1.06187500e+02  3.46250000e+01  1.36250000e+01  3.17187500e+00\n   3.67421875e+01  2.50546875e+01  2.79375000e+01  4.84375000e+01\n   3.51250000e+01  3.94375000e+01  5.64687500e+01  3.95000000e+01\n   1.59375000e+01  1.27859375e+02  9.08437500e+01  1.70156250e+01\n   1.92578125e+01  3.62656250e+01  1.82062500e+02]\n [ 7.65000000e+01  2.45000000e+01  2.83671875e+01  2.28023438e+02\n   2.30468750e+01  2.10703125e+01  5.80468750e+01  1.46718750e+01\n   1.00312500e+01 -1.20390625e+01  6.66171875e+01  3.61250000e+01\n   3.99375000e+01  4.75781250e+00  4.18828125e+01  2.78906250e+01\n   2.85000000e+01  5.62109375e+01  8.18750000e+01]\n [ 6.93750000e+01  8.11015625e+01  8.36015625e+01  3.07031250e+01\n   2.99453125e+01  6.86875000e+01  1.47031250e+01  1.02437500e+02\n   8.00000000e+01 -1.67187500e+00 -3.43750000e-01  3.73046875e+01\n   7.81250000e+00  4.80000000e+01  3.22031250e+01  4.65937500e+01\n  -9.70312500e+00  2.73984375e+01  3.81250000e+01]\n [ 1.35703125e+02  6.18593750e+01  4.71484375e+01  4.51250000e+01\n   5.24531250e+01 -3.29062500e+01  7.10781250e+01  1.19312500e+02\n   1.00437500e+02 -6.70312500e+00  8.75000000e+00 -9.75000000e+00\n   6.87500000e+00  2.01875000e+01 -1.27656250e+01  4.06250000e+00\n  -2.15468750e+01  3.25156250e+01  3.27437500e+02]\n [ 1.94156250e+02  3.09531250e+01 -3.73046875e+01  1.00820312e+02\n   7.16562500e+01  2.55468750e+01  6.08906250e+01  6.72343750e+01\n   5.74296875e+01  7.45390625e+01  3.55312500e+01  1.47796875e+02\n   1.24125000e+02  4.77343750e+00  3.58750000e+01  7.38593750e+01\n   2.69062500e+01 -9.73437500e+00  1.47125000e+02]\n [ 4.74375000e+01  4.76250000e+01  1.12562500e+02  1.25312500e+01\n  -1.33984375e+01 -2.17968750e+00 -5.72812500e+01  5.60625000e+01\n   2.40625000e+00  3.37656250e+01 -1.07500000e+01  4.64843750e+01\n  -1.40000000e+01  8.78125000e+00  6.39531250e+01 -1.25781250e+01\n   9.92968750e+00  3.51250000e+01  1.43531250e+02]\n [ 1.51296875e+02  1.29062500e+01  5.62734375e+01  3.81562500e+01\n   5.79062500e+01  2.09375000e+01 -1.25156250e+01  8.39687500e+01\n   3.57812500e+01  2.13125000e+01  7.15625000e+00  1.00937500e+02\n   6.58125000e+01  9.61093750e+01  1.81875000e+01 -6.31250000e+00\n   1.36250000e+01  1.14250000e+02  6.51250000e+01]\n [ 2.18937500e+02  5.26250000e+01  3.36093750e+01  1.20765625e+02\n   2.91093750e+01  4.20937500e+01  1.60625000e+01 -1.18125000e+01\n  -1.86875000e+01  1.52312500e+02  8.15390625e+01  6.09375000e+01\n   3.05000000e+01  1.82343750e+02  2.08125000e+01  3.78750000e+01\n   4.20781250e+01  7.94375000e+01  1.43875000e+02]\n [ 9.88750000e+01  6.14296875e+01  9.10937500e+00 -6.25000000e-01\n  -6.12500000e+00  1.98515625e+01  5.09375000e+01 -1.42187500e+01\n  -1.90781250e+01 -2.42500000e+01  3.91875000e+01  7.04062500e+01\n   1.80625000e+01  1.29375000e+01  2.14843750e+00  4.27500000e+01\n  -1.10625000e+01  1.67109375e+01  2.12187500e+02]\n [ 7.23750000e+01  4.71796875e+01  4.38281250e+01  1.75468750e+02\n   2.47968750e+01  1.47500000e+01 -3.82812500e+01  1.96171875e+01\n   4.01328125e+01  1.45312500e+00  1.24062500e+01 -1.24062500e+01\n   3.65625000e+01  3.38125000e+01  2.28906250e+01  2.22500000e+01\n   3.49843750e+01  2.84531250e+01  1.08750000e+01]\n [ 5.38593750e+01  2.79062500e+01  7.08437500e+01  4.62500000e+01\n   4.91875000e+01  6.78125000e+00 -6.04687500e+00  2.91562500e+01\n   5.97656250e+01 -4.12343750e+01  6.20312500e+00 -2.48437500e+01\n   6.62500000e+00  5.18125000e+01  2.24375000e+01 -1.75000000e+00\n   4.03125000e+00 -4.91562500e+01  3.62500000e+01]]",
+        "profile": {
+          "launch_overhead_ms": 0.601347,
+          "kernel_elapsed_ms": 0.601347,
+          "cpu_wall_ms": null
+        }
+      },
+      "image_sha256": "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef",
+      "ir_sha256": {
+        "graph": "b02bb978382792a7a33eb0bbb21aee16a39c732b9767e9d1a1052c0bb7ffc7e6",
+        "schedule": "355c7d017db1e3effe6086e67f323b06655bee8c619a6adb474f466a27a628c9",
+        "tile": "3a269ab20f47d3938ba26056bafd09e60341534fe01d12cf11bfda07fec704ec",
+        "target": "a4bc7c44dbd78c8f2bac93db79c956f9a7438a533fa620a08a040aa74a53cd0d"
+      },
+      "correctness": "independent_float64_block_oracle_and_bitwise_native_owner_parity",
+      "warm_compiler_subprocess_forbidden": true
+    },
+    {
+      "native_owner_image_sha256": [
+        "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992"
+      ],
+      "scale_format": "e8m0",
+      "shape_mnk": [
+        200,
+        129,
+        1536
+      ],
+      "rhs_layout": "KN",
+      "cold_public_ms": 285.3624518029392,
+      "public_warm_ms": [
+        3.670010599307716,
+        3.6133636021986604,
+        3.8899591891095042,
+        4.565691691823304,
+        4.598023393191397,
+        4.540214082226157,
+        4.609310906380415
+      ],
+      "public_warm_median_ms": 4.540214082226157,
+      "native_image_event_ms": [
+        0.5489676594734192,
+        0.5187885761260986,
+        0.5225847363471985,
+        0.5162870287895203,
+        0.5162143707275391,
+        0.5198212265968323,
+        0.5118436813354492,
+        0.5222911238670349,
+        0.5206096172332764,
+        0.5281445980072021,
+        0.5334736704826355
+      ],
+      "native_image_event_median_ms": 0.5206096172332764,
+      "execution": {
+        "ok": true,
+        "runtime_status": "success",
+        "compiler_path": "rocm_gfx1201_native_descriptor",
+        "execution_kind": "native_gpu",
+        "execution_mode": "descriptor",
+        "artifact_hash": "7910e3b87036d8fed71a68a6f8512aab2e960c029f7829f9d9962c91e3d5e032",
+        "image_digest": "86055babc17ca3e4e42cc39247691cb5515d38e42ea6cc59bbb6d96c6767d253",
+        "launch_descriptor_digest": "e045b1f1a539a8e9957463413068aa454a20185d6daaba36aa6d37ac59f20ebe",
+        "output": "[[257.21875   36.515625 137.97656  ... 259.66406  133.39062  162.76562 ]\n [326.75     202.85156  143.10938  ... 296.25     292.9375   174.0625  ]\n [315.5625   128.64844  408.84375  ... 193.24219  223.59375  217.10938 ]\n ...\n [262.4297   285.79688  361.9922   ... 274.28125  207.83594   52.140625]\n [267.42188  269.84375  274.32812  ... 333.5078   301.1172   226.08594 ]\n [247.17188  380.9453   378.71875  ... 372.6953   159.875    340.8672  ]]",
+        "profile": {
+          "launch_overhead_ms": 4.262112,
+          "kernel_elapsed_ms": 4.262112,
+          "cpu_wall_ms": null
+        }
+      },
+      "image_sha256": "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992",
+      "ir_sha256": {
+        "graph": "a9c9aea640b2a0b4e1977a5c1bba45bf7393a98c17d1d774cbf91efa53dd1380",
+        "schedule": "41bc23e6b2bee0867f97f5d299486ce43135000bb9dd0a2e4c026ef8f99136c5",
+        "tile": "c0950f939a6ef6c1b62b8042fdec4b9057fda1a28c24152feeee8e6c3614eedc",
+        "target": "e7fdaaca183e13bb26816302427e8f61eb31b0b44f9aed09dd22abec9cff63ea"
+      },
+      "correctness": "independent_float64_block_oracle_and_bitwise_native_owner_parity",
+      "warm_compiler_subprocess_forbidden": true
+    },
+    {
+      "native_owner_image_sha256": [
+        "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef"
+      ],
+      "scale_format": "e8m0",
+      "shape_mnk": [
+        200,
+        129,
+        1536
+      ],
+      "rhs_layout": "NK",
+      "cold_public_ms": 274.6529320720583,
+      "public_warm_ms": [
+        4.053676105104387,
+        4.030972882173955,
+        3.985614306293428,
+        3.982676286250353,
+        3.9767469046637416,
+        3.8916039979085326,
+        3.9710053941234946
+      ],
+      "public_warm_median_ms": 3.982676286250353,
+      "native_image_event_ms": [
+        0.0523281991481781,
+        0.05246149003505707,
+        0.05214270204305649,
+        0.05204720050096512,
+        0.051958709955215454,
+        0.04709845036268234,
+        0.0451783686876297,
+        0.04492076858878136,
+        0.04507347196340561,
+        0.045293670147657394,
+        0.04503235965967178
+      ],
+      "native_image_event_median_ms": 0.04709845036268234,
+      "execution": {
+        "ok": true,
+        "runtime_status": "success",
+        "compiler_path": "rocm_gfx1201_native_descriptor",
+        "execution_kind": "native_gpu",
+        "execution_mode": "descriptor",
+        "artifact_hash": "02c17e01d0220db649fd67b0d14cfa5fdd0eb5f5550f3d3c4b7a2a0538f315aa",
+        "image_digest": "4473b70c2fe73d12862c6bd464feba696610999064e9ef30d5cd6f996c7c0bfb",
+        "launch_descriptor_digest": "a49e2df2f837e95aac271830870bd6f3d357a0f1e1ad5c118f2364b25fb957c5",
+        "output": "[[257.21875   36.515625 137.97656  ... 259.66406  133.39062  162.76562 ]\n [326.75     202.85156  143.10938  ... 296.25     292.9375   174.0625  ]\n [315.5625   128.64844  408.84375  ... 193.24219  223.59375  217.10938 ]\n ...\n [262.4297   285.79688  361.9922   ... 274.28125  207.83594   52.140625]\n [267.42188  269.84375  274.32812  ... 333.5078   301.1172   226.08594 ]\n [247.17188  380.9453   378.71875  ... 372.6953   159.875    340.8672  ]]",
+        "profile": {
+          "launch_overhead_ms": 3.756448,
+          "kernel_elapsed_ms": 3.756448,
+          "cpu_wall_ms": null
+        }
+      },
+      "image_sha256": "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef",
+      "ir_sha256": {
+        "graph": "5d068b5f38b7a03ff7a130721a1ad5ea4ae925a92e4da1e6d43000977a6d114a",
+        "schedule": "f8bbe3db3fcf97837a0dc59647d996ee7f63509371e604e2efeaa15f1b7f92cd",
+        "tile": "e5a4856bac8bb12703e86e5fb771ddb5866ebda25c33347915a0ec4448577923",
+        "target": "a4bc7c44dbd78c8f2bac93db79c956f9a7438a533fa620a08a040aa74a53cd0d"
+      },
+      "correctness": "independent_float64_block_oracle_and_bitwise_native_owner_parity",
+      "warm_compiler_subprocess_forbidden": true
+    }
+  ],
+  "timing_note": "Public JIT includes checked descriptor launch/staging/readback. Native event uses the actual compiler-projected primal member package and includes enqueue gaps; no isolated kernel speedup claim."
+}

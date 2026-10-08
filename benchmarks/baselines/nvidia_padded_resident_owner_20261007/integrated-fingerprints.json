@@ -1,0 +1,13 @@
+{
+  "runtime_sha256": "5aaa82f6ec6c2e90f5e7e4123c93fedb3517838c3e948a3c65a7a41b2ceedf63",
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "561115738529ab96d3bc8a64e4898a2e076cbad03e7fcae7029ed43be4e0968d",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "dd8aad7ae8a13f4f6072f316eec9b13ce03cee5e6f40c58acaa2d07550086e1f",
+    "python/tessera/compiler/nvidia_native.py": "98efe61bac95c01f6b41379f8cc2a53de85a1b8530e01865221adbb8220287e8",
+    "tests/device/nvidia/test_native_padded_resident_tensor_owner.py": "9170f5f27afc3a4d69787614314f593fd6b6a340736ed67d6bae2adeebbe1809",
+    "tests/device/nvidia/test_native_padded_resident_tensor_values.py": "a5e2715493b7cd990d0ca8cf66508b4a16277771c25a74e45a37246a84f87f93",
+    "benchmarks/nvidia/record_padded_resident_tensor_owner.py": "b44aad7c307d4de2791ed1485b58889c1bb74b16f189d03c4a68261a4a7d0854"
+  },
+  "state": "matching_runtime_built; 581_focused_pass; 48_timing_rows_pass; generated_graphify_pending",
+  "timing_packet_sha256": "0f06401da8584163f15e3064d25f62fd0bfc1d10d6bb4133f3dc0104f33d1fd6"
+}

@@ -1,0 +1,159 @@
+{
+  "schema": "tessera.gfx1201.graph_ingest_package.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "host": "tajasarus",
+  "rows": [
+    {
+      "shape_nk": [
+        67,
+        256
+      ],
+      "row_offsets": [
+        0,
+        33,
+        67
+      ],
+      "projection_globals": [
+        0.5,
+        2.0
+      ],
+      "host_oracle_ms": 3.546496,
+      "compile_ms": 3663.727962,
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "522500d7ffd26d16874ed6b17d4d8919dfe01f372dd8022d7695906141fb03a2",
+      "target_sha256": "4e165a45b21cb82eafa8de9f28c20d9d94a78f256b857b8a49baeddb7046c0c0",
+      "hsaco_sha256": "8b8d878076d69bac3c5eeb3be7d7ff2f7f316a206c1326ed9892229dfebabfc2",
+      "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->GPU MLIR->ROCDL/LLVM->HSACO",
+      "frontend_schedule_tile_integrated": true,
+      "selector_promotion": false,
+      "resident_event_ms": [
+        0.16404229402542114,
+        0.16560640335083007,
+        0.16572840213775636
+      ],
+      "timing_scope": "HIP event window over ten resident launches; includes device dispatch",
+      "correctness": "packed codes/exponents bitwise and independent f64 signal/error verified after timing",
+      "checked_wall_samples_ms": [
+        3.782857,
+        3.635355,
+        3.509685
+      ],
+      "checked_wall_median_ms": 3.635355,
+      "checked_wall_scope": "host metadata/value checks, HIP module load, allocation, H2D, conversion, D2H, sync and cleanup; excludes compilation and oracle",
+      "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+      "schedule_digest": "1c2d2793b18abd19ec8df46fe72cbda3d747214edbd8fa6ebe0e789ab9a02b9a",
+      "checked_image_sha256": "8b8d878076d69bac3c5eeb3be7d7ff2f7f316a206c1326ed9892229dfebabfc2",
+      "resident_event_median_ms": 0.16560640335083007,
+      "source_sha256": {
+        "gate": "972bcc4d97aa6160e95240a66ae6d2a5c9ded550009addf4dcf0d2d9bcfe6c0b",
+        "up": "cec3298360584a35e4016314ad580d4503e118db19d00dac9b2d2db8ca4a62d4"
+      }
+    },
+    {
+      "shape_nk": [
+        513,
+        1024
+      ],
+      "row_offsets": [
+        0,
+        256,
+        513
+      ],
+      "projection_globals": [
+        0.5,
+        2.0
+      ],
+      "host_oracle_ms": 80.880439,
+      "compile_ms": 3593.560163,
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "522500d7ffd26d16874ed6b17d4d8919dfe01f372dd8022d7695906141fb03a2",
+      "target_sha256": "8e4fe45a2398ce398b54e24ae05ee88dc308fd752dfbbd7d34053fad0056e039",
+      "hsaco_sha256": "07c259960deb542a1f38cd37591eadf47ef59bdb34b9473073d415619f8764fd",
+      "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->GPU MLIR->ROCDL/LLVM->HSACO",
+      "frontend_schedule_tile_integrated": true,
+      "selector_promotion": false,
+      "resident_event_ms": [
+        0.7686007022857666,
+        0.3897222995758057,
+        0.33927059173583984
+      ],
+      "timing_scope": "HIP event window over ten resident launches; includes device dispatch",
+      "correctness": "packed codes/exponents bitwise and independent f64 signal/error verified after timing",
+      "checked_wall_samples_ms": [
+        6.807156,
+        6.645938,
+        6.804982
+      ],
+      "checked_wall_median_ms": 6.804982,
+      "checked_wall_scope": "host metadata/value checks, HIP module load, allocation, H2D, conversion, D2H, sync and cleanup; excludes compilation and oracle",
+      "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+      "schedule_digest": "f4f5989a5bc882277060f751a176dfe5fcf6dea7cf102a25bdadb447dcfc8494",
+      "checked_image_sha256": "07c259960deb542a1f38cd37591eadf47ef59bdb34b9473073d415619f8764fd",
+      "resident_event_median_ms": 0.3897222995758057,
+      "source_sha256": {
+        "gate": "1dac2fe4c382c0b8188ba55338d84bab3c158f6ed6d10764334f86725646e105",
+        "up": "f839b7d753bd74aeebeee157050787c1d7e7edfb5d9bc46c2bec438ec41c3f63"
+      }
+    },
+    {
+      "shape_nk": [
+        4097,
+        4096
+      ],
+      "row_offsets": [
+        0,
+        2048,
+        4097
+      ],
+      "projection_globals": [
+        0.5,
+        2.0
+      ],
+      "host_oracle_ms": 2539.934985,
+      "compile_ms": 3520.75537,
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "522500d7ffd26d16874ed6b17d4d8919dfe01f372dd8022d7695906141fb03a2",
+      "target_sha256": "ec20b43d5dc92f47635bff23dc734f58fafef662f5c17cc8fcb7e091ad094472",
+      "hsaco_sha256": "b9ca62f08bbab9cad9173006b4e22094990e11fdf78d3817dff3a262df3fe765",
+      "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->GPU MLIR->ROCDL/LLVM->HSACO",
+      "frontend_schedule_tile_integrated": true,
+      "selector_promotion": false,
+      "resident_event_ms": [
+        7.2223350524902346,
+        7.030062866210938,
+        7.032511138916016
+      ],
+      "timing_scope": "HIP event window over ten resident launches; includes device dispatch",
+      "correctness": "packed codes/exponents bitwise and independent f64 signal/error verified after timing",
+      "checked_wall_samples_ms": [
+        46.526162,
+        53.628291,
+        46.31867
+      ],
+      "checked_wall_median_ms": 46.526162,
+      "checked_wall_scope": "host metadata/value checks, HIP module load, allocation, H2D, conversion, D2H, sync and cleanup; excludes compilation and oracle",
+      "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+      "schedule_digest": "2ad52daba6540ad632cd7eb9fcdfffd0a4ad031101ddb07672c6c8cd98b3206a",
+      "checked_image_sha256": "b9ca62f08bbab9cad9173006b4e22094990e11fdf78d3817dff3a262df3fe765",
+      "resident_event_median_ms": 7.032511138916016,
+      "source_sha256": {
+        "gate": "e2855f29124ee29227458588134eb544bc1f8436e21e196d69a41b0d1ec65547",
+        "up": "ecfc8be605e8b2a6d3848658765df6b37273e649848bbac8932f2ef927b24fc8"
+      }
+    }
+  ],
+  "compiler_sha256": "601f0214d5ea02b5f9854906d4bfeb19174188963398bc7094b494506e216f39",
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_graph_nvfp4_ingest.py": "2654751273be15cc362ec25e6d349dc61213b92b99e7fecac033dee0270c2a7a",
+    "tests/device/rocm/test_native_nvfp4_ingest_leaf.py": "4a7153ce2d58c9a663c8bc643e4a01356cce9257699a869b4875a59e490ebcfa",
+    "python/tessera/compiler/rocm_nvfp4_ingest.py": "cc095b97a889313271592fbb9ffb516d3b86a39b5bc3fea2f78b7fe5c3132748",
+    "python/tessera/compiler/rocm_nvfp4_ingest_native.py": "7a9719df06fe2f802e1195288d4785c89e62d72f75aef191d858af02f1cc854c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h": "8523a4b83a453d0522f6e57362633674d1cf648cd36562d3d66de6e16bb57b3c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp": "523bc7bdf0629e7e3831a761bfd05bd576f32f5931f3145e00fa544e53c1a9df",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "d95f7d36fb40434fa3b6cb74e0d36fabe11b469f7c792d05e9209ec1713e0034",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "1bc729517d1cb1fe8bed7ef80b36dd31ab661d89eca601aca681b0df313cd637"
+  },
+  "boundary": "Graph/Schedule/Tile native conversion and checked six-buffer host ABI; ordinary JIT and conversion-plus-consumer integration pending"
+}

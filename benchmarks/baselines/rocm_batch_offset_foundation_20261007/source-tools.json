@@ -1,0 +1,7 @@
+{
+  "fixture": "src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir",
+  "fixture_sha256": "d79040c419e970630c84e3a969551f837e77a49d1114ec3e15e0e5a1eb2eb020",
+  "compiler": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "c260c0cc2328612b88790b162352c47a2273f8ef5af98b502f95af11d45ed177",
+  "scope": "cross-target native compiler proof; no GPU execution or timings"
+}

@@ -1,0 +1,171 @@
+{
+  "compiler_package_ms": 230.15714506618679,
+  "compiler_sha256": "1e9b32318ce4a15b8466dcb79a2d55b504c0b6cce5f563abf853abc10bf9b397",
+  "device": {
+    "architecture": "gfx1201",
+    "host": "tajasarus",
+    "target": "rocm_gfx1201"
+  },
+  "direct_bf16_mxfp4_maximum_output_abs_error": 0.0,
+  "direct_bf16_mxfp4_output_correctness": "passed_on_same_native_package",
+  "ingest_ms": 2544.2214449867606,
+  "limitations": [
+    "One real q_proj projection only; this does not establish whole-model quality or all ModelOpt packing variants.",
+    "BF16 baseline is the pinned Qwen3-8B source revision named by the NVIDIA checkpoint model lineage.",
+    "Activation input is deterministic synthetic FP8; only the weight input is real checkpoint data.",
+    "No selector promotion follows from this packet."
+  ],
+  "maximum_output_abs_error": 0.0,
+  "output_correctness": "passed_before_timing_and_after_every_end_to_end_launch",
+  "package": {
+    "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+    "entry": "tessera_mxfp4_w4a8_wmma",
+    "grid": [
+      256,
+      1,
+      1
+    ],
+    "image_sha256": "59145427242d42ab7770cba549ff9ad7496de27dbb5bb239849e7df174de9d9a",
+    "schedule_ir_sha256": "65d24557d02d0380efc55f72249ec1f2b7abda463d81d252831266207f158999",
+    "target_ir_sha256": "5c8bba523c0c476ec31c8993a150f419ddbe365b02e556f8fe55bbd90645c514",
+    "tile_ir_sha256": "b173cff846b57a2528afc1f203c33c09fbf5c3e9afac24c2b7991d4976e99b48",
+    "workgroup": [
+      256,
+      1,
+      1
+    ]
+  },
+  "quality": {
+    "direct_mxfp4_method": "same bounded joint E2M1/E8M0 candidate search, seeded by floor(log2(max(abs(K32))/6)); row-batched by 64",
+    "mxfp4_direct_from_bf16_bounded_seed_vs_bf16": {
+      "max_abs_error": 0.08984375,
+      "relative_rms_error": 0.11218407114576033,
+      "sqnr_db": 19.001376070973485
+    },
+    "mxfp4_ingested_vs_bf16": {
+      "max_abs_error": 0.103515625,
+      "relative_rms_error": 0.14992945866188917,
+      "sqnr_db": 16.48226054152118
+    },
+    "mxfp4_ingested_vs_direct_bf16_mxfp4": {
+      "max_abs_error": 0.125,
+      "relative_rms_error": 0.18026126832654338,
+      "sqnr_db": 14.881951550858334
+    },
+    "mxfp4_ingested_vs_nvfp4_source": {
+      "max_abs_error": 0.07142857275903225,
+      "relative_rms_error": 0.11291461913892763,
+      "sqnr_db": 18.944996520164395
+    },
+    "nvfp4_dequantized_vs_bf16": {
+      "max_abs_error": 0.0411551333963871,
+      "relative_rms_error": 0.09499994399815243,
+      "sqnr_db": 20.445533014496846
+    }
+  },
+  "revision": "source_snapshot",
+  "schema": "tessera.rocm.nvfp4_checkpoint_ingest.v1",
+  "shape_mnk": [
+    16,
+    4096,
+    4096
+  ],
+  "source": {
+    "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+    "bf16_repo": "Qwen/Qwen3-8B",
+    "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+    "bf16_shard": "model-00001-of-00005.safetensors",
+    "bf16_storage": {
+      "data_offsets": [
+        1588609536,
+        1622163968
+      ],
+      "dtype": "BF16",
+      "shape": [
+        4096,
+        4096
+      ]
+    },
+    "bf16_tensor_sha256": "fd56b85bf301661c8655ed517928304d25df7d6b3ea3d9be85c021159d61bad8",
+    "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved.",
+    "downloaded_tensor_bytes": 42991620,
+    "nvfp4_global_scale": 0.0002325148816453293,
+    "nvfp4_global_scale_sha256": "a920443bfab1bd19ef0ced27bb5fda2ae5f9d48bbf8ef1b76ecabcee7aea3238",
+    "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+    "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+    "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+    "nvfp4_scale_sha256": "153c69b3985ef81cb0269e7459f4abd016a27b55d8dd165eebb12ce8fe428938",
+    "nvfp4_shard": "model-00001-of-00002.safetensors",
+    "nvfp4_storage": {
+      "global_scale": {
+        "data_offsets": [
+          48,
+          52
+        ],
+        "dtype": "F32",
+        "shape": []
+      },
+      "scale": {
+        "data_offsets": [
+          1255984816,
+          1257033392
+        ],
+        "dtype": "F8_E4M3",
+        "shape": [
+          4096,
+          256
+        ]
+      },
+      "weight": {
+        "data_offsets": [
+          1746980528,
+          1755369136
+        ],
+        "dtype": "U8",
+        "shape": [
+          4096,
+          2048
+        ]
+      }
+    },
+    "nvfp4_tensor_sha256": "0fae32050c693343a90768b5570c29e6322152cd8bb5a3d4cf73bd3d7d3cf0e4",
+    "tensor": "model.layers.0.self_attn.q_proj.weight"
+  },
+  "source_code_sha256": {
+    "checkpoint_benchmark": "b032389863fe3bafa5e3a1311a285e114e92004a4817d292ccdb0ec8b7afaa00",
+    "ingest": "c8b3420c8da62847da9730bbca38170b7a9c08f65911be887e772aed5220d37b",
+    "schedule_benchmark": "d99a6aff1b4f130f2087afa08427e48e7a0162588e9f73029b6554e59fd9312f"
+  },
+  "source_dirty": true,
+  "source_range_fetch_ms": 6487.100268946961,
+  "sync_key": "ROCM-NVFP4-INGEST-1-QWEN3-QPROJ-2026-10-02",
+  "timing": {
+    "domains": "HIP event covers persistent native consumer launch; E2E includes runtime.launch module load, allocations, copies, validation, and dispatch. Checkpoint range download and host ingest are separate.",
+    "end_to_end_cv_pct": 0.6055312524421668,
+    "end_to_end_ms_median": 6.281164009124041,
+    "end_to_end_ms_samples": [
+      6.264191120862961,
+      6.364051951095462,
+      6.261368049308658,
+      6.32624002173543,
+      6.281164009124041,
+      6.3175049144774675,
+      6.25434797257185
+    ],
+    "end_to_end_warmup_count": 5,
+    "kernel_event_ms_median": 0.03128592014312744,
+    "kernel_event_ms_samples": [
+      0.03548858880996704,
+      0.03469419956207275,
+      0.03406359910964966,
+      0.03209191083908081,
+      0.03049232006072998,
+      0.029258129596710206,
+      0.030553719997406005,
+      0.03128592014312744,
+      0.028808438777923585
+    ],
+    "kernel_event_repeats_per_sample": 100
+  },
+  "work_item": "ROCM-NVFP4-INGEST-1"
+}

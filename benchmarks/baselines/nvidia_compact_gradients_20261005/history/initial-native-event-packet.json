@@ -1,0 +1,5799 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "architecture": "sm_120",
+  "rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.3584597325386767e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 96,
+          "physical_roles": [
+            0
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 24,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "b7d0b70a1305ad23a6c2209837318a0f885106dbe1b553c4c2634f5ffafc13dd",
+        "compact": "135cc7df86920c38bf11be4e88f1ab1cd483f1d5be5ef1a541d78d5fef5947d6"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.009765000082552433,
+          0.010598000138998032,
+          0.010189499706029892,
+          0.010867499746382236,
+          0.010029000230133533
+        ],
+        "compact": [
+          0.010242000222206116,
+          0.009593999944627285,
+          0.009840000420808792,
+          0.01056700013577938,
+          0.009922499768435955
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010189499706029892,
+        "compact": 0.009922499768435955
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009627499617636204,
+          0.01090800017118454,
+          0.009754374623298645,
+          0.009619000367820263,
+          0.009346875362098217
+        ],
+        "compact": [
+          0.009411375038325787,
+          0.009409124962985516,
+          0.009861250407993793,
+          0.009349624626338482,
+          0.009309000335633755
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009627499617636204,
+        "compact": 0.009409124962985516
+      },
+      "native_event_ratio_complete_over_compact": 1.0232088164956625,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.251502,
+          0.150747,
+          0.167148,
+          0.157757,
+          0.157417
+        ],
+        "compact": [
+          0.152797,
+          0.140957,
+          0.142077,
+          0.150587,
+          0.143777
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.157757,
+        "compact": 0.143777
+      },
+      "dispatch_ratio_complete_over_compact": 1.0269085355328784,
+      "wall_ratio_complete_over_compact": 1.0972339108480496,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "k"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.6527533775476684e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            80
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 80,
+          "physical_roles": [
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 20,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "a61d9d15cd7f340c4245c16afb66fa3cfa9351f4dc364fbd0998c92f783d0b5b",
+        "compact": "c4b4ddefec835aa01d09924a5317b2f6c59cb1303280490cd24a6e6031c3ba3f"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.010270999744534492,
+          0.010009500198066235,
+          0.009791499935090542,
+          0.010389500297605991,
+          0.009600999765098095
+        ],
+        "compact": [
+          0.010472999885678291,
+          0.0133865000680089,
+          0.010588999837636948,
+          0.011312000453472137,
+          0.010853500105440617
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010009500198066235,
+        "compact": 0.010853500105440617
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009945875033736229,
+          0.009684249758720398,
+          0.010066750459372997,
+          0.009963625110685825,
+          0.00988287478685379
+        ],
+        "compact": [
+          0.009351749904453754,
+          0.010511624626815319,
+          0.010007125325500965,
+          0.010851499624550343,
+          0.0102937500923872
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009945875033736229,
+        "compact": 0.0102937500923872
+      },
+      "native_event_ratio_complete_over_compact": 0.9662052162206421,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.2169,
+          0.192539,
+          0.165928,
+          0.156737,
+          0.182908
+        ],
+        "compact": [
+          0.149357,
+          0.146457,
+          0.145307,
+          0.155247,
+          0.170588
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.182908,
+        "compact": 0.149357
+      },
+      "dispatch_ratio_complete_over_compact": 0.9222370756737448,
+      "wall_ratio_complete_over_compact": 1.2246362741619075,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.726246966540003e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            60
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 60,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 15,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "7034e8b9a5db2353ca68cc9ec43e1c757c25e38fa034a6847931a525a58a8865",
+        "compact": "a83db229dd5cfdbc7474a47804beb81f68b9e56915bed89da159d76532e241ac"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.009398000314831734,
+          0.009796500205993652,
+          0.010369500145316124,
+          0.009891499765217304,
+          0.009005500003695488
+        ],
+        "compact": [
+          0.010212000459432602,
+          0.010645999573171139,
+          0.011908500455319881,
+          0.009832000359892845,
+          0.009915499947965145
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.009796500205993652,
+        "compact": 0.010212000459432602
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.008914999663829803,
+          0.008943749591708183,
+          0.009916375391185284,
+          0.009375625289976597,
+          0.009421374648809433
+        ],
+        "compact": [
+          0.010259624570608139,
+          0.00946312490850687,
+          0.008761375211179256,
+          0.011053250171244144,
+          0.009262374602258205
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009375625289976597,
+        "compact": 0.00946312490850687
+      },
+      "native_event_ratio_complete_over_compact": 0.9907536232083742,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.22376,
+          0.177108,
+          0.167148,
+          0.153498,
+          0.185129
+        ],
+        "compact": [
+          0.160608,
+          0.154717,
+          0.143017,
+          0.137327,
+          0.150647
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.177108,
+        "compact": 0.150647
+      },
+      "dispatch_ratio_complete_over_compact": 0.959312550455757,
+      "wall_ratio_complete_over_compact": 1.1756490338340624,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.726246966540003e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            60
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 156,
+          "physical_roles": [
+            0,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 39,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "bd76c3d469c81b8e5011471f36eb60e0524302ba889641d95860cee0a616ff13",
+        "compact": "34da10b567a21df01e32a3985157d45fb7474f937b47fadf7b88d63960b664b0"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.010666999965906143,
+          0.010900000110268593,
+          0.009724999777972698,
+          0.009688000194728374,
+          0.01074250042438507
+        ],
+        "compact": [
+          0.012179000303149223,
+          0.010727999731898308,
+          0.011769000440835953,
+          0.010858500376343727,
+          0.009620499797165394
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010666999965906143,
+        "compact": 0.010858500376343727
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.00941575039178133,
+          0.009109124541282654,
+          0.009549999609589577,
+          0.009691749699413776,
+          0.008968249894678593
+        ],
+        "compact": [
+          0.010392624884843826,
+          0.009964625351130962,
+          0.01112887542694807,
+          0.010279875248670578,
+          0.010300500318408012
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.00941575039178133,
+        "compact": 0.010300500318408012
+      },
+      "native_event_ratio_complete_over_compact": 0.914106121132238,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.295094,
+          0.156288,
+          0.170449,
+          0.160077,
+          0.161208
+        ],
+        "compact": [
+          0.172458,
+          0.161388,
+          0.159568,
+          0.151777,
+          0.158387
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.161208,
+        "compact": 0.159568
+      },
+      "dispatch_ratio_complete_over_compact": 0.9823640094119456,
+      "wall_ratio_complete_over_compact": 1.010277749924797,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.6527533775476684e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 176,
+          "physical_roles": [
+            0,
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 44,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "d2fcb54738d279afff31861331d2767a635f927e2ceea9de8325b3a09864e34d",
+        "compact": "2141594740e628844a3596443384daaf6ccaa6da8f574d23dd7201d7353a3e87"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.012071499601006508,
+          0.012334500439465046,
+          0.014154000207781792,
+          0.010669499635696411,
+          0.009859000332653522
+        ],
+        "compact": [
+          0.012027000077068806,
+          0.010828999802470207,
+          0.011110500432550907,
+          0.010842000134289265,
+          0.011809499934315681
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.012071499601006508,
+        "compact": 0.011110500432550907
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.01149774994701147,
+          0.011080875061452389,
+          0.011095000430941582,
+          0.011693624779582024,
+          0.011448999866843224
+        ],
+        "compact": [
+          0.012167874723672867,
+          0.010980875231325626,
+          0.010705624707043171,
+          0.01092937495559454,
+          0.01120462454855442
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.011448999866843224,
+        "compact": 0.010980875231325626
+      },
+      "native_event_ratio_complete_over_compact": 1.0426309037900874,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.2051,
+          0.161578,
+          0.161918,
+          0.162648,
+          0.169799
+        ],
+        "compact": [
+          0.156878,
+          0.151247,
+          0.152447,
+          0.154667,
+          0.153487
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.162648,
+        "compact": 0.153487
+      },
+      "dispatch_ratio_complete_over_compact": 1.0864946790011474,
+      "wall_ratio_complete_over_compact": 1.0596858365855086,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.726246966540003e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2",
+        "compact": "34b4730cfc526414ca434a17f8247552ca903580ddf33776f145e0e238d31fcb"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.011148500256240368,
+          0.013244500383734703,
+          0.012071999721229076,
+          0.012089500203728676,
+          0.012748000212013721
+        ],
+        "compact": [
+          0.012120000086724758,
+          0.010881000198423862,
+          0.012409999966621399,
+          0.012204499915242195,
+          0.011479499749839306
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.012089500203728676,
+        "compact": 0.012120000086724758
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.011370000429451466,
+          0.011630499735474586,
+          0.011341624893248081,
+          0.011319874785840511,
+          0.01104275044053793
+        ],
+        "compact": [
+          0.010822624899446964,
+          0.011110374704003334,
+          0.011389750055968761,
+          0.011397999711334705,
+          0.011256500147283077
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.011341624893248081,
+        "compact": 0.011256500147283077
+      },
+      "native_event_ratio_complete_over_compact": 1.0075622746725188,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.21561,
+          0.162678,
+          0.160637,
+          0.172728,
+          0.161108
+        ],
+        "compact": [
+          0.171698,
+          0.188579,
+          0.157088,
+          0.159738,
+          0.160468
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.162678,
+        "compact": 0.160468
+      },
+      "dispatch_ratio_complete_over_compact": 0.9974835080216303,
+      "wall_ratio_complete_over_compact": 1.0137722162674176,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.3584597325386767e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 96,
+          "physical_roles": [
+            0
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 24,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "ac9690885e5caf507a3f98f7868fb841eb05061789e4e767f9d3e35c3e13ab03",
+        "compact": "fed1d1a56abeb0480b2d5ee70e6c69934988db94144aa58ee60e71b805e493f2"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.009610000066459179,
+          0.009543499909341335,
+          0.009224499575793743,
+          0.010940499603748322,
+          0.01047549955546856
+        ],
+        "compact": [
+          0.0100685004144907,
+          0.010400500148534775,
+          0.01064349990338087,
+          0.012653499841690063,
+          0.009341499768197536
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.009610000066459179,
+        "compact": 0.010400500148534775
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009428375400602818,
+          0.009501124732196331,
+          0.010537249967455864,
+          0.008775374852120876,
+          0.009187250398099422
+        ],
+        "compact": [
+          0.009942750446498394,
+          0.009120374917984009,
+          0.00858487468212843,
+          0.009379874914884567,
+          0.009635374881327152
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009428375400602818,
+        "compact": 0.009379874914884567
+      },
+      "native_event_ratio_complete_over_compact": 1.005170696428082,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.248021,
+          0.181609,
+          0.161878,
+          0.167328,
+          0.165938
+        ],
+        "compact": [
+          0.159488,
+          0.155848,
+          0.155668,
+          0.145697,
+          0.147017
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.167328,
+        "compact": 0.155668
+      },
+      "dispatch_ratio_complete_over_compact": 0.9239940319421118,
+      "wall_ratio_complete_over_compact": 1.0749029986895187,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "k"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 2.202916279947509e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            80
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 80,
+          "physical_roles": [
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 20,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "f113a88f390ab40bd63ea672d40097e3f57a06f72f5ca1febab891cc1e355449",
+        "compact": "308fdc3febcbda124e961167823ce6502b1de31f18d5e021c88901890fd0c57c"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.010502999648451805,
+          0.010687500238418579,
+          0.011783000081777573,
+          0.010604499839246273,
+          0.009746000170707703
+        ],
+        "compact": [
+          0.01041099987924099,
+          0.011730999685823917,
+          0.010611999779939651,
+          0.0106995003297925,
+          0.010714500211179256
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010604499839246273,
+        "compact": 0.0106995003297925
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.010393500328063965,
+          0.010665999725461006,
+          0.009988624602556229,
+          0.010073374956846237,
+          0.010221749544143677
+        ],
+        "compact": [
+          0.009913874790072441,
+          0.009950375184416771,
+          0.01125587522983551,
+          0.009521625004708767,
+          0.010227750055491924
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.010221749544143677,
+        "compact": 0.009950375184416771
+      },
+      "native_event_ratio_complete_over_compact": 1.0272727766237302,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.198869,
+          0.170148,
+          0.167598,
+          0.158947,
+          0.157077
+        ],
+        "compact": [
+          0.151607,
+          0.171108,
+          0.144777,
+          0.145597,
+          0.151648
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.167598,
+        "compact": 0.151607
+      },
+      "dispatch_ratio_complete_over_compact": 0.9911210348504126,
+      "wall_ratio_complete_over_compact": 1.1054766600486785,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.584528739970395e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            60
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 60,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 15,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "2a5551af11e92ff38b6ca92fd071a9e64f828614265b684f429fcf8aa2e9988a",
+        "compact": "3982069ecd77f7536639b26418905788aa1464481f05dba457f73fa6e49dbe03"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.011956499889492989,
+          0.010557999834418297,
+          0.009864999912679195,
+          0.010460999794304371,
+          0.0094395000487566
+        ],
+        "compact": [
+          0.00965499971061945,
+          0.010635999962687492,
+          0.009654000401496887,
+          0.009491000324487686,
+          0.009757000021636486
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010460999794304371,
+        "compact": 0.00965499971061945
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009660124778747559,
+          0.008476999588310719,
+          0.008739749900996685,
+          0.009985375218093395,
+          0.009313874877989292
+        ],
+        "compact": [
+          0.009069874882698059,
+          0.010160000063478947,
+          0.010025625117123127,
+          0.009222500026226044,
+          0.009683624841272831
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009313874877989292,
+        "compact": 0.009683624841272831
+      },
+      "native_event_ratio_complete_over_compact": 0.9618169880241934,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.20668,
+          0.157278,
+          0.162718,
+          0.171689,
+          0.156198
+        ],
+        "compact": [
+          0.152357,
+          0.144947,
+          0.145567,
+          0.152967,
+          0.142527
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.162718,
+        "compact": 0.145567
+      },
+      "dispatch_ratio_complete_over_compact": 1.083480073313561,
+      "wall_ratio_complete_over_compact": 1.1178220338400873,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.584528739970395e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            60
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 156,
+          "physical_roles": [
+            0,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 39,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "5485073458ae8b82f43e47ae3b927b83101214df60878a89f8e82fd65ac7d5be",
+        "compact": "1fb066849c2347f9ea9f915e945ce4b65d2b1807f5106fead9b97964243344e6"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.010814500041306019,
+          0.011529499664902687,
+          0.011460999958217144,
+          0.010945499874651432,
+          0.011753500439226627
+        ],
+        "compact": [
+          0.01064400002360344,
+          0.011719999834895134,
+          0.013387000188231468,
+          0.01211750041693449,
+          0.010247999802231789
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.011460999958217144,
+        "compact": 0.011719999834895134
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.010370125062763691,
+          0.010407124646008015,
+          0.01127537526190281,
+          0.010179624892771244,
+          0.011148749850690365
+        ],
+        "compact": [
+          0.010072125121951103,
+          0.011209875345230103,
+          0.010505500249564648,
+          0.010516875423491001,
+          0.0102141248062253
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.010407124646008015,
+        "compact": 0.010505500249564648
+      },
+      "native_event_ratio_complete_over_compact": 0.9906358001789862,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.197219,
+          0.160347,
+          0.190339,
+          0.158198,
+          0.175108
+        ],
+        "compact": [
+          0.155698,
+          0.159828,
+          0.176498,
+          0.157207,
+          0.152787
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.175108,
+        "compact": 0.157207
+      },
+      "dispatch_ratio_complete_over_compact": 0.9779010341018228,
+      "wall_ratio_complete_over_compact": 1.113868975300082,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.3584597325386767e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 176,
+          "physical_roles": [
+            0,
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 44,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "2e2657e58fe66c98fe2d5b45a3167c4ddf27b157a3702913116b28c55812b5da",
+        "compact": "40e4ba15ca66522c32ff9120f264dc5eb00e71c266036fbbc3c87020ea7971dc"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.01245499961078167,
+          0.01405400037765503,
+          0.014076500199735165,
+          0.012875000014901161,
+          0.011149999685585499
+        ],
+        "compact": [
+          0.011593000032007694,
+          0.011221500113606453,
+          0.01186749991029501,
+          0.011358500458300114,
+          0.01312949974089861
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.012875000014901161,
+        "compact": 0.011593000032007694
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.011797125451266766,
+          0.012072624638676643,
+          0.012260125018656254,
+          0.01145237497985363,
+          0.011108375154435635
+        ],
+        "compact": [
+          0.011663874611258507,
+          0.011778250336647034,
+          0.011664500460028648,
+          0.011228499934077263,
+          0.011276374571025372
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.011797125451266766,
+        "compact": 0.011663874611258507
+      },
+      "native_event_ratio_complete_over_compact": 1.0114242346089386,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.21176,
+          0.171218,
+          0.163698,
+          0.162718,
+          0.166168
+        ],
+        "compact": [
+          0.162258,
+          0.159787,
+          0.152548,
+          0.183019,
+          0.154937
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.166168,
+        "compact": 0.159787
+      },
+      "dispatch_ratio_complete_over_compact": 1.1105839713062995,
+      "wall_ratio_complete_over_compact": 1.0399344126868895,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.584528739970395e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        }
+      },
+      "image_sha256": {
+        "complete": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32",
+        "compact": "aa5701db8040d83bfa41ca457d2b29552be1a70fc0cec558dfb9d0c3f79dc5d3"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.012744000181555748,
+          0.011319500394165516,
+          0.013154000043869019,
+          0.011098000220954418,
+          0.011819999665021896
+        ],
+        "compact": [
+          0.012902500107884407,
+          0.012315499596297741,
+          0.010707000270485878,
+          0.010327000170946121,
+          0.012662500143051147
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.011819999665021896,
+        "compact": 0.012315499596297741
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.012091250158846378,
+          0.010913125239312649,
+          0.010428249835968018,
+          0.011268124915659428,
+          0.011074000038206577
+        ],
+        "compact": [
+          0.011187124997377396,
+          0.010564000345766544,
+          0.010530750267207623,
+          0.011172999627888203,
+          0.011212499812245369
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.011074000038206577,
+        "compact": 0.011172999627888203
+      },
+      "native_event_ratio_complete_over_compact": 0.9911393902283395,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.2155,
+          0.170189,
+          0.169588,
+          0.160977,
+          0.161227
+        ],
+        "compact": [
+          0.171298,
+          0.303165,
+          0.970726,
+          0.165618,
+          0.168318
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.169588,
+        "compact": 0.171298
+      },
+      "dispatch_ratio_complete_over_compact": 0.9597661526110722,
+      "wall_ratio_complete_over_compact": 0.9900173965837312,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.871932778738707e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 512,
+          "physical_roles": [
+            0
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 128,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "f76ccbca36349aac17bff1d84761e956262d0f946ee00607a1ef36263a33d212",
+        "compact": "ac73a8e4f6d8c71d8f0046384ccea9c92d2f079f4424e2dc18706aaa97de5434"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.0760670006275177,
+          0.06979600340127945,
+          0.0697150006890297,
+          0.06984750181436539,
+          0.06972599774599075
+        ],
+        "compact": [
+          0.06949149817228317,
+          0.06986600160598755,
+          0.06953950226306915,
+          0.06947849690914154,
+          0.06954099982976913
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.06979600340127945,
+        "compact": 0.06953950226306915
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.06964924931526184,
+          0.06965400278568268,
+          0.06965500116348267,
+          0.0696365013718605,
+          0.06964662671089172
+        ],
+        "compact": [
+          0.06968100368976593,
+          0.06958487629890442,
+          0.0695672482252121,
+          0.0695590004324913,
+          0.06958174705505371
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.06964924931526184,
+        "compact": 0.06958174705505371
+      },
+      "native_event_ratio_complete_over_compact": 1.0009701144777914,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.317816,
+          0.226191,
+          0.225991,
+          0.2281,
+          0.225021
+        ],
+        "compact": [
+          0.226441,
+          0.21251,
+          0.21428,
+          0.21424,
+          0.226031
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.226191,
+        "compact": 0.21428
+      },
+      "dispatch_ratio_complete_over_compact": 1.0036885673590235,
+      "wall_ratio_complete_over_compact": 1.0555861489639724,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "k"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 1.340950758581521e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            4128
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 4128,
+          "physical_roles": [
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 9,
+          "gradient_elements": 1032,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "8898691944f9123f89f441662919e979900ac8ad79a9e3d034488283558911e5",
+        "compact": "8486a5cacdfc6fde0056d15780b1e43765f37336503bd574f793cce7b90b70ba"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.015109499916434288,
+          0.014872499741613865,
+          0.015576500445604324,
+          0.015203000046312809,
+          0.015279999934136868
+        ],
+        "compact": [
+          0.018191499635577202,
+          0.01829650066792965,
+          0.018223000690340996,
+          0.018255500122904778,
+          0.018256500363349915
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.015203000046312809,
+        "compact": 0.018255500122904778
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.014785249717533588,
+          0.014859374612569809,
+          0.01473462488502264,
+          0.014828500337898731,
+          0.014961625449359417
+        ],
+        "compact": [
+          0.01834762468934059,
+          0.018392499536275864,
+          0.018546750769019127,
+          0.018396874889731407,
+          0.018540749326348305
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.014828500337898731,
+        "compact": 0.018396874889731407
+      },
+      "native_event_ratio_complete_over_compact": 0.8060336566280375,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.246222,
+          0.165768,
+          0.180629,
+          0.175469,
+          0.170068
+        ],
+        "compact": [
+          0.171588,
+          0.158167,
+          0.164458,
+          0.155077,
+          0.153277
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.175469,
+        "compact": 0.158167
+      },
+      "dispatch_ratio_complete_over_compact": 0.8327901149767974,
+      "wall_ratio_complete_over_compact": 1.1093907072903957,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 9.27928136499473e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            3096
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 3096,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 7,
+          "gradient_elements": 774,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "a60920b3cd1fe6ca9dfc9e5d973357a6e81d8525a0a661e01e165eb6b5a9d799",
+        "compact": "42aaa8ff2e48a044be25471761c9012bc365ed4b0e9077d2d1b2f0885bbf9a02"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.01285099983215332,
+          0.015304500237107277,
+          0.014095500111579895,
+          0.015048500150442123,
+          0.012141499668359756
+        ],
+        "compact": [
+          0.013611000031232834,
+          0.013276499696075916,
+          0.011829500086605549,
+          0.012758499942719936,
+          0.013085500337183475
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.014095500111579895,
+        "compact": 0.013085500337183475
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.012099875137209892,
+          0.012201875448226929,
+          0.012730875052511692,
+          0.013899999670684338,
+          0.0127982497215271
+        ],
+        "compact": [
+          0.01240449957549572,
+          0.01287037506699562,
+          0.013017875142395496,
+          0.0125516252592206,
+          0.012062625028192997
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.012730875052511692,
+        "compact": 0.0125516252592206
+      },
+      "native_event_ratio_complete_over_compact": 1.0142810026262863,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.259252,
+          0.159837,
+          0.163938,
+          0.159178,
+          0.161258
+        ],
+        "compact": [
+          0.159458,
+          0.150227,
+          0.147048,
+          0.152547,
+          0.145467
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.161258,
+        "compact": 0.150227
+      },
+      "dispatch_ratio_complete_over_compact": 1.0771846508250378,
+      "wall_ratio_complete_over_compact": 1.0734288776318506,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 9.27928136499473e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            3096
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 3608,
+          "physical_roles": [
+            0,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 8,
+          "gradient_elements": 902,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "c5882a1780d3e6575a49302ba7b41a3a78991c6b8c2a74be8893b987aa3680bf",
+        "compact": "c5b95dcf99a6146512a2901b0ae4634729d919667523102eb4134a5b422bc35b"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.06974750012159348,
+          0.06972450017929077,
+          0.06980200111865997,
+          0.06986799836158752,
+          0.06983599811792374
+        ],
+        "compact": [
+          0.06948649883270264,
+          0.06954299658536911,
+          0.06948649883270264,
+          0.06953450292348862,
+          0.06949350237846375
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.06980200111865997,
+        "compact": 0.06949350237846375
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.06970137357711792,
+          0.06969987601041794,
+          0.06972562521696091,
+          0.06970737129449844,
+          0.06971687823534012
+        ],
+        "compact": [
+          0.0695822536945343,
+          0.06966874748468399,
+          0.06958262622356415,
+          0.0695827528834343,
+          0.06957412511110306
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.06970737129449844,
+        "compact": 0.06958262622356415
+      },
+      "native_event_ratio_complete_over_compact": 1.0017927617525315,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.319406,
+          0.234771,
+          0.221071,
+          0.2254,
+          0.230051
+        ],
+        "compact": [
+          0.242281,
+          0.217451,
+          0.227251,
+          0.230031,
+          0.222591
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.230051,
+        "compact": 0.227251
+      },
+      "dispatch_ratio_complete_over_compact": 1.0044392458235323,
+      "wall_ratio_complete_over_compact": 1.0123211779046077,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.871932778738707e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 4640,
+          "physical_roles": [
+            0,
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 10,
+          "gradient_elements": 1160,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "2df7bea5e5aaf0d9eb2ae1bec0a3d2a29cb8173f104c1071ceaa96507c3d4327",
+        "compact": "0ec62fb69abec2732bb4b4d9f1d57bd415d4e5a9e16850f59a460ba2bca41ff4"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.06975100189447403,
+          0.06981799751520157,
+          0.06976950168609619,
+          0.06978850066661835,
+          0.06978099793195724
+        ],
+        "compact": [
+          0.06970749795436859,
+          0.06971000134944916,
+          0.06969550251960754,
+          0.069691002368927,
+          0.06974200159311295
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.06978099793195724,
+        "compact": 0.06970749795436859
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.069691501557827,
+          0.06972324848175049,
+          0.06969799846410751,
+          0.06972462683916092,
+          0.06971612572669983
+        ],
+        "compact": [
+          0.06964737176895142,
+          0.06963974982500076,
+          0.0697343721985817,
+          0.06966900080442429,
+          0.0696215033531189
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.06971612572669983,
+        "compact": 0.06964737176895142
+      },
+      "native_event_ratio_complete_over_compact": 1.0009871723225465,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.316925,
+          0.357277,
+          0.227991,
+          1.068372,
+          0.224301
+        ],
+        "compact": [
+          0.229301,
+          0.232351,
+          0.222881,
+          0.215921,
+          0.237791
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.316925,
+        "compact": 0.229301
+      },
+      "dispatch_ratio_complete_over_compact": 1.0010544056198483,
+      "wall_ratio_complete_over_compact": 1.3821352719787527,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 9.27928136499473e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01",
+        "compact": "67ae1ba6e09a3803b7dcc1a2c198a0ae9c025942ac72976b82535a5591621351"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.0699314996600151,
+          0.06984149664640427,
+          0.06976649910211563,
+          0.0698465034365654,
+          0.06984999775886536
+        ],
+        "compact": [
+          0.0697690024971962,
+          0.06980449706315994,
+          0.06972649693489075,
+          0.06974899768829346,
+          0.06976000219583511
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.0698465034365654,
+        "compact": 0.06976000219583511
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.0697452500462532,
+          0.06977587193250656,
+          0.06974650174379349,
+          0.06976500153541565,
+          0.06977950036525726
+        ],
+        "compact": [
+          0.06968412548303604,
+          0.06970937550067902,
+          0.06968612223863602,
+          0.06968662142753601,
+          0.06969362497329712
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.06976500153541565,
+        "compact": 0.06968662142753601
+      },
+      "native_event_ratio_complete_over_compact": 1.001124751154153,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.324005,
+          0.248942,
+          0.256873,
+          0.233071,
+          0.234121
+        ],
+        "compact": [
+          0.237002,
+          0.229051,
+          0.225891,
+          0.227371,
+          0.226761
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.248942,
+        "compact": 0.227371
+      },
+      "dispatch_ratio_complete_over_compact": 1.0012399833429972,
+      "wall_ratio_complete_over_compact": 1.0948713776163188,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.890798594766154e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 512,
+          "physical_roles": [
+            0
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 128,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "477398f9aba471fcc3205580aaa89199d3670cb0777a9542c450ba66ce9a401c",
+        "compact": "1d86759c4571e9eeb6fbd25f39f44ce540bc9d684c78c38e6f7fd96cffe73294"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.06985100358724594,
+          0.06968700140714645,
+          0.06971699744462967,
+          0.06967850029468536,
+          0.06984049826860428
+        ],
+        "compact": [
+          0.06981249898672104,
+          0.06979800015687943,
+          0.06982450187206268,
+          0.06978149712085724,
+          0.06974499672651291
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.06971699744462967,
+        "compact": 0.06979800015687943
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.06964362412691116,
+          0.06964437663555145,
+          0.06967337429523468,
+          0.06964249908924103,
+          0.06963224709033966
+        ],
+        "compact": [
+          0.06972949951887131,
+          0.06969299912452698,
+          0.06970050185918808,
+          0.06972187757492065,
+          0.06969787180423737
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.06964362412691116,
+        "compact": 0.06970050185918808
+      },
+      "native_event_ratio_complete_over_compact": 0.9991839695445547,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.313315,
+          0.230661,
+          0.248822,
+          0.220091,
+          0.231481
+        ],
+        "compact": [
+          0.21603,
+          0.225301,
+          0.211591,
+          0.20644,
+          0.21406
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.231481,
+        "compact": 0.21406
+      },
+      "dispatch_ratio_complete_over_compact": 0.9988394694394153,
+      "wall_ratio_complete_over_compact": 1.0813837241894795,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "k"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 1.4238052976206506e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            4128
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 4128,
+          "physical_roles": [
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 9,
+          "gradient_elements": 1032,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "9a31785a7a47c5e96ceaf668ed2a8da925921bd6323f2015463463db51e109ca",
+        "compact": "1dbfcc32159ffe482e636b889f21b0edc5e8fb2f7b22f8ab695fd8c77e7380c5"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.0173799991607666,
+          0.016588499769568443,
+          0.0165839996188879,
+          0.016583500429987907,
+          0.017539000138640404
+        ],
+        "compact": [
+          0.015179499983787537,
+          0.014669000171124935,
+          0.01558700017631054,
+          0.015351500362157822,
+          0.015330499969422817
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.016588499769568443,
+        "compact": 0.015330499969422817
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.016503874212503433,
+          0.016498124226927757,
+          0.016920749098062515,
+          0.016534624621272087,
+          0.016616124659776688
+        ],
+        "compact": [
+          0.01477350015193224,
+          0.01490787509828806,
+          0.014677374623715878,
+          0.014766749925911427,
+          0.014836374670267105
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.016534624621272087,
+        "compact": 0.01477350015193224
+      },
+      "native_event_ratio_complete_over_compact": 1.119208342723678,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.253352,
+          0.181458,
+          0.171128,
+          0.172529,
+          0.178018
+        ],
+        "compact": [
+          0.165738,
+          0.159338,
+          0.162378,
+          0.177748,
+          0.154588
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.178018,
+        "compact": 0.162378
+      },
+      "dispatch_ratio_complete_over_compact": 1.0820586283979483,
+      "wall_ratio_complete_over_compact": 1.0963184667873727,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 7.3205922005749324e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            3096
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 3096,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 7,
+          "gradient_elements": 774,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "5e67cff2b0b97fe68886676be52277f05cf17c3e5867e78e18254e583975c69d",
+        "compact": "bd1b0b5dda04e2880eb213d41193acb22d27c1ee391ad834e258b3bf37913c2d"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.011837000027298927,
+          0.012307499535381794,
+          0.012455999851226807,
+          0.012507500126957893,
+          0.014058999717235565
+        ],
+        "compact": [
+          0.013585999608039856,
+          0.012086000293493271,
+          0.013027000240981579,
+          0.01253450009971857,
+          0.012462000362575054
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.012455999851226807,
+        "compact": 0.01253450009971857
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.012234499678015709,
+          0.01189349964261055,
+          0.011792625300586224,
+          0.012492124922573566,
+          0.012312750332057476
+        ],
+        "compact": [
+          0.013526000082492828,
+          0.012481000274419785,
+          0.013566125184297562,
+          0.012813875451683998,
+          0.01267087459564209
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.012234499678015709,
+        "compact": 0.012813875451683998
+      },
+      "native_event_ratio_complete_over_compact": 0.9547852813262557,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.20572,
+          0.168998,
+          0.181939,
+          0.169749,
+          0.159507
+        ],
+        "compact": [
+          0.163328,
+          0.149707,
+          0.159668,
+          0.149108,
+          0.152697
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.169749,
+        "compact": 0.152697
+      },
+      "dispatch_ratio_complete_over_compact": 0.9937372653183412,
+      "wall_ratio_complete_over_compact": 1.1116721350124759,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 7.3205922005749324e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            3096
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 3608,
+          "physical_roles": [
+            0,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 8,
+          "gradient_elements": 902,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "511462fc9e929730b34d6be59629b3a342900f9bed069804a25139557ac51a1b",
+        "compact": "ad7c3629abecc4f6ec6e8ae8fa6cad12163d9d7bf454672afea0d3b52a43a113"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.07157400250434875,
+          0.07153499871492386,
+          0.07156450301408768,
+          0.07154949754476547,
+          0.07161299884319305
+        ],
+        "compact": [
+          0.06991150230169296,
+          0.06999500095844269,
+          0.06979049742221832,
+          0.06988450139760971,
+          0.06991200149059296
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.07156450301408768,
+        "compact": 0.06991150230169296
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.0716167464852333,
+          0.0716136246919632,
+          0.07161562144756317,
+          0.0716058760881424,
+          0.07165162265300751
+        ],
+        "compact": [
+          0.06981600075960159,
+          0.06977900117635727,
+          0.06981100142002106,
+          0.06980637460947037,
+          0.06981199979782104
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.07161562144756317,
+        "compact": 0.06981100142002106
+      },
+      "native_event_ratio_complete_over_compact": 1.0258500808015134,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.314926,
+          0.230241,
+          0.242712,
+          1.05338,
+          0.228531
+        ],
+        "compact": [
+          0.244952,
+          0.228271,
+          0.21851,
+          0.222111,
+          0.224931
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.242712,
+        "compact": 0.224931
+      },
+      "dispatch_ratio_complete_over_compact": 1.0236441881231708,
+      "wall_ratio_complete_over_compact": 1.0790509089454101,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.890798594766154e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128
+          ],
+          "retained_gradient_buffers": 2,
+          "retained_gradient_bytes": 4640,
+          "physical_roles": [
+            0,
+            1
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 10,
+          "gradient_elements": 1160,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "308a5cabcfcd64094d06485cf7d058ea28f41872ed14579a99a76594f8b07565",
+        "compact": "ce760f79df6e2f84b8ffb5358c4e8b62b650f4a1a50f1597632c3838c130c08b"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.07154399901628494,
+          0.07159800082445145,
+          0.07159149646759033,
+          0.07159049808979034,
+          0.07160600274801254
+        ],
+        "compact": [
+          0.06978049874305725,
+          0.06976450234651566,
+          0.069752998650074,
+          0.06981649994850159,
+          0.06975100189447403
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.07159149646759033,
+        "compact": 0.06976450234651566
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.07162900269031525,
+          0.07171449810266495,
+          0.07174374908208847,
+          0.07161962240934372,
+          0.07174474745988846
+        ],
+        "compact": [
+          0.06982262432575226,
+          0.06970199942588806,
+          0.06982112675905228,
+          0.0697028785943985,
+          0.06982649862766266
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.07171449810266495,
+        "compact": 0.06982112675905228
+      },
+      "native_event_ratio_complete_over_compact": 1.0271174561554492,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.314375,
+          0.232381,
+          0.231422,
+          0.226771,
+          0.245482
+        ],
+        "compact": [
+          0.255042,
+          0.229261,
+          0.221151,
+          0.222071,
+          0.21908
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.232381,
+        "compact": 0.222071
+      },
+      "dispatch_ratio_complete_over_compact": 1.0261880191160846,
+      "wall_ratio_complete_over_compact": 1.0464265932967385,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 7.3205922005749324e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            384,
+            512,
+            4128,
+            3096
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 7736,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "gradient_elements": 1934,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        }
+      },
+      "image_sha256": {
+        "complete": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c",
+        "compact": "6269f3e4c9b4e1baee1a752724d099f13ff261e8cbf783a53dc0dc59d35bf4ff"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.06973399966955185,
+          0.06977249681949615,
+          0.06977549940347672,
+          0.06977950036525726,
+          0.06984449923038483
+        ],
+        "compact": [
+          0.06974449753761292,
+          0.0697145015001297,
+          0.06969299912452698,
+          0.06968549638986588,
+          0.06970349699258804
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.06977549940347672,
+        "compact": 0.06970349699258804
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.0697101280093193,
+          0.06971575319766998,
+          0.06981012225151062,
+          0.06981637328863144,
+          0.06971912831068039
+        ],
+        "compact": [
+          0.06968475133180618,
+          0.06962862610816956,
+          0.06975387781858444,
+          0.06966162472963333,
+          0.06966887414455414
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.06971912831068039,
+        "compact": 0.06966887414455414
+      },
+      "native_event_ratio_complete_over_compact": 1.0007213288106533,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.347667,
+          0.233511,
+          0.227801,
+          0.224661,
+          0.229311
+        ],
+        "compact": [
+          0.238881,
+          0.230471,
+          0.229171,
+          0.223441,
+          0.22519
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.229311,
+        "compact": 0.229171
+      },
+      "dispatch_ratio_complete_over_compact": 1.001032981327986,
+      "wall_ratio_complete_over_compact": 1.000610897539392,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    }
+  ],
+  "biased_rows": [
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "bias"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        2,
+        4,
+        3,
+        5
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 7.449290052863322e-09,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 1424,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            480
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 480,
+          "physical_roles": [
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 356,
+          "registers": 38,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 120,
+          "registers": 38,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "eaa4d87313bd67be81734369e4769d627182280c6d6428c6b5cc1ea5f9ecfd7a",
+        "compact": "9a7288414ccb9ea4a82bd91535e4cc5349107722655ee144946609af19d230e0"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.009777500294148922,
+          0.011598000302910805,
+          0.01206399966031313,
+          0.010433499701321125,
+          0.009147999808192253
+        ],
+        "compact": [
+          0.009197499603033066,
+          0.009393500164151192,
+          0.010355000384151936,
+          0.01046149991452694,
+          0.009929000400006771
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010433499701321125,
+        "compact": 0.009929000400006771
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.008548124693334103,
+          0.00954474974423647,
+          0.009207624942064285,
+          0.009338749572634697,
+          0.00927175022661686
+        ],
+        "compact": [
+          0.009216374717652798,
+          0.008855375461280346,
+          0.008485499769449234,
+          0.009244250133633614,
+          0.009171875193715096
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.00927175022661686,
+        "compact": 0.009171875193715096
+      },
+      "native_event_ratio_complete_over_compact": 1.0108892708189272,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.236732,
+          0.171768,
+          0.170579,
+          0.164758,
+          0.175118
+        ],
+        "compact": [
+          0.171109,
+          0.165148,
+          0.147087,
+          0.143466,
+          0.146157
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.171768,
+        "compact": 0.147087
+      },
+      "dispatch_ratio_complete_over_compact": 1.0508106839550546,
+      "wall_ratio_complete_over_compact": 1.1677986497787025,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        2,
+        4,
+        3,
+        5
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 5.7550242515969074e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 1424,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            240
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 240,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 356,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 60,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "4dd9853c6513b5ce97a0b292a45e4a94b00a19852e19ff3f3677c1940eed1005",
+        "compact": "874505fa06fda2c079e680eb458d21af878585484e5481768f47b47ecf10c2b3"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.010481500066816807,
+          0.010526999831199646,
+          0.012232000008225441,
+          0.010604999959468842,
+          0.013251500204205513
+        ],
+        "compact": [
+          0.010355000384151936,
+          0.010611499659717083,
+          0.010347999632358551,
+          0.010320499539375305,
+          0.01187250018119812
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010604999959468842,
+        "compact": 0.010355000384151936
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.00851837545633316,
+          0.009822750464081764,
+          0.00981612503528595,
+          0.009468000382184982,
+          0.008674249984323978
+        ],
+        "compact": [
+          0.009507374837994576,
+          0.009731625206768513,
+          0.010081999935209751,
+          0.009268124587833881,
+          0.009580500423908234
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009468000382184982,
+        "compact": 0.009580500423908234
+      },
+      "native_event_ratio_complete_over_compact": 0.988257394003918,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.249602,
+          0.172769,
+          0.165868,
+          0.167408,
+          0.169088
+        ],
+        "compact": [
+          0.179128,
+          0.145697,
+          0.143757,
+          0.147918,
+          0.144897
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.169088,
+        "compact": 0.145697
+      },
+      "dispatch_ratio_complete_over_compact": 1.024142884214618,
+      "wall_ratio_complete_over_compact": 1.1605455156935283,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "bias",
+        "q",
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        2,
+        4,
+        3,
+        5
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 5.7550242515969074e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 1424,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 1104,
+          "physical_roles": [
+            0,
+            2,
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 356,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 276,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "ad65afe9ec8637a271383cd4ff778887ac1bf54e252e7124896a99f9d10acd4a",
+        "compact": "7476c82143958036671a5563ddc3101a53b7f9892c23300c6ee7b7af31110ad4"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.012009000405669212,
+          0.011282499879598618,
+          0.009417500346899033,
+          0.011933499947190285,
+          0.00943399965763092
+        ],
+        "compact": [
+          0.011276500299572945,
+          0.010068000294268131,
+          0.009510999545454979,
+          0.012062500230967999,
+          0.010004499927163124
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.011282499879598618,
+        "compact": 0.010068000294268131
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009917125105857849,
+          0.009642000310122967,
+          0.009903499856591225,
+          0.010007125325500965,
+          0.011190124787390232
+        ],
+        "compact": [
+          0.011039875447750092,
+          0.009221750311553478,
+          0.009867374785244465,
+          0.010429625399410725,
+          0.010287124663591385
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009917125105857849,
+        "compact": 0.010287124663591385
+      },
+      "native_event_ratio_complete_over_compact": 0.9640327526074363,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.276784,
+          0.192509,
+          0.179358,
+          0.174658,
+          0.182269
+        ],
+        "compact": [
+          0.182489,
+          0.19825,
+          0.164238,
+          0.173199,
+          0.164178
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.182269,
+        "compact": 0.173199
+      },
+      "dispatch_ratio_complete_over_compact": 1.1206296732055043,
+      "wall_ratio_complete_over_compact": 1.0523675078955421,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "bias"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        2,
+        4,
+        3,
+        5
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 1.0694329879989972e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 1424,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            480
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 480,
+          "physical_roles": [
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 356,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 120,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "af0405bdd765924603ccdeb5fd853a046483c88b1ffc900ee1ebfd314d504bdf",
+        "compact": "6413fd340cfb00692749cdd6c3893bb14e4fbc70890ece4069c2eaadc1d40ca4"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.009996499866247177,
+          0.010714500211179256,
+          0.009088999591767788,
+          0.01083299983292818,
+          0.009525000117719173
+        ],
+        "compact": [
+          0.010797499679028988,
+          0.011593500152230263,
+          0.009120499715209007,
+          0.010023999959230423,
+          0.009449999779462814
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.009996499866247177,
+        "compact": 0.010023999959230423
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.00898400042206049,
+          0.009650499559938908,
+          0.009217875078320503,
+          0.008614749647676945,
+          0.008912124671041965
+        ],
+        "compact": [
+          0.009425249882042408,
+          0.009263750165700912,
+          0.00911024957895279,
+          0.009173000231385231,
+          0.00905737467110157
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.00898400042206049,
+        "compact": 0.009173000231385231
+      },
+      "native_event_ratio_complete_over_compact": 0.9793960749419713,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.218031,
+          0.176648,
+          0.168208,
+          0.167498,
+          0.180429
+        ],
+        "compact": [
+          0.151647,
+          0.149667,
+          0.165157,
+          0.157858,
+          0.154447
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.176648,
+        "compact": 0.154447
+      },
+      "dispatch_ratio_complete_over_compact": 0.9972565749107049,
+      "wall_ratio_complete_over_compact": 1.1437451034982875,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        2,
+        4,
+        3,
+        5
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 7.427125087167141e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 1424,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            240
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 240,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 356,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 60,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "3e86711866b6c1028de3c6ea78d1e3667d5681c00d7fae39396268296f4f18b5",
+        "compact": "a3251cb5977bbd1229a57e90c0f5c9a5008ebd16e509e96d4507c033deeeb7df"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.01078800018876791,
+          0.009689999744296074,
+          0.012864000163972378,
+          0.011540999636054039,
+          0.011550500057637691
+        ],
+        "compact": [
+          0.01074250042438507,
+          0.0113305002450943,
+          0.01267549954354763,
+          0.009838500060141087,
+          0.010867999866604805
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.011540999636054039,
+        "compact": 0.010867999866604805
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.010132375173270702,
+          0.010759375058114529,
+          0.01042299997061491,
+          0.009857124648988247,
+          0.010365749709308147
+        ],
+        "compact": [
+          0.011024749837815762,
+          0.009839249774813652,
+          0.011227374896407127,
+          0.0102528752759099,
+          0.010239125229418278
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.010365749709308147,
+        "compact": 0.0102528752759099
+      },
+      "native_event_ratio_complete_over_compact": 1.0110090516426602,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.21552,
+          0.169858,
+          0.169199,
+          0.175149,
+          0.197159
+        ],
+        "compact": [
+          0.20033,
+          0.181238,
+          0.162438,
+          0.144747,
+          0.152977
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.175149,
+        "compact": 0.162438
+      },
+      "dispatch_ratio_complete_over_compact": 1.0619248967344237,
+      "wall_ratio_complete_over_compact": 1.0782513943781626,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "bias",
+        "q",
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        2,
+        4,
+        3,
+        5
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 7.427125087167141e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 1424,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            240,
+            480
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 1104,
+          "physical_roles": [
+            0,
+            2,
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 356,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 3,
+          "gradient_elements": 276,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "fa3378862bf92dae8c119d30ac9eead2698d1847ecf7524bba19980eaf010f19",
+        "compact": "9ea56ae7fc6370b89e418e72f302a37b86b39ccc103ac0c2672211e863cf244d"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.01117200031876564,
+          0.01192300021648407,
+          0.012700499966740608,
+          0.012631500139832497,
+          0.010530499741435051
+        ],
+        "compact": [
+          0.01220100000500679,
+          0.011944499798119068,
+          0.012367499992251396,
+          0.00994850043207407,
+          0.009288500063121319
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.01192300021648407,
+        "compact": 0.011944499798119068
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.01000049989670515,
+          0.010964875109493732,
+          0.010309250093996525,
+          0.010683625005185604,
+          0.010616250336170197
+        ],
+        "compact": [
+          0.009748125448822975,
+          0.010578500106930733,
+          0.01124625001102686,
+          0.010307375341653824,
+          0.010982625186443329
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.010616250336170197,
+        "compact": 0.010578500106930733
+      },
+      "native_event_ratio_complete_over_compact": 1.0035685805036512,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.274133,
+          0.184749,
+          0.176308,
+          0.183158,
+          0.173638
+        ],
+        "compact": [
+          0.171468,
+          0.165748,
+          0.161747,
+          0.192749,
+          0.194939
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.183158,
+        "compact": 0.171468
+      },
+      "dispatch_ratio_complete_over_compact": 0.9982000433673762,
+      "wall_ratio_complete_over_compact": 1.0681759861898428,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "bias"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 3.026798366806416e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 960,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            16
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 16,
+          "physical_roles": [
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 240,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 4,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        }
+      },
+      "image_sha256": {
+        "complete": "f0951166f61173bfab26d7694d1fa1db2b6ad96ab43a18344a81db088fe235a2",
+        "compact": "b37e9172826f580fe66b4125aa14a30badc4b4c60a635e976b29f157b6e1baa5"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.023559000343084335,
+          0.022646000608801842,
+          0.019338000565767288,
+          0.01692350022494793,
+          0.017100999131798744
+        ],
+        "compact": [
+          0.022642500698566437,
+          0.023768499493598938,
+          0.01844549924135208,
+          0.016758499667048454,
+          0.01753149926662445
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.019338000565767288,
+        "compact": 0.01844549924135208
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.016808124259114265,
+          0.016674375161528587,
+          0.016598250716924667,
+          0.017134500667452812,
+          0.05408500134944916
+        ],
+        "compact": [
+          0.016541749238967896,
+          0.016963999718427658,
+          0.016433000564575195,
+          0.016520749777555466,
+          0.017025625333189964
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.016808124259114265,
+        "compact": 0.016541749238967896
+      },
+      "native_event_ratio_complete_over_compact": 1.0161031953935598,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.293004,
+          0.186319,
+          0.20593,
+          0.232662,
+          0.191809
+        ],
+        "compact": [
+          0.181178,
+          0.162858,
+          0.158687,
+          0.157768,
+          0.157338
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.20593,
+        "compact": 0.158687
+      },
+      "dispatch_ratio_complete_over_compact": 1.0483858589424542,
+      "wall_ratio_complete_over_compact": 1.297711847851431,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.493133787253356e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 960,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            240
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 240,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 240,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 60,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "701e8c54bffb26381a8cf8f95027b289b0b1bbc5869d1cdaf887117794a88ecf",
+        "compact": "d79df06a4b6979d5eef52a72301e530afa9fd67bfed3ad14f2f1899d6df38236"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.011909499764442444,
+          0.010018999688327312,
+          0.012326500378549099,
+          0.01010149996727705,
+          0.009573499672114849
+        ],
+        "compact": [
+          0.012082500383257866,
+          0.010431000031530857,
+          0.010804000310599804,
+          0.009556500241160393,
+          0.01058650016784668
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.01010149996727705,
+        "compact": 0.01058650016784668
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.00959287490695715,
+          0.00854912493377924,
+          0.009255125187337399,
+          0.009243125095963478,
+          0.00958549976348877
+        ],
+        "compact": [
+          0.009732875041663647,
+          0.009336750023066998,
+          0.009346624836325645,
+          0.009859999641776085,
+          0.009325750172138214
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009255125187337399,
+        "compact": 0.009346624836325645
+      },
+      "native_event_ratio_complete_over_compact": 0.99021040743685,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.257653,
+          0.174738,
+          0.176848,
+          0.173018,
+          0.190969
+        ],
+        "compact": [
+          0.163088,
+          0.149577,
+          0.152698,
+          0.155797,
+          0.144037
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.176848,
+        "compact": 0.152698
+      },
+      "dispatch_ratio_complete_over_compact": 0.9541869179728847,
+      "wall_ratio_complete_over_compact": 1.158155313101678,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "bias",
+        "q",
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.493133787253356e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 960,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 640,
+          "physical_roles": [
+            0,
+            2,
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 240,
+          "registers": 64,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 8
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 160,
+          "registers": 64,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 8
+        }
+      },
+      "image_sha256": {
+        "complete": "754ce0f236964d278572ab379474c10bd5d4d3abb32c2d0a62fc286d6501a1af",
+        "compact": "b1e8b38b0dcb5d5b3d392eaa057569289d51ff20f626a4a2210bdba9070b1613"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.01661200076341629,
+          0.01655299961566925,
+          0.016633499413728714,
+          0.01671149954199791,
+          0.016630999743938446
+        ],
+        "compact": [
+          0.01827950030565262,
+          0.01827850006520748,
+          0.01825149916112423,
+          0.018350999802350998,
+          0.018276000395417213
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.016630999743938446,
+        "compact": 0.01827850006520748
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.016626624390482903,
+          0.016527000814676285,
+          0.017130624502897263,
+          0.016528375446796417,
+          0.01697400026023388
+        ],
+        "compact": [
+          0.018419750034809113,
+          0.01833062432706356,
+          0.018316250294446945,
+          0.01833450049161911,
+          0.018351249396800995
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.016626624390482903,
+        "compact": 0.01833450049161911
+      },
+      "native_event_ratio_complete_over_compact": 0.9068490520417016,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.245351,
+          0.191919,
+          0.19787,
+          0.181718,
+          0.182879
+        ],
+        "compact": [
+          0.187619,
+          0.19942,
+          0.178219,
+          0.192139,
+          0.177778
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.191919,
+        "compact": 0.187619
+      },
+      "dispatch_ratio_complete_over_compact": 0.9098667661245904,
+      "wall_ratio_complete_over_compact": 1.0229187875428394,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "bias"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.8894435148230664e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 960,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            16
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 16,
+          "physical_roles": [
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 240,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 4,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        }
+      },
+      "image_sha256": {
+        "complete": "38a9072ba7076ba91960372a6749ed7b82d00cc41ebdd289de267e6028d2217e",
+        "compact": "a6b96bdff7c0af19a15119d478f116805117c90c15b72dfd7984c789e9f8660e"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.01999500021338463,
+          0.018509000539779663,
+          0.018576499074697495,
+          0.018905000761151314,
+          0.018554499372839928
+        ],
+        "compact": [
+          0.018363500013947487,
+          0.01828650012612343,
+          0.018366999924182892,
+          0.01828549988567829,
+          0.018354499712586403
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.018576499074697495,
+        "compact": 0.018354499712586403
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.018483750522136688,
+          0.01867849938571453,
+          0.018460875377058983,
+          0.018441375344991684,
+          0.018459999933838844
+        ],
+        "compact": [
+          0.018308749422430992,
+          0.018358375877141953,
+          0.01830199919641018,
+          0.01862587407231331,
+          0.018323499709367752
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.018460875377058983,
+        "compact": 0.018323499709367752
+      },
+      "native_event_ratio_complete_over_compact": 1.007497239603251,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.286094,
+          0.184499,
+          0.187079,
+          0.19858,
+          0.183309
+        ],
+        "compact": [
+          0.173638,
+          0.157028,
+          0.157857,
+          0.185339,
+          0.163708
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.187079,
+        "compact": 0.163708
+      },
+      "dispatch_ratio_complete_over_compact": 1.0120950919713088,
+      "wall_ratio_complete_over_compact": 1.142760280499426,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.7076926301681254e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 960,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            240
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 240,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 240,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 60,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "complete": "65e98b29376d9a124314382141df3d6195cfeea43a32e166f79eaee452668f1d",
+        "compact": "f26c18655449a2b217edd9881bb8691d3afc4be133b6484d52b0ed8b0d851702"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.01072550006210804,
+          0.010445499792695045,
+          0.010020500048995018,
+          0.009010500274598598,
+          0.010170499794185162
+        ],
+        "compact": [
+          0.010386000387370586,
+          0.010172500275075436,
+          0.010528000071644783,
+          0.009960000403225422,
+          0.009332999587059021
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010170499794185162,
+        "compact": 0.010172500275075436
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009772124700248241,
+          0.009197874926030636,
+          0.009235125035047531,
+          0.00848000030964613,
+          0.01023387536406517
+        ],
+        "compact": [
+          0.009097875095903873,
+          0.008906874805688858,
+          0.009303250350058079,
+          0.009541500359773636,
+          0.009207000024616718
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009235125035047531,
+        "compact": 0.009207000024616718
+      },
+      "native_event_ratio_complete_over_compact": 1.0030547420827214,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.22174,
+          0.167718,
+          0.165158,
+          0.19765,
+          0.171128
+        ],
+        "compact": [
+          0.157118,
+          0.145707,
+          0.141947,
+          0.149487,
+          0.145847
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.171128,
+        "compact": 0.145847
+      },
+      "dispatch_ratio_complete_over_compact": 0.9998033442284415,
+      "wall_ratio_complete_over_compact": 1.1733391842135936,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "bias",
+        "q",
+        "v"
+      ],
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "nonfinite_primal_v": null,
+      "max_abs_error": 4.8894435148230664e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            320,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 4,
+          "retained_gradient_bytes": 960,
+          "physical_roles": [
+            0,
+            1,
+            2,
+            3
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            288,
+            384,
+            240,
+            16
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 640,
+          "physical_roles": [
+            0,
+            2,
+            3
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 240,
+          "registers": 64,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 8
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 2,
+          "gradient_elements": 160,
+          "registers": 64,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 8
+        }
+      },
+      "image_sha256": {
+        "complete": "4ee14b52ba26361d2687afff492de34991a441e84226189aa57075f747377382",
+        "compact": "6b87c662e68006c6348c1ea4a183d31cfa5826ba0ac366a80faa5be287d7ff07"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.020612500607967377,
+          0.017557499930262566,
+          0.017521999776363373,
+          0.017713500186800957,
+          0.017546499148011208
+        ],
+        "compact": [
+          0.01993349939584732,
+          0.018927499651908875,
+          0.018442999571561813,
+          0.018343500792980194,
+          0.018330000340938568
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.017557499930262566,
+        "compact": 0.018442999571561813
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.01797562465071678,
+          0.01775825023651123,
+          0.018254749476909637,
+          0.01787937432527542,
+          0.01768437586724758
+        ],
+        "compact": [
+          0.018283624202013016,
+          0.01832050085067749,
+          0.018341749906539917,
+          0.018328500911593437,
+          0.018364250659942627
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.01787937432527542,
+        "compact": 0.018328500911593437
+      },
+      "native_event_ratio_complete_over_compact": 0.9754957272018943,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.272613,
+          0.19343,
+          0.19439,
+          0.19407,
+          0.21403
+        ],
+        "compact": [
+          0.333826,
+          0.225651,
+          0.203939,
+          0.190789,
+          0.182759
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.19439,
+        "compact": 0.203939
+      },
+      "dispatch_ratio_complete_over_compact": 0.9519872221509649,
+      "wall_ratio_complete_over_compact": 0.9531771755279765,
+      "checked_host_and_resident_passed": true,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    }
+  ],
+  "nonfinite_rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": "inf",
+      "max_abs_error": 3.726246966540003e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            60
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 60,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 15,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "7034e8b9a5db2353ca68cc9ec43e1c757c25e38fa034a6847931a525a58a8865",
+        "compact": "a83db229dd5cfdbc7474a47804beb81f68b9e56915bed89da159d76532e241ac"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.010995499789714813,
+          0.012203999795019627,
+          0.010412500239908695,
+          0.00986700039356947,
+          0.010576000437140465
+        ],
+        "compact": [
+          0.010106000117957592,
+          0.011467999778687954,
+          0.00981099996715784,
+          0.008848000317811966,
+          0.009651999920606613
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010576000437140465,
+        "compact": 0.00981099996715784
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009066125378012657,
+          0.009271999821066856,
+          0.00939362496137619,
+          0.008337249979376793,
+          0.009168875403702259
+        ],
+        "compact": [
+          0.008705374784767628,
+          0.008864750154316425,
+          0.01860875077545643,
+          0.009487125091254711,
+          0.008371124975383282
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009168875403702259,
+        "compact": 0.008864750154316425
+      },
+      "native_event_ratio_complete_over_compact": 1.0343072556013042,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.237912,
+          0.195389,
+          0.166188,
+          0.158578,
+          0.162678
+        ],
+        "compact": [
+          0.176398,
+          0.171228,
+          0.147287,
+          0.148287,
+          0.147747
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.166188,
+        "compact": 0.148287
+      },
+      "dispatch_ratio_complete_over_compact": 1.077973751151101,
+      "wall_ratio_complete_over_compact": 1.120718606486071,
+      "checked_host_and_resident_passed": false,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": "nan",
+      "max_abs_error": 3.726246966540003e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            60
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 60,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 15,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "7034e8b9a5db2353ca68cc9ec43e1c757c25e38fa034a6847931a525a58a8865",
+        "compact": "a83db229dd5cfdbc7474a47804beb81f68b9e56915bed89da159d76532e241ac"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.010637500323355198,
+          0.010149000212550163,
+          0.009991999715566635,
+          0.01039899978786707,
+          0.009174499660730362
+        ],
+        "compact": [
+          0.009650000371038914,
+          0.010246999561786652,
+          0.010583000257611275,
+          0.009214499965310097,
+          0.011160500347614288
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010149000212550163,
+        "compact": 0.010246999561786652
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.009924500249326229,
+          0.009661374613642693,
+          0.00902712531387806,
+          0.009069999679923058,
+          0.009301749989390373
+        ],
+        "compact": [
+          0.008584749884903431,
+          0.008454624563455582,
+          0.00933349970728159,
+          0.00920225027948618,
+          0.009859125129878521
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009301749989390373,
+        "compact": 0.00920225027948618
+      },
+      "native_event_ratio_complete_over_compact": 1.0108125411591988,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.249782,
+          0.168828,
+          0.174898,
+          0.183468,
+          0.176618
+        ],
+        "compact": [
+          0.198449,
+          0.158138,
+          0.145207,
+          0.141477,
+          0.153217
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.176618,
+        "compact": 0.153217
+      },
+      "dispatch_ratio_complete_over_compact": 0.9904362883353729,
+      "wall_ratio_complete_over_compact": 1.1527310938081283,
+      "checked_host_and_resident_passed": false,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": "inf",
+      "max_abs_error": 4.584528739970395e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            60
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 60,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 15,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "2a5551af11e92ff38b6ca92fd071a9e64f828614265b684f429fcf8aa2e9988a",
+        "compact": "3982069ecd77f7536639b26418905788aa1464481f05dba457f73fa6e49dbe03"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.011181999929249287,
+          0.009147499687969685,
+          0.010368499904870987,
+          0.010620499961078167,
+          0.011739999987185001
+        ],
+        "compact": [
+          0.010479499585926533,
+          0.012424999848008156,
+          0.009913500398397446,
+          0.00926399976015091,
+          0.010102500207722187
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.010620499961078167,
+        "compact": 0.010102500207722187
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.008960249833762646,
+          0.008833750151097775,
+          0.008548124693334103,
+          0.009144499897956848,
+          0.009387874975800514
+        ],
+        "compact": [
+          0.008846624754369259,
+          0.009408749639987946,
+          0.009290625341236591,
+          0.010138499550521374,
+          0.010076000355184078
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.008960249833762646,
+        "compact": 0.009408749639987946
+      },
+      "native_event_ratio_complete_over_compact": 0.9523316249888147,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.254143,
+          0.175719,
+          0.165808,
+          0.161208,
+          0.158227
+        ],
+        "compact": [
+          0.157638,
+          0.146867,
+          0.144547,
+          0.147007,
+          0.142596
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.165808,
+        "compact": 0.146867
+      },
+      "dispatch_ratio_complete_over_compact": 1.0512744115521055,
+      "wall_ratio_complete_over_compact": 1.1289670245868713,
+      "checked_host_and_resident_passed": false,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "bias_shape": [],
+      "nonfinite_primal_v": "nan",
+      "max_abs_error": 4.584528739970395e-08,
+      "allocations": {
+        "complete": {
+          "native_allocations_bytes": [
+            72,
+            96,
+            80,
+            60
+          ],
+          "retained_gradient_buffers": 3,
+          "retained_gradient_bytes": 236,
+          "physical_roles": [
+            0,
+            1,
+            2
+          ]
+        },
+        "compact": {
+          "native_allocations_bytes": [
+            72,
+            60
+          ],
+          "retained_gradient_buffers": 1,
+          "retained_gradient_bytes": 60,
+          "physical_roles": [
+            2
+          ]
+        }
+      },
+      "resources": {
+        "complete": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 59,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "compact": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "gradient_elements": 15,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "complete": "2a5551af11e92ff38b6ca92fd071a9e64f828614265b684f429fcf8aa2e9988a",
+        "compact": "3982069ecd77f7536639b26418905788aa1464481f05dba457f73fa6e49dbe03"
+      },
+      "device_dispatch_samples_ms": {
+        "complete": [
+          0.011358999647200108,
+          0.00984449964016676,
+          0.009329999797046185,
+          0.01126800011843443,
+          0.009241499938070774
+        ],
+        "compact": [
+          0.011880500242114067,
+          0.010118000209331512,
+          0.011144000105559826,
+          0.009391499683260918,
+          0.01524799969047308
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "complete": 0.00984449964016676,
+        "compact": 0.011144000105559826
+      },
+      "native_resident_event_samples_ms": {
+        "complete": [
+          0.00979937519878149,
+          0.010099249891936779,
+          0.010604624636471272,
+          0.009900500066578388,
+          0.008495124988257885
+        ],
+        "compact": [
+          0.01089787483215332,
+          0.010121124796569347,
+          0.011336125433444977,
+          0.010590375401079655,
+          0.01083349995315075
+        ]
+      },
+      "native_resident_event_medians_ms": {
+        "complete": 0.009900500066578388,
+        "compact": 0.01083349995315075
+      },
+      "native_event_ratio_complete_over_compact": 0.9138782581246042,
+      "checked_backward_wall_samples_ms": {
+        "complete": [
+          0.243292,
+          0.163968,
+          0.160278,
+          0.166278,
+          0.160948
+        ],
+        "compact": [
+          0.164978,
+          0.150407,
+          0.155078,
+          0.145867,
+          0.141007
+        ]
+      },
+      "checked_backward_wall_medians_ms": {
+        "complete": 0.163968,
+        "compact": 0.150407
+      },
+      "dispatch_ratio_complete_over_compact": 0.8833901244540786,
+      "wall_ratio_complete_over_compact": 1.090162027033316,
+      "checked_host_and_resident_passed": false,
+      "repeated_backward_result_order_and_private_capture": "passed"
+    }
+  ],
+  "repetitions": 64,
+  "source_and_binary_sha256": {
+    "src/transforms/lib/AutodiffPairedPass.cpp": "24544ce8c74c923a5312dc426721bfa1d8c14928ec12359621cdea0b215cd6ae",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "b905bc4c0d19eb2ff9c53efee82d3814f2569bc1e5834fc684300283646d4287",
+    "src/compiler/ir/TileOps.cpp": "a1d625ac0ce53f4f7a9e4476eb3c928e1f6cdd8bc14cf0d40ddc6c917168fa04",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "e2236406bf35a2e2601780d535545dc1f9e9587ed70d8e1ccb3a88ccc8a96dbc",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "34ade0dd8036d0df0bd2f35d9e6ccc8dfa7033064efc420865babbebf23c39d1",
+    "python/tessera/compiler/scheduled_checkpoint.py": "8eafac86b193690c7344a9425eccd7a101faca62adba5902fd9a6f573320d441",
+    "python/tessera/compiler/nvidia_native.py": "a92754c6981d2e0fab579562087bb422338680e23c38604a989646c5f754f962",
+    "python/tessera/compiler/native_attention_program.py": "eaa2be9caa86260808217817593e7b0fe9eb386de04c391812ad318082fe4515",
+    "python/tessera/compiler/resident_attention.py": "5497a399f2a305d04a3981c870e256124af00a7572ae38f90beca9b489d57558",
+    "python/tessera/compiler/compact_attention_contract.py": "220c34f69f667d3d5eb699a51f3a911524834afc4da02febac9d0c0b16d2b9d5",
+    "python/tessera/compiler/jit.py": "a15acdd54357bd2177d90eef6b62f4cee1086cd53b0764f17844809d4daab0c6",
+    "python/tessera/runtime.py": "8752a725d1abee769e688a06ad8d91097e53d88a64d4f5ad944d55b3c98fb508",
+    "benchmarks/nvidia/benchmark_compact_attention_gradients.py": "571c45535c99bb5ac37c2f3cb2100a406d19e1ae79b41d946d56470b70a69d2b",
+    "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt": "cf9126879aeec1bbbfd31a0d2195fe6b1889a4ec33f8f680ce2a425e71f46254",
+    "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "19dcc051c2d0ce93d1c96136c57cafc7168c9e6638a71fd4f49dc0e1d5270213",
+    "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so": "f7752c6b7f4182228005c10a2a1d5d60a6a22402f7850bb572d694ab88529230"
+  },
+  "timing_scope": "Python dispatch and C++ resident submission CUDA-event windows separate; neither asserted to exclude all host submission gaps; allocating/synchronous backward wall separate",
+  "route": "frontend -> native paired AD -> Graph -> Schedule -> Tile -> NVIDIA Target/LLVM/NVVM -> PTX + checked compact ABI"
+}

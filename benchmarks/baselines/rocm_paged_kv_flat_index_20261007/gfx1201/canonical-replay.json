@@ -1,0 +1,233 @@
+{
+  "schema": "tessera.rocm.paged-kv-flat-index-ab.v1",
+  "work_item": "ROCM-E2E-2",
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "pci_bus_id": "0000:03:00.0",
+    "architecture": "gfx1201",
+    "ordinal": 0
+  },
+  "architecture": "gfx1201",
+  "samples": 3,
+  "iterations": 100,
+  "compiler_sha256": {
+    "reference": "0fbd6553c9f791af3176d729051ae31b2a5e27f436f626c8875db678971ec8ca",
+    "candidate": "f105b3ce3fc08dc32f75413f93748c459d28af6f59eb94500185e07c5d6ccd74"
+  },
+  "recorder_sha256": "b0ae2056c9d74c011f502e299e78f0a31d00325d729f9fb5df92329d012d1e28",
+  "rows": [
+    {
+      "dims": [
+        4,
+        4,
+        16,
+        3,
+        8,
+        7,
+        41
+      ],
+      "samples_ms": {
+        "reference": [
+          0.005714839696884156,
+          0.0056359398365020755,
+          0.005550950169563294
+        ],
+        "candidate": [
+          0.00515064001083374,
+          0.005168650150299072,
+          0.005400739908218384
+        ]
+      },
+      "medians_ms": {
+        "reference": 0.0056359398365020755,
+        "candidate": 0.005168650150299072
+      },
+      "candidate_over_reference": 0.9170875311378368,
+      "shared_allocations": true,
+      "correctness": "bit_exact_before_timing_and_each_poisoned_window",
+      "oracle_sha256": "8007d3884422dbd6e814a874957b8fad55f743f76ced1d20ccaa4100127b2536",
+      "payload_sha256": {
+        "reference": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+        "candidate": "364cff3801abd064f77ae4d426b4944569dc8b88307e5a00d5863919c8b8f8b2"
+      }
+    },
+    {
+      "dims": [
+        3,
+        5,
+        7,
+        3,
+        17,
+        5,
+        25
+      ],
+      "samples_ms": {
+        "reference": [
+          0.005715230107307434,
+          0.005581550002098083,
+          0.0056207400560379026
+        ],
+        "candidate": [
+          0.004998649954795837,
+          0.005000550150871277,
+          0.005311750173568726
+        ]
+      },
+      "medians_ms": {
+        "reference": 0.0056207400560379026,
+        "candidate": 0.005000550150871277
+      },
+      "candidate_over_reference": 0.8896604541424387,
+      "shared_allocations": true,
+      "correctness": "bit_exact_before_timing_and_each_poisoned_window",
+      "oracle_sha256": "15649ffb58cb09d8949bc1c967e1c24b14e2988b77e4446545df704dd505526c",
+      "payload_sha256": {
+        "reference": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+        "candidate": "364cff3801abd064f77ae4d426b4944569dc8b88307e5a00d5863919c8b8f8b2"
+      }
+    },
+    {
+      "dims": [
+        5,
+        8,
+        9,
+        1,
+        31,
+        8,
+        51
+      ],
+      "samples_ms": {
+        "reference": [
+          0.0055353397130966184,
+          0.0055497997999191286,
+          0.005532900094985962
+        ],
+        "candidate": [
+          0.00498214989900589,
+          0.005153039693832398,
+          0.005419700145721435
+        ]
+      },
+      "medians_ms": {
+        "reference": 0.0055353397130966184,
+        "candidate": 0.005153039693832398
+      },
+      "candidate_over_reference": 0.9309346780722964,
+      "shared_allocations": true,
+      "correctness": "bit_exact_before_timing_and_each_poisoned_window",
+      "oracle_sha256": "d365d8d99c3ebb479bf1254b9bcd1ad0aee99c0c1894d0eefd313101447c298d",
+      "payload_sha256": {
+        "reference": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+        "candidate": "364cff3801abd064f77ae4d426b4944569dc8b88307e5a00d5863919c8b8f8b2"
+      }
+    },
+    {
+      "dims": [
+        4,
+        3,
+        1,
+        2,
+        257,
+        0,
+        3
+      ],
+      "samples_ms": {
+        "reference": [
+          0.005562009811401367,
+          0.005559599995613098,
+          0.005813400149345398
+        ],
+        "candidate": [
+          0.005164300203323364,
+          0.0050774097442626955,
+          0.005177009701728821
+        ]
+      },
+      "medians_ms": {
+        "reference": 0.005562009811401367,
+        "candidate": 0.005164300203323364
+      },
+      "candidate_over_reference": 0.9284953422299342,
+      "shared_allocations": true,
+      "correctness": "bit_exact_before_timing_and_each_poisoned_window",
+      "oracle_sha256": "b99b1201c005b7a881fb89daffc48dc58d75fff2cc218ddac7faa2f746208f58",
+      "payload_sha256": {
+        "reference": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+        "candidate": "364cff3801abd064f77ae4d426b4944569dc8b88307e5a00d5863919c8b8f8b2"
+      }
+    },
+    {
+      "dims": [
+        2,
+        3,
+        3,
+        1,
+        1,
+        2,
+        5
+      ],
+      "samples_ms": {
+        "reference": [
+          0.0055691999197006225,
+          0.005675399899482727,
+          0.005567100048065186
+        ],
+        "candidate": [
+          0.00502810001373291,
+          0.004970110058784485,
+          0.004963110089302063
+        ]
+      },
+      "medians_ms": {
+        "reference": 0.0055691999197006225,
+        "candidate": 0.004970110058784485
+      },
+      "candidate_over_reference": 0.8924280202624972,
+      "shared_allocations": true,
+      "correctness": "bit_exact_before_timing_and_each_poisoned_window",
+      "oracle_sha256": "cf7d875b730e3c6ae7823c34364f24adb2c2581fa2fe224fe873b35d4ea76fbf",
+      "payload_sha256": {
+        "reference": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+        "candidate": "364cff3801abd064f77ae4d426b4944569dc8b88307e5a00d5863919c8b8f8b2"
+      }
+    },
+    {
+      "dims": [
+        32,
+        64,
+        16,
+        8,
+        128,
+        0,
+        1024
+      ],
+      "samples_ms": {
+        "reference": [
+          0.02990206003189087,
+          0.027650740146636963,
+          0.027701940536499024
+        ],
+        "candidate": [
+          0.02361829996109009,
+          0.021867589950561525,
+          0.021885690689086915
+        ]
+      },
+      "medians_ms": {
+        "reference": 0.027701940536499024,
+        "candidate": 0.021885690689086915
+      },
+      "candidate_over_reference": 0.7900417900417901,
+      "shared_allocations": true,
+      "correctness": "bit_exact_before_timing_and_each_poisoned_window",
+      "oracle_sha256": "ba89cddde373f0eef1bf1d3afbfff072899eb7f9f71a2811e194b8395a0978d5",
+      "payload_sha256": {
+        "reference": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+        "candidate": "364cff3801abd064f77ae4d426b4944569dc8b88307e5a00d5863919c8b8f8b2"
+      }
+    }
+  ],
+  "timing_scope": "same-allocation resident HIP-event launch windows; Python enqueue gaps included; no uploads/readback/allocation inside events",
+  "selector_changed": false,
+  "identical_image_control": false
+}

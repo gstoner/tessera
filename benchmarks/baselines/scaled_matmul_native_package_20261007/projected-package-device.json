@@ -1,0 +1,68 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "shape_mnk": [
+    17,
+    19,
+    256
+  ],
+  "execution": "compiler_owned_member_ABI_to_native_CPP_program_owner",
+  "compiler_free_replay": "passed_subprocess_refusal",
+  "ordinary_jit_AD": "not_yet_integrated",
+  "numerical_max_abs_error": [
+    1.987880096976369e-06,
+    1.7086885293338128e-06
+  ],
+  "finite_difference_max_abs_error": 1.6137992719933436e-06,
+  "device_native_launch_window_ms": [
+    0.029331069439649582,
+    0.029544100165367126,
+    0.029410578310489655,
+    0.029420280829072,
+    0.029387978836894035,
+    0.029274670407176018,
+    0.028117939829826355,
+    0.026736900210380554,
+    0.025856878608465195,
+    0.026240170001983643,
+    0.0265751201659441
+  ],
+  "device_native_launch_window_median_ms": 0.029274670407176018,
+  "warm_invoke_two_readbacks_ms": [
+    0.3811279311776161,
+    0.3847649786621332,
+    0.38107787258923054,
+    0.37722988054156303,
+    0.3899640869349241,
+    0.3817589022219181,
+    0.3774911165237427,
+    0.4027190152555704,
+    0.44961879029870033,
+    0.49011618830263615,
+    0.4882318899035454
+  ],
+  "warm_invoke_two_readbacks_median_ms": 0.3847649786621332,
+  "update_invoke_two_readbacks_ms": [
+    0.4604489076882601,
+    0.4825219511985779,
+    0.479044858366251,
+    0.4756979178637266,
+    0.4961579106748104,
+    0.4901660140603781,
+    0.4604801069945097,
+    0.4638051614165306,
+    0.5038219969719648,
+    0.5902082193642855,
+    0.5474861245602369
+  ],
+  "update_invoke_two_readbacks_median_ms": 0.4825219511985779,
+  "timing_note": "device event window includes native C++ enqueue gaps; host windows exclude compilation/preparation",
+  "runtime_sha256": "e7e822e798daf7e5b78d0d952c1b0ec2aaf20e74ed95adb9741f9ba681e7428f",
+  "package_sha256": "b53e63d65202a5c3d9f73bbdbe3346382e6aefd8eea6fb74bc1074a8f5cddc44",
+  "image_sha256": [
+    "56be70a98a4d945db9642499d19e3d335f112b5bf43cb7f64f992cc94e8d4c0b",
+    "c8c3a3cc36a8382fb982e8f928e7bda2ad96498a840d02d6e4f4d4b53a4f896d",
+    "a4f249a33ec9d11c8718798209062b09879c3e6002177ab4740a5b014623e707",
+    "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2"
+  ]
+}

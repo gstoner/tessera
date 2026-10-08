@@ -1,0 +1,34 @@
+{
+  "architecture": "gfx1151",
+  "compiler_path": "/home/gstoner/scratch/next-five-rocm/build-rocm-gfx1151-c05a82dd/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "5ae35aad07884cf3939500ecb049ead1b5828744b5d7f56dc667f0524a06905c",
+  "host": "Princess-Luna",
+  "promotion_eligible": false,
+  "schema": "tessera.rocm_gfx1151_cache_recheck.v1",
+  "source_commit": "c05a82dd3230bc53362e3f6404292cfc6042f20d",
+  "source_sha256": {
+    "python/tessera/compiler/rocm_native.py": "e677b426a811c9239b855633037933cfa836137c2b1bf153bc4170c5148f4a74",
+    "tests/unit/test_rocm_shape_free_cache_key.py": "572406234e3d2248358b9917062c7ad23f442b27914ca6c4d96cdc26c507931f",
+    "tests/unit/test_scheduled_attention_consumers.py": "97465dcd0a6e07dea5eaa8791863b155a289461f5f1df752f75adbc83010a36b",
+    "tests/unit/test_scheduled_matmul_consumers.py": "4ccb2385549a0c5a0914dadbd1c44f0ae14d715093c8107479b0f61c1849650b"
+  },
+  "source_worktree_dirty": true,
+  "tests": {
+    "assertions": [
+      "one native image and entry reused across changed runtime shapes and caller symbols",
+      "shape guards retained per package",
+      "native_gpu execution",
+      "numerical agreement with independent NumPy/reference attention oracle"
+    ],
+    "command": "python -m pytest tests/unit/test_rocm_shape_free_cache_key.py::test_exact_device_new_shape_and_symbol_reuse_one_image tests/unit/test_rocm_shape_free_cache_key.py::test_scheduled_attention_shape_and_symbol_reuse_one_image[gfx1151] -q",
+    "families": [
+      "softmax",
+      "reduce",
+      "scheduled attention"
+    ],
+    "passed": 3,
+    "skipped": 0
+  },
+  "timing": "not collected in this test packet; see gfx1201 warmed matmul packet for kernel and end-to-end timing methodology",
+  "work_item": "E2E-REAL-6-ROCM-CACHE-KEYS"
+}

@@ -1,0 +1,23 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "whole_copy_packages_byte_identical": true,
+  "candidate_compiler_sha256": "f0816cbb0439d6d69cc70259156b46e621bd3ead33ea9959a374be985ec94e79",
+  "reference_compiler_sha256": "372d5a4c8625d7f361843584ed54e9d53656cfaf3b570ed653d657202ceb5931",
+  "reference_generator_sha256": "3eaef4079210a1aba1f284a8fb16e0484398a8cf2072f1a92fecb1eea43c9db4",
+  "generator_sha256": "e2c969bad29abff429853068bd710c8960f7c6d0d3c2f2cb5579f9b949ea8c81",
+  "focused_tests": "523 passed; no skips",
+  "new_partial_copy_cases": 48,
+  "quality_oracle_cases": 5,
+  "benchmark_shapes": 7,
+  "benchmark_arms": 4,
+  "benchmark_processes": 2,
+  "filecheck": "partial-copy typed generated IR and target lowering passed",
+  "selector_promotion": false,
+  "audit_tests": "11 passed",
+  "generated_docs": "32 in sync",
+  "source_fingerprints_match_current_tree": true,
+  "repeat_compiler_and_source_fingerprints_identical": true,
+  "graphify": "unavailable on owning WSL host"
+}

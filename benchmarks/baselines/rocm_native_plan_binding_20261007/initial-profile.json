@@ -1,0 +1,767 @@
+{
+  "scope": "instrumented host attribution; not device or uninstrumented benchmark cost",
+  "rows": [
+    {
+      "shape": [
+        3,
+        7,
+        19,
+        256
+      ],
+      "format": "fp32",
+      "nk": false,
+      "profiled_calls": 50,
+      "functions": [
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35755,
+          "function": "launch",
+          "calls": 50,
+          "self_ms_per_call": 0.00187542,
+          "cumulative_ms_per_call": 0.98898364
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35577,
+          "function": "_launch_native_descriptor",
+          "calls": 50,
+          "self_ms_per_call": 0.014019240000000002,
+          "cumulative_ms_per_call": 0.98659412
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 4818,
+          "function": "_submit_rocm_gfx1151_native",
+          "calls": 50,
+          "self_ms_per_call": 0.018722580000000003,
+          "cumulative_ms_per_call": 0.64319466
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 233,
+          "function": "__init__",
+          "calls": 50,
+          "self_ms_per_call": 0.15670212,
+          "cumulative_ms_per_call": 0.28088188
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 303,
+          "function": "read",
+          "calls": 50,
+          "self_ms_per_call": 0.13570184000000002,
+          "cumulative_ms_per_call": 0.13982768
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 6359,
+          "function": "_ensure_builtin_native_launcher",
+          "calls": 50,
+          "self_ms_per_call": 0.011246100000000002,
+          "cumulative_ms_per_call": 0.12551298
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 879,
+          "function": "descriptor_digest",
+          "calls": 50,
+          "self_ms_per_call": 0.00153466,
+          "cumulative_ms_per_call": 0.1100892
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 55,
+          "function": "validate",
+          "calls": 100,
+          "self_ms_per_call": 0.036055460000000004,
+          "cumulative_ms_per_call": 0.10256298000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 86,
+          "function": "_sha256_json",
+          "calls": 50,
+          "self_ms_per_call": 0.00090728,
+          "cumulative_ms_per_call": 0.09845216000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 295,
+          "function": "invoke",
+          "calls": 50,
+          "self_ms_per_call": 0.09515872,
+          "cumulative_ms_per_call": 0.09573910000000002
+        },
+        {
+          "file": "/usr/lib/python3.14/json/__init__.py",
+          "line": 185,
+          "function": "dumps",
+          "calls": 350,
+          "self_ms_per_call": 0.0040310400000000005,
+          "cumulative_ms_per_call": 0.0850803
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 82,
+          "function": "_canonical_json",
+          "calls": 50,
+          "self_ms_per_call": 0.00084882,
+          "cumulative_ms_per_call": 0.08144072000000001
+        },
+        {
+          "file": "/usr/lib/python3.14/json/encoder.py",
+          "line": 185,
+          "function": "encode",
+          "calls": 350,
+          "self_ms_per_call": 0.0034059000000000008,
+          "cumulative_ms_per_call": 0.08066290000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 45,
+          "function": "from_manifest",
+          "calls": 50,
+          "self_ms_per_call": 0.0045633,
+          "cumulative_ms_per_call": 0.07798596000000001
+        },
+        {
+          "file": "/usr/lib/python3.14/json/__init__.py",
+          "line": 304,
+          "function": "loads",
+          "calls": 500,
+          "self_ms_per_call": 0.00694432,
+          "cumulative_ms_per_call": 0.0775156
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35523,
+          "function": "_split_native_arguments",
+          "calls": 50,
+          "self_ms_per_call": 0.00594618,
+          "cumulative_ms_per_call": 0.0755543
+        },
+        {
+          "file": "/usr/lib/python3.14/json/encoder.py",
+          "line": 207,
+          "function": "iterencode",
+          "calls": 50,
+          "self_ms_per_call": 0.07542174,
+          "cumulative_ms_per_call": 0.07542174
+        },
+        {
+          "file": "/usr/lib/python3.14/json/decoder.py",
+          "line": 340,
+          "function": "decode",
+          "calls": 500,
+          "self_ms_per_call": 0.008999440000000001,
+          "cumulative_ms_per_call": 0.0652809
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35438,
+          "function": "_native_buffer_value",
+          "calls": 250,
+          "self_ms_per_call": 0.0175061,
+          "cumulative_ms_per_call": 0.06381132
+        },
+        {
+          "file": "/usr/lib/python3.14/json/decoder.py",
+          "line": 351,
+          "function": "raw_decode",
+          "calls": 500,
+          "self_ms_per_call": 0.04904718000000001,
+          "cumulative_ms_per_call": 0.04904718000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 272,
+          "function": "_inputs",
+          "calls": 50,
+          "self_ms_per_call": 0.01302622,
+          "cumulative_ms_per_call": 0.02500382
+        },
+        {
+          "file": "/usr/lib/python3.14/base64.py",
+          "line": 62,
+          "function": "b64decode",
+          "calls": 150,
+          "self_ms_per_call": 0.0013716400000000001,
+          "cumulative_ms_per_call": 0.01890294
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 746,
+          "function": "__post_init__",
+          "calls": 250,
+          "self_ms_per_call": 0.00661478,
+          "cumulative_ms_per_call": 0.01660094
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 1013,
+          "function": "validate_invocation",
+          "calls": 50,
+          "self_ms_per_call": 0.00872004,
+          "cumulative_ms_per_call": 0.016224500000000003
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 78,
+          "function": "_sha256_bytes",
+          "calls": 50,
+          "self_ms_per_call": 0.0006387600000000002,
+          "cumulative_ms_per_call": 0.015182980000000002
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 50,
+          "function": "<genexpr>",
+          "calls": 100,
+          "self_ms_per_call": 0.00070538,
+          "cumulative_ms_per_call": 0.014192920000000003
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 858,
+          "function": "_content_dict",
+          "calls": 50,
+          "self_ms_per_call": 0.00557782,
+          "cumulative_ms_per_call": 0.010102380000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 8419,
+          "function": "_rocm_live_arch",
+          "calls": 50,
+          "self_ms_per_call": 0.00601766,
+          "cumulative_ms_per_call": 0.007184780000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 289,
+          "function": "<genexpr>",
+          "calls": 250,
+          "self_ms_per_call": 0.00405272,
+          "cumulative_ms_per_call": 0.006069500000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 751,
+          "function": "<genexpr>",
+          "calls": 1000,
+          "self_ms_per_call": 0.0039114200000000005,
+          "cumulative_ms_per_call": 0.005765960000000001
+        }
+      ],
+      "profile_total_ms_per_call": 1.4090136600000005
+    },
+    {
+      "shape": [
+        3,
+        7,
+        19,
+        256
+      ],
+      "format": "e8m0",
+      "nk": true,
+      "profiled_calls": 50,
+      "functions": [
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35755,
+          "function": "launch",
+          "calls": 50,
+          "self_ms_per_call": 0.0019340000000000002,
+          "cumulative_ms_per_call": 0.9044085599999999
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35577,
+          "function": "_launch_native_descriptor",
+          "calls": 50,
+          "self_ms_per_call": 0.013198540000000002,
+          "cumulative_ms_per_call": 0.901965
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 4818,
+          "function": "_submit_rocm_gfx1151_native",
+          "calls": 50,
+          "self_ms_per_call": 0.0192229,
+          "cumulative_ms_per_call": 0.68567168
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 233,
+          "function": "__init__",
+          "calls": 50,
+          "self_ms_per_call": 0.15740846,
+          "cumulative_ms_per_call": 0.28017872000000005
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 303,
+          "function": "read",
+          "calls": 50,
+          "self_ms_per_call": 0.14146522,
+          "cumulative_ms_per_call": 0.14565138
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 295,
+          "function": "invoke",
+          "calls": 50,
+          "self_ms_per_call": 0.12940422,
+          "cumulative_ms_per_call": 0.12998034
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 55,
+          "function": "validate",
+          "calls": 100,
+          "self_ms_per_call": 0.03559984000000001,
+          "cumulative_ms_per_call": 0.10411650000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 879,
+          "function": "descriptor_digest",
+          "calls": 50,
+          "self_ms_per_call": 0.00154284,
+          "cumulative_ms_per_call": 0.08728192000000001
+        },
+        {
+          "file": "/usr/lib/python3.14/json/__init__.py",
+          "line": 304,
+          "function": "loads",
+          "calls": 500,
+          "self_ms_per_call": 0.0068400399999999995,
+          "cumulative_ms_per_call": 0.08008108
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35523,
+          "function": "_split_native_arguments",
+          "calls": 50,
+          "self_ms_per_call": 0.005855960000000001,
+          "cumulative_ms_per_call": 0.07983506000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 45,
+          "function": "from_manifest",
+          "calls": 50,
+          "self_ms_per_call": 0.00490852,
+          "cumulative_ms_per_call": 0.07963352
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 86,
+          "function": "_sha256_json",
+          "calls": 50,
+          "self_ms_per_call": 0.0009240600000000002,
+          "cumulative_ms_per_call": 0.07563278000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35438,
+          "function": "_native_buffer_value",
+          "calls": 250,
+          "self_ms_per_call": 0.01922938,
+          "cumulative_ms_per_call": 0.06799608
+        },
+        {
+          "file": "/usr/lib/python3.14/json/decoder.py",
+          "line": 340,
+          "function": "decode",
+          "calls": 500,
+          "self_ms_per_call": 0.00919196,
+          "cumulative_ms_per_call": 0.0679706
+        },
+        {
+          "file": "/usr/lib/python3.14/json/__init__.py",
+          "line": 185,
+          "function": "dumps",
+          "calls": 350,
+          "self_ms_per_call": 0.0043647600000000005,
+          "cumulative_ms_per_call": 0.06247714
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 82,
+          "function": "_canonical_json",
+          "calls": 50,
+          "self_ms_per_call": 0.0008818400000000002,
+          "cumulative_ms_per_call": 0.05876514
+        },
+        {
+          "file": "/usr/lib/python3.14/json/encoder.py",
+          "line": 185,
+          "function": "encode",
+          "calls": 350,
+          "self_ms_per_call": 0.00348022,
+          "cumulative_ms_per_call": 0.05771028
+        },
+        {
+          "file": "/usr/lib/python3.14/json/encoder.py",
+          "line": 207,
+          "function": "iterencode",
+          "calls": 50,
+          "self_ms_per_call": 0.05234200000000001,
+          "cumulative_ms_per_call": 0.05234200000000001
+        },
+        {
+          "file": "/usr/lib/python3.14/json/decoder.py",
+          "line": 351,
+          "function": "raw_decode",
+          "calls": 500,
+          "self_ms_per_call": 0.05158202000000001,
+          "cumulative_ms_per_call": 0.05158202000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 272,
+          "function": "_inputs",
+          "calls": 50,
+          "self_ms_per_call": 0.013079480000000001,
+          "cumulative_ms_per_call": 0.025259140000000003
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 746,
+          "function": "__post_init__",
+          "calls": 250,
+          "self_ms_per_call": 0.006962520000000001,
+          "cumulative_ms_per_call": 0.018726040000000003
+        },
+        {
+          "file": "/usr/lib/python3.14/base64.py",
+          "line": 62,
+          "function": "b64decode",
+          "calls": 150,
+          "self_ms_per_call": 0.0013995000000000001,
+          "cumulative_ms_per_call": 0.018417620000000003
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 6359,
+          "function": "_ensure_builtin_native_launcher",
+          "calls": 50,
+          "self_ms_per_call": 0.011732500000000002,
+          "cumulative_ms_per_call": 0.017388980000000002
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 1013,
+          "function": "validate_invocation",
+          "calls": 50,
+          "self_ms_per_call": 0.009335640000000001,
+          "cumulative_ms_per_call": 0.0166028
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 78,
+          "function": "_sha256_bytes",
+          "calls": 50,
+          "self_ms_per_call": 0.00064984,
+          "cumulative_ms_per_call": 0.014913340000000002
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 50,
+          "function": "<genexpr>",
+          "calls": 100,
+          "self_ms_per_call": 0.00072818,
+          "cumulative_ms_per_call": 0.013511760000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 858,
+          "function": "_content_dict",
+          "calls": 50,
+          "self_ms_per_call": 0.005951240000000001,
+          "cumulative_ms_per_call": 0.010106299999999999
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 8419,
+          "function": "_rocm_live_arch",
+          "calls": 50,
+          "self_ms_per_call": 0.00609608,
+          "cumulative_ms_per_call": 0.0073171799999999995
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 751,
+          "function": "<genexpr>",
+          "calls": 1000,
+          "self_ms_per_call": 0.00461698,
+          "cumulative_ms_per_call": 0.006211400000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 289,
+          "function": "<genexpr>",
+          "calls": 250,
+          "self_ms_per_call": 0.00417426,
+          "cumulative_ms_per_call": 0.0062002
+        }
+      ],
+      "profile_total_ms_per_call": 1.32930128
+    },
+    {
+      "shape": [
+        2,
+        128,
+        4096,
+        256
+      ],
+      "format": "fp32",
+      "nk": true,
+      "profiled_calls": 50,
+      "functions": [
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35755,
+          "function": "launch",
+          "calls": 50,
+          "self_ms_per_call": 0.0020282,
+          "cumulative_ms_per_call": 1.3201846599999998
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35577,
+          "function": "_launch_native_descriptor",
+          "calls": 50,
+          "self_ms_per_call": 0.01437002,
+          "cumulative_ms_per_call": 1.31763254
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 4818,
+          "function": "_submit_rocm_gfx1151_native",
+          "calls": 50,
+          "self_ms_per_call": 0.08082682000000001,
+          "cumulative_ms_per_call": 1.1058535200000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 233,
+          "function": "__init__",
+          "calls": 50,
+          "self_ms_per_call": 0.38864156,
+          "cumulative_ms_per_call": 0.5129045400000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 303,
+          "function": "read",
+          "calls": 50,
+          "self_ms_per_call": 0.28255174,
+          "cumulative_ms_per_call": 0.28872268
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 295,
+          "function": "invoke",
+          "calls": 50,
+          "self_ms_per_call": 0.11527600000000002,
+          "cumulative_ms_per_call": 0.11588794000000002
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 55,
+          "function": "validate",
+          "calls": 100,
+          "self_ms_per_call": 0.036050900000000004,
+          "cumulative_ms_per_call": 0.10387768000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 879,
+          "function": "descriptor_digest",
+          "calls": 50,
+          "self_ms_per_call": 0.00162712,
+          "cumulative_ms_per_call": 0.08531404000000002
+        },
+        {
+          "file": "/usr/lib/python3.14/json/__init__.py",
+          "line": 304,
+          "function": "loads",
+          "calls": 500,
+          "self_ms_per_call": 0.00676836,
+          "cumulative_ms_per_call": 0.07931684000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35523,
+          "function": "_split_native_arguments",
+          "calls": 50,
+          "self_ms_per_call": 0.00589586,
+          "cumulative_ms_per_call": 0.07607720000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 45,
+          "function": "from_manifest",
+          "calls": 50,
+          "self_ms_per_call": 0.00493548,
+          "cumulative_ms_per_call": 0.0745007
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 86,
+          "function": "_sha256_json",
+          "calls": 50,
+          "self_ms_per_call": 0.0009315400000000001,
+          "cumulative_ms_per_call": 0.07332254
+        },
+        {
+          "file": "/usr/lib/python3.14/json/decoder.py",
+          "line": 340,
+          "function": "decode",
+          "calls": 500,
+          "self_ms_per_call": 0.008805940000000002,
+          "cumulative_ms_per_call": 0.06727288000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 35438,
+          "function": "_native_buffer_value",
+          "calls": 250,
+          "self_ms_per_call": 0.01813508,
+          "cumulative_ms_per_call": 0.06420416000000001
+        },
+        {
+          "file": "/usr/lib/python3.14/json/__init__.py",
+          "line": 185,
+          "function": "dumps",
+          "calls": 350,
+          "self_ms_per_call": 0.00400698,
+          "cumulative_ms_per_call": 0.06213482
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 82,
+          "function": "_canonical_json",
+          "calls": 50,
+          "self_ms_per_call": 0.0009446200000000001,
+          "cumulative_ms_per_call": 0.058628820000000005
+        },
+        {
+          "file": "/usr/lib/python3.14/json/encoder.py",
+          "line": 185,
+          "function": "encode",
+          "calls": 350,
+          "self_ms_per_call": 0.0034524000000000004,
+          "cumulative_ms_per_call": 0.05772202000000001
+        },
+        {
+          "file": "/usr/lib/python3.14/json/encoder.py",
+          "line": 207,
+          "function": "iterencode",
+          "calls": 50,
+          "self_ms_per_call": 0.05239346,
+          "cumulative_ms_per_call": 0.05239346
+        },
+        {
+          "file": "/usr/lib/python3.14/json/decoder.py",
+          "line": 351,
+          "function": "raw_decode",
+          "calls": 500,
+          "self_ms_per_call": 0.0505872,
+          "cumulative_ms_per_call": 0.0505872
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 272,
+          "function": "_inputs",
+          "calls": 50,
+          "self_ms_per_call": 0.012656960000000002,
+          "cumulative_ms_per_call": 0.02522752
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 6359,
+          "function": "_ensure_builtin_native_launcher",
+          "calls": 50,
+          "self_ms_per_call": 0.011873600000000002,
+          "cumulative_ms_per_call": 0.017484600000000003
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 1013,
+          "function": "validate_invocation",
+          "calls": 50,
+          "self_ms_per_call": 0.008865620000000001,
+          "cumulative_ms_per_call": 0.01646962
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 746,
+          "function": "__post_init__",
+          "calls": 250,
+          "self_ms_per_call": 0.00659224,
+          "cumulative_ms_per_call": 0.016372880000000003
+        },
+        {
+          "file": "/usr/lib/python3.14/base64.py",
+          "line": 62,
+          "function": "b64decode",
+          "calls": 150,
+          "self_ms_per_call": 0.00141564,
+          "cumulative_ms_per_call": 0.014998280000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 78,
+          "function": "_sha256_bytes",
+          "calls": 50,
+          "self_ms_per_call": 0.00067564,
+          "cumulative_ms_per_call": 0.012912479999999999
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_artifact.py",
+          "line": 858,
+          "function": "_content_dict",
+          "calls": 50,
+          "self_ms_per_call": 0.00599504,
+          "cumulative_ms_per_call": 0.01036438
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 50,
+          "function": "<genexpr>",
+          "calls": 100,
+          "self_ms_per_call": 0.0007664,
+          "cumulative_ms_per_call": 0.010111239999999999
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py",
+          "line": 8419,
+          "function": "_rocm_live_arch",
+          "calls": 50,
+          "self_ms_per_call": 0.006193000000000001,
+          "cumulative_ms_per_call": 0.007411600000000001
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 321,
+          "function": "__exit__",
+          "calls": 50,
+          "self_ms_per_call": 0.00040204000000000005,
+          "cumulative_ms_per_call": 0.0069074
+        },
+        {
+          "file": "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py",
+          "line": 289,
+          "function": "<genexpr>",
+          "calls": 250,
+          "self_ms_per_call": 0.004232520000000001,
+          "cumulative_ms_per_call": 0.006572400000000001
+        }
+      ],
+      "profile_total_ms_per_call": 1.751670659999999
+    }
+  ]
+}

@@ -1,0 +1,1950 @@
+{
+  "compiler_binary_sha256": "e6739c179eec02295a61eb0777e87c26a59c1ead63d1374e6a5ce7e4635449cd",
+  "source_sha256": {
+    "src/compiler/programming_model/lib/NativeROCMMath.h": "dec4c87f6090bc6d98c3d971f734082cfdc78a8c9f2d5fb2b89337594ebaff1d",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "e5a556220ccf433f76f8bf2c95b35aa8ef9b3388bc8c1a8bc3755dfb09cf4b7e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "85e7a43068a7dd73301e972ee8f1e19ec6bf26ee80d77891a6bea21b31592b73",
+    "benchmarks/rocm/benchmark_native_math_schedule.py": "192bc471e245f3805df959e3111a38ad9dc93e2b36b9f3722af777e40fcd004f"
+  },
+  "schema": "tessera.rocm.native-math-schedule.v1",
+  "architecture": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "device_ordinal": 0,
+  "opaque_hip_uuid": "66666666666666666666666666666666",
+  "rows": [
+    {
+      "kind": "sqrt",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_sqrt_7bcb407c26e1",
+      "image_sha256": "ac4d23f2346ec4c6366d79837d5e8d5cfc235ea5916dc5b5c227c671c9f10422",
+      "ir_sha256": {
+        "graph": "7af5df6d0fdcb5820047b73f631324bc89b451aec0001b1e412872e1f80abcdd",
+        "schedule": "6ce8ac7b9cb964a71b0b372e2f04e3336dbeea875b3993a0f0f5685b40490916",
+        "tile": "b5e36713bfbb9468913c158af6f9b4a2f0dcf0bfcc30a712b8706ef87b28215e",
+        "target": "398b212520017d11a3dfb1ea2818f139a246f96b23460439ab89920a6275648b",
+        "backend": "050086ff651c2431bce11fd562b88955c2e387c8ee249db3856a771f2d03f691"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.006028599739074707,
+        0.002998049855232239,
+        0.002235510051250458,
+        0.0025515300035476684,
+        0.002725430130958557,
+        0.002522229850292206,
+        0.0027652299404144287
+      ],
+      "device_event_median_ms": 0.002725430130958557,
+      "allocating_end_to_end_samples_ms": [
+        1.960253,
+        1.947101,
+        1.907429,
+        1.890309,
+        1.903669,
+        1.912379,
+        1.862987
+      ],
+      "allocating_end_to_end_median_ms": 1.907429
+    },
+    {
+      "kind": "exp",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 4.76837158203125e-07,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_exp_ff4d3d5a1b5e",
+      "image_sha256": "342217d67ceb598e24c849ec0e0cc43a3fba868cf834b825d9a78b285b282fe3",
+      "ir_sha256": {
+        "graph": "7e3a95b83500b37ad86ef19ef85fcca8c24db78a1655021e20463244b43cb831",
+        "schedule": "0287540326d7cb21b60ddd6450c3ef0929f90de24e77c43b7a58d31321fdd5fc",
+        "tile": "9dcd745eb6857435e5ebc90ef83840c578a8cc8be7817569e0b926a0a1e38487",
+        "target": "fc464ec22612efaa7c9bd277e35ef4adae5aa0d59d7fe27b1b3a4ada6dbc1506",
+        "backend": "94b771e1098c3660ab67cfa9f7ca1267c8e30552a261c686a9bed06a5283dbcc"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.002066420018672943,
+        0.002498140037059784,
+        0.0020169200003147124,
+        0.0021789200603961945,
+        0.0019964200258255006,
+        0.002034019976854324,
+        0.0020697200298309326
+      ],
+      "device_event_median_ms": 0.002066420018672943,
+      "allocating_end_to_end_samples_ms": [
+        1.756431,
+        1.755371,
+        1.851926,
+        1.785807,
+        1.85033,
+        1.729829,
+        1.757641
+      ],
+      "allocating_end_to_end_median_ms": 1.757641
+    },
+    {
+      "kind": "add",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_add_a42e461a10e6",
+      "image_sha256": "3eadf24fe665f4c90a5ae32deffd03b28934a7c0732caafbc6e1ef94911e1a11",
+      "ir_sha256": {
+        "graph": "f6145a9cd044c9c7fc138026738452be873e7125fbe24a11d2209ec913b819b6",
+        "schedule": "07c79a5e122f7f64207ec103dde15863da3e87304652b1a2c27cf5755a909e89",
+        "tile": "a1410e6b587d6e5cf1d88d9892043d5c18eb13f5ca4abef5b1d60377bdc3bcf6",
+        "target": "1383f3f062c0fceb99b9efe1b8aacc60fa7b3287d32075b853507fdd3e2dc5dc",
+        "backend": "c5d5fabfb8563335bed7dcb987465a1811407799ee984df511ed59a3e6a4a7e0"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.002523239850997925,
+        0.0021491199731826782,
+        0.0020973099768161773,
+        0.0020587100088596344,
+        0.0020764200389385224,
+        0.002014710009098053,
+        0.0022335299849510193
+      ],
+      "device_event_median_ms": 0.0020973099768161773,
+      "allocating_end_to_end_samples_ms": [
+        2.127862,
+        1.986745,
+        1.959702,
+        2.007225,
+        2.033707,
+        2.013816,
+        1.998055
+      ],
+      "allocating_end_to_end_median_ms": 2.007225
+    },
+    {
+      "kind": "add",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_add_1805242b18a0",
+      "image_sha256": "de3b23801009e2ebd30012cd677a0d77a5707082da5a39778596528f3fce69bc",
+      "ir_sha256": {
+        "graph": "b85fd6105550b8f19bb176f34a0d6aea8b330fa1091fb3d7029b51e18bf69a2f",
+        "schedule": "36e37abc86e2c3658b16bce3723502cad3eb538ed7183c1bc16ea6420ee9e1d6",
+        "tile": "d2e616734bf81dce9588d7452e0669995661f029bf87dc44654d48b556c4bf2e",
+        "target": "f3f149fdc98314900b309ff9a5a93c9897f8d0c351047f5b873f7d974cb04943",
+        "backend": "6c5c026302f1187905d9cbd20aa63bb90f277c309d13a530adc8559c2937b74e"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0020353099703788757,
+        0.002083919942378998,
+        0.0020360200107097624,
+        0.002021210044622421,
+        0.0021741199493408203,
+        0.001994609981775284,
+        0.0023802299797534942
+      ],
+      "device_event_median_ms": 0.0020360200107097624,
+      "allocating_end_to_end_samples_ms": [
+        2.089661,
+        1.891959,
+        1.866057,
+        1.91944,
+        1.946802,
+        2.103488,
+        2.182248
+      ],
+      "allocating_end_to_end_median_ms": 1.946802
+    },
+    {
+      "kind": "div",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_div_12bdb9843265",
+      "image_sha256": "5be5e049ee2527e5a2be0035f96c3f67af29f6c11ec6a8444fc07b1a54fccbfc",
+      "ir_sha256": {
+        "graph": "3d53e6cccc9a72a30b8b52f43d2f11e61f8c64651c413d2bc3876fed19f4cfec",
+        "schedule": "a352850e4961240b77d808ece8e43dbcd7dc1dd4a554f31a0a0e7332506336ee",
+        "tile": "3b24884950d347e01cf3b3622d20236b52207a4a94446443e8cb296e55c7c608",
+        "target": "946bb408199295301dc4ae69860f3d14da28d815a4a7b50cd986b989ff72d831",
+        "backend": "4a83fa218ea60ed0b8322bf13b49e7cca9cfcd8561ae8f42d2d9078a52b102d8"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.002030699998140335,
+        0.002158820033073425,
+        0.0023891299962997435,
+        0.002564229965209961,
+        0.0020394100248813628,
+        0.0022110199928283693,
+        0.0024173299968242644
+      ],
+      "device_event_median_ms": 0.0022110199928283693,
+      "allocating_end_to_end_samples_ms": [
+        2.100081,
+        1.975924,
+        1.950173,
+        2.179595,
+        2.010735,
+        1.944731,
+        1.978424
+      ],
+      "allocating_end_to_end_median_ms": 1.978424
+    },
+    {
+      "kind": "div",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_div_5de8ce58c5c4",
+      "image_sha256": "c744c5e07dd690b097d623a3d0bb746cb47f266f0b6c2b94b79d229a7d6dfec9",
+      "ir_sha256": {
+        "graph": "7b82c6039f3716ecf03c8030cd10fa749c6447b751f12e255f8255a0bcddfa3f",
+        "schedule": "14428afc2f3c5d93486fab89e6c6f02aba0496d55f475cf983484ae58ebd6972",
+        "tile": "fb2711d8dfd95e5ff10b686fc18e1ea03af064e11f6df3f1fb3ea587661b70a8",
+        "target": "8c390d9c50b948bc207d8952aeb7ab77b7d46046900a815068eea1c37ced83b5",
+        "backend": "9df137b7fde91fc34da35644b1f7b911cef9675346256f887d3afccdcceb2267"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.002150090038776398,
+        0.0021184900403022765,
+        0.0020629899203777314,
+        0.0021091899275779724,
+        0.0024748000502586363,
+        0.00189068004488945,
+        0.0023322999477386475
+      ],
+      "device_event_median_ms": 0.0021184900403022765,
+      "allocating_end_to_end_samples_ms": [
+        1.713419,
+        1.792078,
+        1.657346,
+        1.82805,
+        1.710959,
+        1.822655,
+        1.779572
+      ],
+      "allocating_end_to_end_median_ms": 1.779572
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 1.9073486328125e-06,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_sum_a3cab12b3fc4",
+      "image_sha256": "c1f1efdfd4d2915188f2ef65c456990bd6029631fc2ee0aec45642dc0dd220b1",
+      "ir_sha256": {
+        "graph": "ba8c2ed29483bcd14a64b98373c5982636d14aa48f5c42c37084517a8669fc4c",
+        "schedule": "16f4467e82eb5f805944e2c620d45ef3fc216ae574a7d2ac78bfb3f3b729b42d",
+        "tile": "17aad4aa123fa1d971ab7d34ae8708e8437cbfa0f8d660e2b218f298eb2c791e",
+        "target": "6f6acfa0fa3bd01fe65ab628c49b1690891b37898c087b850b6c6f6a60f3ea7e",
+        "backend": "849b1e8d9f63e043a654291242d120d9a71f318b58c19eb1d57eb6eaccf3c487"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0022031000256538392,
+        0.002775920033454895,
+        0.002326299995183945,
+        0.0021872900426387785,
+        0.0022421999275684355,
+        0.0023704999685287475,
+        0.0023969000577926634
+      ],
+      "device_event_median_ms": 0.002326299995183945,
+      "allocating_end_to_end_samples_ms": [
+        1.590907,
+        1.722854,
+        1.56416,
+        1.665516,
+        1.659535,
+        1.828435,
+        1.627014
+      ],
+      "allocating_end_to_end_median_ms": 1.659535
+    },
+    {
+      "kind": "cummax",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_max_83fc45e7ef04",
+      "image_sha256": "2b70328b9880047728f4f78547d7740eeb41e72b8921764b38276ed68323d724",
+      "ir_sha256": {
+        "graph": "b13e398a6bf520495e9c4272c608c1938ac1d509cc3ac2bcc19f032c1262abe0",
+        "schedule": "1edef7dbd2df4eadb31e4a5145cf19ed0e453bea4261d20db38bd28a6239c637",
+        "tile": "43692c736993ae0b79da7bb1869f348246a8110d1601ac5965a4062fbc454ba8",
+        "target": "deca30a8f6728235d1ac323f5ec48159350ebe195c4f720e87078b65384732f1",
+        "backend": "267f9b30fb56e0614ece6d691b7b73fb51ff0f95be37568ba2c83d56785be93e"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0023839099705219267,
+        0.0023795999586582184,
+        0.002796419858932495,
+        0.002369010001420975,
+        0.0031970399618148804,
+        0.002397499978542328,
+        0.002466609925031662
+      ],
+      "device_event_median_ms": 0.002397499978542328,
+      "allocating_end_to_end_samples_ms": [
+        1.586882,
+        1.702248,
+        1.560989,
+        1.611574,
+        1.626823,
+        1.530332,
+        1.57362
+      ],
+      "allocating_end_to_end_median_ms": 1.586882
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_sqrt_d78f2f15a25b",
+      "image_sha256": "e9abc10f89ee933a0baaaec945499cf63768ae5075a3ee26c13ccf38b6a096cf",
+      "ir_sha256": {
+        "graph": "5fae11d73fa1ca4e64ac70422434fee2c37b663a10cdcaae1e0779404b7d3345",
+        "schedule": "008e83a5148ea8ebcafc177d5152fa3f266942b994b00eff159a487744a14ba7",
+        "tile": "4305fee953194365dcff96ad61ae4bf0dcb18a01233dd739f26bdbcb3bf5ea31",
+        "target": "06b61a588fb1ccd34e51c61229f72e9e4884e0d88daec20b21511744ad50b4b7",
+        "backend": "9e8cc0bf2d0a257c18ea3054e6f062d040c6b958b09245310c35b8d1e38b4aba"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.002039709985256195,
+        0.0020468099415302276,
+        0.0021313199400901793,
+        0.0021312199532985687,
+        0.00216061994433403,
+        0.003041970133781433,
+        0.0021387200057506562
+      ],
+      "device_event_median_ms": 0.0021313199400901793,
+      "allocating_end_to_end_samples_ms": [
+        1.877188,
+        1.994785,
+        1.877658,
+        1.916525,
+        1.955747,
+        1.848896,
+        1.788783
+      ],
+      "allocating_end_to_end_median_ms": 1.877658
+    },
+    {
+      "kind": "exp",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 9.5367431640625e-07,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_exp_644da8c8d5eb",
+      "image_sha256": "2020f2d816b44b4d6f9f7337fb82ea400cc3f5f5358ddef69beae88845dc111c",
+      "ir_sha256": {
+        "graph": "185ddfe58a8c71567a06b74f8ac8183b2d52c59a01910c92191d2341b9f7aeee",
+        "schedule": "a0a16bade72c6105e4542572aed17bf4842bf34e304a54c8d9956769525d0275",
+        "tile": "6eaaf242bbef0d53afa297e40c21976a64d70f6e39c0be17a7f82067e67a6393",
+        "target": "2fbe193b91df9b84940df59a9c0ed4109c8273904e1f528114e2712500df5b57",
+        "backend": "3e58824cde4718035c8027d5448bf2aa2aceb34628f09d7cf1799d85ec98b99d"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0033644899725914002,
+        0.002007009983062744,
+        0.0020954099297523497,
+        0.002072709947824478,
+        0.002140820026397705,
+        0.0021685199439525605,
+        0.00228752002120018
+      ],
+      "device_event_median_ms": 0.002140820026397705,
+      "allocating_end_to_end_samples_ms": [
+        2.014416,
+        1.894819,
+        2.014033,
+        1.989854,
+        2.056748,
+        1.968293,
+        1.827315
+      ],
+      "allocating_end_to_end_median_ms": 1.989854
+    },
+    {
+      "kind": "add",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_add_71cfcfbdc6d5",
+      "image_sha256": "770c12ecd23a5fac08e011dd114149a69419bc20b979f051635a99e159c8f507",
+      "ir_sha256": {
+        "graph": "067cd57dd267e44a9ae1dd6d05f5d8b110a57f059e12521311fc586a15b06e9b",
+        "schedule": "408ed88a5a830fee121d4b30efe472d09d9e4967e74687ea06930a8a14a134c4",
+        "tile": "bb443a51720cf6d0c0d4fd66b2c4d4e7c3d1eb1f77e8ab0002801e37efaeddaa",
+        "target": "fba4dee6eacb44bbbb56908c2a54cc4290538140303ba37750e99a32dedc4c6d",
+        "backend": "d2c77857aeab596ed8d92c0a833b556a30101fbbf228619256d84703c31e0b21"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.002059909999370575,
+        0.002021909952163696,
+        0.0020215199887752533,
+        0.0021029199659824372,
+        0.002030320018529892,
+        0.002691349983215332,
+        0.0028858599066734314
+      ],
+      "device_event_median_ms": 0.002059909999370575,
+      "allocating_end_to_end_samples_ms": [
+        2.067169,
+        1.911955,
+        1.886438,
+        1.948762,
+        1.91903,
+        1.91936,
+        1.843986
+      ],
+      "allocating_end_to_end_median_ms": 1.91903
+    },
+    {
+      "kind": "add",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_add_a04bff5aa0d6",
+      "image_sha256": "89a1eae5cbfec3788cf1aed35c18bb0ebff05f4393359502ca66999e6f37b5b1",
+      "ir_sha256": {
+        "graph": "f09c262078fafff99e9ca11007844049840b7a15baeb22b8bfea74b3550db84b",
+        "schedule": "1e3b545526f134704aeba3959be0aaaeeee6638d3bf9a96b8cf011d1db53a4e5",
+        "tile": "f4643b97ca450e96397aa0224a34bab8b4bea0d956a25dfba1d38d589423369c",
+        "target": "58c7bc932be52ddc6e74256b14145cb446a66f62d620b5bddf0d00c04200ca55",
+        "backend": "27e1e888feeec6ede017f8148128d022d5165ba9d4f4f2b3b9f714d20444240e"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0019485999643802643,
+        0.0020609000325202942,
+        0.0021195000410079955,
+        0.002330719977617264,
+        0.0020457999408245086,
+        0.0021137000620365144,
+        0.0023226100206375122
+      ],
+      "device_event_median_ms": 0.0021137000620365144,
+      "allocating_end_to_end_samples_ms": [
+        1.710029,
+        1.676636,
+        1.590711,
+        1.783982,
+        1.73363,
+        1.658076,
+        1.65972
+      ],
+      "allocating_end_to_end_median_ms": 1.676636
+    },
+    {
+      "kind": "div",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_div_3cdcf3f713a2",
+      "image_sha256": "2d2f67d0f3dcea63503801189fd8fdcce6af5494856cca448df34b3acde255f1",
+      "ir_sha256": {
+        "graph": "fae2ce8b94eeb2ccb60a17a502b15d70bca6e255e47d61ba2bd24d99adb4b210",
+        "schedule": "62d400b1e00bc85f70da4979d3909dea3f3b0f4aee20bed9a5680e59a4ea7f4c",
+        "tile": "659037512c429b9baade771d36a139caf3170879a853eac8fa8c14fb3a04b3d4",
+        "target": "04e1d740c716fe10fa098183d497a70afb0a04a03271ca507136fb7db8c68fdc",
+        "backend": "0e3c1aad140a27ddc85325e87a85af0c69a2ce6e3bedaf24902814a318c475db"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0020023000240325926,
+        0.0018890899419784545,
+        0.0020670999586582185,
+        0.0020478999614715575,
+        0.0020451000332832336,
+        0.0020333999395370484,
+        0.002878740131855011
+      ],
+      "device_event_median_ms": 0.0020451000332832336,
+      "allocating_end_to_end_samples_ms": [
+        1.731059,
+        1.776602,
+        1.649735,
+        1.626824,
+        1.745871,
+        1.612033,
+        1.705548
+      ],
+      "allocating_end_to_end_median_ms": 1.705548
+    },
+    {
+      "kind": "div",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_div_6fd8d863eeaf",
+      "image_sha256": "bc56876c8c80266f2076ae37ff44f485e027d14ee1bfe39f02bd493122b807d0",
+      "ir_sha256": {
+        "graph": "991dbfabc8c5c5888f087b4ba2847f5d997bd26cdb86ad8d09a43826f1eeef1c",
+        "schedule": "f719a60efc3bf86dd374594ddf7b09f633c5ea57fa9d10e79eb077db0a59c092",
+        "tile": "372fa3f8487c273e472e48136aed9fb048fd7a11fb4dfe4d6eec5a3842532f6b",
+        "target": "0b69f40048bd8df8468e948eb0800ba50486f511faffc5f404424e14c0ebb9d8",
+        "backend": "e2f26e3f270faaaea32a56ebd2d2fd38dfe85f261c63c4c0b5fd9806030f0c0e"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0021556200087070464,
+        0.0021281200647354126,
+        0.0021347199380397797,
+        0.002121510058641434,
+        0.002129410058259964,
+        0.0022181299328804015,
+        0.002107219994068146
+      ],
+      "device_event_median_ms": 0.002129410058259964,
+      "allocating_end_to_end_samples_ms": [
+        2.052308,
+        1.941171,
+        2.072569,
+        1.975574,
+        1.971983,
+        2.058828,
+        2.053388
+      ],
+      "allocating_end_to_end_median_ms": 2.052308
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0001373291015625,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_sum_66e434410370",
+      "image_sha256": "599590cc3f5c09c833f5d0ba3cfc081a6a44c76ccf8592c63c325fcbc053bcb2",
+      "ir_sha256": {
+        "graph": "1f1c0e7696d54e6b3e38894097828cf6606df2541e87e1b587a2490e862b5749",
+        "schedule": "927a6824f2f1e9a32352e1f9fb054f6c95715d6a978143c8777fd14bf0976d18",
+        "tile": "ec4f51f91c503e709b14ec5b597ba6c3228e66b4c16af6aaf88128ac49924ffb",
+        "target": "1228d1bc616b76bbf13567c197f2bc9d047944b3e0e7a14660e7c050641758f5",
+        "backend": "99000b480da9fd0e322797838c651377e951b09d2735b6fa5f92a51ecbe9847e"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.0026000401377677916,
+        0.0025038400292396543,
+        0.0026235398650169372,
+        0.002632850110530853,
+        0.0024998399615287783,
+        0.002684749960899353,
+        0.002807359993457794
+      ],
+      "device_event_median_ms": 0.0026235398650169372,
+      "allocating_end_to_end_samples_ms": [
+        1.868158,
+        1.74458,
+        1.806814,
+        1.760951,
+        1.808013,
+        1.756701,
+        1.882779
+      ],
+      "allocating_end_to_end_median_ms": 1.806814
+    },
+    {
+      "kind": "cummax",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_max_d54e9004bd86",
+      "image_sha256": "eb1c534e5a50d9995d18f15b6d957b383e38a936d538bcb0c001f5d3b43ca057",
+      "ir_sha256": {
+        "graph": "ea53905af21adddfcb2501f357901656f6c5b3bfae561fbebe752f1e31eed9fd",
+        "schedule": "e776c08aa79ea84c26f1740b97b323efb6b9f96fb00454345dbe5ca6ddbcc79a",
+        "tile": "c1c2afeb54f59ee8be48e283944e64eea1d7515e9db58914143fee769b89d6f1",
+        "target": "a82808bebb0b5f23339ce8ec8cf05a492de7e4a1092436c4e879fedc06227237",
+        "backend": "cd833b7e87d8f15578a6c8dc017e91792b02e9bf20a5fa3750e33632af2af99b"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.003067770004272461,
+        0.002860159873962402,
+        0.0030289700627326964,
+        0.002886660099029541,
+        0.0030349698662757874,
+        0.0035611000657081605,
+        0.003098570108413696
+      ],
+      "device_event_median_ms": 0.0030349698662757874,
+      "allocating_end_to_end_samples_ms": [
+        1.905655,
+        1.879518,
+        1.819354,
+        1.960382,
+        1.823275,
+        1.819635,
+        1.74464
+      ],
+      "allocating_end_to_end_median_ms": 1.823275
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_sqrt_52301496ac17",
+      "image_sha256": "8b7bcacd1920544a861ce3b12a1b7b15802445b76704b77904ba2488858277ac",
+      "ir_sha256": {
+        "graph": "74211252057645ba95d2350c5ffb199c9c2c13bd28a1af6783ecb1e8b7dbf2e0",
+        "schedule": "4ab1d82d9f61c3d740f5bfa4467871f011cbee53c410af563f54a0486429fd9c",
+        "tile": "53c294700b868cfd6ab0c3961568ac8555a53b8277e97e2b11d26bf90ecf74d1",
+        "target": "a8913dd5a8886190fab1b488dc241b12a5a7b751a52af9b91f34bfaaf2931e8f",
+        "backend": "27069009b1a423750d9173cadc7d1ff413ac5ff6d42e7440aa8cc73516b7e79e"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.010916630029678345,
+        0.005268409848213196,
+        0.005248209834098816,
+        0.005137990117073059,
+        0.005203199982643128,
+        0.0052183997631073,
+        0.005369409918785095
+      ],
+      "device_event_median_ms": 0.005248209834098816,
+      "allocating_end_to_end_samples_ms": [
+        4.079064,
+        3.703703,
+        3.668711,
+        3.597646,
+        3.597607,
+        3.588535,
+        3.611137
+      ],
+      "allocating_end_to_end_median_ms": 3.611137
+    },
+    {
+      "kind": "exp",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 9.5367431640625e-07,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_exp_592b60a183c0",
+      "image_sha256": "c0ec58fff6280f96f1bdd7b9aee0f48eb913ddd1f228a9b1f3d0f04c7a23c1aa",
+      "ir_sha256": {
+        "graph": "f238478df8f4e6052015a03731a323444422f168f1ae95b38e7c517450e93e5b",
+        "schedule": "21b27103a04d3152f4398aab6315f7b4459949166c4a3464a29b25cbfd93d260",
+        "tile": "428f64411a57d81576cbeace36ba8180418800621fd31b2cfe8437c82ac67d8a",
+        "target": "398061a94e7b7e3014fef23350832b83c192b1c50185f2a7c7c719940fcd0c73",
+        "backend": "382f8963d3d0e65447e2a9689b8ca7b6c58b174037c3ac1e1d3a65ef404cfc4e"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.007772949934005738,
+        0.00481687992811203,
+        0.005234500169754028,
+        0.004921480119228363,
+        0.004843080043792724,
+        0.004723770022392273,
+        0.004860289990901947
+      ],
+      "device_event_median_ms": 0.004860289990901947,
+      "allocating_end_to_end_samples_ms": [
+        4.17021,
+        5.003182,
+        4.152814,
+        4.948859,
+        4.44784,
+        4.209636,
+        4.599509
+      ],
+      "allocating_end_to_end_median_ms": 4.44784
+    },
+    {
+      "kind": "add",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_add_292bbf9ca9e8",
+      "image_sha256": "ed424357c05df54b0e9f22c1452da3410be169c1c2cddcfdf950f37bf00abfb0",
+      "ir_sha256": {
+        "graph": "f2d4d176a2483c128e6c0597ac80bc61795791a6304bc22526266308076b9413",
+        "schedule": "57b67bc3cc0f522dc06599b26f8419c753a9b0b438bd9a0714bde76ab063b9be",
+        "tile": "edf084eb67416545ff2d65d5160244d729e193bc16eb6d85d16f364c76ad57dc",
+        "target": "bad944e60153525890f24429934d66ea5b0ea403138ec641c3fce6621661c572",
+        "backend": "cdb1d56039d639d34b793f3c742c6c88d4b7881b4f653eb356ee33a395aa44a6"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.009086120128631591,
+        0.005788130164146424,
+        0.0059808498620986935,
+        0.005921139717102051,
+        0.005680829882621765,
+        0.00591484010219574,
+        0.00659168004989624
+      ],
+      "device_event_median_ms": 0.005921139717102051,
+      "allocating_end_to_end_samples_ms": [
+        5.234451,
+        5.058831,
+        4.957274,
+        4.85966,
+        5.033759,
+        5.548839,
+        5.173517
+      ],
+      "allocating_end_to_end_median_ms": 5.058831
+    },
+    {
+      "kind": "add",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_add_3bc98ad3a081",
+      "image_sha256": "7c5c76bc6e5c2b8349d73214cb7feb5c215e47aa5eca741c0b5c882cf533df50",
+      "ir_sha256": {
+        "graph": "635e22398e6fbff00a5d7280a9befd824af957c4282f4d4962a1d928133c65ac",
+        "schedule": "00e3cc8d23d58f4425e5c11943b8c0633fd24495601fccacb67498227a876cf2",
+        "tile": "8f304bdb19d3423577b44a21ee43b3b2798249c3a9e52c5470c511efd269525a",
+        "target": "612b11908190a97ce978c0d457b723ffbf27859ee4d046691dc250dccb967e1c",
+        "backend": "02230aac2ddb02946e758efd422d8d670c0b687c91ff87120da6eafbc8bb378b"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.013358160257339477,
+        0.005103690028190613,
+        0.005242289900779724,
+        0.005223600268363953,
+        0.005653319954872131,
+        0.00562861979007721,
+        0.005697429776191711
+      ],
+      "device_event_median_ms": 0.00562861979007721,
+      "allocating_end_to_end_samples_ms": [
+        5.82253,
+        5.903649,
+        6.259144,
+        6.528255,
+        6.165494,
+        10.555371,
+        6.470122
+      ],
+      "allocating_end_to_end_median_ms": 6.259144
+    },
+    {
+      "kind": "div",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_div_3edb414fbffe",
+      "image_sha256": "fd72b6cf0cf4c955b70f5ce112f72a3200b4e10f542a789a53fbba3ee9759b6f",
+      "ir_sha256": {
+        "graph": "67d242ef155fcedd78522efe1f543c61cbc54815f47a4a57f098e0392ad57096",
+        "schedule": "724a6357d3c9dbb323b2c82f3a1f96a5580705efec34eb885ae68eb150dce935",
+        "tile": "7d50ccbd345edf4ff3ab5765ba0299bdfc02466fbf3acddcba3c505d8bfcbf23",
+        "target": "e22f5d7d89ea4668a0bb3d55d2b724269ce8029124e0d1c9af1b3bdee913aa8b",
+        "backend": "8f943debdf445137c7f88414459d6e20c993d425d2c74b5d2f6264d6020e8139"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.011493010520935059,
+        0.005359280109405518,
+        0.005064359903335571,
+        0.005211780071258545,
+        0.005015760064125061,
+        0.005198270082473755,
+        0.005380979776382446
+      ],
+      "device_event_median_ms": 0.005211780071258545,
+      "allocating_end_to_end_samples_ms": [
+        4.753473,
+        4.802406,
+        4.415363,
+        4.426355,
+        4.34942,
+        4.250364,
+        4.262465
+      ],
+      "allocating_end_to_end_median_ms": 4.415363
+    },
+    {
+      "kind": "div",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_div_6ee927787cc7",
+      "image_sha256": "5876f6a0e24717ee41d875f28577adf3661b7e424395bf6e507ea42fc4c2ef25",
+      "ir_sha256": {
+        "graph": "ae6a908c3eb8a13b68419308fe3cdbb69081af943beed68fa0cee8435db2db93",
+        "schedule": "9c448cfc506359f0366538496956768143a922f985e8f59bb768c57f0f1979d1",
+        "tile": "a63116ccd74a93f8d0431fe6b2279cd66eb5a3d716d4e1dfa0f94e70c52c1116",
+        "target": "9f56600b6ca474a6e088b94b6a7e5470bc7e9d1c8a75fe9ce412eed2c29cd382",
+        "backend": "c561305f06a333ac023ae8ce8eb69a6dbc2e8518fa64a1747796795f5a0e5276"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.01073256015777588,
+        0.005663300156593323,
+        0.005757499933242798,
+        0.006370840072631836,
+        0.0055946999788284305,
+        0.005684499740600586,
+        0.0059466099739074706
+      ],
+      "device_event_median_ms": 0.005757499933242798,
+      "allocating_end_to_end_samples_ms": [
+        5.237221,
+        5.608887,
+        5.353217,
+        5.736015,
+        5.469719,
+        5.051275,
+        5.775306
+      ],
+      "allocating_end_to_end_median_ms": 5.469719
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0013427734375,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_sum_2a9b6014dbb9",
+      "image_sha256": "481f7fb64e15b82e00b42eda3243e0689a161cc65649452897b86b91f8927c4b",
+      "ir_sha256": {
+        "graph": "0a2250bd87761b1045f231168457230a5bea632b92daba07ecd2611949d8186f",
+        "schedule": "a1b04801f339140dd83008e91a5559618814a774bbacff3e4f89b1fb8011153e",
+        "tile": "a5ac72ee676b9682c8d28a3c894ea922a0f45b478a118d812cf8b1c5b088a7af",
+        "target": "951744077c55cfa0f9a9ac237b1be1f7896f08725ef19517ccbb74cb7c46845c",
+        "backend": "21ae4a652bccafb9a5674a47373439674a226a4be5be0f193473092931651d99"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.017710119485855103,
+        0.00951919972896576,
+        0.008450539708137512,
+        0.008479440212249756,
+        0.00851144015789032,
+        0.008295029997825623,
+        0.008636450171470642
+      ],
+      "device_event_median_ms": 0.00851144015789032,
+      "allocating_end_to_end_samples_ms": [
+        3.83161,
+        4.357966,
+        3.844466,
+        4.01873,
+        3.90156,
+        3.715739,
+        4.200016
+      ],
+      "allocating_end_to_end_median_ms": 3.90156
+    },
+    {
+      "kind": "cummax",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before events and after each allocating call",
+      "max_abs_error": 0.0,
+      "route": "textual Graph->native Schedule->native Tile->ROCm Target->ROCDL/LLVM->HSACO",
+      "entry_symbol": "tessera_tile_rocm_math_max_2b890b594c7c",
+      "image_sha256": "73f764d5cd34b87a9996b0497f79bfa143a8bd0ad155dc7c19b9e9dad38d6cf0",
+      "ir_sha256": {
+        "graph": "2ac86f98fb2fb34143b4fcd574321d2732b2087fc6f966fb1ff786f0d895690d",
+        "schedule": "f28b2ea22b9416411ccd6680d56eb68c531c2580e3785f2ee3a240474cb7c637",
+        "tile": "48ed6fb87d41cb09a8b40cee228d17da66cd878c3ad47096c54d595ee5089679",
+        "target": "9130c273a32cd46916daf6dfacb15e1bc7280067fc6912760becf12684b2c031",
+        "backend": "6b01711701cb2ca0d6eed34291df5920e963228319e81224bf02ac24af52efc3"
+      },
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2",
+      "device_libraries": [
+        {
+          "logical_name": "rocm.ocml",
+          "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.ockl",
+          "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_unsafe_math_off",
+          "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_finite_only_off",
+          "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_wavefrontsize64_off",
+          "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_isa_version_1151",
+          "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+          "link_mode": "compiler_driver"
+        },
+        {
+          "logical_name": "rocm.oclc_abi_version_600",
+          "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+          "link_mode": "compiler_driver"
+        }
+      ],
+      "compile_state": "cold",
+      "device_event_samples_ms": [
+        0.015756720304489137,
+        0.010849670171737671,
+        0.009840620160102844,
+        0.010002230405807494,
+        0.010077320337295533,
+        0.01014112949371338,
+        0.010294439792633057
+      ],
+      "device_event_median_ms": 0.01014112949371338,
+      "allocating_end_to_end_samples_ms": [
+        3.187139,
+        3.076262,
+        3.016849,
+        2.87719,
+        2.943365,
+        2.913257,
+        2.893376
+      ],
+      "allocating_end_to_end_median_ms": 2.943365
+    }
+  ],
+  "storage": "f32",
+  "timing_domains": {
+    "device": "HIP events around resident launches; allocation/upload/readback excluded",
+    "end_to_end": "module load/allocate/upload/launch/completion/readback/free/unload; compiler excluded"
+  },
+  "scope": "direct compiler-product proof; ordinary JIT/package ABI and f16/bf16 remain open"
+}

@@ -1,0 +1,10 @@
+LLVM (http://llvm.org/):
+  LLVM version 23.1.1
+  Optimized build with assertions.
+AMD clang version 23.0.0git (https://github.com/ROCm/llvm-project.git 8f497e0992fb7513f7f78a6f6b6f1056c375e961)
+Target: x86_64-unknown-linux-gnu
+Thread model: posix
+InstalledDir: /home/angstorms/scratch/tessera-validation-sdk/rocm-core/lib/llvm/bin
+AMD LLD 23.0.0 (https://github.com/ROCm/llvm-project.git 8f497e0992fb7513f7f78a6f6b6f1056c375e961) (compatible with GNU linkers)
+7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8  /home/angstorms/scratch/tessera-validation-sdk/rocm-core/amdgcn/bitcode/ocml.bc
+27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6  /home/angstorms/scratch/tessera-validation-sdk/rocm-core/amdgcn/bitcode/ockl.bc

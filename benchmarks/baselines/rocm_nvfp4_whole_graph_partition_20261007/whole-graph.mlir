@@ -1,0 +1,8 @@
+module attributes {tessera.target = "rocm_gfx1201", tessera.arch = "gfx1201"} {
+  func.func @nvfp4_resident(%arg0: tensor<16x32xui8>, %arg1: tensor<16x4xf8E4M3FN>, %arg2: tensor<1xf64>, %arg3: tensor<16x64xui8>, %arg4: tensor<16xf32>) -> (tensor<16x16xbf16>) {
+    %packed, %exponents, %stats = tessera.nvfp4_requantize %arg0, %arg1, %arg2 {row_offsets = [0, 16], numeric_policy = {destination_code_selection = "nearest_signed_e2m1_by_weight_sse", destination_format = "mxfp4_e2m1_e8m0_k32", destination_scale_order = "k_group_n", execution_mode = "explicit_scale_requantization", lossy_steps = ["nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"], source_format = "nvfp4_e2m1_e4m3_k16", source_scale_application = "projection_global_times_e4m3"}, tessera.effect_kind = "pure"} : (tensor<16x32xui8>, tensor<16x4xf8E4M3FN>, tensor<1xf64>) -> (tensor<16x32xui8>, tensor<2x16xui8>, tensor<16x2x2xf64>)
+    %fragment, %plane = tessera.mxfp4_folded_storage %packed, %exponents {storage_contract = "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1", tessera.effect_kind = "pure"} : (tensor<16x32xui8>, tensor<2x16xui8>) -> (tensor<16x32xui8>, tensor<3x16xui8>)
+    %out = tessera.scaled_matmul %arg3, %fragment scales (%arg4, %plane) {physical_contract = "rocm_mxfp4_w4a8_packed_folded_prefill_v1", numeric_policy = {accum = "fp32", execution_mode = "folded_row_reference_explicit_approximate"}, scale_layout = {block = [1, 64], format = "e8m0_k32_plus_row_reference", granularity = "output_column"}, tessera.effect_kind = "pure"} : (tensor<16x64xui8>, tensor<16x32xui8>, tensor<16xf32>, tensor<3x16xui8>) -> tensor<16x16xbf16>
+    return %out : tensor<16x16xbf16>
+  }
+}

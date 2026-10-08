@@ -1,0 +1,24 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "compiler_sha256": "372d5a4c8625d7f361843584ed54e9d53656cfaf3b570ed653d657202ceb5931",
+  "arbitrary_partial_count": 116,
+  "scale_code_pairs": 65536,
+  "accumulator_cases": 4,
+  "arbitrary_results_per_compiler": 30408704,
+  "candidate_arbitrary_tests": "4 passed",
+  "reference_arbitrary_tests": "4 passed",
+  "regression_tests": "575 passed",
+  "compiler_filecheck": "passed; f64 forbidden",
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "5a6d5aed15e8b1cf33714a09a86b9b564000670a1512fa5062038dd914d6457e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "0fa6d6ab827cf1759ea5a9d135046dca8603abde206360ffc5e60b51ef18e7df",
+    "python/tessera/compiler/pass_metadata.py": "30c4074809d137572b5bba58dfd2c17d3b224fdb373178f49c997c8790adfc63",
+    "tests/device/rocm/test_e8m0_arbitrary_partial.py": "d78c33bff894e5b128350782204f5597e57ebc49c85f8c9d69e44a8c50668e82",
+    "tests/device/rocm/fixtures/e8m0_arbitrary_partial.mlir": "de6b43a9520da82df68abbd88a3f88b2257f16732ec68815abd2a81c8a3dc68d",
+    "tests/device/rocm/test_e8m0_tile_scale.py": "b899bf4b0d9a9a99f2031288d54b7108e79b6e23ef8f03840cb53b8303420ac6",
+    "tests/tessera-ir/phase2/rocm_fragment_e8m0_scale.mlir": "b732d5da79cdad4864434000669d4364b2b8965c1c1d064feb485fd07118b635"
+  },
+  "device_ordinal": 0,
+  "device_identity_source": "HIP hipGetDevice + hipDeviceGetName"
+}

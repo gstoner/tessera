@@ -1,0 +1,9 @@
+........................................................................ [ 96%]
+...                                                                      [100%]
+=============================== warnings summary ===============================
+tests/device/nvidia/test_prepared_matmul_owner.py::test_native_fork_guard_precedes_mutex_or_cuda
+  /home/angstorms/scratch/next-five-compiler-slices/tests/device/nvidia/test_prepared_matmul_owner.py:108: DeprecationWarning: This process (pid=310588) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    child=os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+75 passed, 1 warning in 36.90s

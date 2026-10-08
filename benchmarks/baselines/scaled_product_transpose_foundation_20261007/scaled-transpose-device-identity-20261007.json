@@ -1,0 +1,10 @@
+{
+  "live_architecture": "gfx1201",
+  "native_vjp_proof": false,
+  "files": {
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt": "cfe639a2c740b0ac7e8c4682c9ab41f8e7c796af181ae7afdb0540d36cb96642",
+    "tests/support/scaled_product_transpose_oracle.py": "953413a0bd317370dfd044dc1ef0120ae2ef34aa61688015510d37fa2ccdc7a8",
+    "tests/device/rocm/test_scaled_product_transpose_duality.py": "3d639912ad5c9391f896a467dba59624370d5637a5e0ab7fb3381ab2c0607ec8"
+  }
+}

@@ -1,0 +1,22 @@
+............................F.                                           [100%]
+=================================== FAILURES ===================================
+_________ test_native_transpose_member_projection_preserves_real_body __________
+
+    def test_native_transpose_member_projection_preserves_real_body():
+        result = compile_native(source("shared_lhs", (3, 2)),
+                                "export-scaled-transpose=true select-scaled-transpose-member=0")
+        assert result.returncode == 0, result.stderr
+        assert "tessera.autodiff.scaled_program_witness" in result.stdout
+        assert 'operation = "tensor.generate"' in result.stdout
+        assert 'tessera.autodiff.scale_adjoint = "lhs_scale"' in result.stdout
+        # One actual outlined region, with its captures remapped to member args.
+>       assert result.stdout.count("func.func private @scales__bwd__member_0(") == 1
+E       assert 2 == 1
+E        +  where 2 = <built-in method count of str object at 0x21b7ad60>('func.func private @scales__bwd__member_0(')
+E        +    where <built-in method count of str object at 0x21b7ad60> = 'module attributes {tessera.arch = "gfx1201", tessera.autodiff.scaled_member = {inputs = array<i64: 0, 1, 3, 4>, kind ... {tessera.autodiff.scale_adjoint = "lhs_scale"} : tensor<7x2xf32>\n    return %generated : tensor<7x2xf32>\n  }\n}\n\n'.count
+E        +      where 'module attributes {tessera.arch = "gfx1201", tessera.autodiff.scaled_member = {inputs = array<i64: 0, 1, 3, 4>, kind ... {tessera.autodiff.scale_adjoint = "lhs_scale"} : tensor<7x2xf32>\n    return %generated : tensor<7x2xf32>\n  }\n}\n\n' = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...todiff.scale_adjoint = "lhs_scale"} : tensor<7x2xf32>\n    return %generated : tensor<7x2xf32>\n  }\n}\n\n', stderr='').stdout
+
+tests/unit/test_native_scaled_transpose_export.py:92: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_scaled_transpose_export.py::test_native_transpose_member_projection_preserves_real_body
+1 failed, 29 passed in 0.78s

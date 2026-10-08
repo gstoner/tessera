@@ -1,0 +1,35 @@
+--- /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/scheduled_kernel.py
++++ /home/angstorms/scratch/nvidia-cooperative-softmax-candidate-20261008/scheduled_kernel.py
+@@ -187,10 +187,10 @@
+     if schedule is not None:
+         module = copy.deepcopy(module)
+         if (module.functions and module.functions[0].body
+-                and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm"}):
++                and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.softmax", "tessera.softmax_safe"}):
+             module.functions[0].body[0].kwargs["schedule"] = schedule
+         else:
+-            raise ValueError("explicit Schedule policy requires a normalization or reduction")
++            raise ValueError("explicit Schedule policy requires a normalization, reduction or softmax")
+     contract = _graph_contract(module, target)
+     if architecture is not None:
+         if target != 'x86' or architecture not in ('zen5-avx512','x86_64_base'):
+@@ -227,6 +227,8 @@
+             # gfx1151 keepdims (E2E-REAL-6). Only a true value is spelled so the
+             # established rank-reducing f32 Graph text is byte-identical.
+             op.kwargs["keepdims"] = True
++    if contract[5] == "softmax" and contract[20] != "serial":
++        op.kwargs = {**op.kwargs, "schedule": contract[20]}
+     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
+     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
+     graph_ir = targeted.to_mlir(target=target, canonical=True)
+@@ -382,8 +384,8 @@
+         rows, columns = math.prod(input_shape[:-1]), input_shape[-1]
+         outer = axis_extent = inner = 1
+     elif op.op_name in {"tessera.softmax", "tessera.softmax_safe"}:
+-        if mode != "serial":
+-            raise ValueError("reduction scheduling policy is not applicable to softmax")
++        if mode != "serial" and (target != "nvidia_sm120" or mode != "cooperative_128"):
++            raise ValueError("softmax scheduling requires serial or SM120 cooperative_128")
+         if op.kwargs.get("axis", -1) != -1 or output_shape != input_shape:
+             raise ValueError("scheduled softmax requires shape-preserving last-axis semantics")
+         family, kind, axis, keepdims = "softmax", "softmax", -1, False

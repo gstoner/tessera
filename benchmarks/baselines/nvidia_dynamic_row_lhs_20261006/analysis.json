@@ -1,0 +1,4081 @@
+{
+  "comparisons": [
+    {
+      "control": "control_row",
+      "median_warm_ratio": 0.07817486965449776,
+      "prepared": "prepared_row",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008433599956333637,
+          "control_wall_ms": 6.227943,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.444903,
+          "producer_event_ms": 0.008776640519499779,
+          "warm_prepared_over_control": 0.07143658829247473
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008685119450092316,
+          "control_wall_ms": 6.761638,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.487153,
+          "producer_event_ms": 0.010545920580625534,
+          "warm_prepared_over_control": 0.07204659581006852
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015046720393002033,
+          "control_wall_ms": 6.707838,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.495864,
+          "producer_event_ms": 0.008694720454514027,
+          "warm_prepared_over_control": 0.07392307327636714
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.026259519159793854,
+          "control_wall_ms": 7.549593,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.633025,
+          "producer_event_ms": 0.009688000194728374,
+          "warm_prepared_over_control": 0.08384889092696785
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008366400375962257,
+          "control_wall_ms": 6.867759,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.515274,
+          "producer_event_ms": 0.009152320213615894,
+          "warm_prepared_over_control": 0.0750279676383519
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008374080061912537,
+          "control_wall_ms": 7.722535,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.552064,
+          "producer_event_ms": 0.009157120250165462,
+          "warm_prepared_over_control": 0.07148740666115466
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014883840456604958,
+          "control_wall_ms": 6.971358,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.570004,
+          "producer_event_ms": 0.00869120005518198,
+          "warm_prepared_over_control": 0.08176369654233794
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.026594560593366623,
+          "control_wall_ms": 7.339192,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.675865,
+          "producer_event_ms": 0.008275840431451797,
+          "warm_prepared_over_control": 0.09208983768240428
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.007753599900752306,
+          "control_wall_ms": 5.976422,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.467203,
+          "producer_event_ms": 0.007727360352873802,
+          "warm_prepared_over_control": 0.07817436586639966
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008531520143151283,
+          "control_wall_ms": 6.501281,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.479174,
+          "producer_event_ms": 0.007028480060398579,
+          "warm_prepared_over_control": 0.07370455145685904
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014709440059959888,
+          "control_wall_ms": 6.354725,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.496783,
+          "producer_event_ms": 0.007616320159286261,
+          "warm_prepared_over_control": 0.07817537344259586
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.025234879925847054,
+          "control_wall_ms": 6.559695,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.612204,
+          "producer_event_ms": 0.007371199782937765,
+          "warm_prepared_over_control": 0.09332811967629592
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008477759547531605,
+          "control_wall_ms": 6.668197,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.498274,
+          "producer_event_ms": 0.007003840059041977,
+          "warm_prepared_over_control": 0.07472394711793907
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008286720141768456,
+          "control_wall_ms": 6.832844,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.552164,
+          "producer_event_ms": 0.0076310401782393456,
+          "warm_prepared_over_control": 0.08081027460893297
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015320960432291031,
+          "control_wall_ms": 7.045331,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.558574,
+          "producer_event_ms": 0.008600320667028427,
+          "warm_prepared_over_control": 0.0792828612310763
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02654687874019146,
+          "control_wall_ms": 7.31984,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.650605,
+          "producer_event_ms": 0.007734079845249653,
+          "warm_prepared_over_control": 0.08888240726573259
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009934719651937485,
+          "control_wall_ms": 5.837615,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.434743,
+          "producer_event_ms": 0.00988479983061552,
+          "warm_prepared_over_control": 0.07447270846056137
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008307520300149918,
+          "control_wall_ms": 5.939502,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.464144,
+          "producer_event_ms": 0.009928000159561634,
+          "warm_prepared_over_control": 0.07814527211203902
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015315840020775795,
+          "control_wall_ms": 6.172642,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.574894,
+          "producer_event_ms": 0.09530431777238846,
+          "warm_prepared_over_control": 0.09313580797331192
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02492768131196499,
+          "control_wall_ms": 6.522637,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.898836,
+          "producer_event_ms": 0.25049152970314026,
+          "warm_prepared_over_control": 0.1378025482638387
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008390720002353191,
+          "control_wall_ms": 6.669576,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.481924,
+          "producer_event_ms": 0.009958719834685326,
+          "warm_prepared_over_control": 0.07225706701595423
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009108159691095352,
+          "control_wall_ms": 6.465585,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.484573,
+          "producer_event_ms": 0.010145599953830242,
+          "warm_prepared_over_control": 0.07494650522729188
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014933439902961254,
+          "control_wall_ms": 6.634695,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.623454,
+          "producer_event_ms": 0.09549152106046677,
+          "warm_prepared_over_control": 0.09396875063586194
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.026400959119200706,
+          "control_wall_ms": 7.390582,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.875166,
+          "producer_event_ms": 0.25031328201293945,
+          "warm_prepared_over_control": 0.11841638452830913
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009531520307064056,
+          "control_wall_ms": 6.167703,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.479634,
+          "producer_event_ms": 0.010039360262453556,
+          "warm_prepared_over_control": 0.077765417692778
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009289280511438847,
+          "control_wall_ms": 6.880219,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.514044,
+          "producer_event_ms": 0.009207360446453094,
+          "warm_prepared_over_control": 0.07471331944520951
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015558719635009766,
+          "control_wall_ms": 6.433255,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.516814,
+          "producer_event_ms": 0.00997088011354208,
+          "warm_prepared_over_control": 0.08033476055278393
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.025672640651464462,
+          "control_wall_ms": 7.447074,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.655085,
+          "producer_event_ms": 0.011419199407100677,
+          "warm_prepared_over_control": 0.08796542104993184
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008824319578707218,
+          "control_wall_ms": 6.856367,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.494374,
+          "producer_event_ms": 0.009215999394655228,
+          "warm_prepared_over_control": 0.07210436664198401
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008970559574663639,
+          "control_wall_ms": 7.650314,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.555174,
+          "producer_event_ms": 0.009855680167675018,
+          "warm_prepared_over_control": 0.07256878606551312
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015025599859654903,
+          "control_wall_ms": 6.894309,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.552844,
+          "producer_event_ms": 0.008875200524926186,
+          "warm_prepared_over_control": 0.08018845688523679
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02653440088033676,
+          "control_wall_ms": 8.198788,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.699245,
+          "producer_event_ms": 0.009247999638319016,
+          "warm_prepared_over_control": 0.08528638623172108
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.00940959993749857,
+          "control_wall_ms": 6.749047,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.422483,
+          "producer_event_ms": 0.008824000135064125,
+          "warm_prepared_over_control": 0.06259891211307315
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009420800022780895,
+          "control_wall_ms": 5.893113,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.455514,
+          "producer_event_ms": 0.009912960231304169,
+          "warm_prepared_over_control": 0.07729598940322373
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015209279954433441,
+          "control_wall_ms": 6.313114,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.498944,
+          "producer_event_ms": 0.009087679907679558,
+          "warm_prepared_over_control": 0.07903294633995205
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.026012800633907318,
+          "control_wall_ms": 7.132311,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.669265,
+          "producer_event_ms": 0.01004799921065569,
+          "warm_prepared_over_control": 0.09383564457579037
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009792639873921871,
+          "control_wall_ms": 6.600715,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.623465,
+          "producer_event_ms": 0.008708800189197063,
+          "warm_prepared_over_control": 0.09445416140524171
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009139199741184711,
+          "control_wall_ms": 7.171039,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.538843,
+          "producer_event_ms": 0.008593600243330002,
+          "warm_prepared_over_control": 0.07514155201219794
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01519583910703659,
+          "control_wall_ms": 7.308078,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.544474,
+          "producer_event_ms": 0.010298880748450756,
+          "warm_prepared_over_control": 0.0745030362292247
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02715519815683365,
+          "control_wall_ms": 7.341782,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.698845,
+          "producer_event_ms": 0.009568640030920506,
+          "warm_prepared_over_control": 0.09518738093830627
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008852159604430199,
+          "control_wall_ms": 5.910716,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.419163,
+          "producer_event_ms": 0.009714880026876926,
+          "warm_prepared_over_control": 0.07091577399421661
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008344960398972034,
+          "control_wall_ms": 5.820191,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.447073,
+          "producer_event_ms": 0.009962559677660465,
+          "warm_prepared_over_control": 0.07681414579006084
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015347839333117008,
+          "control_wall_ms": 6.499311,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.576364,
+          "producer_event_ms": 0.09523807466030121,
+          "warm_prepared_over_control": 0.08868078477857115
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.025517120957374573,
+          "control_wall_ms": 6.345935,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.898286,
+          "producer_event_ms": 0.2504883110523224,
+          "warm_prepared_over_control": 0.14155297840270978
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008788160048425198,
+          "control_wall_ms": 6.482055,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.497804,
+          "producer_event_ms": 0.009407039731740952,
+          "warm_prepared_over_control": 0.07679725025474175
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008843840099871159,
+          "control_wall_ms": 6.434617,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.478693,
+          "producer_event_ms": 0.0097980797290802,
+          "warm_prepared_over_control": 0.0743933943543182
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014920959249138832,
+          "control_wall_ms": 7.740756,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.628484,
+          "producer_event_ms": 0.09540575742721558,
+          "warm_prepared_over_control": 0.08119155286641254
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.026575999334454536,
+          "control_wall_ms": 7.109679,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.951116,
+          "producer_event_ms": 0.2505660951137543,
+          "warm_prepared_over_control": 0.13377762906032747
+        }
+      ]
+    },
+    {
+      "control": "control_row_reverse",
+      "median_warm_ratio": 0.07658149562239645,
+      "prepared": "prepared_row_reverse",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008858240209519863,
+          "control_wall_ms": 6.386094,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.471204,
+          "producer_event_ms": 0.009072639979422092,
+          "warm_prepared_over_control": 0.07378594803020438
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008683199994266033,
+          "control_wall_ms": 6.007642,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.484194,
+          "producer_event_ms": 0.009123200550675392,
+          "warm_prepared_over_control": 0.08059634711921916
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015596159733831882,
+          "control_wall_ms": 6.660566,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.496803,
+          "producer_event_ms": 0.008378559723496437,
+          "warm_prepared_over_control": 0.07458870612497497
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.025302400812506676,
+          "control_wall_ms": 6.740756,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.625035,
+          "producer_event_ms": 0.008617280051112175,
+          "warm_prepared_over_control": 0.09272476262306482
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008948479779064655,
+          "control_wall_ms": 7.2064,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.518144,
+          "producer_event_ms": 0.009348159655928612,
+          "warm_prepared_over_control": 0.07190053285968029
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008615360595285892,
+          "control_wall_ms": 7.21751,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.518834,
+          "producer_event_ms": 0.009681280702352524,
+          "warm_prepared_over_control": 0.07188545634159149
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014756159856915474,
+          "control_wall_ms": 6.962188,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.564434,
+          "producer_event_ms": 0.008532480336725712,
+          "warm_prepared_over_control": 0.0810713528563147
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.0264169592410326,
+          "control_wall_ms": 7.531523,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.665705,
+          "producer_event_ms": 0.00937695987522602,
+          "warm_prepared_over_control": 0.08838916112982725
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009598719887435436,
+          "control_wall_ms": 6.259284,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.450673,
+          "producer_event_ms": 0.009895999915897846,
+          "warm_prepared_over_control": 0.07200072723972901
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009360319934785366,
+          "control_wall_ms": 7.046499,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.478414,
+          "producer_event_ms": 0.008960000239312649,
+          "warm_prepared_over_control": 0.06789385764476799
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015810560435056686,
+          "control_wall_ms": 6.422745,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.523794,
+          "producer_event_ms": 0.009060800075531006,
+          "warm_prepared_over_control": 0.08155298085164521
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.025069119408726692,
+          "control_wall_ms": 7.048639,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.605554,
+          "producer_event_ms": 0.00900223944336176,
+          "warm_prepared_over_control": 0.08591076944073885
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.0089273601770401,
+          "control_wall_ms": 6.732097,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.499633,
+          "producer_event_ms": 0.00902015995234251,
+          "warm_prepared_over_control": 0.07421654797903238
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009458879940211773,
+          "control_wall_ms": 6.91096,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.495203,
+          "producer_event_ms": 0.009285119362175465,
+          "warm_prepared_over_control": 0.0716547339298737
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015150400809943676,
+          "control_wall_ms": 7.16453,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.547984,
+          "producer_event_ms": 0.008065920323133469,
+          "warm_prepared_over_control": 0.07648568712811588
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.0266281608492136,
+          "control_wall_ms": 7.036911,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.654525,
+          "producer_event_ms": 0.00853952020406723,
+          "warm_prepared_over_control": 0.09301311328223422
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.00806943979114294,
+          "control_wall_ms": 5.942451,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.396053,
+          "producer_event_ms": 0.008298239670693874,
+          "warm_prepared_over_control": 0.06664808847393104
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008546560071408749,
+          "control_wall_ms": 5.884971,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.448003,
+          "producer_event_ms": 0.010374080389738083,
+          "warm_prepared_over_control": 0.07612662832153293
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014885439537465572,
+          "control_wall_ms": 5.951291,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.578454,
+          "producer_event_ms": 0.0955011174082756,
+          "warm_prepared_over_control": 0.09719807013301819
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02518239989876747,
+          "control_wall_ms": 6.419735,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.864367,
+          "producer_event_ms": 0.2512083351612091,
+          "warm_prepared_over_control": 0.13464216202070645
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.007991679944097996,
+          "control_wall_ms": 6.416304,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.452273,
+          "producer_event_ms": 0.008085439912974834,
+          "warm_prepared_over_control": 0.07048808784621177
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.00913952011615038,
+          "control_wall_ms": 6.591736,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.489274,
+          "producer_event_ms": 0.009814079850912094,
+          "warm_prepared_over_control": 0.07422536339440779
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015150720253586769,
+          "control_wall_ms": 6.95594,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.641335,
+          "producer_event_ms": 0.09541631489992142,
+          "warm_prepared_over_control": 0.09219961644292504
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02701760083436966,
+          "control_wall_ms": 7.411782,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.902196,
+          "producer_event_ms": 0.2511100769042969,
+          "warm_prepared_over_control": 0.12172457311885321
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008751999586820602,
+          "control_wall_ms": 6.252729,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.458513,
+          "producer_event_ms": 0.009255040436983109,
+          "warm_prepared_over_control": 0.07333006116209417
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008985280059278011,
+          "control_wall_ms": 6.161833,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.513304,
+          "producer_event_ms": 0.008292799815535545,
+          "warm_prepared_over_control": 0.0833037831437496
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01556640025228262,
+          "control_wall_ms": 7.138599,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.482824,
+          "producer_event_ms": 0.008948159404098988,
+          "warm_prepared_over_control": 0.06763568033447459
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02504703961312771,
+          "control_wall_ms": 6.769919,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.626634,
+          "producer_event_ms": 0.008833919651806355,
+          "warm_prepared_over_control": 0.09256152104626363
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009154880419373512,
+          "control_wall_ms": 6.821497,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.523054,
+          "producer_event_ms": 0.00866016000509262,
+          "warm_prepared_over_control": 0.07667730411667703
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009718080051243305,
+          "control_wall_ms": 7.512298,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.501184,
+          "producer_event_ms": 0.008007040247321129,
+          "warm_prepared_over_control": 0.06671513829722941
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014841919764876366,
+          "control_wall_ms": 7.475684,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.528954,
+          "producer_event_ms": 0.008732479996979237,
+          "warm_prepared_over_control": 0.07075660233899668
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02680191956460476,
+          "control_wall_ms": 7.650992,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.663205,
+          "producer_event_ms": 0.008649920113384724,
+          "warm_prepared_over_control": 0.08668222369073188
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009600959718227386,
+          "control_wall_ms": 6.231099,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.460833,
+          "producer_event_ms": 0.008858240209519863,
+          "warm_prepared_over_control": 0.07395693761245006
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.00929183978587389,
+          "control_wall_ms": 5.903301,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.491633,
+          "producer_event_ms": 0.009214079938828945,
+          "warm_prepared_over_control": 0.08328103208696287
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015129280276596546,
+          "control_wall_ms": 6.417735,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.476153,
+          "producer_event_ms": 0.010749119333922863,
+          "warm_prepared_over_control": 0.07419330963338311
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.026383040472865105,
+          "control_wall_ms": 6.267795,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.642855,
+          "producer_event_ms": 0.021521279588341713,
+          "warm_prepared_over_control": 0.10256477756531603
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.010620160028338432,
+          "control_wall_ms": 7.359432,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.498473,
+          "producer_event_ms": 0.007693439722061157,
+          "warm_prepared_over_control": 0.06773253696752685
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.007697920314967632,
+          "control_wall_ms": 7.366713,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.506604,
+          "producer_event_ms": 0.007945280522108078,
+          "warm_prepared_over_control": 0.06876934122450543
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014431040734052658,
+          "control_wall_ms": 6.974418,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.544234,
+          "producer_event_ms": 0.008079680614173412,
+          "warm_prepared_over_control": 0.07803289105987052
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.02842560037970543,
+          "control_wall_ms": 7.564972,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.700635,
+          "producer_event_ms": 0.00871680025011301,
+          "warm_prepared_over_control": 0.09261567656826754
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009525439701974392,
+          "control_wall_ms": 5.881965,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.446724,
+          "producer_event_ms": 0.008728640154004097,
+          "warm_prepared_over_control": 0.07594808877645481
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009520960040390491,
+          "control_wall_ms": 5.802262,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.459493,
+          "producer_event_ms": 0.00964256003499031,
+          "warm_prepared_over_control": 0.07919204613648953
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014817279763519764,
+          "control_wall_ms": 6.187585,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.588904,
+          "producer_event_ms": 0.0956575945019722,
+          "warm_prepared_over_control": 0.09517509658453176
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.025773758068680763,
+          "control_wall_ms": 6.99661,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.911646,
+          "producer_event_ms": 0.2511056065559387,
+          "warm_prepared_over_control": 0.13029824443551946
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009246080182492733,
+          "control_wall_ms": 6.547486,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.489503,
+          "producer_event_ms": 0.008142399601638317,
+          "warm_prepared_over_control": 0.07476197734519784
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009321920573711395,
+          "control_wall_ms": 6.756122,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.483123,
+          "producer_event_ms": 0.009808000177145004,
+          "warm_prepared_over_control": 0.07150892183415279
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.014952640980482101,
+          "control_wall_ms": 7.149621,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.632334,
+          "producer_event_ms": 0.09555871784687042,
+          "warm_prepared_over_control": 0.08844300977632241
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.026469120755791664,
+          "control_wall_ms": 6.856277,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.985807,
+          "producer_event_ms": 0.2510966360569,
+          "warm_prepared_over_control": 0.1437816762654134
+        }
+      ]
+    },
+    {
+      "control": "control_col",
+      "median_warm_ratio": 0.07472532549462793,
+      "prepared": "prepared_col",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.00869120005518198,
+          "control_wall_ms": 6.309125,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.440733,
+          "producer_event_ms": 0.009107199497520924,
+          "warm_prepared_over_control": 0.06985643809561548
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.014976639300584793,
+          "control_wall_ms": 6.496934,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.443484,
+          "producer_event_ms": 0.008425920270383358,
+          "warm_prepared_over_control": 0.06826050564774092
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012503999285399914,
+          "control_wall_ms": 6.391004,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.454483,
+          "producer_event_ms": 0.0093295993283391,
+          "warm_prepared_over_control": 0.07111292685781452
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016815681010484695,
+          "control_wall_ms": 6.727096,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.509584,
+          "producer_event_ms": 0.009626240469515324,
+          "warm_prepared_over_control": 0.07575096297124347
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008778559975326061,
+          "control_wall_ms": 6.887228,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.483964,
+          "producer_event_ms": 0.008303999900817871,
+          "warm_prepared_over_control": 0.07026978052708578
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008648959919810295,
+          "control_wall_ms": 6.769479,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.512574,
+          "producer_event_ms": 0.008115519769489765,
+          "warm_prepared_over_control": 0.07571838246340672
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012167359702289104,
+          "control_wall_ms": 7.04412,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.500743,
+          "producer_event_ms": 0.008516479283571243,
+          "warm_prepared_over_control": 0.07108666519025798
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018336959183216095,
+          "control_wall_ms": 7.05251,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.542014,
+          "producer_event_ms": 0.009107840247452259,
+          "warm_prepared_over_control": 0.0768540562154467
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008907199837267399,
+          "control_wall_ms": 6.414765,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.449193,
+          "producer_event_ms": 0.009811840020120144,
+          "warm_prepared_over_control": 0.07002485671727647
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008644159883260727,
+          "control_wall_ms": 6.884277,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.461823,
+          "producer_event_ms": 0.00895904004573822,
+          "warm_prepared_over_control": 0.06708373297588112
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012299519963562489,
+          "control_wall_ms": 6.576106,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.465023,
+          "producer_event_ms": 0.008973440155386925,
+          "warm_prepared_over_control": 0.07071403654381483
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.017079999670386314,
+          "control_wall_ms": 6.846957,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.501104,
+          "producer_event_ms": 0.008863999508321285,
+          "warm_prepared_over_control": 0.07318638046069224
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008621759712696075,
+          "control_wall_ms": 6.842778,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.515264,
+          "producer_event_ms": 0.009624320082366467,
+          "warm_prepared_over_control": 0.07530041161645169
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009015039540827274,
+          "control_wall_ms": 7.567851,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.476273,
+          "producer_event_ms": 0.009192639961838722,
+          "warm_prepared_over_control": 0.06293371790750109
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012716799974441528,
+          "control_wall_ms": 8.169328,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.517333,
+          "producer_event_ms": 0.00844896025955677,
+          "warm_prepared_over_control": 0.06332626135221894
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018421759828925133,
+          "control_wall_ms": 7.615861,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.546344,
+          "producer_event_ms": 0.01017312053591013,
+          "warm_prepared_over_control": 0.07173765382535213
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009273920208215714,
+          "control_wall_ms": 5.866541,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.408262,
+          "producer_event_ms": 0.007993279956281185,
+          "warm_prepared_over_control": 0.06959160432016073
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008503999561071396,
+          "control_wall_ms": 5.916211,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.430313,
+          "producer_event_ms": 0.009455040097236633,
+          "warm_prepared_over_control": 0.07273455933197785
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.013798719272017479,
+          "control_wall_ms": 6.329733,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.569974,
+          "producer_event_ms": 0.09548768401145935,
+          "warm_prepared_over_control": 0.09004708413451246
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016735998913645744,
+          "control_wall_ms": 6.174814,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.723295,
+          "producer_event_ms": 0.25074464082717896,
+          "warm_prepared_over_control": 0.11713632183900602
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009270720183849335,
+          "control_wall_ms": 6.483936,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.489214,
+          "producer_event_ms": 0.008553280495107174,
+          "warm_prepared_over_control": 0.07545015866905534
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008936639875173569,
+          "control_wall_ms": 6.664506,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.499173,
+          "producer_event_ms": 0.009548800066113472,
+          "warm_prepared_over_control": 0.07490022516297531
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012263679876923561,
+          "control_wall_ms": 6.977939,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.597514,
+          "producer_event_ms": 0.09552543610334396,
+          "warm_prepared_over_control": 0.08562900879471717
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01833312027156353,
+          "control_wall_ms": 7.631453,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.798066,
+          "producer_event_ms": 0.25115904211997986,
+          "warm_prepared_over_control": 0.10457589138005569
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008867200464010239,
+          "control_wall_ms": 6.07729,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.461963,
+          "producer_event_ms": 0.009538239799439907,
+          "warm_prepared_over_control": 0.07601463810349679
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008997759781777859,
+          "control_wall_ms": 6.645255,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.481154,
+          "producer_event_ms": 0.009845759719610214,
+          "warm_prepared_over_control": 0.07240564884267045
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012797759845852852,
+          "control_wall_ms": 6.54351,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.479663,
+          "producer_event_ms": 0.010531200096011162,
+          "warm_prepared_over_control": 0.07330362450733627
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016705600544810295,
+          "control_wall_ms": 6.923857,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.537974,
+          "producer_event_ms": 0.008685119450092316,
+          "warm_prepared_over_control": 0.07769860064989788
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009875520132482052,
+          "control_wall_ms": 7.099819,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.509554,
+          "producer_event_ms": 0.00860224012285471,
+          "warm_prepared_over_control": 0.07176999864362739
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008957120589911938,
+          "control_wall_ms": 6.879944,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.526964,
+          "producer_event_ms": 0.008576960302889347,
+          "warm_prepared_over_control": 0.07659422809255424
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01163903996348381,
+          "control_wall_ms": 7.382341,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.512793,
+          "producer_event_ms": 0.008276799693703651,
+          "warm_prepared_over_control": 0.0694621123570423
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018391679972410202,
+          "control_wall_ms": 7.198498,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.540564,
+          "producer_event_ms": 0.009457600302994251,
+          "warm_prepared_over_control": 0.07509399877585575
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009001919999718666,
+          "control_wall_ms": 6.119562,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.458104,
+          "producer_event_ms": 0.008757439441978931,
+          "warm_prepared_over_control": 0.07485895232371205
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009068160317838192,
+          "control_wall_ms": 6.333584,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.469744,
+          "producer_event_ms": 0.009434879757463932,
+          "warm_prepared_over_control": 0.07416716980464773
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012522239238023758,
+          "control_wall_ms": 6.454914,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.481483,
+          "producer_event_ms": 0.009662399999797344,
+          "warm_prepared_over_control": 0.0745916986655438
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016936959698796272,
+          "control_wall_ms": 7.146867,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.515194,
+          "producer_event_ms": 0.008943679742515087,
+          "warm_prepared_over_control": 0.07208669197286027
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.011155200190842152,
+          "control_wall_ms": 7.035318,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.516613,
+          "producer_event_ms": 0.009737280197441578,
+          "warm_prepared_over_control": 0.07343136443867924
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009742080233991146,
+          "control_wall_ms": 7.394519,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.571244,
+          "producer_event_ms": 0.010283839888870716,
+          "warm_prepared_over_control": 0.07725235407468693
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.013361919671297073,
+          "control_wall_ms": 6.944296,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.540074,
+          "producer_event_ms": 0.009672319516539574,
+          "warm_prepared_over_control": 0.07777231846107943
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018368959426879883,
+          "control_wall_ms": 7.489432,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.568604,
+          "producer_event_ms": 0.010306880809366703,
+          "warm_prepared_over_control": 0.0759208441975306
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.00911903940141201,
+          "control_wall_ms": 5.921701,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.435203,
+          "producer_event_ms": 0.008956479839980602,
+          "warm_prepared_over_control": 0.07349290347486305
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008782720193266869,
+          "control_wall_ms": 5.863239,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.463953,
+          "producer_event_ms": 0.00997248012572527,
+          "warm_prepared_over_control": 0.07912912982056505
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01233791932463646,
+          "control_wall_ms": 6.049652,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.575674,
+          "producer_event_ms": 0.0955161601305008,
+          "warm_prepared_over_control": 0.09515820083535384
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016659200191497803,
+          "control_wall_ms": 6.715658,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.750136,
+          "producer_event_ms": 0.2511654496192932,
+          "warm_prepared_over_control": 0.11169955349125879
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008897599764168262,
+          "control_wall_ms": 6.742126,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.502903,
+          "producer_event_ms": 0.008792320266366005,
+          "warm_prepared_over_control": 0.07459116011774328
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009735680185258389,
+          "control_wall_ms": 6.571966,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.502614,
+          "producer_event_ms": 0.009701759554445744,
+          "warm_prepared_over_control": 0.07647848452046162
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01242303941398859,
+          "control_wall_ms": 7.044871,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.607295,
+          "producer_event_ms": 0.09546688199043274,
+          "warm_prepared_over_control": 0.08620384958078013
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01835584081709385,
+          "control_wall_ms": 7.190652,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.795025,
+          "producer_event_ms": 0.25108641386032104,
+          "warm_prepared_over_control": 0.11056368740970916
+        }
+      ]
+    },
+    {
+      "control": "control_col_reverse",
+      "median_warm_ratio": 0.07506054394936487,
+      "prepared": "prepared_col_reverse",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009340159595012665,
+          "control_wall_ms": 6.078673,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.442723,
+          "producer_event_ms": 0.00807775929570198,
+          "warm_prepared_over_control": 0.072832178996962
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009779520332813263,
+          "control_wall_ms": 6.688607,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.459273,
+          "producer_event_ms": 0.009031360037624836,
+          "warm_prepared_over_control": 0.06866497014998788
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.011858880519866943,
+          "control_wall_ms": 6.302515,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.472003,
+          "producer_event_ms": 0.009081599302589893,
+          "warm_prepared_over_control": 0.07489121406295741
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016740478575229645,
+          "control_wall_ms": 6.453326,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.488293,
+          "producer_event_ms": 0.009355519898235798,
+          "warm_prepared_over_control": 0.07566532358662804
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009459519758820534,
+          "control_wall_ms": 6.829879,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.511103,
+          "producer_event_ms": 0.00871904008090496,
+          "warm_prepared_over_control": 0.07483339016694146
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009080319665372372,
+          "control_wall_ms": 7.2875,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.482573,
+          "producer_event_ms": 0.00869663991034031,
+          "warm_prepared_over_control": 0.06621927958833619
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.0123619195073843,
+          "control_wall_ms": 7.02004,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.514753,
+          "producer_event_ms": 0.009342079982161522,
+          "warm_prepared_over_control": 0.07332622036341674
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018378879874944687,
+          "control_wall_ms": 7.890206,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.532493,
+          "producer_event_ms": 0.008793920278549194,
+          "warm_prepared_over_control": 0.06748784505753082
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009247999638319016,
+          "control_wall_ms": 6.156452,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.434603,
+          "producer_event_ms": 0.00910624023526907,
+          "warm_prepared_over_control": 0.07059309485398409
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.007895680144429207,
+          "control_wall_ms": 6.055743,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.467993,
+          "producer_event_ms": 0.008533759973943233,
+          "warm_prepared_over_control": 0.0772808555448935
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012542719952762127,
+          "control_wall_ms": 6.470655,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.445113,
+          "producer_event_ms": 0.008829760365188122,
+          "warm_prepared_over_control": 0.06878948112671747
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01683007925748825,
+          "control_wall_ms": 7.460978,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.465303,
+          "producer_event_ms": 0.008452479727566242,
+          "warm_prepared_over_control": 0.06236488031461827
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008576960302889347,
+          "control_wall_ms": 7.017298,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.526624,
+          "producer_event_ms": 0.008831359446048737,
+          "warm_prepared_over_control": 0.07504654925585318
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008379840292036533,
+          "control_wall_ms": 6.86241,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.519394,
+          "producer_event_ms": 0.008585600182414055,
+          "warm_prepared_over_control": 0.07568682139365034
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01196512021124363,
+          "control_wall_ms": 7.180463,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.504874,
+          "producer_event_ms": 0.009668800048530102,
+          "warm_prepared_over_control": 0.07031217903358043
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018333440646529198,
+          "control_wall_ms": 7.112831,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.571474,
+          "producer_event_ms": 0.008913279511034489,
+          "warm_prepared_over_control": 0.08034409927636409
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008667520247399807,
+          "control_wall_ms": 5.839481,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.451974,
+          "producer_event_ms": 0.008496959693729877,
+          "warm_prepared_over_control": 0.07739968671873408
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009419519454240799,
+          "control_wall_ms": 5.923481,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.465643,
+          "producer_event_ms": 0.00971135962754488,
+          "warm_prepared_over_control": 0.07860968913380494
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01274527981877327,
+          "control_wall_ms": 6.248855,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.565324,
+          "producer_event_ms": 0.09551487863063812,
+          "warm_prepared_over_control": 0.09046841381341063
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.0166940800845623,
+          "control_wall_ms": 6.737427,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.748525,
+          "producer_event_ms": 0.2505756616592407,
+          "warm_prepared_over_control": 0.11109953399124027
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009344320744276047,
+          "control_wall_ms": 6.673507,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.468114,
+          "producer_event_ms": 0.009713600389659405,
+          "warm_prepared_over_control": 0.0701451275918344
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008893439546227455,
+          "control_wall_ms": 6.594566,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.495084,
+          "producer_event_ms": 0.010302719660103321,
+          "warm_prepared_over_control": 0.07507453864287657
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012916799634695053,
+          "control_wall_ms": 6.872799,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.597064,
+          "producer_event_ms": 0.09564767777919769,
+          "warm_prepared_over_control": 0.08687348487857714
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018347520381212234,
+          "control_wall_ms": 7.714625,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.785736,
+          "producer_event_ms": 0.2509164810180664,
+          "warm_prepared_over_control": 0.10185018714454688
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009031360037624836,
+          "control_wall_ms": 6.715465,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.478403,
+          "producer_event_ms": 0.00957696046680212,
+          "warm_prepared_over_control": 0.07123899834188697
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009376000612974167,
+          "control_wall_ms": 6.670546,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.472934,
+          "producer_event_ms": 0.010509760119020939,
+          "warm_prepared_over_control": 0.0708988439626981
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012698880396783352,
+          "control_wall_ms": 6.463083,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.461533,
+          "producer_event_ms": 0.0098924795165658,
+          "warm_prepared_over_control": 0.07141065649319372
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01712735928595066,
+          "control_wall_ms": 7.679133,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.512064,
+          "producer_event_ms": 0.009322240017354488,
+          "warm_prepared_over_control": 0.06668252783224356
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008852800354361534,
+          "control_wall_ms": 7.070329,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.518434,
+          "producer_event_ms": 0.009548800066113472,
+          "warm_prepared_over_control": 0.07332530070382863
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008909120224416256,
+          "control_wall_ms": 7.441409,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.485453,
+          "producer_event_ms": 0.009811200201511383,
+          "warm_prepared_over_control": 0.06523670450045146
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012167999520897865,
+          "control_wall_ms": 7.076159,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.544864,
+          "producer_event_ms": 0.010513599961996078,
+          "warm_prepared_over_control": 0.07699996565933581
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018337920308113098,
+          "control_wall_ms": 7.893454,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.542234,
+          "producer_event_ms": 0.00889728032052517,
+          "warm_prepared_over_control": 0.0686941356724192
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.00917023979127407,
+          "control_wall_ms": 5.979372,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.450143,
+          "producer_event_ms": 0.008846399374306202,
+          "warm_prepared_over_control": 0.07528265510157255
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008811519481241703,
+          "control_wall_ms": 5.963086,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.514984,
+          "producer_event_ms": 0.009617599658668041,
+          "warm_prepared_over_control": 0.08636199444381651
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012641279958188534,
+          "control_wall_ms": 6.158473,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.484063,
+          "producer_event_ms": 0.008618559688329697,
+          "warm_prepared_over_control": 0.07860114025018865
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.017077120020985603,
+          "control_wall_ms": 6.225643,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.560774,
+          "producer_event_ms": 0.00876447930932045,
+          "warm_prepared_over_control": 0.09007487258745804
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008461439982056618,
+          "control_wall_ms": 6.687966,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.488423,
+          "producer_event_ms": 0.008859519846737385,
+          "warm_prepared_over_control": 0.07303012605028195
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008688639849424362,
+          "control_wall_ms": 7.166139,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.502264,
+          "producer_event_ms": 0.009628159925341606,
+          "warm_prepared_over_control": 0.07008850930745274
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.013277440331876278,
+          "control_wall_ms": 7.232609,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.544014,
+          "producer_event_ms": 0.009824319742619991,
+          "warm_prepared_over_control": 0.0752168408384858
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018369920551776886,
+          "control_wall_ms": 8.431029,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.555814,
+          "producer_event_ms": 0.009127680212259293,
+          "warm_prepared_over_control": 0.06592481178750542
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008968960493803024,
+          "control_wall_ms": 5.82214,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.443643,
+          "producer_event_ms": 0.009239680133759975,
+          "warm_prepared_over_control": 0.07619930128784262
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008773120120167732,
+          "control_wall_ms": 5.911971,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.458263,
+          "producer_event_ms": 0.010083840228617191,
+          "warm_prepared_over_control": 0.07751441947194937
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012213439680635929,
+          "control_wall_ms": 6.436302,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.578594,
+          "producer_event_ms": 0.09570303559303284,
+          "warm_prepared_over_control": 0.08989540888541278
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016865920275449753,
+          "control_wall_ms": 6.6087,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.758026,
+          "producer_event_ms": 0.2512313723564148,
+          "warm_prepared_over_control": 0.11470122717024528
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009122559800744057,
+          "control_wall_ms": 6.466485,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.493423,
+          "producer_event_ms": 0.00848831981420517,
+          "warm_prepared_over_control": 0.07630466938375331
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008440639823675156,
+          "control_wall_ms": 7.2174,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.472243,
+          "producer_event_ms": 0.010612159967422485,
+          "warm_prepared_over_control": 0.06543118020339735
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01397663913667202,
+          "control_wall_ms": 7.045508,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.581354,
+          "producer_event_ms": 0.09556544572114944,
+          "warm_prepared_over_control": 0.08251413524759323
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01838015951216221,
+          "control_wall_ms": 7.600232,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.819675,
+          "producer_event_ms": 0.2510940730571747,
+          "warm_prepared_over_control": 0.10784868146130276
+        }
+      ]
+    }
+  ],
+  "layout_comparisons": [
+    {
+      "median_row_over_col_consumer_event": 1.0924326350668352,
+      "median_row_over_col_public_wall": 1.0665802284007913,
+      "order": "forward",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9703608135570699,
+          "row_over_col_public_wall": 1.0094615107105662
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.5799111052740108,
+          "row_over_col_public_wall": 1.0984680394332151
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.2033526273926682,
+          "row_over_col_public_wall": 1.0910507103676046
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.5616090209739861,
+          "row_over_col_public_wall": 1.2422387673082356
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9530492927630201,
+          "row_over_col_public_wall": 1.0646948946615864
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9682181602821224,
+          "row_over_col_public_wall": 1.0770425343462604
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.2232596734856773,
+          "row_over_col_public_wall": 1.1383164617378574
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.4503255598512075,
+          "row_over_col_public_wall": 1.2469511857627296
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 0.8704868019589643,
+          "row_over_col_public_wall": 1.0400941243518933
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 0.9869692669234903,
+          "row_over_col_public_wall": 1.0375706710146528
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.1959361099894,
+          "row_over_col_public_wall": 1.068297697103154
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.4774520148030128,
+          "row_over_col_public_wall": 1.2217104632970401
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 0.983298053997907,
+          "row_over_col_public_wall": 0.9670266116010432
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 0.9192106262251641,
+          "row_over_col_public_wall": 1.1593434857739153
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.2047811134155915,
+          "row_over_col_public_wall": 1.079718479200051
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.4410609511100334,
+          "row_over_col_public_wall": 1.190833980056521
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.0712535183488394,
+          "row_over_col_public_wall": 1.0648627596984288
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.97689566426827,
+          "row_over_col_public_wall": 1.078619516491484
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.1099464898771363,
+          "row_over_col_public_wall": 1.0086319726864734
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.4894648022258254,
+          "row_over_col_public_wall": 1.2426962719222447
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.9050774735894623,
+          "row_over_col_public_wall": 0.985098545830659
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.0191928754338948,
+          "row_over_col_public_wall": 0.9707516231847476
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.2176964869297797,
+          "row_over_col_public_wall": 1.0434132087281636
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.440069051428806,
+          "row_over_col_public_wall": 1.0966085511724593
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.0749187802565339,
+          "row_over_col_public_wall": 1.0382519812192752
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.0323992567851579,
+          "row_over_col_public_wall": 1.0683564929315768
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.215737740230499,
+          "row_over_col_public_wall": 1.077452294631856
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.5367684976425369,
+          "row_over_col_public_wall": 1.2176889589459716
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.8935549176476002,
+          "row_over_col_public_wall": 0.9702092418075415
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.0015003688536734,
+          "row_over_col_public_wall": 1.0535330686726228
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.2909655699092062,
+          "row_over_col_public_wall": 1.0781036402603
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.4427393756384217,
+          "row_over_col_public_wall": 1.2935471100554234
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.0452881094025102,
+          "row_over_col_public_wall": 0.9222425475437892
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.0388876787113057,
+          "row_over_col_public_wall": 0.9697069041861098
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.2145814870115632,
+          "row_over_col_public_wall": 1.0362650394717985
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.5358601010165995,
+          "row_over_col_public_wall": 1.2990543368129286
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 0.8778542479193809,
+          "row_over_col_public_wall": 1.206831806400536
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 0.9381158358044598,
+          "row_over_col_public_wall": 0.9432799294172017
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.1372496977121473,
+          "row_over_col_public_wall": 1.0081470317030627
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.478319894217665,
+          "row_over_col_public_wall": 1.2290539637427806
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.9707337817906031,
+          "row_over_col_public_wall": 0.9631436364179475
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.9501566958001878,
+          "row_over_col_public_wall": 0.9636170043086261
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.2439568560373317,
+          "row_over_col_public_wall": 1.0011985950381639
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.5317134474677543,
+          "row_over_col_public_wall": 1.1974975204496252
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.9877000855687179,
+          "row_over_col_public_wall": 0.9898608678015443
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.9083946813764856,
+          "row_over_col_public_wall": 0.9524068171598881
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.2010715535795158,
+          "row_over_col_public_wall": 1.034890786191225
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.4478224996212474,
+          "row_over_col_public_wall": 1.196334706455772
+        }
+      ]
+    },
+    {
+      "median_row_over_col_consumer_event": 1.1483419821704088,
+      "median_row_over_col_public_wall": 1.0346905298542004,
+      "order": "_reverse",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9484035170287528,
+          "row_over_col_public_wall": 1.0643314216790183
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.8878963076676939,
+          "row_over_col_public_wall": 1.0542618442625629
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.3151460382541127,
+          "row_over_col_public_wall": 1.0525420389277187
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.5114502670160122,
+          "row_over_col_public_wall": 1.2800408770963336
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9459761179441103,
+          "row_over_col_public_wall": 1.0137760881857474
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9487948566547065,
+          "row_over_col_public_wall": 1.0751409631288946
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.1936786878527232,
+          "row_over_col_public_wall": 1.0965142505240377
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.4373541489351567,
+          "row_over_col_public_wall": 1.2501666688576187
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.037923903853025,
+          "row_over_col_public_wall": 1.0369762748991609
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.1854988757858353,
+          "row_over_col_public_wall": 1.0222674270769008
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.2605368289016867,
+          "row_over_col_public_wall": 1.176766349219187
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.489542563952729,
+          "row_over_col_public_wall": 1.3014186454847703
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.0408536196713785,
+          "row_over_col_public_wall": 0.948747113690223
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.1287661352210572,
+          "row_over_col_public_wall": 0.9534245678617773
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.2662138401005647,
+          "row_over_col_public_wall": 1.085387641272872
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.4524366354688978,
+          "row_over_col_public_wall": 1.1453276964481323
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.9309975126465627,
+          "row_over_col_public_wall": 0.8762738564607698
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.9073244248740278,
+          "row_over_col_public_wall": 0.9621169007157845
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.1679178291197605,
+          "row_over_col_public_wall": 1.0232256192908844
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.508462866549602,
+          "row_over_col_public_wall": 1.154760362045356
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 0.8552446092984742,
+          "row_over_col_public_wall": 0.9661599524902054
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.0276698985408081,
+          "row_over_col_public_wall": 0.9882646177214371
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.172946912708262,
+          "row_over_col_public_wall": 1.07414783004837
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.4725478033552448,
+          "row_over_col_public_wall": 1.1482177219829561
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9690677318100029,
+          "row_over_col_public_wall": 0.9584241737614522
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 0.9583275887209851,
+          "row_over_col_public_wall": 1.0853607480113503
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.2258088717983056,
+          "row_over_col_public_wall": 1.046131045884043
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.4623993807190963,
+          "row_over_col_public_wall": 1.2237415635545559
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.0341225434800585,
+          "row_over_col_public_wall": 1.0089114525667686
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.0908013144339461,
+          "row_over_col_public_wall": 1.03240478480924
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.2197501930688106,
+          "row_over_col_public_wall": 0.9708000528572268
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "row_over_col_consumer_event": 1.4615572057397916,
+          "row_over_col_public_wall": 1.2230974081300694
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.0469693199694916,
+          "row_over_col_public_wall": 1.0237480089660396
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.0545104968166628,
+          "row_over_col_public_wall": 0.9546568437077657
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.1968155381921102,
+          "row_over_col_public_wall": 0.9836591518046204
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.544935003117839,
+          "row_over_col_public_wall": 1.146370908779651
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.2551244292767674,
+          "row_over_col_public_wall": 1.0205764265810577
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 0.8859753020465722,
+          "row_over_col_public_wall": 1.0086408741219757
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.0868842467630477,
+          "row_over_col_public_wall": 1.000404401357318
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "row_over_col_consumer_event": 1.5473992007524429,
+          "row_over_col_public_wall": 1.2605565890747623
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.0620450060579327,
+          "row_over_col_public_wall": 1.0069447731622048
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.085242184078116,
+          "row_over_col_public_wall": 1.0026840482430395
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.2131946569492746,
+          "row_over_col_public_wall": 1.0178190579231723
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.5281560476837646,
+          "row_over_col_public_wall": 1.202657956323398
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.013540101073232,
+          "row_over_col_public_wall": 0.9920554980209678
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.10440923537151,
+          "row_over_col_public_wall": 1.0230389862846034
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.0698309396319206,
+          "row_over_col_public_wall": 1.0876918366434218
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "row_over_col_consumer_event": 1.4400920045485441,
+          "row_over_col_public_wall": 1.2026803306188427
+        }
+      ]
+    }
+  ],
+  "scope": "Identical-image native dynamic host ownership; complete warm ordinary JIT wall, separate dispatch events; no kernel or format promotion"
+}

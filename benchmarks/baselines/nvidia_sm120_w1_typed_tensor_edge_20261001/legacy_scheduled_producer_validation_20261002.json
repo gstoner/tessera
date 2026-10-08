@@ -1,0 +1,36 @@
+{
+  "compiler_sha256": "b9ae7611ee6ae4aaaeb2d27f5e77574c6b143228305c5217660dc9b1b4764470",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "missing_proof": [
+    "canonical K-reduction step migration",
+    "arbitrary tensor producer/lifetime graphs",
+    "older target execution"
+  ],
+  "native_launch_library_sha256": "0f16a5a904b6613ae4df6f9345eedf942c31c90db55ec90d55d3de2f33e23e93",
+  "older_targets": "SM80/SM90 actual compiler FileCheck fixtures passed; no owning-GPU execution claim",
+  "packet_sha256": "48dfb7e0d2bd31b17a51884ff9d7d84132f386cb458498bcdf52f403fa7827fc",
+  "schema": "tessera.nvidia.legacy_scheduled_producer.validation.v1",
+  "selector_changed": false,
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_scheduled_typed_matmul.py": "5cd4f82de3dfba3dbcdd998755416a5947a8a2ef996aff37358dbde8bbd7f278",
+    "python/tessera/compiler/driver.py": "d7b763d18616b30a2f7f2836c9977397ae0d6efba78217e2cb2706ef70bb31e8",
+    "python/tessera/compiler/emit/nvidia_cuda.py": "6f0ab46c6949a51b91dd7ac124ceb4250648d69fc2630e2ec26e8542f11f9758",
+    "python/tessera/compiler/native_artifact.py": "9ea3f6a4deea0b2d66047bf6f682394cbaff9520352cab6686b5614731892921",
+    "python/tessera/compiler/nvidia_native.py": "1ffd9b8054887c3d8ce7b5822d1fad3eaeb337ba44fd2323f09d1362ba66c560",
+    "python/tessera/compiler/pass_metadata.py": "01585211f65f8ace5e77cec19fcbb2e998c46b3c32d8954310f2f544c5a0cb17",
+    "python/tessera/compiler/scheduled_matmul.py": "7916e5adb76d0fc4374cb1f16fa5bc8819965d8c1077262e220cacc6a3f648e7",
+    "python/tessera/runtime.py": "56ed5efd9cfb5be9020a55a5da37c8aeb277d6dd4f27d6664bf2f03b72d3a124",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "bb8e67783a10c87c210393844fbee5c8ae8bf7ebd7c3d2c0483719e339f12029",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "323525a40bb8c7ae41daddfe630cca563d1e71edbeb0bee4c9f936a6235e2ec7",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "447b3d24abe34522abf4e9e491624da87c296858b10665317046cd0139adc68e",
+    "src/transforms/lib/TileIRLoweringPass.cpp": "f28c0eea25c4c6531e220162391e94b209cd8014a9e9d38981f03e922323bc1d",
+    "tests/device/nvidia/test_scheduled_matmul_consumers.py": "063639112ac4569e4035b55db23ce39b7d5303c3a3d981ce97e807cd917dac8d",
+    "tests/unit/test_scheduled_matmul_consumers.py": "8b1fa5a6c65f9599a5deb9745b9b0d2898490724419fa5819bce751e9af1e5c8",
+    "tests/unit/test_sm120_legacy_scheduled_producer.py": "dc134716093b123a63917aa64a5a0aa25b8337814b82e91ca6bb0a05ec6c42ef"
+  },
+  "sync_key": "W1.1-SM120-LEGACY-SCHEDULE-2026-10-02",
+  "target": "nvidia_sm120",
+  "test_result": "386 passed",
+  "test_transcript_sha256": "b203b343173e77c70ce791c3c498d30e58f2fd70c45990abb7a99d69238bea79",
+  "work_item": "W1.1"
+}

@@ -1,0 +1,1612 @@
+[  6%] Built target tessera_layout_algebra
+[  6%] Built target TesseraAdjointInterfaceTableGen
+[  6%] Built target TesseraLinalgSolverTableGen
+[ 13%] Built target tessera_solvers_passes
+[ 15%] Built target mlir-headers
+[ 15%] Built target mlir-generic-headers
+[ 15%] Built target TesseraCollectiveTypesIncGen
+[ 18%] Built target TesseraNVIDIATableGen
+[ 23%] Building AttnDialect.cpp.inc...
+[ 25%] Built target TesseraPMTableGen
+[ 30%] Built target TesseraNeighbors
+[ 32%] Built target DialectSR
+[ 32%] Building AttnDialect.h.inc...
+[ 37%] Built target TesseraTPPPasses
+[ 37%] Built target TPPGen
+[ 38%] Built target tessera_linalg_solver_passes
+[ 40%] Built target TesseraAttnTableGen
+[ 44%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 44%] Built target TesseraCollectiveOpsIncGen
+[ 44%] Built target obj.TesseraNVIDIAIR
+[ 44%] Built target TPPTypesGen
+[ 44%] Built target TesseraTangentInterfaceTableGen
+[ 47%] Built target TesseraSR
+[ 49%] Built target obj.TesseraCollectiveDialect
+[ 52%] Built target TPPAttrsGen
+[ 52%] Built target TesseraNVIDIAIR
+[ 54%] Built target TesseraIRTableGen
+[ 54%] Built target TesseraCollectiveDialect
+[ 54%] Building Tessera/Dialect/Tile/TileOps.cpp.inc...
+[ 55%] Built target TPPOpsGen
+[ 54%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 57%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 57%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 57%] Built target obj.TesseraTPPDialect
+[ 59%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 61%] Built target TesseraTPPDialect
+[ 61%] Built target TesseraTileIRTableGen
+[ 62%] Built target TesseraTPPInit
+[ 66%] Built target obj.TesseraIR
+[ 66%] Built target TesseraIR
+[ 66%] Built target obj.TesseraAttnDialect
+[ 66%] Building CXX object src/compiler/programming_model/CMakeFiles/TesseraScheduleIR.dir/ir/ScheduleDialect.cpp.o
+[ 66%] Built target TesseraAttnDialect
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp: In member function ‘llvm::LogicalResult tessera::schedule::MatmulOp::verify()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:138:19: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  138 |   if (getBlockK() < 0 || (getBlockK() > 0 && getBlockK() % getTileK() != 0))
+      |       ~~~~~~~~~~~~^~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:158:19: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  158 |   if (getScaleK() < 0)
+      |       ~~~~~~~~~~~~^~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:182:19: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  182 |   if (getScaleN() < 0 || (getScaleN() > 0) != fp8W8A8)
+      |       ~~~~~~~~~~~~^~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp: In member function ‘llvm::LogicalResult tessera::schedule::NormOp::verify()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:316:73: warning: comparison of integer expressions of different signedness: ‘uint64_t’ {aka ‘long unsigned int’} and ‘int’ [-Wsign-compare]
+  316 |   if ((!sm120 && !zen5 && !gfx1201) || getAccum() != "f32" || getAxis() != -1 ||
+      |                                                               ~~~~~~~~~~^~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp: In member function ‘llvm::LogicalResult tessera::schedule::ESLowRankCorrectionOp::verify()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:768:56: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  768 |       getOutDim() <= 0 || getRank() != 1 || getEpoch() < 0)
+      |                                             ~~~~~~~~~~~^~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Support/TypeID.h:19,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/MLIRContext.h:13,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/DialectRegistry.h:16,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Dialect.h:16,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/include/tessera/ProgrammingModel/ScheduleDialect.h:6,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:3:
+In function ‘llvm::hash_code llvm::hashing::detail::combine_bytes(const char*, size_t)’,
+    inlined from ‘llvm::hash_code llvm::hash_combine(const Ts& ...) [with Ts = {}]’ at /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:312:40,
+    inlined from ‘static llvm::hash_code tessera::schedule::AwaitMovementOp::computePropertiesHash(const Properties&)’ at /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/programming_model/ScheduleMeshPipelineOps.cpp.inc:6457:28:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:51:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h: In static member function ‘static llvm::hash_code tessera::schedule::AwaitMovementOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::schedule::YieldOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+[ 66%] Linking CXX static library libTesseraScheduleIR.a
+[ 66%] Built target TesseraScheduleIR
+[ 66%] Building CXX object src/compiler/programming_model/CMakeFiles/TesseraPM.dir/lib/PMPasses.cpp.o
+In file included from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:64:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:14:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIndexOp; Args = {long int&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   14 |       return b.create<arith::ConstantIndexOp>(loc, v);
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/PatternMatch.h:12,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/ControlFlowInterfaces.h:19,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/include/tessera/ProgrammingModel/ScheduleDialect.h:9,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:14:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In function ‘llvm::LogicalResult tessera::{anonymous}::lowerNativeSSD(mlir::ModuleOp)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:20:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantFloatOp; Args = {mlir::FloatType, llvm::APFloat}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   20 |     Value fzero = b.create<arith::ConstantFloatOp>(loc, b.getF32Type(), APFloat(0.0f));
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:23:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::EmptyOp; Args = {llvm::ArrayRef<long int>, mlir::Type}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   23 |       return b.create<tensor::EmptyOp>(loc, type.getShape(), type.getElementType());
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:39:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   39 |         Value ci = tb.create<arith::DivUIOp>(loc, t, chunk);
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:41:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::ExtractOp; Args = {mlir::detail::TypedValue<mlir::RankedTensorType>, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   41 |           Value decay = hb.create<tensor::ExtractOp>(loc, op.getDecay(), ValueRange{t,h});
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:43:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::ExtractOp; Args = {mlir::detail::TypedValue<mlir::RankedTensorType>, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   43 |             Value x = pb.create<tensor::ExtractOp>(loc, op.getX(), ValueRange{t,h,p});
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:46:57: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::ExtractOp; Args = {mlir::Value, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   46 |                 Value old = nb.create<tensor::ExtractOp>(loc, na[0], ValueRange{h,n,p});
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:47:56: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::ExtractOp; Args = {mlir::detail::TypedValue<mlir::RankedTensorType>, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   47 |                 Value bv = nb.create<tensor::ExtractOp>(loc, op.getB(), ValueRange{t,h,n});
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:48:56: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::ExtractOp; Args = {mlir::detail::TypedValue<mlir::RankedTensorType>, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   48 |                 Value cv = nb.create<tensor::ExtractOp>(loc, op.getC(), ValueRange{t,h,n});
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:49:57: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   49 |                 Value carried = nb.create<arith::MulFOp>(loc, decay, old);
+      |                                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:50:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   50 |                 Value added = nb.create<arith::MulFOp>(loc, bv, x);
+      |                               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:51:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   51 |                 Value next = nb.create<arith::AddFOp>(loc, carried, added);
+      |                              ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:52:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::InsertOp; Args = {mlir::Value&, mlir::Value, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   52 |                 Value state = nb.create<tensor::InsertOp>(loc, next, na[0], ValueRange{h,n,p});
+      |                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:53:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::InsertOp; Args = {mlir::Value&, mlir::Value, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   53 |                 Value saved = nb.create<tensor::InsertOp>(loc, next, na[1], ValueRange{ci,h,n,p});
+      |                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:54:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   54 |                 Value weighted = nb.create<arith::MulFOp>(loc, cv, next);
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:55:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   55 |                 Value sum = nb.create<arith::AddFOp>(loc, na[2], weighted);
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In instantiation of ‘tessera::{anonymous}::lowerNativeSSD(mlir::ModuleOp)::<lambda(mlir::OpBuilder&, mlir::Value, mlir::ValueRange, auto:59)> [with auto:59 = tessera::{anonymous}::lowerNativeSSD(mlir::ModuleOp)::<lambda(mlir::OpBuilder&, mlir::Value, mlir::ValueRange)>::<lambda(mlir::OpBuilder&, mlir::Value, mlir::ValueRange)>::<lambda(mlir::OpBuilder&, mlir::Value, mlir::ValueRange)>::<lambda(mlir::OpBuilder&, mlir::Value, mlir::ValueRange)>]’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:44:27:   required from here
+   44 |             auto ns = loop(pb, states, ValueRange{pa[0], pa[2], fzero},
+      |                       ~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   45 |               [&](OpBuilder &nb, Value n, ValueRange na) {
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   46 |                 Value old = nb.create<tensor::ExtractOp>(loc, na[0], ValueRange{h,n,p});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   47 |                 Value bv = nb.create<tensor::ExtractOp>(loc, op.getB(), ValueRange{t,h,n});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   48 |                 Value cv = nb.create<tensor::ExtractOp>(loc, op.getC(), ValueRange{t,h,n});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   49 |                 Value carried = nb.create<arith::MulFOp>(loc, decay, old);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   50 |                 Value added = nb.create<arith::MulFOp>(loc, bv, x);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   51 |                 Value next = nb.create<arith::AddFOp>(loc, carried, added);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   52 |                 Value state = nb.create<tensor::InsertOp>(loc, next, na[0], ValueRange{h,n,p});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   53 |                 Value saved = nb.create<tensor::InsertOp>(loc, next, na[1], ValueRange{ci,h,n,p});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   54 |                 Value weighted = nb.create<arith::MulFOp>(loc, cv, next);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                 Value sum = nb.create<arith::AddFOp>(loc, na[2], weighted);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                 return SmallVector<Value>{state, saved, sum};
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   57 |               });
+      |               ~~           
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:30:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::YieldOp; Args = {llvm::SmallVector<mlir::Value, 6>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   30 |             nested.create<scf::YieldOp>(at, values);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:27:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::ForOp; Args = {mlir::Value&, mlir::Value&, mlir::Value&, mlir::ValueRange&, tessera::{anonymous}::lowerNativeSSD(mlir::ModuleOp)::<lambda(mlir::OpBuilder&, mlir::Value, mlir::ValueRange, auto:59)>::<lambda(mlir::OpBuilder&, mlir::Location, mlir::Value, mlir::ValueRange)>}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   27 |       auto forOp = builder.create<scf::ForOp>(loc, zero, upper, one, initial,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   28 |           [&](OpBuilder &nested, Location at, Value iv, ValueRange args) {
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   29 |             auto values = body(nested, iv, args);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   30 |             nested.create<scf::YieldOp>(at, values);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   31 |           });
+      |           ~~                                  
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/NativeSSD.h:58:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::InsertOp; Args = {mlir::Value&, mlir::Value, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   58 |             Value y = pb.create<tensor::InsertOp>(loc, ns[2], pa[1], ValueRange{t,h,p});
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::GraphToSchedulePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:3648:68: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::schedule::DepthAttentionOp; Args = {mlir::Type, mlir::OpResult, mlir::StringAttr, mlir::StringAttr, mlir::StringAttr, mlir::StringAttr, mlir::StringAttr, mlir::FloatAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::StringAttr, mlir::StringAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 3648 |       auto scheduledOp = builder.create<schedule::DepthAttentionOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 3649 |           op->getLoc(), op->getResult(0).getType(), op->getResult(0),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 3650 |           builder.getStringAttr(digest), builder.getStringAttr(selected->arch),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 3651 |           builder.getStringAttr(selected->storage),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                 
+ 3652 |           builder.getStringAttr(selected->softmax),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                 
+ 3653 |           builder.getStringAttr(selected->accum),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                   
+ 3654 |           builder.getF64FloatAttr(selected->eps),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                   
+ 3655 |           builder.getI64IntegerAttr(selected->sourceCount),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         
+ 3656 |           builder.getI64IntegerAttr(selected->rows),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                
+ 3657 |           builder.getI64IntegerAttr(selected->width),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~               
+ 3658 |           builder.getI64IntegerAttr(selected->sourceTile),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~          
+ 3659 |           builder.getI64IntegerAttr(selected->workgroupSize),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~       
+ 3660 |           builder.getStringAttr(selected->statisticsRecurrence),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+ 3661 |           builder.getStringAttr(selected->mergeRecurrence),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         
+ 3662 |           builder.getBoolAttr(selected->reassociable));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:3716:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::schedule::AttentionOp; Args = {mlir::Type, mlir::OpResult, mlir::StringAttr, mlir::StringAttr, mlir::StringAttr, mlir::StringAttr, mlir::FloatAttr, mlir::BoolAttr, mlir::BoolAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::FloatAttr, mlir::FloatAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::IntegerAttr, mlir::StringAttr, mlir::StringAttr, mlir::StringAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 3716 |       auto scheduledOp = builder.create<schedule::AttentionOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 3717 |           op->getLoc(), op->getResult(0).getType(), op->getResult(0),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 3718 |           builder.getStringAttr(digest), builder.getStringAttr(selected->arch),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 3719 |           builder.getStringAttr(selected->storage),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
+ 3720 |           builder.getStringAttr(selected->accum),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+ 3721 |           builder.getF32FloatAttr(selected->scale),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
+ 3722 |           builder.getBoolAttr(selected->causal),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~               
+ 3723 |           builder.getBoolAttr(selected->bias),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                 
+ 3724 |           builder.getI64IntegerAttr(selected->windowLeft),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+ 3725 |           builder.getI64IntegerAttr(selected->windowRight),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+ 3726 |           builder.getF32FloatAttr(selected->softcap),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~          
+ 3727 |           builder.getF32FloatAttr(selected->dropoutP),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         
+ 3728 |           builder.getI64IntegerAttr(selected->dropoutSeed),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+ 3729 |           builder.getI64IntegerAttr(selected->tileQ),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~          
+ 3730 |           builder.getI64IntegerAttr(selected->tileKV),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         
+ 3731 |           builder.getI64IntegerAttr(selected->workgroupSize),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+ 3732 |           builder.getStringAttr(selected->recurrence),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~         
+ 3733 |           builder.getStringAttr(selected->backwardLsePolicy),
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+ 3734 |           builder.getStringAttr(selected->backwardLseSelection));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:3999:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 3999 |             builder.create<bufferization::ToBufferOp>(loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4001:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4001 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4002:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4002 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4003 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4004:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4004 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4012:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4012 |       Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4014:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4014 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4015:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4015 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4016 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4018:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4018 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4019:62: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4019 |       operands.push_back(builder.create<arith::ConstantIntOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4020 |           loc, selected->batch, 64));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~                           
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4021:62: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4021 |       operands.push_back(builder.create<arith::ConstantIntOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4022 |           loc, selected->systemSize, 64));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                      
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4032:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4032 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4033 |           loc, outputType, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4097:68: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4097 |       Value inputBuffer = builder.create<bufferization::ToBufferOp>(
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4098 |           loc, inputMemref, graph->getOperand(0));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                   
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4100:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4100 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, inputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4101:62: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4101 |       Value inputInteger = builder.create<arith::IndexCastOp>(
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4102 |           loc, builder.getI64Type(), inputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4104:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4104 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, inputInteger);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4108:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4108 |       Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4110:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4110 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4111:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4111 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4112 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4114:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4114 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4115:62: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4115 |       Value batchValue = builder.create<arith::ConstantIntOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4116 |           loc, selected->batch, 64);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~                           
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4117:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4117 |       Value sizeValue = builder.create<arith::ConstantIntOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4118 |           loc, selected->latticeSize, 64);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                    
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4132:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4132 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4133 |           loc, outputType, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4176:33: warning: comparison of integer expressions of different signedness: ‘uint64_t’ {aka ‘long unsigned int’} and ‘int64_t’ {aka ‘long int’} [-Wsign-compare]
+ 4176 |           scheduled.getBlockK() != selected->blockK ||
+      |           ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4177:33: warning: comparison of integer expressions of different signedness: ‘uint64_t’ {aka ‘long unsigned int’} and ‘int64_t’ {aka ‘long int’} [-Wsign-compare]
+ 4177 |           scheduled.getSplitK() != selected->splitK ||
+      |           ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4179:33: warning: comparison of integer expressions of different signedness: ‘uint64_t’ {aka ‘long unsigned int’} and ‘int64_t’ {aka ‘long int’} [-Wsign-compare]
+ 4179 |           scheduled.getScaleK() != selected->scaleBlockK ||
+      |           ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4182:33: warning: comparison of integer expressions of different signedness: ‘uint64_t’ {aka ‘long unsigned int’} and ‘int64_t’ {aka ‘long int’} [-Wsign-compare]
+ 4182 |           scheduled.getScaleN() != selected->scaleBlockN ||
+      |           ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4689:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4689 |         Value buffer = builder.create<bufferization::ToBufferOp>(loc, memrefType, tensor);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4691:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4691 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4693:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4693 |             builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4694:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4694 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer)
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4718:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::DimOp; Args = {mlir::Value, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4718 |         runtimeMIndex = builder.create<tensor::DimOp>(loc, graph->getOperand(0), 0);
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4720:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::DimOp; Args = {mlir::Value, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4720 |         runtimeNIndex = builder.create<tensor::DimOp>(loc, graph->getOperand(1), 1);
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4722:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::DimOp; Args = {mlir::Value, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4722 |         runtimeKIndex = builder.create<tensor::DimOp>(loc, graph->getOperand(0), 1);
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4728:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&, llvm::SmallVector<mlir::Value, 6>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4728 |       Value output = builder.create<memref::AllocOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4729 |           loc, outputMemref, outputDynamicSizes);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4731:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4731 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, output);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4732:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4732 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4733 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4734:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4734 |       Value d = builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4737:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4737 |           return Value(builder.create<arith::IndexCastOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4738 |               loc, builder.getI64Type(), runtimeIndex));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~    
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4739:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4739 |         return Value(builder.create<arith::ConstantIntOp>(loc, bound, 64));
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:4904:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 4904 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 4905 |           loc, outType, output);
+      |           ~~~~~~~~~~~~~~~~~~~~~                                
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5050:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::FloatAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5050 |         if (isNorm) state.addOperands(kb.create<arith::ConstantOp>(loc, kb.getF32FloatAttr(selected->epsilon)).getResult());
+      |                                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5080:68: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5080 |       Value inputBuffer = builder.create<bufferization::ToBufferOp>(
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5081 |           loc, inputMemref, graph->getOperand(0));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                   
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5083:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5083 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, inputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5085:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5085 |           builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), inputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5087:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5087 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, inputInteger);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5090:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5090 |       Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5092:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5092 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5094:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5094 |           builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5096:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5096 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5104:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5104 |         Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5106:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5106 |             builder.create<arith::ConstantIntOp>(loc, selected->columns, 64);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5107:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::FloatAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5107 |         Value epsilon = builder.create<arith::ConstantOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5108 |             loc, builder.getF32FloatAttr(selected->epsilon));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5116:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5116 |         Value rows = builder.create<arith::ConstantIntOp>(loc, selected->rows, 64);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5118:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5118 |             builder.create<arith::ConstantIntOp>(loc, selected->columns, 64);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5126:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5126 |         Value outer = builder.create<arith::ConstantIntOp>(loc, selected->outer, 64);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5128:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5128 |             builder.create<arith::ConstantIntOp>(loc, selected->axisExtent, 64);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5129:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5129 |         Value inner = builder.create<arith::ConstantIntOp>(loc, selected->inner, 64);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5147:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5147 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5148 |           loc, outputType, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5196:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5196 |             builder.create<bufferization::ToBufferOp>(loc, memref, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5198:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5198 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5199:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5199 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5200 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5201:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5201 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer)
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5221:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5221 |         Value buffer = builder.create<memref::AllocOp>(loc, memref);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5224:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5224 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5225:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5225 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5226 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5228:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5228 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5503:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5503 |         Value tensor = builder.create<bufferization::ToTensorOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5504 |             loc, cast<RankedTensorType>(type), buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~           
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5667:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5667 |         Value buffer = builder.create<bufferization::ToBufferOp>(loc, memref, subject);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5669:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5669 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5671:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5671 |             builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5673:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5673 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5677:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5677 |       Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5679:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5679 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5680:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5680 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5681 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5683:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5683 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5685:68: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5685 |       launchOperands.push_back(builder.create<arith::ConstantIntOp>(
+      |                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5686 |           loc, workspace.getInt(), 64));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~                              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5714:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5714 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5715 |           loc, outputType, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5807:68: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5807 |       Value inputBuffer = builder.create<bufferization::ToBufferOp>(
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5808 |           loc, inputMemref, graph->getOperand(0));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                   
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5809:80: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5809 |       Value inputIndex = builder.create<memref::ExtractAlignedPointerAsIndexOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5810 |           loc, inputBuffer);
+      |           ~~~~~~~~~~~~~~~~~                                                     
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5812:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5812 |           builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), inputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5814:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5814 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, inputInteger);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5818:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5818 |       Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5819:81: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5819 |       Value outputIndex = builder.create<memref::ExtractAlignedPointerAsIndexOp>(
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5820 |           loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~                                                     
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5821:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5821 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5822 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5824:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5824 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5826:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5826 |           builder.create<arith::ConstantIntOp>(loc, selected->batch, 64);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5828:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5828 |           builder.create<arith::ConstantIntOp>(loc, selected->length, 64);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5883:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5883 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5884 |           loc, outputType, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5954:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5954 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5955 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5957:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5957 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5958:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5958 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5959 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5960:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5960 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5967:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5967 |       Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5969:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5969 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5970:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5970 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 5971 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5973:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5973 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:5977:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 5977 |             builder.create<arith::ConstantIntOp>(loc, extent, 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6008:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6008 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6009 |           loc, outputType, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6126:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6126 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6127 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6129:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6129 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6131:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6131 |             builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6132:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6132 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6143:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6143 |       outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6145:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6145 |           builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6146:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6146 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6147 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6149:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6149 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6155:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6155 |             builder.create<arith::ConstantIntOp>(loc, dimension, 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6209:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6209 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6210 |           loc, cast<RankedTensorType>(graph->getResult(0).getType()), outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6321:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6321 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6322 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6324:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6324 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6326:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6326 |             builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6327:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6327 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6331:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6331 |         Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6333:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6333 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6335:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6335 |             builder.create<arith::IndexCastOp>(loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6337:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6337 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6364:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6364 |             builder.create<arith::ConstantIntOp>(loc, dimension, 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6429:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6429 |         Value tensor = builder.create<bufferization::ToTensorOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6430 |             loc, cast<RankedTensorType>(resultType), buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6484:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6484 |         Value buffer = builder.create<bufferization::ToBufferOp>(loc, memref, tensor);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6486:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6486 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6487:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6487 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6488 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6489:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6489 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer)
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6503:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6503 |       Value outputBuffer = builder.create<memref::AllocOp>(loc, outputMemref);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6504:81: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6504 |       Value outputIndex = builder.create<memref::ExtractAlignedPointerAsIndexOp>(
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6505 |           loc, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~                                                     
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6506:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6506 |       Value outputInteger = builder.create<arith::IndexCastOp>(
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6507 |           loc, builder.getI64Type(), outputIndex);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6509:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6509 |           builder.create<LLVM::IntToPtrOp>(loc, pointerType, outputInteger));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6514:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6514 |             builder.create<arith::ConstantIntOp>(loc, dimension, 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6533:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6533 |       Value result = builder.create<bufferization::ToTensorOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6534 |           loc, outputType, outputBuffer);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                       
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6580:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6580 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6581 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6583:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6583 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6584:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6584 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6585 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6586:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6586 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6591:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6591 |         Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6593:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6593 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6594:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6594 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6595 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6597:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6597 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6611:62: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6611 |       operands.push_back(builder.create<arith::ConstantIntOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6612 |           loc, tensorType.getNumElements(), 64));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~               
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6639:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6639 |         Value tensor = builder.create<bufferization::ToTensorOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6640 |             loc, tensorType, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6690:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6690 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6691 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6693:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6693 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6694:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6694 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6695 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6696:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6696 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6701:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6701 |         Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6703:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6703 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6704:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6704 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6705 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6707:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6707 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6724:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6724 |           builder.create<arith::ConstantIntOp>(loc, elements, 64));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6749:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6749 |         Value tensor = builder.create<bufferization::ToTensorOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6750 |             loc, tensorType, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6796:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6796 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6797 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6799:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6799 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6800:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6800 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6801 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6802:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6802 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6807:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6807 |         Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6809:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6809 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6810:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6810 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6811 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6813:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6813 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6827:62: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6827 |       operands.push_back(builder.create<arith::ConstantIntOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6828 |           loc, tensorType.getNumElements(), 64));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~               
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6858:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6858 |         Value tensor = builder.create<bufferization::ToTensorOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6859 |             loc, tensorType, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6906:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6906 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6907 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6909:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6909 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6910:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6910 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6911 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6912:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6912 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6916:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6916 |         Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6918:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6918 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6919:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6919 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6920 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6922:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6922 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6940:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6940 |             builder.create<arith::ConstantIntOp>(loc, rows, 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6942:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6942 |             builder.create<arith::ConstantIntOp>(loc, columns, 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6944:64: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6944 |         operands.push_back(builder.create<arith::ConstantIntOp>(
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6945 |             loc, parameterType.getNumElements(), 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:6972:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6972 |         Value tensor = builder.create<bufferization::ToTensorOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6973 |             loc, cast<RankedTensorType>(type), buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~           
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7020:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToBufferOp; Args = {mlir::MemRefType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7020 |         Value buffer = builder.create<bufferization::ToBufferOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 7021 |             loc, memrefType, tensor);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~                             
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7023:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7023 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7024:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7024 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 7025 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7026:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7026 |         return builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7030:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::AllocOp; Args = {mlir::MemRefType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7030 |         Value buffer = builder.create<memref::AllocOp>(loc, memrefType);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7032:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::ExtractAlignedPointerAsIndexOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7032 |             builder.create<memref::ExtractAlignedPointerAsIndexOp>(loc, buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7033:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7033 |         Value integer = builder.create<arith::IndexCastOp>(
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 7034 |             loc, builder.getI64Type(), index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7036:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::IntToPtrOp; Args = {mlir::LLVM::LLVMPointerType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7036 |             builder.create<LLVM::IntToPtrOp>(loc, pointerType, integer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp: In member function ‘virtual void tessera::{anonymous}::ScheduleToTilePass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7056:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7056 |             builder.create<arith::ConstantIntOp>(loc, dimension, 64));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp:7083:65: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::bufferization::ToTensorOp; Args = {mlir::RankedTensorType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 7083 |         Value tensor = builder.create<bufferization::ToTensorOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 7084 |             loc, cast<RankedTensorType>(type), buffer);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~           
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[ 66%] Linking CXX static library libTesseraPM.a
+[ 66%] Built target TesseraPM
+[ 98%] Built target TesseraPasses
+[100%] Built target obj.TesseraNVIDIAConversion
+[100%] Built target TesseraNVIDIAConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt
+[  4%] Building AttnDialect.cpp.inc...
+[  4%] Built target mlir-generic-headers
+[  4%] Built target mlir-headers
+[  4%] Built target TesseraAdjointInterfaceTableGen
+[  4%] Building AttnDialect.h.inc...
+[  9%] Built target TesseraCollectiveTypesIncGen
+[  9%] Built target tessera_layout_algebra
+[ 12%] Built target TesseraAttnTableGen
+[ 17%] Built target TesseraNVIDIATableGen
+[ 26%] Built target TesseraPMTableGen
+[ 26%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 29%] Built target TesseraCollectiveOpsIncGen
+[ 29%] Built target obj.TesseraNVIDIAIR
+[ 29%] Built target TesseraTangentInterfaceTableGen
+[ 29%] Built target TesseraNVIDIAIR
+[ 31%] Built target obj.TesseraCollectiveDialect
+[ 36%] Built target TesseraIRTableGen
+[ 36%] Built target TesseraCollectiveDialect
+[ 39%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 39%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 39%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 39%] Building Tessera/Dialect/Tile/TileOps.cpp.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 43%] Built target TesseraTileIRTableGen
+[ 48%] Built target obj.TesseraIR
+[ 48%] Built target TesseraIR
+[ 48%] Built target TesseraScheduleIR
+[ 48%] Built target obj.TesseraAttnDialect
+[ 48%] Built target TesseraAttnDialect
+[ 48%] Built target TesseraPM
+[ 95%] Built target TesseraPasses
+[ 97%] Built target obj.TesseraNVIDIAConversion
+[ 97%] Built target TesseraNVIDIAConversion
+[100%] Linking CXX executable tessera-nvidia-opt
+[100%] Built target tessera-nvidia-opt

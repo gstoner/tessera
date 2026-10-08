@@ -1,0 +1,802 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "method": {
+    "ncu_required": true,
+    "recompute_route_note": "comparator ancestry is recorded per row and may be partial",
+    "repetitions": 2,
+    "samples": 3,
+    "saved_route_pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+    "selector_default": "recompute",
+    "timing_domains": [
+      "cuda_event",
+      "end_to_end"
+    ],
+    "warmup": 1
+  },
+  "packets": [
+    {
+      "correctness": {
+        "backward_recompute_gradient_max_abs": 2.4798403441828043e-08,
+        "backward_saved_gradient_max_abs": 1.5951924434154385e-08,
+        "forward_recompute": {
+          "output_max_abs": 1.2720437675417529e-08
+        },
+        "forward_saved": {
+          "output_max_abs": 1.2720437675417529e-08,
+          "row_lse_max_abs": 7.629683484999816e-08
+        },
+        "oracle": "independent_fp64_attention_and_gradients"
+      },
+      "rows": {
+        "backward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "tile_ir_digest": "4a933db608359c3d7590fde9ef5fc602d52f716055a4a4b2c11e5ae8c8905e10"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.027295999228954315,
+            "device_event_samples_ms": [
+              0.03835200145840645,
+              0.027295999228954315,
+              0.02611199952661991
+            ],
+            "end_to_end_median_ms": 1.1066824954468757,
+            "end_to_end_samples_ms": [
+              1.1022724793292582,
+              1.1153224913869053,
+              1.1066824954468757
+            ],
+            "entry": "tessera_tile_attention_backward_f32_deterministic_248bd14b8b",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 8,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 64,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_row_lse_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "32538dc685e3c477714064a3c70211bb5113702ff96c916e99e10401abb60de6",
+              "schedule_digest": "73dcc4d79c6a3e9fc7b85133f03aa6655f61d7d40ba9576ef1e41190b8531423",
+              "schedule_ir_digest": "594fcb3f852a9e196bbe343c1f52fa6a38e9445c99964e9f16f4a467fcb4404f",
+              "tile_ir_digest": "32a7bd7204d953f575006a4a35c25dc7bdba2b8ec99150f1b67bb92ba957a63c"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.018239999189972878,
+            "device_event_samples_ms": [
+              0.018592000007629395,
+              0.018239999189972878,
+              0.017823999747633934
+            ],
+            "end_to_end_median_ms": 1.1986345052719116,
+            "end_to_end_samples_ms": [
+              1.1945840087719262,
+              1.1986345052719116,
+              1.342495990684256
+            ],
+            "entry": "tessera_tile_attention_backward_lse_73dcc4d79c",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 9,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 56,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        },
+        "forward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+            "compiler_provenance": {
+              "schedule_digest": "ff515b78fdb10a670ee26ad2e21535325e48661d7d4246c0c2a19f3f9c6a12b8",
+              "tile_ir_digest": "700091dc11e5638b4cf4d9582e240bdb1f1b1b12df426883e7de6e3785276cff"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.008208000101149082,
+            "device_event_samples_ms": [
+              0.008208000101149082,
+              0.008688000030815601,
+              0.008031999692320824
+            ],
+            "end_to_end_median_ms": 0.981045508524403,
+            "end_to_end_samples_ms": [
+              1.026786514557898,
+              0.9458750137127936,
+              0.981045508524403
+            ],
+            "entry": "tessera_tile_attention_f32_causal_ff515b78fd",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "f99e5af35b449207630db4925bd9bd8455a0e228f27a80d581d623cf9d534826",
+              "schedule_digest": "6a86c333fde68b75646a6bb44193713ec3804c8f6aea077c1c58e8873283cca0",
+              "schedule_ir_digest": "d7a59bc4ef500d73752585b51267723b048f7b8ab0e767425f2b1b569cac3f56",
+              "tile_ir_digest": "242de301a2cfb27b062b1a2c94e406c265ec0e3d448b774758f06885b6fad829"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.00872000027447939,
+            "device_event_samples_ms": [
+              0.00872000027447939,
+              0.007823999971151352,
+              0.018831999972462654
+            ],
+            "end_to_end_median_ms": 1.061606511939317,
+            "end_to_end_samples_ms": [
+              1.061606511939317,
+              1.1801840155385435,
+              0.9870560024864972
+            ],
+            "entry": "tessera_tile_attention_lse_6a86c333fd",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        }
+      },
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        4,
+        3
+      ]
+    },
+    {
+      "correctness": {
+        "backward_recompute_gradient_max_abs": 3.8901396548496336e-08,
+        "backward_saved_gradient_max_abs": 6.870371893619165e-08,
+        "forward_recompute": {
+          "output_max_abs": 2.361454895516424e-08
+        },
+        "forward_saved": {
+          "output_max_abs": 2.361454895516424e-08,
+          "row_lse_max_abs": 1.1313508618826518e-07
+        },
+        "oracle": "independent_fp64_attention_and_gradients"
+      },
+      "rows": {
+        "backward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "tile_ir_digest": "4a933db608359c3d7590fde9ef5fc602d52f716055a4a4b2c11e5ae8c8905e10"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.11540800333023071,
+            "device_event_samples_ms": [
+              0.11540800333023071,
+              0.12302400171756744,
+              0.11297599971294403
+            ],
+            "end_to_end_median_ms": 1.267585001187399,
+            "end_to_end_samples_ms": [
+              1.4223729958757758,
+              1.1928445019293576,
+              1.267585001187399
+            ],
+            "entry": "tessera_tile_attention_backward_f32_deterministic_248bd14b8b",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 8,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 64,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_row_lse_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "41c46d6bc612ff64ff301b2df1353e9f4295b27b007dac493c311218ec5d9b83",
+              "schedule_digest": "d602d77a272b603d6b6ae3992f3f04782e8ec0a70dbac4b8b83eabe46bf7ee83",
+              "schedule_ir_digest": "cc27459e74e7674df72a427c0f4a823727863963faf7f19488d3e1fde4bfe97d",
+              "tile_ir_digest": "0677b5bc8f1ddbdd793e8de5cdfe51f4417427978680d50566aa007f45a52f8c"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.090768001973629,
+            "device_event_samples_ms": [
+              0.09267199784517288,
+              0.090768001973629,
+              0.09057600051164627
+            ],
+            "end_to_end_median_ms": 1.3014959986321628,
+            "end_to_end_samples_ms": [
+              1.3403614866547287,
+              1.3014959986321628,
+              1.2165599910076708
+            ],
+            "entry": "tessera_tile_attention_backward_lse_d602d77a27",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 9,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 56,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        },
+        "forward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+            "compiler_provenance": {
+              "schedule_digest": "5939bdfb55d0210db17812778b5a00693f91c65a8039c16b6c3f54bd68a4c45b",
+              "tile_ir_digest": "18534c007f7a4e0d807a2029eed47dd31285fb60346388a0a2fe909e9d2414ca"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.01740800030529499,
+            "device_event_samples_ms": [
+              0.04095999896526337,
+              0.01740800030529499,
+              0.011807999573647976
+            ],
+            "end_to_end_median_ms": 0.9930210071615875,
+            "end_to_end_samples_ms": [
+              1.0048160038422793,
+              0.89356949320063,
+              0.9930210071615875
+            ],
+            "entry": "tessera_tile_attention_f32_causal_5939bdfb55",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "95cfc53123663144351810dd9b791904c9f283c5fa88491a8d848687efba0b27",
+              "schedule_digest": "c1252980f4385d717a0f943b3e7552c51fa7da449e08861e386d5675642f78ca",
+              "schedule_ir_digest": "33e3902b2480572267a197dc5230542dd3d97eb8aadc697cdf0b69f9f8f15358",
+              "tile_ir_digest": "404f067235b744ec8c17bf780adb7382c1093bc4f1451afa8855f2d01ada298b"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.013248000293970108,
+            "device_event_samples_ms": [
+              0.02739199995994568,
+              0.012240000069141388,
+              0.013248000293970108
+            ],
+            "end_to_end_median_ms": 1.0849875106941909,
+            "end_to_end_samples_ms": [
+              1.0849875106941909,
+              0.9884155006147921,
+              1.1717835150193423
+            ],
+            "entry": "tessera_tile_attention_lse_c1252980f4",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        }
+      },
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        8,
+        8,
+        8
+      ]
+    },
+    {
+      "correctness": {
+        "backward_recompute_gradient_max_abs": 9.523368066366444e-08,
+        "backward_saved_gradient_max_abs": 8.781375343547282e-08,
+        "forward_recompute": {
+          "output_max_abs": 3.098814616020462e-08
+        },
+        "forward_saved": {
+          "output_max_abs": 3.098814616020462e-08,
+          "row_lse_max_abs": 2.7342185315859524e-07
+        },
+        "oracle": "independent_fp64_attention_and_gradients"
+      },
+      "rows": {
+        "backward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "tile_ir_digest": "4a933db608359c3d7590fde9ef5fc602d52f716055a4a4b2c11e5ae8c8905e10"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.6732000112533569,
+            "device_event_samples_ms": [
+              0.6732000112533569,
+              0.6774880290031433,
+              0.6658080220222473
+            ],
+            "end_to_end_median_ms": 22.115019004559144,
+            "end_to_end_samples_ms": [
+              14.154639007756487,
+              22.115019004559144,
+              70.77644599485211
+            ],
+            "entry": "tessera_tile_attention_backward_f32_deterministic_248bd14b8b",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 8,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 64,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_row_lse_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "81069e447f72f001e5fb215697fc5f4484b389b5c43eb7677c55e467487094aa",
+              "schedule_digest": "38055cd839c9f3ad6ef3aa475cfe0e04dbfed2f55b74fb2e3a421b4fe2391f53",
+              "schedule_ir_digest": "4200b2c56346b347bac4d5a5a1b01ed8048aeba2e11d256b64db7a68ab76bb3a",
+              "tile_ir_digest": "89e7fc86f075360e42c39dcb7a4718584ca32b1e77f6297b098e2f983261303e"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.518127977848053,
+            "device_event_samples_ms": [
+              0.5269759893417358,
+              0.518127977848053,
+              0.5171840190887451
+            ],
+            "end_to_end_median_ms": 1.814097020542249,
+            "end_to_end_samples_ms": [
+              1.814097020542249,
+              1.6819325101096183,
+              1.8522304890211672
+            ],
+            "entry": "tessera_tile_attention_backward_lse_38055cd839",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 9,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 56,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        },
+        "forward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+            "compiler_provenance": {
+              "schedule_digest": "20af9a38ba3569d0983b7bce5b3e32a4812e8eb1cddf85e07a0a7b87382685aa",
+              "tile_ir_digest": "b4e44126d3899ff75fe766aecf625239bcaa62ab7a92264faf2b328a4ca4e8be"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.02727999910712242,
+            "device_event_samples_ms": [
+              0.032016001641750336,
+              0.02727999910712242,
+              0.020640000700950623
+            ],
+            "end_to_end_median_ms": 1.088732504285872,
+            "end_to_end_samples_ms": [
+              1.0046809911727905,
+              1.088732504285872,
+              1.165800989838317
+            ],
+            "entry": "tessera_tile_attention_f32_causal_20af9a38ba",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "87ae17aa52863e1989f70ec7a9e100752367f02385f6f89af5b9c824e4f08a3a",
+              "schedule_digest": "684a96d1e69682be345b0e437e990ef1b400155cb3ca78f2043945457743b46b",
+              "schedule_ir_digest": "e763e2a9b6a7529e27d3be1c60db83c3ef64e1627407dfbcee136b5ae3b23cfb",
+              "tile_ir_digest": "08457a2203c6fc72def0bc670144d2517650c9fe5ec3c091cfddedd6f88cb1ec"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.021167999133467674,
+            "device_event_samples_ms": [
+              0.02638399973511696,
+              0.021167999133467674,
+              0.020576000213623047
+            ],
+            "end_to_end_median_ms": 1.0040565102826804,
+            "end_to_end_samples_ms": [
+              1.0029815020971,
+              1.0060610075015575,
+              1.0040565102826804
+            ],
+            "entry": "tessera_tile_attention_lse_684a96d1e6",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        }
+      },
+      "shape": [
+        1,
+        4,
+        2,
+        15,
+        17,
+        16,
+        12
+      ]
+    },
+    {
+      "correctness": {
+        "backward_recompute_gradient_max_abs": 1.975725409941731e-07,
+        "backward_saved_gradient_max_abs": 2.086680955803999e-07,
+        "forward_recompute": {
+          "output_max_abs": 4.326873936921771e-08
+        },
+        "forward_saved": {
+          "output_max_abs": 4.326873936921771e-08,
+          "row_lse_max_abs": 1.035887855493911e-06
+        },
+        "oracle": "independent_fp64_attention_and_gradients"
+      },
+      "rows": {
+        "backward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "tile_ir_digest": "4a933db608359c3d7590fde9ef5fc602d52f716055a4a4b2c11e5ae8c8905e10"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 306.5013427734375,
+            "device_event_samples_ms": [
+              306.37298583984375,
+              306.54949951171875,
+              306.5013427734375
+            ],
+            "end_to_end_median_ms": 328.3528645115439,
+            "end_to_end_samples_ms": [
+              328.3528645115439,
+              308.90386950341053,
+              331.44487149547786
+            ],
+            "entry": "tessera_tile_attention_backward_f32_deterministic_248bd14b8b",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 8,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 64,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_row_lse_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "aad42c1b087feafecd2ad1efe0793cf5ad9657e2cdb1dee2fb65f1df0ec6f250",
+              "schedule_digest": "7edb6c1094c859779352ab6a2bd9d61d3942a94841203950ca01426dc9abfbde",
+              "schedule_ir_digest": "791a02aba39a9511553e55e51d6797a8097d061973c8e15ffd4eefc0ab150501",
+              "tile_ir_digest": "94b1999bc39d2e01f24f306e72ec04ea646e52b7e777bd309ad418e991d74e16"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 188.55223083496094,
+            "device_event_samples_ms": [
+              188.55223083496094,
+              188.54417419433594,
+              188.56932067871094
+            ],
+            "end_to_end_median_ms": 190.94035049783997,
+            "end_to_end_samples_ms": [
+              191.12823100294918,
+              190.85031450958923,
+              190.94035049783997
+            ],
+            "entry": "tessera_tile_attention_backward_lse_7edb6c1094",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 9,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 56,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        },
+        "forward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+            "compiler_provenance": {
+              "schedule_digest": "9995f1d40992d1c6d074526cb4dc186ee592f973ee84c38453f40ba77886ad2a",
+              "tile_ir_digest": "2d7b4cae85fe7eb781a3928a1e627bd09e131dade1ff7992de82802398b4de41"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.7863199710845947,
+            "device_event_samples_ms": [
+              0.7863199710845947,
+              0.7863680124282837,
+              0.7853440046310425
+            ],
+            "end_to_end_median_ms": 1.8785200081765652,
+            "end_to_end_samples_ms": [
+              1.8785200081765652,
+              1.861515484051779,
+              2.105808991473168
+            ],
+            "entry": "tessera_tile_attention_f32_causal_9995f1d409",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "c6e1ddca2ddd42d37a98d742f0c04906fa78a71c5897f8ba4afa82572c445c08",
+              "schedule_digest": "268d316ffe88230c43f3d4ff4ddbac0555920f1113f3b9b4ee106e4120232e10",
+              "schedule_ir_digest": "a3716b297bf8e01845c9e60e733fd41ef3506125a40e21466ef89d33f4928d0f",
+              "tile_ir_digest": "5ea25dd36d2313b1d37b7d0ece04c7e6e653c4ff1fe78f8c9718042fd47f36a3"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 0.7900800108909607,
+            "device_event_samples_ms": [
+              0.7900800108909607,
+              0.7904800176620483,
+              0.7884960174560547
+            ],
+            "end_to_end_median_ms": 1.9920975028071553,
+            "end_to_end_samples_ms": [
+              1.9920975028071553,
+              2.185040502808988,
+              1.9271659839432687
+            ],
+            "entry": "tessera_tile_attention_lse_268d316ffe",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        }
+      },
+      "shape": [
+        1,
+        4,
+        2,
+        127,
+        131,
+        64,
+        64
+      ]
+    },
+    {
+      "correctness": {
+        "backward_recompute_gradient_max_abs": 7.055788167065202e-07,
+        "backward_saved_gradient_max_abs": 6.750719150350193e-07,
+        "forward_recompute": {
+          "output_max_abs": 5.2168530995100326e-08
+        },
+        "forward_saved": {
+          "output_max_abs": 5.2168530995100326e-08,
+          "row_lse_max_abs": 1.146434061460866e-06
+        },
+        "oracle": "independent_fp64_attention_and_gradients"
+      },
+      "rows": {
+        "backward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "tile_ir_digest": "4a933db608359c3d7590fde9ef5fc602d52f716055a4a4b2c11e5ae8c8905e10"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 1926.1275634765625,
+            "device_event_samples_ms": [
+              1926.1275634765625,
+              1926.101318359375,
+              1927.1021728515625
+            ],
+            "end_to_end_median_ms": 1938.8227490126155,
+            "end_to_end_samples_ms": [
+              1948.159752995707,
+              1938.8227490126155,
+              1929.3822339968756
+            ],
+            "entry": "tessera_tile_attention_backward_f32_deterministic_248bd14b8b",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 8,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 64,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention_backward.do_q_k_v_row_lse_dq_dk_dv_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "e144738d29bfb33b669fd66dcc14eab574d8af83e2d550a0a48f06402636be79",
+              "schedule_digest": "18c6642788826e055e7f4f06268a728e797aba30aec567f61e7ff7aa452699f5",
+              "schedule_ir_digest": "58078d7bbcda9973dbcbea35195343944871bf05bdd8b45a2b7914f17986b9cc",
+              "tile_ir_digest": "032ccffd9ab78450c50e308dd76cfc6246bb63c15f3dfd0c99d52ba4e6af6acd"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 1218.6016845703125,
+            "device_event_samples_ms": [
+              1216.7607421875,
+              1218.6016845703125,
+              1218.8389892578125
+            ],
+            "end_to_end_median_ms": 1222.1686525153928,
+            "end_to_end_samples_ms": [
+              1222.1017215051688,
+              1222.1686525153928,
+              1222.6005094998982
+            ],
+            "entry": "tessera_tile_attention_backward_lse_18c6642788",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 9,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 56,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        },
+        "forward": {
+          "recompute": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+            "compiler_provenance": {
+              "schedule_digest": "61d749e860782ece2ebab4d349ba95fd640eb6e1da0ee443ff2c0ac1c2ec740a",
+              "tile_ir_digest": "6d9d14535c0826e24258d6491e4dd8cae448cacaa10a83a3a93be3dbcefeeb32"
+            },
+            "compiler_provenance_complete": false,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 2.7707200050354004,
+            "device_event_samples_ms": [
+              2.7707200050354004,
+              2.7700319290161133,
+              2.78056001663208
+            ],
+            "end_to_end_median_ms": 4.239547502947971,
+            "end_to_end_samples_ms": [
+              13.749766512773931,
+              4.239547502947971,
+              4.074480501003563
+            ],
+            "entry": "tessera_tile_attention_f32_causal_61d749e860",
+            "pipeline": "recompute_comparator_package",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          },
+          "saved": {
+            "abi_id": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+            "compiler_provenance": {
+              "graph_ir_digest": "a66d1519c9cca8b1950ac54a77cea39a4cc6197001f976b1ca90390b8f3f0b72",
+              "schedule_digest": "f0de56c29d71713b1b8b0d6a9e58d63e9323bfbc854b7c9765596391773b78ef",
+              "schedule_ir_digest": "33d71dba6df5dea3f64f27db0370b7634c9f1681e5beb511dc94eaa2039bc2d9",
+              "tile_ir_digest": "0489bfa13bce862acce69576eda2c48824c77ace51284a7ee944200621022756"
+            },
+            "compiler_provenance_complete": true,
+            "correctness": "passed_before_timing",
+            "device_event_median_ms": 2.8001279830932617,
+            "device_event_samples_ms": [
+              2.7994558811187744,
+              2.802272081375122,
+              2.8001279830932617
+            ],
+            "end_to_end_median_ms": 4.147681494941935,
+            "end_to_end_samples_ms": [
+              4.393650975544006,
+              4.147681494941935,
+              4.107076005311683
+            ],
+            "entry": "tessera_tile_attention_lse_f0de56c29d",
+            "pipeline": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->native image",
+            "resources": {
+              "active_blocks_per_sm": 12,
+              "dynamic_shared_memory_bytes": 0,
+              "local_memory_bytes": 0,
+              "registers_per_thread": 40,
+              "static_shared_memory_bytes": 0
+            },
+            "workspace_bytes": 0
+          }
+        }
+      },
+      "shape": [
+        1,
+        4,
+        2,
+        256,
+        256,
+        64,
+        64
+      ]
+    }
+  ],
+  "schema": "tessera.nvidia.lse_checkpoint.benchmark.v3",
+  "selector_changed": false,
+  "target": "nvidia_sm120",
+  "work_item": "NVIDIA-LSE-1"
+}

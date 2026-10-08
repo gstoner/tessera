@@ -1,0 +1,9 @@
+{
+  "checks": [
+    "serial_geometry",
+    "wrong_workgroup",
+    "serial_policy",
+    "wrong_storage"
+  ],
+  "cuda_registration": "not_reached"
+}

@@ -1,0 +1,14 @@
+{
+  "timing_unit": "milliseconds per complete program invocation",
+  "native_api_already_averages_over_repeats": true,
+  "measurement_repeats": 20,
+  "runtime_source": "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp",
+  "runtime_source_sha256": "a4d5618c9c664027fc856822ff9999d52b7409afd01a8dce2c210ef2a5b49f46",
+  "native_return_expression": "if (elapsed) *elapsed /= repeats;",
+  "affected_recorder_sha256": {
+    "record_public_independent_scale_reverse.py": "7f19c11f3d554f2ed3fcf446b378bd8a23f7b860e3b3d2d50f8fd32b505e42a0",
+    "record_independent_batch_reverse_device.py": "1ac66ecc9e17ae56d26cea587f84142c6b39913c6a29f9fc1742880673e5cc46",
+    "record_independent_scaled_primal.py": "eb2e6d627956149f535ebf0124c670cf05961604b6b3f0b133d88effa66c54a0"
+  },
+  "owning_host_runtime_source_sha256_verified": "a4d5618c9c664027fc856822ff9999d52b7409afd01a8dce2c210ef2a5b49f46"
+}

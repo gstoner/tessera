@@ -1,0 +1,102 @@
+{
+  "compiler_packaging_ms": 121.594389,
+  "compiler_sha256": "fd8acb4877bc5e2cea58f280d8f31d882f6ff3618e16e7e10bb283fb17675640",
+  "correctness": "passed_before_timing_and_after_each_end_to_end_sample",
+  "device_arch": "gfx1201",
+  "end_to_end_ms_median": 2.446506,
+  "end_to_end_ms_samples": [
+    8.265712,
+    8.814499,
+    2.461529,
+    2.405733,
+    2.446506,
+    2.438772,
+    2.364154
+  ],
+  "grid": [
+    2,
+    2,
+    1
+  ],
+  "host": "tajasarus",
+  "image_sha256": "90185689ec64670b553ec1f7261d57247b2fd0001ac380589b390b158617b1c3",
+  "ingest_ms": 0.918264,
+  "kernel_event_us_median": 4.407959878444672,
+  "kernel_event_us_samples": [
+    4.697520136833191,
+    4.229759871959686,
+    4.407959878444672,
+    4.611339867115021,
+    4.302740097045898,
+    4.294340014457703,
+    4.690139889717102
+  ],
+  "package_abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+  "package_entry": "tessera_mxfp4_w4a8_wmma",
+  "preserve_code_baseline_projection_error": [
+    {
+      "method": "source_e2m1_codes_with_best_code_preserving_e8m0_scale",
+      "projection": "gate",
+      "relative_rms_error": 0.36791461247006463,
+      "sqnr_db": 8.68505925892027
+    },
+    {
+      "method": "source_e2m1_codes_with_best_code_preserving_e8m0_scale",
+      "projection": "up",
+      "relative_rms_error": 0.42102129412119627,
+      "sqnr_db": 7.5139187633122315
+    }
+  ],
+  "projection_error": [
+    {
+      "lossy_steps": [
+        "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+      ],
+      "projection": "gate",
+      "relative_rms_error": 0.09064277594877257,
+      "source_global_scale": 0.5,
+      "sqnr_db": 20.853336052131212
+    },
+    {
+      "lossy_steps": [
+        "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+      ],
+      "projection": "up",
+      "relative_rms_error": 0.06701446295510725,
+      "source_global_scale": 2.0,
+      "sqnr_db": 23.47662916874496
+    }
+  ],
+  "revision": "source_snapshot",
+  "schedule_digest": "11d4885a7e0ad182532fc994be48400281d30c9728497d575d73abe13ed17ce6",
+  "shape_mnk": [
+    17,
+    19,
+    64
+  ],
+  "source_dirty": true,
+  "source_projection_names": [
+    "gate",
+    "up"
+  ],
+  "source_row_offsets": [
+    0,
+    9,
+    19
+  ],
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_rocm_nvfp4_ingest_schedule.py": "07e5b9f587819724df8359557c8acca2abc28ee7735a0b1894ab7d3fb5188c3d",
+    "python/tessera/compiler/rocm_nvfp4_ingest.py": "c8b3420c8da62847da9730bbca38170b7a9c08f65911be887e772aed5220d37b"
+  },
+  "sync_key": "ROCM-NVFP4-INGEST-1-2026-10-01",
+  "target": "rocm_gfx1201",
+  "target_ir_digest": "12680683e7cb164d797e788bdc904235b8284a5a7faadb9fcfe47208f327a303",
+  "tile_ir_digest": "9a84dc95bb6a0ed578c995558f530510fe8cca2904eed40f29c8821b2c5f30f6",
+  "timing_note": "compiler_packaging_ms covers Graph/Schedule/Tile lowering, target lowering, and native image materialization once. Kernel timing uses persistent device allocations and HIP events around the package launch only. End-to-end timing calls runtime.launch per sample and includes descriptor validation, module load, allocations, input/output transfers, synchronization, and Python dispatch. Graph/Schedule/Tile compilation occurs once before either timing loop.",
+  "work_item": "ROCM-NVFP4-INGEST-1",
+  "workgroup": [
+    128,
+    1,
+    1
+  ]
+}

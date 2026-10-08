@@ -1,0 +1,4 @@
+[256, 4096, 1024] native/control device ratio 1.233408088731694
+[256, 4096, 2048] native/control device ratio 1.19888212262776
+[256, 4096, 5120] native/control device ratio 1.0580613270234351
+[256, 8192, 5120] native/control device ratio 0.9909424190969073

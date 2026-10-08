@@ -1,0 +1,9 @@
+{
+  "python/tessera/compiler/native_vmap.py": "2e46b32c187ffffcb220ea377d9658bb05735c93bdd0db99724757c7caa0799e",
+  "python/tessera/compiler/jit.py": "57958efe4441efd238560a061eb48f981f975350230b4af85b55faf732694267",
+  "python/tessera/compiler/graph_ir.py": "af5452d1cc41a8012a080f42d4f5cbfb8e78f1c418f8e43df93d5b841531886c",
+  "tests/unit/test_native_typed_scaled_vmap.py": "356579cb9177c7fd2bae2bfc5558eb89d9e0256d7f9f2290a18c7283f65df688",
+  "tests/device/rocm/test_public_typed_scaled_vmap.py": "a6c7f47dd8a5668ac1600e0e4b0afaf44d9df960ab124205024b689d0ba31863",
+  "benchmarks/rocm/benchmark_public_mapped_scaled_jvp.py": "17c419ac2c4e65106fd7505ec232171d6eae7ec4c5251f598b6e4bc421796c26",
+  "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt": "a760556c6b8bdc800d05fabb77a7d5bd4e3fba6309c9f625be82b052d557cf89"
+}

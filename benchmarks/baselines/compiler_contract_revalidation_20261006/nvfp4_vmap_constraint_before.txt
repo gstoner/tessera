@@ -1,0 +1,17 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________ test_independent_batch_preserves_symbolic_constraints _____________
+
+    def test_independent_batch_preserves_symbolic_constraints():
+        from tessera.compiler.constraints import Range, TesseraConstraintError
+        scalar = ts.jit(typed_product, target="nvidia_sm120")
+        scalar.constraints.add(Range("M", 1, 6))
+        owner = vmap(scalar, in_axes=0)
+>       with pytest.raises(TesseraConstraintError, match="M"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE TesseraConstraintError
+
+tests/unit/test_native_nvfp4_vmap.py:69: Failed
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_nvfp4_vmap.py::test_independent_batch_preserves_symbolic_constraints
+1 failed, 7 deselected in 0.40s

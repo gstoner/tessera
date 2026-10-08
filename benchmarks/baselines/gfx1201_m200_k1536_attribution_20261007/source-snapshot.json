@@ -1,0 +1,34 @@
+{
+  "compilers": {
+    "broad_assume": {
+      "path": "/home/angstorms/scratch/fp8-projection-broad-assume-20261007/tessera-opt",
+      "sha256": "e583553a8de7717747811003b4d43900de8a6c5fbbbeade95112a3bf55517dd4"
+    },
+    "profile": {
+      "path": ".build-gfx1201-current/tools/tessera-opt/tessera-opt",
+      "sha256": "0fbd6553c9f791af3176d729051ae31b2a5e27f436f626c8875db678971ec8ca"
+    },
+    "reference": {
+      "path": "/home/angstorms/scratch/fp8-projection-reference-20261007/tessera-opt",
+      "sha256": "3def20f9b8d9a12ecec5d4d7738c577741cdae2a993a54c312e4f04223cfd8ab"
+    },
+    "rocm": {
+      "path": ".build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt",
+      "sha256": "9cfcb90852be8183946f2d17e39f9ca4edd82ae7b762253753aab80191cb7826"
+    }
+  },
+  "historical_source_sha256": {
+    "broad-assume-generator.cpp": "dd9e05eae25de7b93ed223d00fa71292c0f9a044c5c57ec19ca2e1558b9bec3c",
+    "recorder-separate-allocation-source.txt": "4eab28c749f5d38142859e2a4fdfbb4ea87dd36bd21c026c37920f5740cc81cb",
+    "reference-generator.cpp": "0363c8a97f056d79308d87b04aa8c2092189a603f497304f8e7916ced449bcc5"
+  },
+  "schema": "tessera.gfx1201.projection_attribution_snapshot.v1",
+  "source_sha256": {
+    "benchmarks/rocm/record_gfx1201_interleaved_compiler_formats.py": "d8b6809e347aebe72d9ff569c399fee231142577364b1976cabe16aca6562eec",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "430a298fe4c84942eef535d169c1a4e723bc4289d92b9ebee0238f5d03969fca",
+    "python/tessera/compiler/rocm_mxfp8_blockscale.py": "5a90f7c0c3306ec14935ccc02bd90ff23b02ced76d0bf574a4dbd5150466d1d1",
+    "python/tessera/runtime.py": "476180ffb3d35d98cae12a330355e4bf6081a9e8190ae29f876102263f6fb92d",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "533a40ac04f4fd892d516d66d452a764c9f44237ee4db6617b89f2afafc72495",
+    "tests/unit/test_rocm_kernel_identity_native.py": "19c55e5b3e2d3b7832f06ac2fa89a07eb8c4ceb660264de7096a0acaee471b5e"
+  }
+}

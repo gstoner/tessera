@@ -1,0 +1,1 @@
+18 rows; 54 paired numerical windows; source/compiler/runtime fingerprints and both-stage ancestry verified.

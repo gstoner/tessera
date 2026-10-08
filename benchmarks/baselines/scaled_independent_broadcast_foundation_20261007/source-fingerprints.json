@@ -1,0 +1,9 @@
+{
+  "python/tessera/compiler/reference_typed_scaled_matmul.py": "bcd4146cbf333c71a3771d54f7350f42e98f1953d7abc401256338a214cea2b6",
+  "tests/unit/test_scaled_independent_broadcast_reference.py": "dcd1a3adc778de67c9bb3b6b644e2e61c51798fb355c7c212fcfb0202bb23118",
+  "python/tessera/compiler/native_vmap.py": "a2b817731a65d890a0db7349d8d040382e5a72202bd3952f68d0dfde68629085",
+  "python/tessera/compiler/rocm_typed_scaled_native.py": "1efb15a13b7768b7914642b3954cc0cbd3d8f72fdf027c6d2172fcf16ce6e5eb",
+  "src/compiler/ir/TesseraOps.cpp": "f3cd3da8a43499c73bfa5de1a4c8024e37cfcbc90a88769ec46e6c4b51ba84db",
+  "src/compiler/ir/LinearTransposeInterface.cpp": "32e4af54b9ec47e4145b789b0158d2f24d20f42e758bf7860770643c00a65ba0",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "feec78d760041fea3730a68f4d8b01b50f25253cdb190e163cd753fb2ea7e657"
+}

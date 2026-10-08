@@ -1,0 +1,4 @@
+<frozen site>:107: RuntimeWarning: Unexpected value in sys.prefix, expected /home/gstoner/scratch/next-five-rocm/.venv, got /home/gstoner/scratch/next-five-rocm/tessera/../.venv
+<frozen site>:107: RuntimeWarning: Unexpected value in sys.exec_prefix, expected /home/gstoner/scratch/next-five-rocm/.venv, got /home/gstoner/scratch/next-five-rocm/tessera/../.venv
+...                                                                      [100%]
+3 passed in 3.12s

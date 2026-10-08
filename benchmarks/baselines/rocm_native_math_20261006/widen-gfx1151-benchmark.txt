@@ -1,0 +1,1 @@
+{"architecture": "gfx1151", "device": "AMD Radeon(TM) 8060S Graphics", "rows": 72, "correctness": "passed", "image_reuse": "passed"}

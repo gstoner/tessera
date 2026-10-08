@@ -1,0 +1,1054 @@
+{
+  "architecture": "sm_120",
+  "compiler_sha256": "3ccf2c518165eeb81dac85a11eacbc06a667462c680cfbd4a41f46701b84b283",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "reps": 200,
+  "rows": [
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.00984928011894226,
+      "backward_device_window_samples_ms": [
+        0.009188960306346416,
+        0.011523840017616749,
+        0.00984928011894226,
+        0.009570559486746788,
+        0.010897599160671234
+      ],
+      "backward_image_sha256": "deb2372d6ff3d289326d9c6f82b6eb43a09b6c41db698bea0c53867c7457a5cf",
+      "backward_wall_median_ms": 0.176462,
+      "backward_wall_samples_ms": [
+        0.301964,
+        0.176462,
+        0.193212,
+        0.167291,
+        0.154712
+      ],
+      "capture_wall_median_ms": 1.83667,
+      "capture_wall_samples_ms": [
+        2.123933,
+        1.693428,
+        1.9165,
+        1.645397,
+        1.83667
+      ],
+      "causal": false,
+      "checkpoint_identity": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "compile_wall_ms": 791.652723,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.009049120359122753,
+      "forward_device_window_samples_ms": [
+        0.00887295976281166,
+        0.00935664027929306,
+        0.009049120359122753,
+        0.008913599886000156,
+        0.013368320651352406
+      ],
+      "forward_image_sha256": "a21baa09639194828d0578eb79b7ec68455c8246fa081e6e2f2ecbf94d1229ba",
+      "max_abs_gradient_error": 2.8593349129385492e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.01047343946993351,
+      "backward_device_window_samples_ms": [
+        0.009885920211672783,
+        0.010279040783643723,
+        0.01047343946993351,
+        0.011110560037195683,
+        0.010893119499087334
+      ],
+      "backward_image_sha256": "deb2372d6ff3d289326d9c6f82b6eb43a09b6c41db698bea0c53867c7457a5cf",
+      "backward_wall_median_ms": 0.184632,
+      "backward_wall_samples_ms": [
+        0.184632,
+        0.167171,
+        0.194172,
+        0.196422,
+        0.167241
+      ],
+      "capture_wall_median_ms": 1.726478,
+      "capture_wall_samples_ms": [
+        2.037561,
+        1.716898,
+        1.726478,
+        1.694659,
+        1.774019
+      ],
+      "causal": false,
+      "checkpoint_identity": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "compile_wall_ms": 787.6019,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.009357600472867489,
+      "forward_device_window_samples_ms": [
+        0.009357600472867489,
+        0.009187839925289154,
+        0.009511039592325687,
+        0.008389119990170002,
+        0.010028159245848656
+      ],
+      "forward_image_sha256": "a21baa09639194828d0578eb79b7ec68455c8246fa081e6e2f2ecbf94d1229ba",
+      "max_abs_gradient_error": 2.8593349129385492e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.016895199194550514,
+      "backward_device_window_samples_ms": [
+        0.01706688106060028,
+        0.01680688001215458,
+        0.016895199194550514,
+        0.017777279019355774,
+        0.016871199011802673
+      ],
+      "backward_image_sha256": "deb2372d6ff3d289326d9c6f82b6eb43a09b6c41db698bea0c53867c7457a5cf",
+      "backward_wall_median_ms": 0.247433,
+      "backward_wall_samples_ms": [
+        0.194912,
+        0.247433,
+        0.262833,
+        0.286993,
+        0.175882
+      ],
+      "capture_wall_median_ms": 2.187455,
+      "capture_wall_samples_ms": [
+        2.271265,
+        2.187455,
+        1.77708,
+        2.217895,
+        1.776029
+      ],
+      "causal": false,
+      "checkpoint_identity": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "compile_wall_ms": 804.175059,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.01750991865992546,
+      "forward_device_window_samples_ms": [
+        0.01750991865992546,
+        0.016307199373841286,
+        0.015899840742349625,
+        0.017819680273532867,
+        0.01935167983174324
+      ],
+      "forward_image_sha256": "a21baa09639194828d0578eb79b7ec68455c8246fa081e6e2f2ecbf94d1229ba",
+      "max_abs_gradient_error": 3.1554316062831766e-08,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.010546879842877388,
+      "backward_device_window_samples_ms": [
+        0.011432800441980362,
+        0.010546879842877388,
+        0.011647040024399757,
+        0.010131200775504112,
+        0.010204639285802841
+      ],
+      "backward_image_sha256": "5f95e93e099319ec2b5eab02acf5799f4bc59f0c8063fe2edcdc031361efc87d",
+      "backward_wall_median_ms": 0.182592,
+      "backward_wall_samples_ms": [
+        0.182592,
+        0.222523,
+        0.169642,
+        0.192202,
+        0.165782
+      ],
+      "capture_wall_median_ms": 1.8049,
+      "capture_wall_samples_ms": [
+        2.044413,
+        1.75439,
+        2.073984,
+        1.677979,
+        1.8049
+      ],
+      "causal": true,
+      "checkpoint_identity": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "compile_wall_ms": 791.580638,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.00890623964369297,
+      "forward_device_window_samples_ms": [
+        0.00993760023266077,
+        0.011614560149610043,
+        0.00890623964369297,
+        0.008820160292088985,
+        0.00871904008090496
+      ],
+      "forward_image_sha256": "2dfe976b2fa90190e48b6bf66532aa942ff305821d0cc7ea468dfc2f8a5921a1",
+      "max_abs_gradient_error": 2.8593349129385492e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.016412800177931786,
+      "backward_device_window_samples_ms": [
+        0.015409279614686966,
+        0.01752128079533577,
+        0.017044320702552795,
+        0.016412800177931786,
+        0.016395360231399536
+      ],
+      "backward_image_sha256": "5f95e93e099319ec2b5eab02acf5799f4bc59f0c8063fe2edcdc031361efc87d",
+      "backward_wall_median_ms": 0.246162,
+      "backward_wall_samples_ms": [
+        0.333543,
+        0.247913,
+        0.179442,
+        0.186173,
+        0.246162
+      ],
+      "capture_wall_median_ms": 1.968212,
+      "capture_wall_samples_ms": [
+        2.377156,
+        2.165454,
+        1.968212,
+        1.899542,
+        1.945312
+      ],
+      "causal": true,
+      "checkpoint_identity": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "compile_wall_ms": 787.640582,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.015141120180487633,
+      "forward_device_window_samples_ms": [
+        0.015491039492189884,
+        0.015141120180487633,
+        0.09313199669122696,
+        0.01430464070290327,
+        0.013799519278109074
+      ],
+      "forward_image_sha256": "2dfe976b2fa90190e48b6bf66532aa942ff305821d0cc7ea468dfc2f8a5921a1",
+      "max_abs_gradient_error": 2.8593349129385492e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.011401279829442501,
+      "backward_device_window_samples_ms": [
+        0.011401279829442501,
+        0.011679518967866898,
+        0.011560159735381603,
+        0.010140160098671913,
+        0.010445280000567436
+      ],
+      "backward_image_sha256": "5f95e93e099319ec2b5eab02acf5799f4bc59f0c8063fe2edcdc031361efc87d",
+      "backward_wall_median_ms": 0.171972,
+      "backward_wall_samples_ms": [
+        0.183843,
+        0.257163,
+        0.165361,
+        0.167002,
+        0.171972
+      ],
+      "capture_wall_median_ms": 1.779071,
+      "capture_wall_samples_ms": [
+        2.073383,
+        1.676599,
+        1.794851,
+        1.666599,
+        1.779071
+      ],
+      "causal": true,
+      "checkpoint_identity": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "compile_wall_ms": 793.482077,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.009692640043795109,
+      "forward_device_window_samples_ms": [
+        0.009408640675246716,
+        0.010251360014081001,
+        0.008763520047068596,
+        0.009692640043795109,
+        0.011170239187777042
+      ],
+      "forward_image_sha256": "2dfe976b2fa90190e48b6bf66532aa942ff305821d0cc7ea468dfc2f8a5921a1",
+      "max_abs_gradient_error": 3.327591289320475e-08,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.012705599889159203,
+      "backward_device_window_samples_ms": [
+        0.09073920547962189,
+        0.01256415992975235,
+        0.012822720222175121,
+        0.012705599889159203,
+        0.012441280297935009
+      ],
+      "backward_image_sha256": "8f9470ebf4520839244192e4538b37aacbb570229bd13d54f26ec63d76a60fd5",
+      "backward_wall_median_ms": 0.195693,
+      "backward_wall_samples_ms": [
+        0.189502,
+        0.195693,
+        0.252627,
+        0.171132,
+        0.210263
+      ],
+      "capture_wall_median_ms": 1.887691,
+      "capture_wall_samples_ms": [
+        2.146154,
+        1.920251,
+        1.748519,
+        1.7774,
+        1.887691
+      ],
+      "causal": false,
+      "checkpoint_identity": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+      "compile_wall_ms": 792.587827,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.011207359842956066,
+      "forward_device_window_samples_ms": [
+        0.011301599442958832,
+        0.010232800617814064,
+        0.011136160232126713,
+        0.011207359842956066,
+        0.011267679743468761
+      ],
+      "forward_image_sha256": "c15ca1b3c9e43339dcbc70115a4a964c90beda3da2f8bb795a037fb425534637",
+      "max_abs_gradient_error": 6.657957657418834e-10,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.012574720196425915,
+      "backward_device_window_samples_ms": [
+        0.012774240225553513,
+        0.011791039258241653,
+        0.012804320082068443,
+        0.012574720196425915,
+        0.012372639961540699
+      ],
+      "backward_image_sha256": "8f9470ebf4520839244192e4538b37aacbb570229bd13d54f26ec63d76a60fd5",
+      "backward_wall_median_ms": 0.217822,
+      "backward_wall_samples_ms": [
+        0.223952,
+        0.203062,
+        0.217822,
+        0.221852,
+        0.200422
+      ],
+      "capture_wall_median_ms": 1.868431,
+      "capture_wall_samples_ms": [
+        2.186694,
+        1.889811,
+        1.79594,
+        1.867621,
+        1.868431
+      ],
+      "causal": false,
+      "checkpoint_identity": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+      "compile_wall_ms": 809.718331,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.010991040617227554,
+      "forward_device_window_samples_ms": [
+        0.011006400920450687,
+        0.010991040617227554,
+        0.011474880389869213,
+        0.010681119747459888,
+        0.009824640117585659
+      ],
+      "forward_image_sha256": "c15ca1b3c9e43339dcbc70115a4a964c90beda3da2f8bb795a037fb425534637",
+      "max_abs_gradient_error": 1.2294087180578228e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.012225920334458351,
+      "backward_device_window_samples_ms": [
+        0.011543200351297855,
+        0.013611040078103542,
+        0.011811679229140282,
+        0.012225920334458351,
+        0.020984958857297897
+      ],
+      "backward_image_sha256": "8f9470ebf4520839244192e4538b37aacbb570229bd13d54f26ec63d76a60fd5",
+      "backward_wall_median_ms": 0.221593,
+      "backward_wall_samples_ms": [
+        0.297043,
+        0.221593,
+        0.178941,
+        0.270933,
+        0.191552
+      ],
+      "capture_wall_median_ms": 1.923241,
+      "capture_wall_samples_ms": [
+        2.348637,
+        1.923241,
+        1.866381,
+        1.977622,
+        1.757289
+      ],
+      "causal": false,
+      "checkpoint_identity": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+      "compile_wall_ms": 785.944259,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.010440959595143795,
+      "forward_device_window_samples_ms": [
+        0.010512479580938816,
+        0.010440959595143795,
+        0.010285120457410812,
+        0.01057136058807373,
+        0.010292479768395424
+      ],
+      "forward_image_sha256": "c15ca1b3c9e43339dcbc70115a4a964c90beda3da2f8bb795a037fb425534637",
+      "max_abs_gradient_error": 3.833938722053176e-08,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.013010560534894466,
+      "backward_device_window_samples_ms": [
+        0.011071200482547283,
+        0.013010560534894466,
+        0.012590080499649048,
+        0.013227519579231739,
+        0.08987775444984436
+      ],
+      "backward_image_sha256": "d7cb2a044f5cdbdaae3c0aa56fa46a8e2b1bca53cbe69f08de9200018db35b58",
+      "backward_wall_median_ms": 0.194952,
+      "backward_wall_samples_ms": [
+        0.180082,
+        0.171772,
+        0.260313,
+        0.194952,
+        0.204742
+      ],
+      "capture_wall_median_ms": 1.924071,
+      "capture_wall_samples_ms": [
+        2.261905,
+        1.932662,
+        1.80445,
+        1.924071,
+        1.671999
+      ],
+      "causal": true,
+      "checkpoint_identity": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+      "compile_wall_ms": 799.299273,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.00970751978456974,
+      "forward_device_window_samples_ms": [
+        0.009983359836041927,
+        0.009232159703969955,
+        0.009649439714848995,
+        0.009885439649224281,
+        0.00970751978456974
+      ],
+      "forward_image_sha256": "22c1c8274efe870fa47e102aad63328d942054944fd9dc1e232fbd1c9add851a",
+      "max_abs_gradient_error": 9.517383740918067e-10,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.01835503987967968,
+      "backward_device_window_samples_ms": [
+        0.01789776049554348,
+        0.0169571191072464,
+        0.01835503987967968,
+        0.019223999232053757,
+        0.01857632026076317
+      ],
+      "backward_image_sha256": "d7cb2a044f5cdbdaae3c0aa56fa46a8e2b1bca53cbe69f08de9200018db35b58",
+      "backward_wall_median_ms": 0.172162,
+      "backward_wall_samples_ms": [
+        0.179722,
+        0.176072,
+        0.172162,
+        0.170512,
+        0.164342
+      ],
+      "capture_wall_median_ms": 2.140694,
+      "capture_wall_samples_ms": [
+        2.483898,
+        2.187745,
+        2.110964,
+        2.103363,
+        2.140694
+      ],
+      "causal": true,
+      "checkpoint_identity": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+      "compile_wall_ms": 797.393263,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.015946079045534134,
+      "forward_device_window_samples_ms": [
+        0.010878720320761204,
+        0.017928320914506912,
+        0.015946079045534134,
+        0.015033919364213943,
+        0.016027679666876793
+      ],
+      "forward_image_sha256": "22c1c8274efe870fa47e102aad63328d942054944fd9dc1e232fbd1c9add851a",
+      "max_abs_gradient_error": 1.7206806699962551e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.017655199393630028,
+      "backward_device_window_samples_ms": [
+        0.018216319382190704,
+        0.018867839127779007,
+        0.01705903932452202,
+        0.01700464077293873,
+        0.017655199393630028
+      ],
+      "backward_image_sha256": "d7cb2a044f5cdbdaae3c0aa56fa46a8e2b1bca53cbe69f08de9200018db35b58",
+      "backward_wall_median_ms": 0.230512,
+      "backward_wall_samples_ms": [
+        0.199852,
+        0.230512,
+        0.257953,
+        0.314674,
+        0.170722
+      ],
+      "capture_wall_median_ms": 2.020702,
+      "capture_wall_samples_ms": [
+        2.402856,
+        2.200465,
+        1.982792,
+        2.020702,
+        1.955392
+      ],
+      "causal": true,
+      "checkpoint_identity": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+      "compile_wall_ms": 811.357721,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.011483360081911087,
+      "forward_device_window_samples_ms": [
+        0.011483360081911087,
+        0.0113968001678586,
+        0.012895040214061737,
+        0.011003680527210236,
+        0.015829600393772125
+      ],
+      "forward_image_sha256": "22c1c8274efe870fa47e102aad63328d942054944fd9dc1e232fbd1c9add851a",
+      "max_abs_gradient_error": 4.9487334785602854e-08,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.028751840814948082,
+      "backward_device_window_samples_ms": [
+        0.030476639047265053,
+        0.028751840814948082,
+        0.028996961191296577,
+        0.028718559071421623,
+        0.028705758973956108
+      ],
+      "backward_image_sha256": "31a1cbc63120cfb611c6722b72a47536d3dad712918d3bc8b898cc0d54d61629",
+      "backward_wall_median_ms": 0.200792,
+      "backward_wall_samples_ms": [
+        0.279033,
+        0.191822,
+        0.190052,
+        0.200792,
+        0.221442
+      ],
+      "capture_wall_median_ms": 1.960122,
+      "capture_wall_samples_ms": [
+        2.349126,
+        2.045063,
+        1.923741,
+        1.938981,
+        1.960122
+      ],
+      "causal": false,
+      "checkpoint_identity": "0c25c2f3c5401119186230ab06276fc214beeac17de4009a275fac1ee27b5794",
+      "compile_wall_ms": 841.94974,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.014023679308593273,
+      "forward_device_window_samples_ms": [
+        0.016056479886174202,
+        0.014564319513738155,
+        0.014023679308593273,
+        0.013412480242550373,
+        0.013249600306153297
+      ],
+      "forward_image_sha256": "83834567f01d8db50d3f62e488b66e6d3d6f65a5e7d00100421d745aaca35649",
+      "max_abs_gradient_error": 1.9100385461635894e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.028707999736070633,
+      "backward_device_window_samples_ms": [
+        0.028694720938801765,
+        0.02874128147959709,
+        0.028705758973956108,
+        0.028707999736070633,
+        0.028743678703904152
+      ],
+      "backward_image_sha256": "31a1cbc63120cfb611c6722b72a47536d3dad712918d3bc8b898cc0d54d61629",
+      "backward_wall_median_ms": 0.210063,
+      "backward_wall_samples_ms": [
+        0.218682,
+        0.252793,
+        0.188682,
+        0.210063,
+        0.192582
+      ],
+      "capture_wall_median_ms": 1.714699,
+      "capture_wall_samples_ms": [
+        2.265035,
+        1.714699,
+        1.75421,
+        1.650789,
+        1.679788
+      ],
+      "causal": false,
+      "checkpoint_identity": "0c25c2f3c5401119186230ab06276fc214beeac17de4009a275fac1ee27b5794",
+      "compile_wall_ms": 782.38339,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.013382879085838795,
+      "forward_device_window_samples_ms": [
+        0.013272000476717949,
+        0.013591519556939602,
+        0.01418624073266983,
+        0.013382879085838795,
+        0.013158080168068409
+      ],
+      "forward_image_sha256": "83834567f01d8db50d3f62e488b66e6d3d6f65a5e7d00100421d745aaca35649",
+      "max_abs_gradient_error": 2.2472464648697066e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.028718719258904457,
+      "backward_device_window_samples_ms": [
+        0.02870224043726921,
+        0.028718719258904457,
+        0.028741760179400444,
+        0.02871040068566799,
+        0.0291571207344532
+      ],
+      "backward_image_sha256": "31a1cbc63120cfb611c6722b72a47536d3dad712918d3bc8b898cc0d54d61629",
+      "backward_wall_median_ms": 0.186862,
+      "backward_wall_samples_ms": [
+        0.180252,
+        0.186862,
+        0.219382,
+        0.185962,
+        0.217042
+      ],
+      "capture_wall_median_ms": 1.999633,
+      "capture_wall_samples_ms": [
+        2.280586,
+        1.864731,
+        1.925421,
+        1.999633,
+        2.654869
+      ],
+      "causal": false,
+      "checkpoint_identity": "0c25c2f3c5401119186230ab06276fc214beeac17de4009a275fac1ee27b5794",
+      "compile_wall_ms": 787.576573,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.013092320412397385,
+      "forward_device_window_samples_ms": [
+        0.01366335991770029,
+        0.012749439105391502,
+        0.01281392015516758,
+        0.013157600536942482,
+        0.013092320412397385
+      ],
+      "forward_image_sha256": "83834567f01d8db50d3f62e488b66e6d3d6f65a5e7d00100421d745aaca35649",
+      "max_abs_gradient_error": 5.1051119581702054e-08,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.02562784031033516,
+      "backward_device_window_samples_ms": [
+        0.0255771204829216,
+        0.025748159736394882,
+        0.025423839688301086,
+        0.026484640315175056,
+        0.02562784031033516
+      ],
+      "backward_image_sha256": "c2224e5bb926317d714a507fe34176267620d4191d3c1f7a4737dceeeabfce31",
+      "backward_wall_median_ms": 0.241242,
+      "backward_wall_samples_ms": [
+        0.186882,
+        0.179042,
+        0.258643,
+        0.241242,
+        0.242712
+      ],
+      "capture_wall_median_ms": 1.81832,
+      "capture_wall_samples_ms": [
+        2.282126,
+        1.8649,
+        1.809,
+        1.722189,
+        1.81832
+      ],
+      "causal": true,
+      "checkpoint_identity": "a7281e5cf2d64880eb8cfcabe5f90a120ed47c460743f0b62a8efa6f17f54657",
+      "compile_wall_ms": 809.708642,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.012877440080046654,
+      "forward_device_window_samples_ms": [
+        0.012803520075976849,
+        0.012877440080046654,
+        0.012626559473574162,
+        0.013202719390392303,
+        0.013081439770758152
+      ],
+      "forward_image_sha256": "07966e34516abced77b2b5c74d3ddfa2b33b62a7073cdad1677eb2eaad0ad7de",
+      "max_abs_gradient_error": 2.1520812475833706e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.026080798357725143,
+      "backward_device_window_samples_ms": [
+        0.026080798357725143,
+        0.025925280526280403,
+        0.026395680382847786,
+        0.026384001597762108,
+        0.0256647989153862
+      ],
+      "backward_image_sha256": "c2224e5bb926317d714a507fe34176267620d4191d3c1f7a4737dceeeabfce31",
+      "backward_wall_median_ms": 0.189102,
+      "backward_wall_samples_ms": [
+        0.201202,
+        0.179452,
+        0.187962,
+        0.201032,
+        0.189102
+      ],
+      "capture_wall_median_ms": 1.990112,
+      "capture_wall_samples_ms": [
+        2.664769,
+        1.990112,
+        1.989083,
+        1.982451,
+        2.024772
+      ],
+      "causal": true,
+      "checkpoint_identity": "a7281e5cf2d64880eb8cfcabe5f90a120ed47c460743f0b62a8efa6f17f54657",
+      "compile_wall_ms": 816.579969,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.013449599966406822,
+      "forward_device_window_samples_ms": [
+        0.012592480517923832,
+        0.012876641005277634,
+        0.013449599966406822,
+        0.018559198826551437,
+        0.019442560151219368
+      ],
+      "forward_image_sha256": "07966e34516abced77b2b5c74d3ddfa2b33b62a7073cdad1677eb2eaad0ad7de",
+      "max_abs_gradient_error": 3.4216907163556187e-09,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_device_window_median_ms": 0.02546576038002968,
+      "backward_device_window_samples_ms": [
+        0.02546576038002968,
+        0.025416960939764977,
+        0.02553647942841053,
+        0.025464320555329323,
+        0.02561408095061779
+      ],
+      "backward_image_sha256": "c2224e5bb926317d714a507fe34176267620d4191d3c1f7a4737dceeeabfce31",
+      "backward_wall_median_ms": 0.196073,
+      "backward_wall_samples_ms": [
+        0.236843,
+        0.196073,
+        0.232693,
+        0.185062,
+        0.179102
+      ],
+      "capture_wall_median_ms": 1.793971,
+      "capture_wall_samples_ms": [
+        2.335527,
+        1.755349,
+        1.83698,
+        1.77948,
+        1.793971
+      ],
+      "causal": true,
+      "checkpoint_identity": "a7281e5cf2d64880eb8cfcabe5f90a120ed47c460743f0b62a8efa6f17f54657",
+      "compile_wall_ms": 813.037699,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+      "forward_device_window_median_ms": 0.01419695932418108,
+      "forward_device_window_samples_ms": [
+        0.012478879652917385,
+        0.015021280385553837,
+        0.014477119781076908,
+        0.01419695932418108,
+        0.013426239602267742
+      ],
+      "forward_image_sha256": "07966e34516abced77b2b5c74d3ddfa2b33b62a7073cdad1677eb2eaad0ad7de",
+      "max_abs_gradient_error": 5.303108635557052e-08,
+      "ownership": "private saved generation survives resident caller mutation and repeated backward",
+      "route": "JIT trace -> native paired AD -> Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident ABI",
+      "shape_b_hq_hkv_sq_sk_d_dv": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "q",
+        "k"
+      ]
+    }
+  ],
+  "samples": 5,
+  "schema": "tessera.nvidia.jit_attention_vjp.v1",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_jit_attention_vjp.py": "7d2ab57dde3afc5e0b692665288a6f80ae2ab0e6c2d2ad2bc252c65d843cfcba",
+    "python/tessera/__init__.py": "a9e46d51d40d49db24ae62f77f3b712a5a19d91da0766bf7cf0325df6139231f",
+    "python/tessera/compiler/graph_ir.py": "b0e38c428c3933199231599258f5a437e4b83437b9a5503a8c30a4f02838679f",
+    "python/tessera/compiler/jit.py": "76c1315f1214ae566f683c079c0d3d4e3746dddb77cb5a33bc0823f015aa83a8",
+    "python/tessera/compiler/matmul_pipeline.py": "42388470f454f20400fd48d775cf2c2875cb0d52cf3c8c68b6aac628a2fc0670",
+    "python/tessera/compiler/native_attention_program.py": "52454c3cdf81af4b64ae371f643178b2e19d7c2142d815feaad1d98f1c3b3bd2",
+    "python/tessera/compiler/nvidia_native.py": "5045f2cd288ee14cc1ae4dbcbd83d4ec232c1946a6b50f9dcedda3384b58f1f0",
+    "python/tessera/compiler/op_catalog.py": "f44bac741e0a9d81abfeee16ef36a195619a50a0e078d49cdd1289391696f5f7",
+    "python/tessera/compiler/resident_attention.py": "9ce67663740cdcc1cb36ee7cf1a1604e7cb4a6786352b5d955e32102de2133b9",
+    "python/tessera/compiler/scheduled_checkpoint.py": "7a8291b9274df5f5b27a73b98882d95396d86f1c0d405bc04dd037288c00b728",
+    "python/tessera/compiler/trace.py": "79f6b405790f1623339eaf6c655b76e6d1a94075e7dfd56785458f0b7d8c05d7",
+    "python/tessera/runtime.py": "e414798ae60e44c2d809f26d2cab33c520f8e318930c1a771f4f17713339641f",
+    "src/compiler/ir/AdjointInterface.cpp": "88e7f128ebb30eb2581787e4acc3f510696426bd996f79da0d81792ac484113c",
+    "src/compiler/ir/AttentionADContract.h": "0021f4aefbbdcbc6ebf3c13367d9b3a9e70b80dbabba8c1edc1c89e30866f72b",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "4f4fb01a71290459c6bacf3bccb1ccdc28f0ae3f8f4602a1623aa73353d08ee8"
+  },
+  "timing_scope": "resident CUDA-event C++ launch windows include driver gaps; capture wall includes private copies, module load and forward; backward wall includes allocation and synchronization; selected wrt still computes full Q/K/V native gradient product; no speedup claim"
+}

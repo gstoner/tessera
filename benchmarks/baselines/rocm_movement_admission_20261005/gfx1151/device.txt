@@ -1,0 +1,6 @@
+paged_kv (4, 4, 3, 8, 1, 5): retained/compiled=1.205
+paged_kv (32, 16, 4, 64, 3, 31): retained/compiled=1.086
+paged_kv (64, 32, 8, 128, 7, 249): retained/compiled=1.289
+moe_dispatch (7, 9, 13): retained/compiled=3.391
+moe_dispatch (64, 128, 256): retained/compiled=3.225
+moe_dispatch (512, 768, 1024): retained/compiled=3.363

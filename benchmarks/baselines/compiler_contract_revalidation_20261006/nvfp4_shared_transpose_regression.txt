@@ -1,0 +1,16 @@
+........................................................................ [ 14%]
+......................................................ssssss..........ss [ 28%]
+ssssssssssss..ssss...................................................... [ 42%]
+........................................................................ [ 57%]
+........................................................................ [ 71%]
+........................................................................ [ 85%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+=============================== warnings summary ===============================
+tests/unit/test_nvfp4_tensor.py::test_revalidation_catches_mutated_caller_buffer
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_nvfp4_tensor.py:37: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+  As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+    storage.shape=(2,6)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+481 passed, 24 skipped, 1 warning in 8.12s

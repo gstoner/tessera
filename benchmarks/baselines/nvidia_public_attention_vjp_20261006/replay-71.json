@@ -1,0 +1,16 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "artifact_hash": "77904b673e1a35320dd4fc4408fa0e5bfe396f36aa1c72ef9c9bf7b37b2b1daf",
+  "correctness": "passed",
+  "compiler_subprocesses": "forbidden",
+  "physical_attestation": {
+    "schema": "tessera.runtime_physical_execution.v1",
+    "target": "nvidia_sm120",
+    "device_arch": "sm_120",
+    "execution_kind": "native_gpu",
+    "execution_mode": "cuda_runtime",
+    "artifact_hash": "77904b673e1a35320dd4fc4408fa0e5bfe396f36aa1c72ef9c9bf7b37b2b1daf",
+    "digest": "041dae63164015c1540e1b885e279e1c6259529ffa5c60a0aa0a47c520180449"
+  },
+  "max_abs_error": 2.2198184722668768e-09
+}

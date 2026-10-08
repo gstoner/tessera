@@ -1,0 +1,1263 @@
+{
+  "schema": "tessera.rocm.native-math-package.v1",
+  "architecture": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "device_ordinal": 0,
+  "opaque_hip_uuid": "66666666666666666666666666666666",
+  "compiler_binary_sha256": "978ba4860d9be16deebe567e4a94cb08198462c65fcc1f8ca457296d7fe6a17f",
+  "source_sha256": {
+    "python/tessera/compiler/rocm_math_native.py": "07a2dcc64f151f4ea1c385f65f234f9be02bd68f3a7a3d546dd3e2778fb9be81",
+    "python/tessera/compiler/rocm_native.py": "3ea986802205e3495dfdaf6e26a8576eed72b6ae79af4b6321b508aa0aa5ac52",
+    "python/tessera/compiler/jit.py": "982f2f491832ed55fcc1edb620beaab2ffb9a7a42787a15f2622a6eec54bea5f",
+    "python/tessera/compiler/driver.py": "31f929a478f9cf3d061ccc1677a2d79db599f9b3814e082fac54a5c138c19eb9",
+    "python/tessera/runtime.py": "81d4fdf1d58be23c78313530def24f040983b438e57b1599540c7eb917ab9d83",
+    "src/compiler/programming_model/lib/NativeROCMMath.h": "5c466516430a81665848156534d488c6da795f6373af2f1cbedaea96d3b4b883",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "e5a556220ccf433f76f8bf2c95b35aa8ef9b3388bc8c1a8bc3755dfb09cf4b7e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "c841fc4bb918ee2f9830658f87469ce925d1579898e7659cac2cecf20795f4dd",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "85e7a43068a7dd73301e972ee8f1e19ec6bf26ee80d77891a6bea21b31592b73",
+    "benchmarks/rocm/benchmark_native_math_package.py": "72fff003f41c421430c5a5aeaee6fd82bd76ddcd4a1e7d8b6330a8b95277b00d",
+    "tests/device/rocm/test_native_math_package_jit.py": "58cb122129f9ecd05ee329537a37a023c0523844cce471818c03ffa41ffc0330"
+  },
+  "storage": "f32",
+  "rows": [
+    {
+      "kind": "sqrt",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_unary_f1f4e7c33a88297a",
+      "image_sha256": "d2b0625a25b594ce0554d0d0e6d53c8ba08bf13c8ca4f68e0097ffc24a1f4b29",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "5bd076b8065438e17e1fece2f4bad646580bdc50907d4d8d090100dc5575f6b4",
+        "schedule_ir": "72b30a91931a7ce7c6d7c11573e728ad95c1ceb2ce1797faf5b4197ecc473499",
+        "tile_ir": "7d6194dca20306733e49ab9e32b97c894216fb765a8cef64edbe5571248f33dd",
+        "target_ir": "1b90ee9634fa678e44456015e6e55f1197ffc0a64283f05d79980c98451cabeb"
+      },
+      "device_event_samples_ms": [
+        0.0021911199390888215,
+        0.002180120050907135,
+        0.0022831200063228607,
+        0.00218190997838974,
+        0.0021647100150585176,
+        0.002207909971475601,
+        0.002217220067977905
+      ],
+      "device_event_median_ms": 0.0021911199390888215,
+      "warm_jit_end_to_end_samples_ms": [
+        1.2197,
+        0.800736,
+        0.96903,
+        0.865199,
+        0.822057,
+        0.800796,
+        0.854619
+      ],
+      "warm_jit_end_to_end_median_ms": 0.854619,
+      "portable_end_to_end_samples_ms": [
+        0.644647,
+        0.608264,
+        0.623326,
+        0.626116,
+        0.629236,
+        0.650997,
+        0.624646
+      ],
+      "portable_end_to_end_median_ms": 0.626116
+    },
+    {
+      "kind": "exp",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 4.76837158203125e-07,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_unary_6842a9296ee25363",
+      "image_sha256": "e245b420b65d46a79711ff29daf7300dcf968697b368fc1097ae8089cabf0195",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "6c35de5b9ac394c4c447d128fb85bd0aa27312f2f322eb1c316975c4d3f14140",
+        "schedule_ir": "4e9abdaa2c926e2cbf838553ed7c60aae0b2ec032382df0a2aff9c2098c965ac",
+        "tile_ir": "7e730fd1739579442349891ba3bc5988409eb4e015183be87501ad192da49a46",
+        "target_ir": "fe4aacc3c7b61368f578458c380ee38b40059b780cdfe26d0e33c9dcb6f1015d"
+      },
+      "device_event_samples_ms": [
+        0.0021668699383735656,
+        0.0020253700017929077,
+        0.002281080037355423,
+        0.002167380005121231,
+        0.0022256800532341,
+        0.00215937003493309,
+        0.00241347998380661
+      ],
+      "device_event_median_ms": 0.002167380005121231,
+      "warm_jit_end_to_end_samples_ms": [
+        1.273663,
+        0.88153,
+        0.833707,
+        0.860069,
+        0.86846,
+        0.849159,
+        0.822677
+      ],
+      "warm_jit_end_to_end_median_ms": 0.860069,
+      "portable_end_to_end_samples_ms": [
+        0.817291,
+        0.675969,
+        0.665178,
+        0.653567,
+        0.647447,
+        0.70006,
+        0.680639
+      ],
+      "portable_end_to_end_median_ms": 0.675969
+    },
+    {
+      "kind": "add",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_6fef572bd096e9b0",
+      "image_sha256": "f64053459cc87380b15b4aa9e70b6a9ac238ec3e78c6c83ee965dcec4043ebc8",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "8dc97441489d8d7fad448322e42ceb986f65eb01d1f99b7d06cac1b682000e2e",
+        "schedule_ir": "3dfe64099d8b3eb9810aa7a698b0dc2987444e7cbbbeb2b624e2ea8b71e3d49b",
+        "tile_ir": "739c565385cfd0c06f3150d951251f8ad51fb5b65dd2658529747d8e8e25d4a7",
+        "target_ir": "f3a907c304962db9747aa2986db862c831381a8d509287b93292210255fe8f8d"
+      },
+      "device_event_samples_ms": [
+        0.0021467800438404083,
+        0.0019193699955940247,
+        0.0021358899772167205,
+        0.00255730003118515,
+        0.0021471899747848512,
+        0.002253589928150177,
+        0.002303390055894852
+      ],
+      "device_event_median_ms": 0.0021471899747848512,
+      "warm_jit_end_to_end_samples_ms": [
+        1.22001,
+        0.946994,
+        0.901642,
+        1.114049,
+        1.04594,
+        0.996417,
+        0.951445
+      ],
+      "warm_jit_end_to_end_median_ms": 0.996417,
+      "portable_end_to_end_samples_ms": [
+        0.726272,
+        0.725671,
+        0.713181,
+        0.778114,
+        0.732162,
+        0.737042,
+        0.760804
+      ],
+      "portable_end_to_end_median_ms": 0.732162
+    },
+    {
+      "kind": "div",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_678843114073a21c",
+      "image_sha256": "e5dd256ce3199fd156e1aed02964263a81cdaa84cab0795494ae6fa2bf6009ac",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "93176c344211ec6b32d428a0a12398fdb244cc56b727ceb2bf7009e6a6f0152a",
+        "schedule_ir": "3a8ad52e37f23131a32d60fc23ce9ae50d31ba678f9a86a3162a72aa5c82dfde",
+        "tile_ir": "affb3814224f09b855c3f513c6d7047187ec7db2b3fe8512c40ad0458e1ff2ed",
+        "target_ir": "967a75b4015ccc2bbd482c8924b8e2327b308e9d4baa13561f1ee31e11ec6cb3"
+      },
+      "device_event_samples_ms": [
+        0.0022258999943733215,
+        0.002077990025281906,
+        0.0021744999289512634,
+        0.0021543000638484956,
+        0.0021282899379730224,
+        0.0022209000587463377,
+        0.002187599986791611
+      ],
+      "device_event_median_ms": 0.0021744999289512634,
+      "warm_jit_end_to_end_samples_ms": [
+        1.374729,
+        0.927793,
+        0.947554,
+        0.88165,
+        0.964825,
+        0.86736,
+        0.960575
+      ],
+      "warm_jit_end_to_end_median_ms": 0.947554,
+      "portable_end_to_end_samples_ms": [
+        0.758273,
+        0.802986,
+        0.708051,
+        0.767224,
+        0.776914,
+        0.747373,
+        0.687029
+      ],
+      "portable_end_to_end_median_ms": 0.758273
+    },
+    {
+      "kind": "add",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_6fef572bd096e9b0",
+      "image_sha256": "f64053459cc87380b15b4aa9e70b6a9ac238ec3e78c6c83ee965dcec4043ebc8",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "14d01533fe4fcdfe7ecbfdf99e5ba18596c25e91287cfc30636d3787defb940d",
+        "schedule_ir": "68a4ff90f3b96e3a23f43328f702c21be4c5e9d5e3a8be5b7aeb90856f60da98",
+        "tile_ir": "1fd8eaaa750f2bae91aa83cf68de2323b8db4fd6fbbf1f193f6cc66376f643f2",
+        "target_ir": "f3a907c304962db9747aa2986db862c831381a8d509287b93292210255fe8f8d"
+      },
+      "device_event_samples_ms": [
+        0.002061000019311905,
+        0.0019999900460243225,
+        0.0021472999453544615,
+        0.0021749000251293183,
+        0.002132200002670288,
+        0.002203110009431839,
+        0.00224250003695488
+      ],
+      "device_event_median_ms": 0.0021472999453544615,
+      "warm_jit_end_to_end_samples_ms": [
+        1.273923,
+        0.960805,
+        0.913982,
+        0.909122,
+        0.919303,
+        0.925693,
+        0.956355
+      ],
+      "warm_jit_end_to_end_median_ms": 0.925693,
+      "portable_end_to_end_samples_ms": [
+        0.796511,
+        0.767154,
+        0.732192,
+        0.741602,
+        0.736132,
+        0.714721,
+        0.719551
+      ],
+      "portable_end_to_end_median_ms": 0.736132
+    },
+    {
+      "kind": "div",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_678843114073a21c",
+      "image_sha256": "e5dd256ce3199fd156e1aed02964263a81cdaa84cab0795494ae6fa2bf6009ac",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "33e64209c2896728ce0c7edbe12aff53bb8301ecad00777b7fad56d99fafd5cc",
+        "schedule_ir": "807e9bc44fc283b5bfe4f9ac8c4746a13f1827f7e7ecf1dd5d4d50efe6aef0ef",
+        "tile_ir": "67e0eb149cc9899fe2e245d9adb404b1ec98a082430fe25ed90e6e1ec08b3a47",
+        "target_ir": "967a75b4015ccc2bbd482c8924b8e2327b308e9d4baa13561f1ee31e11ec6cb3"
+      },
+      "device_event_samples_ms": [
+        0.0021083000302314758,
+        0.0020642900466918946,
+        0.0019385899603366853,
+        0.002193699926137924,
+        0.0025089100003242494,
+        0.0021383999288082122,
+        0.002172600030899048
+      ],
+      "device_event_median_ms": 0.0021383999288082122,
+      "warm_jit_end_to_end_samples_ms": [
+        1.20476,
+        0.948664,
+        0.898641,
+        1.085097,
+        0.967035,
+        0.971905,
+        1.05136
+      ],
+      "warm_jit_end_to_end_median_ms": 0.971905,
+      "portable_end_to_end_samples_ms": [
+        0.732852,
+        0.724421,
+        0.70987,
+        0.770584,
+        0.716111,
+        0.742222,
+        0.717581
+      ],
+      "portable_end_to_end_median_ms": 0.724421
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 1.9073486328125e-06,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scan_2d86b2878035d11e",
+      "image_sha256": "21147845d7a498f9cc02c9fd19ecc333b6c814583ab3e7ca1182456649110261",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "f1b1999528b548fcbb37d41cd45771128cad5454ac4b0d37fc46eedf542cf7cc",
+        "schedule_ir": "64f58d4c3d5cb15abcfc8cd77c7e99ff41db6348925c8a8b04afab1dc1bb3eab",
+        "tile_ir": "0cceadb6e3cee454c69f2a238eac4789db04c9ae798239995f7790d65fa3c225",
+        "target_ir": "1b352682616a26cc62c336c55dd0d5949c0322edc0d57a0f4c79f36fbf2ab1e1"
+      },
+      "device_event_samples_ms": [
+        0.002490130066871643,
+        0.002123900055885315,
+        0.002339019924402237,
+        0.0023173199594020842,
+        0.0026113298535346986,
+        0.0023229099810123444,
+        0.002870039939880371
+      ],
+      "device_event_median_ms": 0.002339019924402237,
+      "warm_jit_end_to_end_samples_ms": [
+        1.24026,
+        0.816586,
+        0.956249,
+        0.855449,
+        0.901541,
+        0.815686,
+        0.832578
+      ],
+      "warm_jit_end_to_end_median_ms": 0.855449,
+      "portable_end_to_end_samples_ms": [
+        0.636446,
+        0.650547,
+        0.628036,
+        0.624236,
+        0.633676,
+        0.608775,
+        0.665488
+      ],
+      "portable_end_to_end_median_ms": 0.633676
+    },
+    {
+      "kind": "cummax",
+      "shape": [
+        3,
+        17
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scan_e05cc5f27e3e0334",
+      "image_sha256": "a4fa399c2abef7eded120b7437397fd36ce4461ed13604afa00dfbfe435f6fa1",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "6811840f19abdfbcb23cdc991c35b54f925eaf709245dcf6ca3d9ffe9e6a72ea",
+        "schedule_ir": "587a9f089cb3ad30cfb2c4445ba8dbd1c65c48a723a688f59d0ce7cc8b40f5ec",
+        "tile_ir": "ee6f03d580a00aff2f4512f0532c82c31d33451bec4a9a31a9b8e4ef6947acf8",
+        "target_ir": "90cba0746b55d419fc575228b4e22f72ea991b85601c00cfb8e187f444fccc37"
+      },
+      "device_event_samples_ms": [
+        0.0026195299625396727,
+        0.002452320009469986,
+        0.002559419870376587,
+        0.0025622299313545227,
+        0.002539930045604706,
+        0.002601029872894287,
+        0.0027718299627304075
+      ],
+      "device_event_median_ms": 0.0025622299313545227,
+      "warm_jit_end_to_end_samples_ms": [
+        1.23017,
+        0.809506,
+        0.9663,
+        0.854868,
+        0.829318,
+        0.814856,
+        0.789125
+      ],
+      "warm_jit_end_to_end_median_ms": 0.829318,
+      "portable_end_to_end_samples_ms": [
+        0.638357,
+        0.633516,
+        0.643946,
+        0.70114,
+        0.630395,
+        0.630006,
+        0.623206
+      ],
+      "portable_end_to_end_median_ms": 0.633516
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_unary_f1f4e7c33a88297a",
+      "image_sha256": "d2b0625a25b594ce0554d0d0e6d53c8ba08bf13c8ca4f68e0097ffc24a1f4b29",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "2d76d0d4001bdb525ca6b5f838af5d27949f965c04ce0b58a39e2eab4ec891e1",
+        "schedule_ir": "5c8b61c49457dba8104cc0d8455899b658f51067d8f239f3bfa73b2eb7e9152f",
+        "tile_ir": "fb0d04e54ce8e9f4fab8f0268134b8061ea04e74b7699c0d6ac9ffe0ef5c8e0f",
+        "target_ir": "1b90ee9634fa678e44456015e6e55f1197ffc0a64283f05d79980c98451cabeb"
+      },
+      "device_event_samples_ms": [
+        0.0021581999957561494,
+        0.0019834999740123748,
+        0.0021748100221157074,
+        0.00213360995054245,
+        0.0020417100191116332,
+        0.002151910066604614,
+        0.0021001100540161133
+      ],
+      "device_event_median_ms": 0.00213360995054245,
+      "warm_jit_end_to_end_samples_ms": [
+        1.094402,
+        0.822527,
+        0.890681,
+        0.817486,
+        0.803776,
+        0.809357,
+        0.785525
+      ],
+      "warm_jit_end_to_end_median_ms": 0.817486,
+      "portable_end_to_end_samples_ms": [
+        0.649797,
+        0.640057,
+        0.658587,
+        0.628566,
+        0.70766,
+        0.623005,
+        0.610525
+      ],
+      "portable_end_to_end_median_ms": 0.640057
+    },
+    {
+      "kind": "exp",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 9.5367431640625e-07,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_unary_6842a9296ee25363",
+      "image_sha256": "e245b420b65d46a79711ff29daf7300dcf968697b368fc1097ae8089cabf0195",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "b3b6f90a457318c98aac7d717fc94bc2062252bc3b0d31ebcb691dfb1f63419f",
+        "schedule_ir": "d8c0409f844d5a964ba5b81dfeb95623ad3ec6f5e1208ede71dd4d8c2efeea79",
+        "tile_ir": "27568ede59ecb60729ea437ae3ca28d8609045776cd64e6e48bedf619fbaa906",
+        "target_ir": "fe4aacc3c7b61368f578458c380ee38b40059b780cdfe26d0e33c9dcb6f1015d"
+      },
+      "device_event_samples_ms": [
+        0.0021827100217342377,
+        0.0019565999507904054,
+        0.00213810995221138,
+        0.00217971995472908,
+        0.0021567100286483763,
+        0.0021205100417137144,
+        0.002150910049676895
+      ],
+      "device_event_median_ms": 0.002150910049676895,
+      "warm_jit_end_to_end_samples_ms": [
+        1.090542,
+        0.830257,
+        0.892631,
+        0.822347,
+        0.795586,
+        0.807946,
+        0.797935
+      ],
+      "warm_jit_end_to_end_median_ms": 0.822347,
+      "portable_end_to_end_samples_ms": [
+        0.656427,
+        0.622045,
+        0.652637,
+        0.619496,
+        0.69456,
+        0.629186,
+        0.604835
+      ],
+      "portable_end_to_end_median_ms": 0.629186
+    },
+    {
+      "kind": "add",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_6fef572bd096e9b0",
+      "image_sha256": "f64053459cc87380b15b4aa9e70b6a9ac238ec3e78c6c83ee965dcec4043ebc8",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "57a110516199240dc6170550d47341122ab82eb5bff2b987e267ea9966b19d32",
+        "schedule_ir": "6b8311e337561d12dabca53ac3f0f529377cadf7d6b9295867331fe74ec3f367",
+        "tile_ir": "56439b7379a9dd5966cf9cf9e220f476b606cd8a866d3e686e567a02a83af894",
+        "target_ir": "f3a907c304962db9747aa2986db862c831381a8d509287b93292210255fe8f8d"
+      },
+      "device_event_samples_ms": [
+        0.0019849099218845366,
+        0.00199071004986763,
+        0.0021021099388599395,
+        0.0020695099234580992,
+        0.0020385099947452545,
+        0.002065510004758835,
+        0.002157610058784485
+      ],
+      "device_event_median_ms": 0.002065510004758835,
+      "warm_jit_end_to_end_samples_ms": [
+        1.300694,
+        0.943944,
+        1.018398,
+        0.907082,
+        0.936713,
+        1.092934,
+        0.960844
+      ],
+      "warm_jit_end_to_end_median_ms": 0.960844,
+      "portable_end_to_end_samples_ms": [
+        0.758453,
+        0.742462,
+        0.750503,
+        0.761993,
+        0.743673,
+        0.771304,
+        0.766543
+      ],
+      "portable_end_to_end_median_ms": 0.758453
+    },
+    {
+      "kind": "div",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_678843114073a21c",
+      "image_sha256": "e5dd256ce3199fd156e1aed02964263a81cdaa84cab0795494ae6fa2bf6009ac",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "71d3990ef05f114faefd961d2bb8581391e8f823943432b13670ff723dc1b445",
+        "schedule_ir": "8c1f0c20bcf7e592ec8fb1dafb22e7570da1889bd9ede2d89b8efcaaa576d313",
+        "tile_ir": "6db60875adeb35bb7aaeeee574c5529f655f2ebd1fe99cda72b7de62605abdb7",
+        "target_ir": "967a75b4015ccc2bbd482c8924b8e2327b308e9d4baa13561f1ee31e11ec6cb3"
+      },
+      "device_event_samples_ms": [
+        0.0022145199775695803,
+        0.0019259999692440033,
+        0.002206929922103882,
+        0.0020896199345588683,
+        0.0021632200479507445,
+        0.0022763200104236603,
+        0.0024789400398731233
+      ],
+      "device_event_median_ms": 0.002206929922103882,
+      "warm_jit_end_to_end_samples_ms": [
+        1.254751,
+        0.940204,
+        0.996027,
+        0.937823,
+        0.923763,
+        1.068531,
+        0.925563
+      ],
+      "warm_jit_end_to_end_median_ms": 0.940204,
+      "portable_end_to_end_samples_ms": [
+        0.821847,
+        0.806148,
+        0.826477,
+        0.740422,
+        0.70481,
+        0.738302,
+        0.791675
+      ],
+      "portable_end_to_end_median_ms": 0.791675
+    },
+    {
+      "kind": "add",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_6fef572bd096e9b0",
+      "image_sha256": "f64053459cc87380b15b4aa9e70b6a9ac238ec3e78c6c83ee965dcec4043ebc8",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "02eb149d45d4721cda2658bdecc079916799197019b35d5c455c2273bd88735d",
+        "schedule_ir": "fff749896f18185d18f8dc4f5574d0f2e07a8f0e34c8632879a31e6d32c6345b",
+        "tile_ir": "ee01d703429433433f604c9519c238503b283065981bab857b6457fc9a845bed",
+        "target_ir": "f3a907c304962db9747aa2986db862c831381a8d509287b93292210255fe8f8d"
+      },
+      "device_event_samples_ms": [
+        0.002083510011434555,
+        0.0020973099768161773,
+        0.0020568099617958068,
+        0.00215161994099617,
+        0.0021597099304199218,
+        0.0021679100394248964,
+        0.001917410045862198
+      ],
+      "device_event_median_ms": 0.0020973099768161773,
+      "warm_jit_end_to_end_samples_ms": [
+        1.315735,
+        0.932123,
+        0.963425,
+        0.968025,
+        1.039039,
+        0.936073,
+        0.963865
+      ],
+      "warm_jit_end_to_end_median_ms": 0.963865,
+      "portable_end_to_end_samples_ms": [
+        0.741522,
+        0.732702,
+        0.724272,
+        0.727162,
+        0.760064,
+        0.753372,
+        0.784265
+      ],
+      "portable_end_to_end_median_ms": 0.741522
+    },
+    {
+      "kind": "div",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_678843114073a21c",
+      "image_sha256": "e5dd256ce3199fd156e1aed02964263a81cdaa84cab0795494ae6fa2bf6009ac",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "63f59f21c87d88c7f7214adf5e14c19e4ef8e9590548bc72552ed29a0507b163",
+        "schedule_ir": "3e8f0e47528cddd084eef9f32787986638907226091e68b3bfbebfa1fb33d900",
+        "tile_ir": "f9cc36bf2247c930f8aef77bf1172ad6ed214c9530b2209867069b535729f111",
+        "target_ir": "967a75b4015ccc2bbd482c8924b8e2327b308e9d4baa13561f1ee31e11ec6cb3"
+      },
+      "device_event_samples_ms": [
+        0.0022255100309848787,
+        0.0019731999933719634,
+        0.002358520030975342,
+        0.002120710015296936,
+        0.0024392299354076387,
+        0.0021961100399494173,
+        0.002355719953775406
+      ],
+      "device_event_median_ms": 0.0022255100309848787,
+      "warm_jit_end_to_end_samples_ms": [
+        1.216949,
+        0.943374,
+        0.928553,
+        1.076182,
+        0.990766,
+        0.966425,
+        0.914962
+      ],
+      "warm_jit_end_to_end_median_ms": 0.966425,
+      "portable_end_to_end_samples_ms": [
+        0.739822,
+        0.732572,
+        0.822572,
+        0.774574,
+        0.757463,
+        0.746242,
+        0.719391
+      ],
+      "portable_end_to_end_median_ms": 0.746242
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.000152587890625,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scan_2d86b2878035d11e",
+      "image_sha256": "21147845d7a498f9cc02c9fd19ecc333b6c814583ab3e7ca1182456649110261",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "75f6b8124552c0946f12fa88c92f6567c6f81fa0cd1a1a846dd47f7708838a76",
+        "schedule_ir": "e4382b3b666b85c5705d4b9b3bb250f66e8fcd5c7ad14f90df060faacaacf878",
+        "tile_ir": "a57f1ba205a6cefecafe297654a18b8d18a79889b7cc8a84d2d2ad34122d8684",
+        "target_ir": "1b352682616a26cc62c336c55dd0d5949c0322edc0d57a0f4c79f36fbf2ab1e1"
+      },
+      "device_event_samples_ms": [
+        0.0028615498542785642,
+        0.002857649922370911,
+        0.002813439965248108,
+        0.0027822500467300417,
+        0.0027269399166107177,
+        0.0028525498509407044,
+        0.0028806498646736147
+      ],
+      "device_event_median_ms": 0.0028525498509407044,
+      "warm_jit_end_to_end_samples_ms": [
+        1.109933,
+        0.819056,
+        0.96917,
+        0.887831,
+        0.852429,
+        0.875599,
+        0.825577
+      ],
+      "warm_jit_end_to_end_median_ms": 0.875599,
+      "portable_end_to_end_samples_ms": [
+        0.637736,
+        0.630516,
+        0.663658,
+        0.641087,
+        0.636427,
+        0.667848,
+        0.657008
+      ],
+      "portable_end_to_end_median_ms": 0.641087
+    },
+    {
+      "kind": "cummax",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scan_e05cc5f27e3e0334",
+      "image_sha256": "a4fa399c2abef7eded120b7437397fd36ce4461ed13604afa00dfbfe435f6fa1",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "86c5a24135a1f84e076f805fc83153e3dd07204949696e4d7863ca6775fe2250",
+        "schedule_ir": "b4617d2e191777e37e26b1501bb6dafbe1dff8ce813dfda0c56487594e490501",
+        "tile_ir": "e5a2fe8468ad196337aa572e7da21e82a6f050775756e2ae791a6fb4f9dfd42b",
+        "target_ir": "90cba0746b55d419fc575228b4e22f72ea991b85601c00cfb8e187f444fccc37"
+      },
+      "device_event_samples_ms": [
+        0.003281469941139221,
+        0.0028452500700950623,
+        0.0031388700008392334,
+        0.003267970085144043,
+        0.0027895399928092954,
+        0.0031126600503921507,
+        0.003261669874191284
+      ],
+      "device_event_median_ms": 0.0031388700008392334,
+      "warm_jit_end_to_end_samples_ms": [
+        1.068261,
+        0.809686,
+        0.949479,
+        0.941813,
+        0.805276,
+        0.790275,
+        0.788505
+      ],
+      "warm_jit_end_to_end_median_ms": 0.809686,
+      "portable_end_to_end_samples_ms": [
+        0.696269,
+        0.614905,
+        0.629086,
+        0.622845,
+        0.607745,
+        0.639896,
+        0.604284
+      ],
+      "portable_end_to_end_median_ms": 0.622845
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_unary_f1f4e7c33a88297a",
+      "image_sha256": "d2b0625a25b594ce0554d0d0e6d53c8ba08bf13c8ca4f68e0097ffc24a1f4b29",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "504853a6796601c3486a296d92b5f23d28d1cfcc70882168f218f7068b1993a0",
+        "schedule_ir": "81b2d663c9fab1120118b3b913b86440fb7276e81af32a82fdca56d002580806",
+        "tile_ir": "70973b3e343d33d0b0d7e67c4f082069881a9a6d360c648da4adbc8f300bbc53",
+        "target_ir": "1b90ee9634fa678e44456015e6e55f1197ffc0a64283f05d79980c98451cabeb"
+      },
+      "device_event_samples_ms": [
+        0.01188583016395569,
+        0.005081070065498352,
+        0.00527508020401001,
+        0.005479289889335632,
+        0.005163270235061646,
+        0.00513047993183136,
+        0.005147479772567749
+      ],
+      "device_event_median_ms": 0.005163270235061646,
+      "warm_jit_end_to_end_samples_ms": [
+        3.021111,
+        3.603415,
+        3.61905,
+        3.083296,
+        3.204807,
+        3.540601,
+        3.612241
+      ],
+      "warm_jit_end_to_end_median_ms": 3.540601,
+      "portable_end_to_end_samples_ms": [
+        3.287912,
+        2.776163,
+        2.758652,
+        2.741521,
+        2.951823,
+        2.930352,
+        2.754701
+      ],
+      "portable_end_to_end_median_ms": 2.776163
+    },
+    {
+      "kind": "exp",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 9.5367431640625e-07,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_unary_6842a9296ee25363",
+      "image_sha256": "e245b420b65d46a79711ff29daf7300dcf968697b368fc1097ae8089cabf0195",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "b2326d172968774fbb80dd103009d5d5561cc6b042785270e32dc55fecc4aa64",
+        "schedule_ir": "c75adba5444d8afe25aa0752936ba3f202b95379194a44e2e3a8c8501f514d53",
+        "tile_ir": "0d9629d3682beb2c86a4809f539dd1feb934d3bc36c68ebb56f611d463fa8949",
+        "target_ir": "fe4aacc3c7b61368f578458c380ee38b40059b780cdfe26d0e33c9dcb6f1015d"
+      },
+      "device_event_samples_ms": [
+        0.010198140144348144,
+        0.005202879905700683,
+        0.005216879844665527,
+        0.005678300261497498,
+        0.005211470127105713,
+        0.005112569928169251,
+        0.005253080129623413
+      ],
+      "device_event_median_ms": 0.005216879844665527,
+      "warm_jit_end_to_end_samples_ms": [
+        3.043653,
+        2.992075,
+        3.053379,
+        3.61478,
+        3.501434,
+        3.057479,
+        3.306043
+      ],
+      "warm_jit_end_to_end_median_ms": 3.057479,
+      "portable_end_to_end_samples_ms": [
+        3.187216,
+        3.015317,
+        3.119108,
+        2.828016,
+        2.825645,
+        2.663276,
+        2.852707
+      ],
+      "portable_end_to_end_median_ms": 2.852707
+    },
+    {
+      "kind": "add",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_6fef572bd096e9b0",
+      "image_sha256": "f64053459cc87380b15b4aa9e70b6a9ac238ec3e78c6c83ee965dcec4043ebc8",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "f0d0d6c660bd5015d227865e08ca06bfec5f83c501f4b186b179f934b241a77d",
+        "schedule_ir": "c24c8493741d57bbd8fbccc398443a0fa0e794897c1845179e56c25392c57aad",
+        "tile_ir": "bd24355ff08c85aa01105915a0779d3cb89e105776da65b237dd067d49000271",
+        "target_ir": "f3a907c304962db9747aa2986db862c831381a8d509287b93292210255fe8f8d"
+      },
+      "device_event_samples_ms": [
+        0.014952199459075928,
+        0.0056294000148773195,
+        0.005702400207519531,
+        0.005738610029220581,
+        0.005662299990653992,
+        0.0056559997797012325,
+        0.005877220034599304
+      ],
+      "device_event_median_ms": 0.005702400207519531,
+      "warm_jit_end_to_end_samples_ms": [
+        4.695878,
+        4.702247,
+        5.130377,
+        4.581026,
+        5.109225,
+        4.598446,
+        5.161849
+      ],
+      "warm_jit_end_to_end_median_ms": 4.702247,
+      "portable_end_to_end_samples_ms": [
+        4.873322,
+        4.716884,
+        4.552224,
+        4.396575,
+        4.825579,
+        4.509051,
+        4.47453
+      ],
+      "portable_end_to_end_median_ms": 4.552224
+    },
+    {
+      "kind": "div",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_678843114073a21c",
+      "image_sha256": "e5dd256ce3199fd156e1aed02964263a81cdaa84cab0795494ae6fa2bf6009ac",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "4dd670c9c13573a06294fd5bad381f4c29adc0e3a95cdf5afcc357a5107f7ccc",
+        "schedule_ir": "c8bdf8a15443e8791c797861b996a57d72d498bdf49e44a273660e66f272cf6c",
+        "tile_ir": "389d0e9c80db5da2626f27b007aa37aaeb1a4eccafb578df5b568f051de266e8",
+        "target_ir": "967a75b4015ccc2bbd482c8924b8e2327b308e9d4baa13561f1ee31e11ec6cb3"
+      },
+      "device_event_samples_ms": [
+        0.014132360219955445,
+        0.005820419788360596,
+        0.005591800212860107,
+        0.005654410123825073,
+        0.0057711201906204225,
+        0.005526400208473206,
+        0.005746809840202332
+      ],
+      "device_event_median_ms": 0.005746809840202332,
+      "warm_jit_end_to_end_samples_ms": [
+        4.732259,
+        5.140508,
+        4.966667,
+        4.92357,
+        4.876907,
+        4.976583,
+        4.799007
+      ],
+      "warm_jit_end_to_end_median_ms": 4.92357,
+      "portable_end_to_end_samples_ms": [
+        4.609288,
+        4.269978,
+        4.517197,
+        4.592536,
+        4.324511,
+        4.278384,
+        4.83722
+      ],
+      "portable_end_to_end_median_ms": 4.517197
+    },
+    {
+      "kind": "add",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_6fef572bd096e9b0",
+      "image_sha256": "f64053459cc87380b15b4aa9e70b6a9ac238ec3e78c6c83ee965dcec4043ebc8",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "0d128a5c104f88348da50a2268e1ff6aed304349b2e278be14b3d056cba5020e",
+        "schedule_ir": "3f59a7edd757b74154349ed7d7138ab145691e353acb70221d3dc84538d03463",
+        "tile_ir": "a344dc3fad4a361b26edd250b2004fb2ce649504a50f8cdd1f482cc5a8639d11",
+        "target_ir": "f3a907c304962db9747aa2986db862c831381a8d509287b93292210255fe8f8d"
+      },
+      "device_event_samples_ms": [
+        0.009743319749832153,
+        0.00613083004951477,
+        0.005857719779014587,
+        0.005629709959030151,
+        0.005928720235824585,
+        0.005759720206260682,
+        0.005831409692764283
+      ],
+      "device_event_median_ms": 0.005857719779014587,
+      "warm_jit_end_to_end_samples_ms": [
+        4.777522,
+        5.075439,
+        5.026341,
+        4.777427,
+        5.049713,
+        5.125497,
+        4.801218
+      ],
+      "warm_jit_end_to_end_median_ms": 5.026341,
+      "portable_end_to_end_samples_ms": [
+        4.453919,
+        4.550204,
+        4.49361,
+        4.776977,
+        4.852881,
+        4.133531,
+        4.464329
+      ],
+      "portable_end_to_end_median_ms": 4.49361
+    },
+    {
+      "kind": "div",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": true,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scalar_binary_678843114073a21c",
+      "image_sha256": "e5dd256ce3199fd156e1aed02964263a81cdaa84cab0795494ae6fa2bf6009ac",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "1b0c88bd3b0ff10381de6e7ef902355ed6ede3ba19d405f42ee09b862b1e565f",
+        "schedule_ir": "9636d6b9df3e6e82a0e669bff3f5d7a2619f8d2f03015955f0a2568d4fee10db",
+        "tile_ir": "b8b78d1da16009517109c852630c3e7293ce334d5130f1824ab960faf9e24dc0",
+        "target_ir": "967a75b4015ccc2bbd482c8924b8e2327b308e9d4baa13561f1ee31e11ec6cb3"
+      },
+      "device_event_samples_ms": [
+        0.008938390016555785,
+        0.005726010203361511,
+        0.005622199773788452,
+        0.005734320282936096,
+        0.005618910193443298,
+        0.005623099803924561,
+        0.005530999898910522
+      ],
+      "device_event_median_ms": 0.005623099803924561,
+      "warm_jit_end_to_end_samples_ms": [
+        4.819804,
+        4.693877,
+        8.017855,
+        5.425191,
+        5.902411,
+        5.088054,
+        5.298906
+      ],
+      "warm_jit_end_to_end_median_ms": 5.298906,
+      "portable_end_to_end_samples_ms": [
+        4.737835,
+        4.283688,
+        5.775316,
+        5.073055,
+        4.833475,
+        4.412866,
+        4.147125
+      ],
+      "portable_end_to_end_median_ms": 4.737835
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0013427734375,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scan_2d86b2878035d11e",
+      "image_sha256": "21147845d7a498f9cc02c9fd19ecc333b6c814583ab3e7ca1182456649110261",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "a275a2210d9fc8dbfa477b1c8b434db26743923fd76896524a2d1878a0d9b093",
+        "schedule_ir": "92527a821423aec8febcf56943fe60add09e6bdaa56484a1505b265d2b245ab4",
+        "tile_ir": "3fac28cc041f50528eb6820531e3fb8bf4037bd0da28f1bb2cf34aa091bae877",
+        "target_ir": "1b352682616a26cc62c336c55dd0d5949c0322edc0d57a0f4c79f36fbf2ab1e1"
+      },
+      "device_event_samples_ms": [
+        0.018417400121688843,
+        0.008735780119895935,
+        0.008932390213012696,
+        0.008675270080566407,
+        0.008835979700088502,
+        0.008644670248031616,
+        0.00879808008670807
+      ],
+      "device_event_median_ms": 0.00879808008670807,
+      "warm_jit_end_to_end_samples_ms": [
+        3.102996,
+        3.126612,
+        3.307703,
+        3.032608,
+        2.962513,
+        2.942502,
+        3.367617
+      ],
+      "warm_jit_end_to_end_median_ms": 3.102996,
+      "portable_end_to_end_samples_ms": [
+        3.118223,
+        3.047979,
+        2.883199,
+        2.835616,
+        2.878839,
+        2.757372,
+        2.855557
+      ],
+      "portable_end_to_end_median_ms": 2.878839
+    },
+    {
+      "kind": "cummax",
+      "shape": [
+        256,
+        1024
+      ],
+      "reversed_binary_roles": false,
+      "correctness": "independent NumPy oracle before device timing and after each changed-input JIT/portable call",
+      "max_abs_error": 0.0,
+      "route": "Python frontend->native Graph/Schedule/Tile->ROCm Target->ROCDL/LLVM->HSACO->checked ABI",
+      "compiler_path": "rocm_math_native_descriptor",
+      "entry_symbol": "tessera_rocm_scan_e05cc5f27e3e0334",
+      "image_sha256": "a4fa399c2abef7eded120b7437397fd36ce4461ed13604afa00dfbfe435f6fa1",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "ir_sha256": {
+        "graph_ir": "141530184a3b1f92dfc170dc7ea17c6ed190e2ac68c8cb2975aef66cc12c5226",
+        "schedule_ir": "ddf55aa6ae6ed670919c3c8f4055499fef50928fa16381d53c15596f2805503a",
+        "tile_ir": "b5fc4790ee5fabc839b185050792130d0ab6e5673c4b4f40935e3730eae72df7",
+        "target_ir": "90cba0746b55d419fc575228b4e22f72ea991b85601c00cfb8e187f444fccc37"
+      },
+      "device_event_samples_ms": [
+        0.016649010181427,
+        0.010272059440612793,
+        0.009838029742240906,
+        0.010036649703979493,
+        0.009929440021514892,
+        0.009903240203857421,
+        0.010038549900054932
+      ],
+      "device_event_median_ms": 0.010036649703979493,
+      "warm_jit_end_to_end_samples_ms": [
+        3.17041,
+        3.454372,
+        3.142054,
+        2.984285,
+        3.08217,
+        3.414659,
+        3.366837
+      ],
+      "warm_jit_end_to_end_median_ms": 3.17041,
+      "portable_end_to_end_samples_ms": [
+        3.322174,
+        3.189566,
+        2.999466,
+        2.753151,
+        2.689217,
+        2.700328,
+        2.926401
+      ],
+      "portable_end_to_end_median_ms": 2.926401
+    }
+  ],
+  "shape_independent_images": "verified per operation across all shapes and binary roles",
+  "timing_domains": {
+    "device": "HIP events around resident launches; upload/readback/allocation excluded",
+    "warm_jit": "ordinary JIT host-array call including validation/upload/launch/readback; compiler excluded",
+    "portable": "checked deserialized package host-array launch; deserialization and compiler excluded"
+  },
+  "scope": "static isolated compact f32; narrow storage, general composition and dynamic shapes remain open"
+}

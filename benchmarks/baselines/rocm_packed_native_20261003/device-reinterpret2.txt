@@ -1,0 +1,349 @@
+F
+=================================== FAILURES ===================================
+_________ test_native_packed_matches_independent_folded_oracle[shape0] _________
+
+shape = (83, 32, 64)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x720b0107b230>
+
+    @pytest.mark.parametrize("shape",[(83,32,64),(128,64,128),(256,80,192),(200,128,256)])
+    def test_native_packed_matches_independent_folded_oracle(shape,monkeypatch):
+        def legacy(*args,**kwargs):
+            raise AssertionError("hand-emitted HIP materializer was used")
+        monkeypatch.setattr(packed,"package_mxfp4_packed_folded_prefill",legacy)
+        program,a,sa,payload,expected=compile_case(*shape)
+        package=program.package
+        assert package.image.pipeline_name=="tessera-lower-to-rocm"
+        assert package.descriptor.provenance["native_compiler_owned"] is True
+        assert package.descriptor.provenance["producer_kind"]=="native_mlir_packed_lds"
+        output=np.full(expected.shape,np.nan,ml_dtypes.bfloat16)
+        artifact=rt.RuntimeArtifact(tile_ir=package.tile_ir,target_ir=package.target_ir,
+            metadata={"target":"rocm_gfx1201"},native_image=package.image,launch_descriptor=package.descriptor)
+        buffers=dict(a=a,b_packed=payload.weight_bytes,a_scale=sa,scale_plane=payload.scale_plane,output=output)
+        receipt=rt.launch(artifact,dict(buffers=buffers,scalars=dict(zip(("M","N","K"),shape,strict=True))))
+        assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
+        np.testing.assert_array_equal(output.view(np.uint16),expected.view(np.uint16))
+        # Wrong physical scale bytes cannot reach the native image.
+        changed=np.array(payload.scale_plane,copy=True)
+        changed[0,0]^=np.uint8(1)
+>       refused=rt.launch(artifact,dict(buffers={**buffers,"scale_plane":changed},
+            scalars=dict(zip(("M","N","K"),shape,strict=True))))
+
+tests/device/rocm/test_packed_native_folded.py:63: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/runtime.py:35276: in launch
+    return _launch_native_descriptor(artifact, args, stream, start_ns)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/runtime.py:35160: in _launch_native_descriptor
+    _ensure_builtin_native_launcher(image.target, descriptor.abi_id)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+target = 'rocm_gfx1201'
+abi_id = 'tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1'
+
+    def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
+        from tessera.compiler.apple_native import (
+            APPLE_BMM_BF16_ABI,
+            APPLE_BMM_F16_ABI,
+            APPLE_BMM_F32_ABI,
+            APPLE_GELU_BF16_ABI,
+            APPLE_GELU_DYNAMIC_BF16_ABI,
+            APPLE_GELU_DYNAMIC_F16_ABI,
+            APPLE_GELU_DYNAMIC_F32_ABI,
+            APPLE_GELU_F16_ABI,
+            APPLE_GELU_F32_ABI,
+            APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI,
+            APPLE_POPCOUNT_DYNAMIC_I32_ABI,
+            APPLE_SVD_REDUCED_BATCHED_F32_ABI,
+            APPLE_SVD_REDUCED_F32_ABI,
+            APPLE_SOFTMAX_BF16_ABI,
+            APPLE_SOFTMAX_DYNAMIC_F32_ABI,
+            APPLE_SOFTMAX_F16_ABI,
+            APPLE_SOFTMAX_F32_ABI,
+            APPLE_SIMDGROUP_GEMM_F16_ABI,
+            APPLE_FLASH_ATTN_VARIANT_F32_ABI,
+            APPLE_FLASH_ATTN_BWD_ALL_ABIS,
+            APPLE_SYNTH_REDUCE_F32_ABI,
+            APPLE_TRANSPOSE_BF16_ABI,
+            APPLE_TRANSPOSE_F16_ABI,
+            APPLE_TRANSPOSE_F32_ABI,
+            APPLE_TOPK_DYNAMIC_F32_I32_ABI,
+        )
+    
+        if target == "apple_cpu" and abi_id.startswith("tessera.apple.cpu.value.") and target not in _native_launchers:
+            register_native_launcher(
+                target,
+                binary_formats=("shared_object",),
+                submit=_submit_apple_cpu_native,
+            )
+            return
+        if (
+            target == "apple_gpu"
+            and (
+                abi_id
+                in {
+                    APPLE_BMM_F32_ABI,
+                    APPLE_BMM_F16_ABI,
+                    APPLE_BMM_BF16_ABI,
+                    APPLE_GELU_F32_ABI,
+                    APPLE_GELU_F16_ABI,
+                    APPLE_GELU_BF16_ABI,
+                    APPLE_GELU_DYNAMIC_F32_ABI,
+                    APPLE_GELU_DYNAMIC_F16_ABI,
+                    APPLE_GELU_DYNAMIC_BF16_ABI,
+                    APPLE_COUNT_NONZERO_DYNAMIC_F32_I32_ABI,
+                    APPLE_POPCOUNT_DYNAMIC_I32_ABI,
+                    APPLE_SVD_REDUCED_F32_ABI,
+                    APPLE_SVD_REDUCED_BATCHED_F32_ABI,
+                    APPLE_SOFTMAX_F32_ABI,
+                    APPLE_SOFTMAX_DYNAMIC_F32_ABI,
+                    APPLE_SOFTMAX_F16_ABI,
+                    APPLE_SOFTMAX_BF16_ABI,
+                    APPLE_SIMDGROUP_GEMM_F16_ABI,
+                    APPLE_FLASH_ATTN_VARIANT_F32_ABI,
+                    APPLE_SYNTH_REDUCE_F32_ABI,
+                    APPLE_TOPK_DYNAMIC_F32_I32_ABI,
+                    APPLE_TRANSPOSE_F32_ABI,
+                    APPLE_TRANSPOSE_F16_ABI,
+                    APPLE_TRANSPOSE_BF16_ABI,
+                }
+                or abi_id in {abi for _, abi in APPLE_FLASH_ATTN_BWD_ALL_ABIS.values()}
+                or abi_id.startswith("tessera.apple.value.")
+            )
+            and target not in _native_launchers
+        ):
+            register_native_launcher(
+                target,
+                binary_formats=("shared_object",),
+                submit=_submit_apple_gpu_native,
+            )
+            return
+    
+        from tessera.compiler.rocm_native import (
+            GFX_ATTN_F16_ABI,
+            GFX_ATTN_BF16_ABI,
+            GFX_DEPTH_ATTN_F32_ABI,
+            GFX_MATMUL_BF16_F32_ABI,
+            GFX_MATMUL_BF16_F32_FUSED_ABI,
+            GFX_MATMUL_E4M3_E5M2_F32_ABI,
+            GFX_MATMUL_E4M3_F32_ABI,
+            GFX_MATMUL_E5M2_E4M3_F32_ABI,
+            GFX_MATMUL_E5M2_F32_ABI,
+            GFX_MATMUL_F16_F32_ABI,
+            GFX_MATMUL_F16_F32_FUSED_ABI,
+            GFX_MATMUL_I4_I32_ABI,
+            GFX_MATMUL_I8_I32_ABI,
+            GFX_MOE_DISPATCH_F32_ABI,
+            GFX_NORM_F16_ABI,
+            GFX_NORM_BF16_ABI,
+            GFX_NORM_F32_ABI,
+            GFX_PAGED_KV_F32_ABI,
+            GFX_REDUCE_BF16_ABI,
+            GFX_REDUCE_F16_ABI,
+            GFX_REDUCE_F32_ABI,
+            GFX_SOFTMAX_F16_ABI,
+            GFX_SOFTMAX_F32_ABI,
+            GFX_SPARSE_MATMUL_2TO4_ABI,
+        )
+        from tessera.compiler.rocm_mxfp4_native import (
+            GFX_MXFP4_W4A8_EXACT_ABI,
+            GFX_MXFP4_W4A8_WMMA_ABI,
+            GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
+        )
+        from tessera.compiler.rocm_mxfp4_folded import (
+            GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+            GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
+        )
+        from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
+        from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
+        from tessera.compiler.rocm_mxfp8_blockscale import MXFP8_PACKAGE_ABIS
+        from tessera.compiler.rocm_fp8_blockscale import (
+            GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+            GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+        )
+    
+        if (
+            (target == "rocm_gfx1151"
+             or (target == "rocm_gfx1201" and
+                 (abi_id in _gfx1201_proved_scheduled_abis()
+                  or abi_id in _gfx1201_manual_probe_abis())))
+            and (abi_id not in {GFX_NORM_F16_ABI, GFX_NORM_BF16_ABI, GFX_NORM_F32_ABI}
+                 or target == "rocm_gfx1201")
+            and abi_id
+            in {
+                GFX_SOFTMAX_F16_ABI,
+                GFX_SOFTMAX_F32_ABI,
+                GFX_REDUCE_F16_ABI,
+                GFX_REDUCE_BF16_ABI,
+                GFX_REDUCE_F32_ABI,
+                GFX_PAGED_KV_F32_ABI,
+                GFX_MOE_DISPATCH_F32_ABI,
+                GFX_NORM_F16_ABI,
+                GFX_NORM_BF16_ABI,
+                GFX_NORM_F32_ABI,
+                GFX_MATMUL_F16_F32_ABI,
+                GFX_MATMUL_F16_F32_FUSED_ABI,
+                GFX_MATMUL_BF16_F32_ABI,
+                GFX_MATMUL_BF16_F32_FUSED_ABI,
+                GFX_MATMUL_E4M3_F32_ABI,
+                GFX_MATMUL_E5M2_F32_ABI,
+                GFX_MATMUL_E4M3_E5M2_F32_ABI,
+                GFX_MATMUL_E5M2_E4M3_F32_ABI,
+                GFX_MATMUL_I8_I32_ABI,
+                GFX_MATMUL_I4_I32_ABI,
+                GFX_DEPTH_ATTN_F32_ABI,
+                GFX_ATTN_F16_ABI,
+                GFX_ATTN_BF16_ABI,
+                GFX_SPARSE_MATMUL_2TO4_ABI,
+                GFX_MXFP4_W4A8_EXACT_ABI,
+                GFX_MXFP4_W4A8_WMMA_ABI,
+                GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
+                GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
+                GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
+                PACKED_FOLDED_TARGET_ABI_V1,
+                GFX1201_QUARK_W4A4_PROBE_ABI,
+                GFX_FP8_W8A8_BLOCKSCALE_ABI,
+                GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
+                GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
+                GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+                *MXFP8_PACKAGE_ABIS.values(),
+            }
+            and target not in _native_launchers
+        ):
+            register_native_launcher(
+                target,
+                binary_formats=("hsaco",),
+                submit=_submit_rocm_gfx1151_native,
+            )
+            return
+    
+        from tessera.compiler.x86_native import (
+            X86_ALIBI_F32_ABI,
+            X86_ARGREDUCE_F32_ABI,
+            X86_ATTENTION_EXT_F32_ABI,
+            X86_ATTENTION_F32_ABI,
+            X86_BINARY_F32_ABI,
+            X86_BINARY_MATH_F32_ABI,
+            X86_BITWISE_I32_ABI,
+            X86_COMPARE_F32_ABI,
+            X86_LOGICAL_I8_ABI,
+            X86_MATMUL_F32_ABI,
+            X86_MATMUL_BF16_F32_ABI,
+            X86_MATMUL_F64_ABI,
+            X86_MATMUL_U8S8_S32_ABI,
+            X86_PREDICATE_F32_ABI,
+            X86_REDUCE_F32_ABI,
+            X86_NORM_F32_ABI,
+            X86_ROPE_F32_ABI,
+            X86_SCAN_F32_ABI,
+            X86_SOFTMAX_F32_ABI,
+            X86_UNARY_F32_ABI,
+            X86_TRANSCENDENTAL_F32_ABI,
+            X86_WHERE_F32_ABI,
+        )
+    
+        from tessera.compiler.x86_breadth import X86_BREADTH_ABIS
+    
+        if (
+            target == "x86"
+            and abi_id
+            in (
+                {
+                    X86_SOFTMAX_F32_ABI,
+                    X86_REDUCE_F32_ABI,
+                    X86_MATMUL_F32_ABI,
+                    X86_MATMUL_BF16_F32_ABI,
+                    X86_MATMUL_U8S8_S32_ABI,
+                    X86_MATMUL_F64_ABI,
+                    X86_ATTENTION_F32_ABI,
+                    X86_ATTENTION_EXT_F32_ABI,
+                    X86_UNARY_F32_ABI,
+                    X86_BINARY_F32_ABI,
+                    X86_PREDICATE_F32_ABI,
+                    X86_COMPARE_F32_ABI,
+                    X86_LOGICAL_I8_ABI,
+                    X86_BITWISE_I32_ABI,
+                    X86_WHERE_F32_ABI,
+                    X86_TRANSCENDENTAL_F32_ABI,
+                    X86_BINARY_MATH_F32_ABI,
+                    X86_ARGREDUCE_F32_ABI,
+                    X86_SCAN_F32_ABI,
+                    X86_NORM_F32_ABI,
+                    X86_ROPE_F32_ABI,
+                    X86_ALIBI_F32_ABI,
+                }
+                | {spec.abi_id for spec in X86_BREADTH_ABIS.values()}
+            )
+            and target not in _native_launchers
+        ):
+            register_native_launcher(
+                target,
+                binary_formats=("shared_object",),
+                submit=_submit_x86_native,
+            )
+            return
+    
+>       from tessera.compiler.nvidia_native import (
+            SM120_ATTN_F16_ABI,
+            SM120_ATTN_BF16_ABI,
+            SM120_ATTN_F32_ABI,
+            SM120_ATTN_BIAS_F16_ABI,
+            SM120_ATTN_BIAS_BF16_ABI,
+            SM120_ATTN_BIAS_F32_ABI,
+            SM120_ATTN_BCAST_F32_ABI,
+            SM120_ATTN_BWD_F32_ABI,
+            SM120_ATTN_BWD_BIAS_F32_ABI,
+            SM120_ATTN_BWD_F16_ABI,
+            SM120_ATTN_BWD_BIAS_F16_ABI,
+            SM120_ATTN_BWD_BF16_ABI,
+            SM120_ATTN_BWD_BIAS_BF16_ABI,
+            SM120_ATTN_LSE_F32_ABI,
+            SM120_ATTN_LSE_BIAS_F32_ABI,
+            SM120_ATTN_LSE_BCAST_F32_ABI,
+            SM120_ATTN_BWD_LSE_F32_ABI,
+            SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
+            SM120_ATTN_BWD_LSE_BCAST_F32_ABI,
+            SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
+            SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
+            SM120_BF16_ABI,
+            SM120_ROW_B_BF16_ABI,
+            SM120_EPILOGUE_ABIS,
+            SM120_REDUCED_OUTPUT_ABIS,
+            SM120_F16_ABI,
+            SM120_ROW_B_F16_ABI,
+            SM120_STRIDED_F16_ABI,
+            SM120_STRIDED_BF16_ABI,
+            SM120_FP8_E4M3_ABI,
+            SM120_FP8_E5M2_ABI,
+            SM120_FP64_ABI,
+            SM120_FP6_E2M3_ABI,
+            SM120_FP6_E3M2_ABI,
+            SM120_INT8_ABI,
+            SM120_INT4_ABI,
+            SM120_CUDA_INTRINSIC_ABI,
+            SM120_PACKED_DECODE_ABI,
+            SM120_MXFP4_ABI,
+            SM120_MOE_DISPATCH_F32_ABI,
+            SM120_MOE_COMBINE_F32_ABI,
+            SM120_GROUPED_GEMM_F32_ABI,
+            SM120_MOE_ABIS,
+            SM120_PAGED_ATTN_F32_ABI,
+            SM120_PAGED_KV_F32_ABI,
+            SM120_NVFP4_ABI,
+            SM120_REDUCE_F16_ABI,
+            SM120_REDUCE_BF16_ABI,
+            SM120_REDUCE_F32_ABI,
+            SM120_NORM_F16_ABI,
+            SM120_NORM_BF16_ABI,
+            SM120_NORM_F32_ABI,
+            SM120_TF32_ABI,
+            SM120_SOFTMAX_F16_ABI,
+            SM120_SOFTMAX_BF16_ABI,
+            SM120_SOFTMAX_F32_ABI,
+        )
+E       ImportError: cannot import name 'SM120_ATTN_LSE_BCAST_F32_ABI' from 'tessera.compiler.nvidia_native' (/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/nvidia_native.py)
+
+python/tessera/runtime.py:6318: ImportError
+=========================== short test summary info ============================
+FAILED tests/device/rocm/test_packed_native_folded.py::test_native_packed_matches_independent_folded_oracle[shape0]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 2.12s

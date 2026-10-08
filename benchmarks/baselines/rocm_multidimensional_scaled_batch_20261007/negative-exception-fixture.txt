@@ -1,0 +1,283 @@
+............F........................................................... [ 18%]
+........................................................................ [ 37%]
+........................................................................ [ 56%]
+........................................................................ [ 75%]
+........................................................................ [ 94%]
+.....................                                                    [100%]
+=================================== FAILURES ===================================
+_____________ test_reject_equal_product_but_different_batch_prefix _____________
+
+a = Tracer(shape=(2, 3, 7, 256), dtype='fp8_e4m3', ssa='a0')
+b = Tracer(shape=(3, 2, 256, 19), dtype='fp8_e4m3', ssa='a1')
+sa = Tracer(shape=(2, 3, 7, 2), dtype='f32', ssa='a2')
+sb = Tracer(shape=(2, 3, 2, 1), dtype='f32', ssa='a3')
+
+    def nested_independent_rhs_fp32_kn(a: ts.Tensor["B0","B1","M","K","fp8_e4m3"],
+            b: ts.Tensor["B0","B1","K","N","fp8_e4m3"],
+            sa: ts.Tensor["B0","B1","M","G","fp32"],
+            sb: ts.Tensor["B0","B1","G","C","fp32"]):
+>       return ts.ops.scaled_matmul(a,b,sa,sb,transposeB=False,
+            batching="independent_rhs",numeric_policy={"accum":"fp32","execution_mode":"exact_per_block"},
+            scale_layout={"granularity":"block","block":[128,128],"format":"fp32"})
+
+tests/unit/test_rocm_multidimensional_scaled_batch.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/autodiff/tape.py:1000: in wrapped
+    return _tracer.record_op(name, original, args, kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/trace.py:356: in record_op
+    inferred = _infer_result_types(graph_name, [
+python/tessera/compiler/graph_ir.py:4408: in _infer_result_types
+    result = _infer_result_type(op_name, operand_types, attrs, mesh=mesh, _raw=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:4455: in _infer_result_type
+    result = fn(operand_types, attrs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+operands = [IRType(mlir_str='tensor<2x3x7x256xf8E4M3FN>', shape=('2', '3', '7', '256'), dtype='fp8_e4m3', layout=None), IRType(ml...pe='fp32', layout=None), IRType(mlir_str='tensor<2x3x2x1xf32>', shape=('2', '3', '2', '1'), dtype='fp32', layout=None)]
+attrs = {'transposeB': False, 'batching': 'independent_rhs', 'numeric_policy': {'accum': 'fp32', 'execution_mode': 'exact_per_block'}, 'scale_layout': {'granularity': 'block', 'block': [128, 128], 'format': 'fp32'}}
+
+    def _shape_scaled_matmul(operands, attrs):
+        """Logical output shape of an explicitly scaled four-operand product."""
+        attrs = attrs or {}
+        if len(operands) != 4:
+            raise ValueError("scaled_matmul requires A, B and two scale operands")
+        a,b,sa,sb=operands
+        physical=attrs.get("physical_contract")
+        transpose_a, transpose_b = (attrs.get(name, False) for name in ("transposeA", "transposeB"))
+        if type(transpose_a) is not bool or type(transpose_b) is not bool:
+            raise ValueError("scaled_matmul transpose attributes must be boolean")
+        packed=physical=="rocm_mxfp4_w4a8_packed_folded_prefill_v1"
+        output="bf16" if packed else "fp32"
+        if a.rank is None or b.rank is None:
+            return tensor_ir_type(("*",),output)
+        if attrs.get("batching") in {"shared_rhs_rows","independent_rhs","shared_lhs"} and physical is None:
+            policy=attrs["batching"]
+            lhs_batched=policy!="shared_lhs"
+            rhs_batched=policy!="shared_rhs_rows"
+            if ((a.rank < 3 if lhs_batched else a.rank != 2) or (b.rank < 3 if rhs_batched else b.rank != 2)
+                    or sa.rank != a.rank or sb.rank != b.rank
+                    or a.dtype != "fp8_e4m3" or b.dtype != "fp8_e4m3" or transpose_a):
+                raise ValueError("typed batches require explicit E4M3 matrix/scale batch storage and no lhs transpose")
+            batch=b.shape[:-2] if not lhs_batched else a.shape[:-2]
+            m,k=a.shape[-2:]
+            kb,n=b.shape[-2:][::-1] if transpose_b else b.shape[-2:]
+            if ((k != kb and "?" not in (k,kb)) or
+                    (lhs_batched and rhs_batched and b.shape[:-2]!=batch)):
+>               raise ValueError("typed batch K or batch extent differs")
+E               ValueError: typed batch K or batch extent differs
+
+python/tessera/compiler/graph_ir.py:4185: ValueError
+
+The above exception was the direct cause of the following exception:
+
+self = <TesseraJitFn 'nested_independent_rhs_fp32_kn' effect=pure deterministic=False target='rocm_gfx1201'>
+args = (array([[[[-0.5, 1, 0, ..., 0.25, -0.5, 1],
+         [-0.5, 1, 0.25, ..., 1, 1, 1],
+         [-0.5, 1, 0, ..., 0, 0.25...9 ]],
+
+        [[0.8910269 ],
+         [0.9877338 ]],
+
+        [[0.90639055],
+         [0.46675357]]]], dtype=float32))
+kwargs = {}
+
+    def _specialized_autodiff_module(
+        self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
+    ) -> GraphIRModule:
+        """Specialize an autodiff Graph IR module from concrete call values.
+    
+        The decoration-time module remains symbolic. One immutable specialized
+        copy is cached per dtype/shape signature and is the input to the paired
+        compiler path.
+        """
+        import numpy as np
+        from .graph_ir import specialize_module_from_values
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("autodiff specialization requires every argument")
+        signature = tuple(
+            (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._autodiff_specializations.get(signature)
+        if cached is not None:
+            return cached
+        values = dict(zip(self.arg_names, ordered))
+        if ordered and all(isinstance(value, np.ndarray) for value in ordered):
+            try:
+>               specialized = self._trace_frontend_capture(args, kwargs)[0]
+                              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/tessera/compiler/jit.py:1275: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'nested_independent_rhs_fp32_kn' effect=pure deterministic=False target='rocm_gfx1201'>
+args = (array([[[[-0.5, 1, 0, ..., 0.25, -0.5, 1],
+         [-0.5, 1, 0.25, ..., 1, 1, 1],
+         [-0.5, 1, 0, ..., 0, 0.25...9 ]],
+
+        [[0.8910269 ],
+         [0.9877338 ]],
+
+        [[0.90639055],
+         [0.46675357]]]], dtype=float32))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+                traced = trace(self._fn, *batch_specs(ordered, batch_axes))
+            else:
+                traced = trace(self._fn, *ordered, evaluate_catalog_outputs=require_outputs)
+            # The AST module is a naming convenience here, not an input to the
+            # trace: a zero-function one (apple_gpu trace-defer, auto_batch
+            # skip) must not fail a capture that never needed it. Both fields
+            # already have their fallback in scope -- the qualname hash this
+            # line computes anyway, and the function's own name.
+            emitted = (
+                self.graph_ir.functions[0] if self.graph_ir.functions else None
+            )
+            source_hash = (
+                emitted.source_hash if emitted is not None else None
+            ) or hashlib.sha256(
+                self._fn.__qualname__.encode("utf-8")
+            ).hexdigest()
+            module = to_graph_ir_module(
+                traced,
+                name=emitted.name if emitted is not None else self._fn.__name__,
+                source_hash=source_hash,
+                target=self._legality_target(),
+            )
+            # Preserve explicit gated storage declarations across tracer SSA
+            # renaming. Concrete storage must agree with the source declaration.
+            if any(arg.dtype_status is not None for arg in self._constraint_ir_args):
+                for captured, declared in zip(
+                    module.functions[0].args, self._constraint_ir_args, strict=True
+                ):
+                    if declared.dtype_status is not None:
+                        if captured.ir_type.dtype != declared.ir_type.dtype:
+                            raise ValueError("gated Tensor storage differs from declaration")
+                        captured.dtype_status = declared.dtype_status
+            if batch_axes is not None:
+                from .native_vmap import project_batch
+                module = project_batch(module, ordered, batch_axes)
+            if self.differentiation_request is not None:
+                intent = self.differentiation_request.module_intent_attrs()
+                module.module_attrs.update(intent)
+                module.functions[0].fn_attrs.update(intent)
+            # FRONTEND-IR-MEDIUM-1 (iii): the tracer rebuilds its arguments from
+            # shape and dtype alone, so the region privileges (Decision #2), the
+            # ConstraintSolver's facts (Decision #4) and the symbolic dimension
+            # names all stop here. Record what was known and declare the debt,
+            # so the loss is attributable and machine-checked rather than
+            # invisible (Decision #32).
+            from .graph_ir import declare_frontier_debt
+            declare_frontier_debt(
+                module,
+                args=self._constraint_ir_args,
+                constraints=self.constraints,
+            )
+        except Exception as exc:
+>           raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
+E           tessera._jit_boundary.TesseraJitError: tracer frontend failed: typed batch K or batch extent differs
+
+python/tessera/compiler/jit.py:1397: TesseraJitError
+
+During handling of the above exception, another exception occurred:
+
+    def test_reject_equal_product_but_different_batch_prefix():
+        owner,values,_=nested_case("independent_rhs","fp32",False)
+        wrong=(values[0],values[1].reshape(3,2,*values[1].shape[2:]),values[2],values[3])
+        with pytest.raises(TesseraJitError,match="batch extent differs"):
+>           owner._specialized_autodiff_module(wrong,{})
+
+tests/unit/test_rocm_multidimensional_scaled_batch.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1279: in _specialized_autodiff_module
+    specialized = specialize_module_from_values(self.graph_ir, values)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:5008: in specialize_module_from_values
+    inferred_types = _infer_result_types(
+python/tessera/compiler/graph_ir.py:4408: in _infer_result_types
+    result = _infer_result_type(op_name, operand_types, attrs, mesh=mesh, _raw=True)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:4455: in _infer_result_type
+    result = fn(operand_types, attrs)
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+operands = [IRType(mlir_str='tensor<2x3x7x256xf8E4M3FN>', shape=('2', '3', '7', '256'), dtype='fp8_e4m3', layout=None), IRType(ml...pe='fp32', layout=None), IRType(mlir_str='tensor<2x3x2x1xf32>', shape=('2', '3', '2', '1'), dtype='fp32', layout=None)]
+attrs = {'transposeB': False, 'batching': 'independent_rhs', 'numeric_policy': {'accum': 'fp32', 'execution_mode': 'exact_per_block'}, 'scale_layout': {'granularity': 'block', 'block': [128, 128], 'format': 'fp32'}}
+
+    def _shape_scaled_matmul(operands, attrs):
+        """Logical output shape of an explicitly scaled four-operand product."""
+        attrs = attrs or {}
+        if len(operands) != 4:
+            raise ValueError("scaled_matmul requires A, B and two scale operands")
+        a,b,sa,sb=operands
+        physical=attrs.get("physical_contract")
+        transpose_a, transpose_b = (attrs.get(name, False) for name in ("transposeA", "transposeB"))
+        if type(transpose_a) is not bool or type(transpose_b) is not bool:
+            raise ValueError("scaled_matmul transpose attributes must be boolean")
+        packed=physical=="rocm_mxfp4_w4a8_packed_folded_prefill_v1"
+        output="bf16" if packed else "fp32"
+        if a.rank is None or b.rank is None:
+            return tensor_ir_type(("*",),output)
+        if attrs.get("batching") in {"shared_rhs_rows","independent_rhs","shared_lhs"} and physical is None:
+            policy=attrs["batching"]
+            lhs_batched=policy!="shared_lhs"
+            rhs_batched=policy!="shared_rhs_rows"
+            if ((a.rank < 3 if lhs_batched else a.rank != 2) or (b.rank < 3 if rhs_batched else b.rank != 2)
+                    or sa.rank != a.rank or sb.rank != b.rank
+                    or a.dtype != "fp8_e4m3" or b.dtype != "fp8_e4m3" or transpose_a):
+                raise ValueError("typed batches require explicit E4M3 matrix/scale batch storage and no lhs transpose")
+            batch=b.shape[:-2] if not lhs_batched else a.shape[:-2]
+            m,k=a.shape[-2:]
+            kb,n=b.shape[-2:][::-1] if transpose_b else b.shape[-2:]
+            if ((k != kb and "?" not in (k,kb)) or
+                    (lhs_batched and rhs_batched and b.shape[:-2]!=batch)):
+>               raise ValueError("typed batch K or batch extent differs")
+E               ValueError: typed batch K or batch extent differs
+
+python/tessera/compiler/graph_ir.py:4185: ValueError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_multidimensional_scaled_batch.py::test_reject_equal_product_but_different_batch_prefix
+1 failed, 380 passed in 22.46s

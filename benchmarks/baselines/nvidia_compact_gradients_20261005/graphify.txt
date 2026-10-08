@@ -1,0 +1,5 @@
+Authoritative WSL checkout: /home/angstorms/scratch/next-five-compiler-slices
+Command: graphify update .
+Exit: 127
+Output: bash: graphify: command not found
+No fresh knowledge-graph claim.

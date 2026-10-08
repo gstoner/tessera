@@ -1,0 +1,26 @@
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_jvp_argument_order.py", line 124, in <module>
+    if __name__=="__main__": main()
+                             ~~~~^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_jvp_argument_order.py", line 114, in main
+    rows.append(run(device,order,wrt,sk,causal,compiler,artifacts));print("verified",order,wrt,sk,causal,flush=True)
+                ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_jvp_argument_order.py", line 37, in run
+    program=fn.compile_native_attention_jvp(*(values[n] for n in order),causal,
+                                           compiler=compiler,llvm_bin=Path("/usr/lib/llvm-23/bin"))
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py", line 1956, in compile_native_attention_jvp
+    return compile_attention_program(source, request.wrt_indices, compiler=compiler, llvm_bin=llvm_bin)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_program.py", line 83, in compile_attention_program
+    pair=package_generated_attention_checkpoint_pair(reverse,pipeline_name='tessera-nvidia-pipeline-sm120')
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/nvidia_native.py", line 4784, in package_generated_attention_checkpoint_pair
+    forward = lower_generated_checkpoint(source)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/scheduled_checkpoint.py", line 219, in lower_generated_checkpoint
+    graph = run_tessera_opt(tool, source, options)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/scheduled_matmul.py", line 998, in run_tessera_opt
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+RuntimeError: scheduled compiler boundary --tessera-autodiff-paired=checkpoint-product=forward failed: <stdin>:3:11: error: 'tessera.flash_attn' op requires attribute 'head_dim'
+    %v0 = "tessera.flash_attn"(%q, %k, %v, %causal) {tessera.effect_kind = "state", operandSegmentSizes = array<i32: 1, 1, 1, 1>} : (tensor<1x2x3x4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>, tensor<i1>) -> tensor<1x2x3x3xf32>
+          ^
+<stdin>:3:11: note: see current operation: %0 = "tessera.flash_attn"(%arg0, %arg1, %arg2, %arg3) <{causal = false, operandSegmentSizes = array<i32: 1, 1, 1, 1>}> {tessera.effect_kind = "state"} : (tensor<1x2x3x4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>, tensor<i1>) -> tensor<1x2x3x3xf32>

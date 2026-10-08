@@ -1,0 +1,7 @@
+PASS source-snapshot.json: all current source hashes
+PASS benchmark-source-snapshot.json: all current source hashes
+PASS final recorder/source/core/runtime fingerprints
+PASS 72 native math rows; f32/f16/bf16; five samples per timing domain; four IR ancestry digests per row
+PASS two movement numerical rows; paged-KV device non-regression fails, retained explicitly
+PASS five native C++ resident rows; 180 bit-exact warm output windows; 90 single-kernel event samples; source/core/runtime hashes
+PASS full read has 32 physical pages and 64 logical table entries; repeated mappings; 30 exported native ancestry/image artifacts fingerprinted

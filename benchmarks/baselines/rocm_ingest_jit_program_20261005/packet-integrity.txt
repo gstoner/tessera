@@ -1,0 +1,1 @@
+Measured source hashes match primary checkout; control activation hash matches pinned source activation; all five ISA hashes match; all format arms have zero bound violations.

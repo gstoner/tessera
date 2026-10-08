@@ -1,0 +1,47 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2606,7 +2606,43 @@
+         gb.create<scf::YieldOp>(l, joined);
+       });
+ 
+-  ValueRange accs = groupLoop.getResults();
++  // Diagnostic candidate: specialize only the uniform scale-group loop.
++  // LDS prologue, buffer ownership and masked epilogue remain shared.
++  // Preserve all reduction ordering and the complete generic fallback.
++  SmallVector<Value> accs(groupLoop.getResults().begin(),
++                         groupLoop.getResults().end());
++  if (runtimeK && !foldedFullK && scaleK == 128 &&
++      scaleFormat == "fp32") {
++    OpBuilder dispatch(groupLoop);
++    Value fixedK = arith::ConstantIndexOp::create(dispatch, loc, 2048);
++    Value selected = arith::CmpIOp::create(
++        dispatch, loc, arith::CmpIPredicate::eq, K, fixedK);
++    auto branch = scf::IfOp::create(
++        dispatch, loc, groupLoop.getResultTypes(), selected, true);
++    auto cloneLoop = [&](Region &region, bool specialized) {
++      Block &block = region.front();
++      if (!block.empty() &&
++          block.back().hasTrait<OpTrait::IsTerminator>())
++        block.back().erase();
++      OpBuilder arm = OpBuilder::atBlockEnd(&block);
++      IRMapping mapping;
++      if (specialized) {
++        mapping.map(K, arith::ConstantIndexOp::create(arm, loc, 2048));
++        mapping.map(cGroups, arith::ConstantIndexOp::create(
++            arm, loc, 2048 / scaleK));
++        mapping.map(lastStageK, arith::ConstantIndexOp::create(
++            arm, loc, 2048 - stageK));
++      }
++      Operation *loop = arm.clone(*groupLoop, mapping);
++      scf::YieldOp::create(arm, loc, loop->getResults());
++    };
++    cloneLoop(branch.getThenRegion(), true);
++    cloneLoop(branch.getElseRegion(), false);
++    for (auto pair : llvm::zip(groupLoop.getResults(), branch.getResults()))
++      std::get<0>(pair).replaceAllUsesWith(std::get<1>(pair));
++    accs.assign(branch.getResults().begin(), branch.getResults().end());
++    groupLoop.erase();
++  }
+   const bool masked = !wholeM || !wholeN;
+   // A bf16 output is the fp32 accumulator rounded once, by the store's
+   // epilogue (the architecture consumer owns the element map and the cast).

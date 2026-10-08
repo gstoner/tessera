@@ -1,0 +1,145 @@
+tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir:10:10: error: redefinition of symbol named 'scales__jvp_mod'
+    %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+         ^
+tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir:10:10: note: see current operation: 
+"gpu.module"() <{sym_name = "scales__jvp_mod"}> ({
+  "gpu.func"() <{function_type = (memref<?xf8E4M3FN>, memref<?xf8E4M3FN>, memref<?xf32>, memref<?xf32>, memref<?xf32>, index, index, index) -> (), kernel, workgroup_attributions = 0 : i64}> ({
+  ^bb0(%arg0: memref<?xf8E4M3FN>, %arg1: memref<?xf8E4M3FN>, %arg2: memref<?xf32>, %arg3: memref<?xf32>, %arg4: memref<?xf32>, %arg5: index, %arg6: index, %arg7: index):
+    %0 = "arith.constant"() <{value = 0 : index}> : () -> index
+    %1 = "arith.constant"() <{value = 2 : index}> : () -> index
+    %2 = "arith.constant"() <{value = 4 : index}> : () -> index
+    %3 = "arith.constant"() <{value = 15 : index}> : () -> index
+    %4 = "arith.constant"() <{value = 16 : index}> : () -> index
+    %5 = "arith.constant"() <{value = 0.000000e+00 : f8E4M3FN}> : () -> f8E4M3FN
+    %6 = "arith.constant"() <{value = dense<0.000000e+00> : vector<16xf8E4M3FN>}> : () -> vector<16xf8E4M3FN>
+    %7 = "arith.constant"() <{value = dense<0.000000e+00> : vector<8xf32>}> : () -> vector<8xf32>
+    %8 = "gpu.thread_id"() <{dimension = #gpu<dim x>}> : () -> index
+    %9 = "arith.andi"(%8, %3) : (index, index) -> index
+    %10 = "arith.shrui"(%8, %2) : (index, index) -> index
+    %11 = "gpu.block_id"() <{dimension = #gpu<dim x>}> : () -> index
+    %12 = "gpu.block_id"() <{dimension = #gpu<dim y>}> : () -> index
+    %13 = "arith.constant"() <{value = 16 : index}> : () -> index
+    %14 = "arith.constant"() <{value = 16 : index}> : () -> index
+    %15 = "arith.muli"(%12, %13) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %16 = "arith.muli"(%11, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %17 = "arith.constant"() <{value = 0 : index}> : () -> index
+    %18 = "arith.addi"(%15, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %19 = "arith.addi"(%18, %9) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %20 = "arith.muli"(%19, %arg7) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %21 = "arith.cmpi"(%19, %arg5) <{predicate = 2 : i64}> : (index, index) -> i1
+    %22 = "arith.select"(%21, %19, %0) : (i1, index, index) -> index
+    %23 = "arith.muli"(%22, %arg7) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %24 = "arith.constant"() <{value = 0 : index}> : () -> index
+    %25 = "arith.addi"(%16, %24) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %26 = "arith.addi"(%25, %9) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %27 = "arith.cmpi"(%26, %arg6) <{predicate = 2 : i64}> : (index, index) -> i1
+    %28 = "arith.select"(%27, %26, %0) : (i1, index, index) -> index
+    %29 = "tile.fragment_zero"() : () -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+    %30 = "arith.constant"() <{value = 16 : index}> : () -> index
+    %31 = "arith.remui"(%arg7, %30) : (index, index) -> index
+    %32 = "arith.subi"(%arg7, %31) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %33 = "arith.cmpi"(%31, %0) <{predicate = 1 : i64}> : (index, index) -> i1
+    %34 = "arith.addi"(%15, %13) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %35 = "arith.addi"(%16, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+    %36 = "arith.cmpi"(%34, %arg5) <{predicate = 3 : i64}> : (index, index) -> i1
+    %37 = "arith.cmpi"(%35, %arg6) <{predicate = 3 : i64}> : (index, index) -> i1
+    %38 = "arith.andi"(%36, %37) : (i1, i1) -> i1
+    "scf.if"(%38) ({
+      %77 = "arith.constant"() <{value = 128 : index}> : () -> index
+      %78 = "arith.divui"(%arg7, %77) : (index, index) -> index
+      %79 = "arith.muli"(%78, %77) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+      %80 = "arith.constant"() <{value = 128 : index}> : () -> index
+      %81 = "scf.for"(%0, %79, %80, %29) ({
+      ^bb0(%arg12: index, %arg13: !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">):
+        %83 = "tile.fragment_zero"() : () -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+        %84 = "arith.constant"() <{value = 128 : index}> : () -> index
+        %85 = "arith.addi"(%arg12, %84) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+        %86 = "arith.constant"() <{value = 32 : index}> : () -> index
+        %87 = "scf.for"(%arg12, %85, %86, %83) ({
+        ^bb0(%arg14: index, %arg15: !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">):
+          %91 = "arith.index_cast"(%19) : (index) -> i64
+          %92 = "arith.index_cast"(%arg14) : (index) -> i64
+          %93 = "tile.materialize_composed_layout"(%91, %92) <{layout = #tile.composed_layout<[17, 256], [256, 1], [[[17], [1]], [[256], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %94 = "tile.view"(%arg0, %93, %18, %arg14, %arg7) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index) -> !tile.tile
+          %95 = "tile.fragment_pack"(%94) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">
+          %96 = "arith.index_cast"(%arg14) : (index) -> i64
+          %97 = "arith.index_cast"(%26) : (index) -> i64
+          %98 = "tile.materialize_composed_layout"(%96, %97) <{layout = #tile.composed_layout<[256, 19], [19, 1], [[[256], [1]], [[19], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %99 = "tile.view"(%arg1, %98, %arg14, %25, %arg6) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index) -> !tile.tile
+          %100 = "tile.fragment_pack"(%99) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">
+          %101 = "tile.mma"(%95, %100, %arg15) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+          %102 = "arith.constant"() <{value = 16 : index}> : () -> index
+          %103 = "arith.addi"(%arg14, %102) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+          %104 = "arith.index_cast"(%19) : (index) -> i64
+          %105 = "arith.index_cast"(%103) : (index) -> i64
+          %106 = "tile.materialize_composed_layout"(%104, %105) <{layout = #tile.composed_layout<[17, 256], [256, 1], [[[17], [1]], [[256], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %107 = "tile.view"(%arg0, %106, %18, %103, %arg7) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index) -> !tile.tile
+          %108 = "tile.fragment_pack"(%107) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">
+          %109 = "arith.index_cast"(%103) : (index) -> i64
+          %110 = "arith.index_cast"(%26) : (index) -> i64
+          %111 = "tile.materialize_composed_layout"(%109, %110) <{layout = #tile.composed_layout<[256, 19], [19, 1], [[[256], [1]], [[19], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %112 = "tile.view"(%arg1, %111, %103, %25, %arg6) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index) -> !tile.tile
+          %113 = "tile.fragment_pack"(%112) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">
+          %114 = "tile.mma"(%108, %113, %101) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+          "scf.yield"(%114) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> ()
+        }) : (index, index, index, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+        %88 = "arith.constant"() <{value = 128 : index}> : () -> index
+        %89 = "arith.divui"(%arg12, %88) : (index, index) -> index
+        %90 = "tile.fragment_scaled_accumulate"(%arg13, %87, %arg2, %arg3, %18, %25, %89, %78, %arg5, %arg6) <{scale_format = "fp32", scale_n = 128 : i64}> : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">, memref<?xf32>, memref<?xf32>, index, index, index, index, index, index) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+        "scf.yield"(%90) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> ()
+      }) : (index, index, index, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+      %82 = "tile.fragment_unpack"(%81) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>} : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.tile
+      "tile.store"(%82, %arg4, %18, %25, %arg6) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (!tile.tile, memref<?xf32>, index, index, index) -> ()
+      "scf.yield"() : () -> ()
+    }, {
+      %39 = "arith.constant"() <{value = 128 : index}> : () -> index
+      %40 = "arith.divui"(%arg7, %39) : (index, index) -> index
+      %41 = "arith.muli"(%40, %39) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+      %42 = "arith.constant"() <{value = 128 : index}> : () -> index
+      %43 = "scf.for"(%0, %41, %42, %29) ({
+      ^bb0(%arg8: index, %arg9: !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">):
+        %45 = "tile.fragment_zero"() : () -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+        %46 = "arith.constant"() <{value = 128 : index}> : () -> index
+        %47 = "arith.addi"(%arg8, %46) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+        %48 = "arith.constant"() <{value = 32 : index}> : () -> index
+        %49 = "scf.for"(%arg8, %47, %48, %45) ({
+        ^bb0(%arg10: index, %arg11: !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">):
+          %53 = "arith.index_cast"(%19) : (index) -> i64
+          %54 = "arith.index_cast"(%arg10) : (index) -> i64
+          %55 = "tile.materialize_composed_layout"(%53, %54) <{layout = #tile.composed_layout<[17, 256], [256, 1], [[[17], [1]], [[256], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %56 = "tile.view"(%arg0, %55, %18, %arg10, %arg5, %arg7, %arg7) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index, index, index) -> !tile.tile
+          %57 = "tile.fragment_pack"(%56) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">
+          %58 = "arith.index_cast"(%arg10) : (index) -> i64
+          %59 = "arith.index_cast"(%26) : (index) -> i64
+          %60 = "tile.materialize_composed_layout"(%58, %59) <{layout = #tile.composed_layout<[256, 19], [19, 1], [[[256], [1]], [[19], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %61 = "tile.view"(%arg1, %60, %arg10, %25, %arg7, %arg6, %arg6) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index, index, index) -> !tile.tile
+          %62 = "tile.fragment_pack"(%61) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">
+          %63 = "tile.mma"(%57, %62, %arg11) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+          %64 = "arith.constant"() <{value = 16 : index}> : () -> index
+          %65 = "arith.addi"(%arg10, %64) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+          %66 = "arith.index_cast"(%19) : (index) -> i64
+          %67 = "arith.index_cast"(%65) : (index) -> i64
+          %68 = "tile.materialize_composed_layout"(%66, %67) <{layout = #tile.composed_layout<[17, 256], [256, 1], [[[17], [1]], [[256], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %69 = "tile.view"(%arg0, %68, %18, %65, %arg5, %arg7, %arg7) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index, index, index) -> !tile.tile
+          %70 = "tile.fragment_pack"(%69) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">
+          %71 = "arith.index_cast"(%65) : (index) -> i64
+          %72 = "arith.index_cast"(%26) : (index) -> i64
+          %73 = "tile.materialize_composed_layout"(%71, %72) <{layout = #tile.composed_layout<[256, 19], [19, 1], [[[256], [1]], [[19], [1]]], [0, 0]>}> : (i64, i64) -> i64
+          %74 = "tile.view"(%arg1, %73, %65, %25, %arg7, %arg6, %arg6) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.linear_base, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (memref<?xf8E4M3FN>, i64, index, index, index, index, index) -> !tile.tile
+          %75 = "tile.fragment_pack"(%74) : (!tile.tile) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">
+          %76 = "tile.mma"(%70, %75, %63) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "a", layout = "row_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "e4m3", acc = "f32", role = "b", layout = "col_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+          "scf.yield"(%76) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> ()
+        }) : (index, index, index, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+        %50 = "arith.constant"() <{value = 128 : index}> : () -> index
+        %51 = "arith.divui"(%arg8, %50) : (index, index) -> index
+        %52 = "tile.fragment_scaled_accumulate"(%arg9, %49, %arg2, %arg3, %18, %25, %51, %40, %arg5, %arg6) <{scale_format = "fp32", scale_n = 128 : i64}> : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">, memref<?xf32>, memref<?xf32>, index, index, index, index, index, index) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+        "scf.yield"(%52) : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> ()
+      }) : (index, index, index, !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">
+      %44 = "tile.fragment_unpack"(%43) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>} : (!tile.fragment<m = 16, n = 16, k = 16, elem = "f32", acc = "f32", role = "acc", layout = "row_major", family = "wmma">) -> !tile.tile
+      "tile.store"(%44, %arg4, %18, %25, %arg5, %arg6, %arg6) {tile.layout = #tile.layout<shard = [16, 16] : [16, 1] on ["tlane", "reg"], replica = [] : [] on [], offset = 0>, tile.memory = #tile.memory_layout<space = "gmem", order = "row_major", leading_dim = 0>} : (!tile.tile, memref<?xf32>, index, index, index, index, index) -> ()
+      "scf.yield"() : () -> ()
+    }) : (i1) -> ()
+    "gpu.return"() : () -> ()
+  }) {sym_name = "scales__jvp", tessera.rocm.block_scale_contract = "rocm_fp8_w8a8_blockscale_v1", tessera.rocm.scale_group_panels = 2 : i64, tessera.rocm.scale_k = 128 : i64, tessera.rocm.scale_n = 128 : i64, tessera.rocm.schedule_raster_group = 1 : i64, tessera.rocm.schedule_raster_order = "row_major"} : () -> ()
+}) : () -> ()
+tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir:10:10: note: see existing symbol definition here

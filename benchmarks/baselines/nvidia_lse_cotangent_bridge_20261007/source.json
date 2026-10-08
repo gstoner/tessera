@@ -1,0 +1,11 @@
+{
+  "device": "NVIDIA GeForce RTX 5070",
+  "uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "00c3dcfd9b1cb6383e8bad208840f9fb500fccb8061ed277f5ebe335a518411e",
+    "tests/device/nvidia/test_lse_cotangent_native.py": "19fea1d947a45e6f85da2a3ef2c45f16c4ae7c6d75343f4bb1ec80747d5e96c6"
+  },
+  "TESSERA_OPT": "91fe237448411e927faaa1b38575a3622ae192f763200cadec8041131fea0fc4",
+  "TESSERA_NVIDIA_OPT": "86aaa8f30d0eea3b2087fa0350493d59a6d245651d22bbe43eb5cdb74a64e523",
+  "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "9720b8ba776a4ce0232a06ddc1240354a7a79b13a3b23d40cc92bb672be0cb11"
+}

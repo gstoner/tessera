@@ -1,0 +1,1 @@
+AMD Radeon RX 9070 XT: 12 native compiler cases passed

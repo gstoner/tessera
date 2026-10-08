@@ -1,0 +1,20 @@
+{
+  "compiler_sha256": "e6ca1522545d745deef8908a7d3457359e69fbd80c7b34d0bc3dd175a401fc32",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "failed": 0,
+  "native_launch_library_sha256": "af964a3c90f472eed634b33cbcabc41f7a00c9c3fbf7ab8c6f8b6e8284e24f21",
+  "passed": 625,
+  "remaining_boundary": "native fused tile.matmul_kernel; explicit fragment epilogue and arbitrary producer graphs remain open",
+  "skipped": 49,
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_resident_tensor_epilogue.py": "617bc9c32d377868f3e256a9ce889fe977e19d1379a500c9a870ae0e47ba9c78",
+    "python/tessera/compiler/nvidia_native.py": "e444629f7bec579d6269a0de39a9bd64b81a3784c31e0df7a3a2011a7f0ec9ad",
+    "python/tessera/compiler/scheduled_matmul.py": "129e55540d95fbec938aa4f12ed566f4502c466fe742f68821564abb6bfbfdd8",
+    "python/tessera/runtime.py": "5c8f04647113db13349173204236a7b4b38d8b7fc89572a6476aa478c52e03de",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "808193124283b4003017addcfb23038081f85ac91997df1ad366fbb4bc39e65c",
+    "tests/unit/test_nvidia_tensor_program.py": "3b8376793bc839e366e65eec64300fbfe6cc78c2cf25ba6f1de64a7e0ee36932",
+    "tests/unit/test_scheduled_matmul_consumers.py": "155efe98e7f6502c4fe6eedd85d69354b6a02a9c0df5090a0e3469085cdd0640"
+  },
+  "sync": "W1.1-SM120-RESIDENT-EPILOGUE-2026-10-02",
+  "work_item": "W1.1"
+}

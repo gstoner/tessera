@@ -1,0 +1,69 @@
+{
+  "device": "AMD Radeon RX 9070 XT",
+  "shape_mnk": [
+    17,
+    19,
+    256
+  ],
+  "driver": "diagnostic_member_launch_loop_not_production_program",
+  "correctness": "passed",
+  "finite_difference_max_abs_error": 9.510137601864699e-07,
+  "members": [
+    {
+      "step": 0,
+      "entry": "scales__jvp__member_0",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "image_sha256": "56be70a98a4d945db9642499d19e3d335f112b5bf43cb7f64f992cc94e8d4c0b",
+      "max_abs_error": 1.987880096976369e-06
+    },
+    {
+      "step": 1,
+      "entry": "scales__jvp__member_1",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "image_sha256": "c8c3a3cc36a8382fb982e8f928e7bda2ad96498a840d02d6e4f4d4b53a4f896d",
+      "max_abs_error": 5.586019957704025e-07
+    },
+    {
+      "step": 2,
+      "entry": "scales__jvp__member_2",
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "image_sha256": "a4f249a33ec9d11c8718798209062b09879c3e6002177ab4740a5b014623e707",
+      "max_abs_error": 6.70959805049165e-07
+    },
+    {
+      "step": 3,
+      "entry": "tessera_tile_rocm_math_add_c9f50d7555e1",
+      "geometry": [
+        2,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "image_sha256": "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2",
+      "max_abs_error": 9.134502487739837e-07
+    }
+  ]
+}

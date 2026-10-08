@@ -1,0 +1,1637 @@
+{
+  "schema": "tessera.mixed_nested_scaled.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "device_uuid": "32386439653765666266326566373136",
+  "compiler_sha256": "736644c0ecc6d36ad3530aa617c8c66a3c2d0401dab5b6a1b674d2e39688dbf0",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "d48a4e58eb07560e13c4421ec1779311dba142588abfcd075f1235dd1de0efa4",
+    "python/tessera/compiler/native_vmap.py": "ab88bc76241fd5840d5369fb0cdf7f3ec69a73474c379198aa1ed4628245f004",
+    "python/tessera/compiler/graph_ir.py": "68d3c34708292bb95cefbbccbd43a26bd74a97bb969f9da5d2c844a3402da394",
+    "python/tessera/compiler/native_scaled_program.py": "66a2640975828df91e4574bda98a19dec1c40a69e28c5d6524622b55e6ad46d1",
+    "python/tessera/compiler/native_jvp_plugins.py": "c1a005b2c1ff0710ae5ba99d536690b2e5972a787426e15fba3d545c0052e28d",
+    "python/tessera/compiler/native_vjp_plugins.py": "dd032662e338c5c71ff11c20bf83573ed2e35f8dfaacdf4e9dd996e64b779de5",
+    "src/compiler/ir/include/Tessera/IR/ScaledBatchContract.h": "adacc9988726dc7f722b888233342b0c8b9e285adbdfc5441a464531fc44793e",
+    "src/compiler/ir/LinearTransposeInterface.cpp": "6353a615043ffa58d7d2d3d3e0c219d173293039c35e81c1d05e7e70fb89f1a6",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "de4dfd45373f3117748859faf17c80ce907a55efe8fca8130d10bb5fc438f802",
+    "tests/unit/test_native_mixed_scaled_maps.py": "5c977cf3efc1c3547359f76a96904803969fbfe483ac7359746ed405908d64da",
+    "tests/device/rocm/test_mixed_nested_scaled_execution.py": "34fa554f886f5af88944f9f94a8b095146f1bee4e29b326a398944420fc3d206",
+    "benchmarks/rocm/benchmark_mixed_nested_scaled.py": "26c8ad711fc8719ac32e7da1122bc7b4b80c80c81ee8b803dcbffe56a5625cbe"
+  },
+  "timing_scope": "cold/warm public wall includes checked package/host transfers; prepared HIP event window covers native program dispatch and member kernels; not an isolated single-kernel metric",
+  "selector_promotion": false,
+  "rows": [
+    {
+      "kind": "primal",
+      "scale_format": "fp32",
+      "transposeB": false,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.2907796147487716e-06,
+      "cold_public_wall_ms": 360.29382,
+      "warm_public_wall_samples_ms": [
+        5.589073,
+        0.911048,
+        0.932719
+      ],
+      "warm_public_wall_median_ms": 0.932719,
+      "prepared_program_event_samples_ms": [
+        0.022799061611294746,
+        0.02259034290909767,
+        0.0228065624833107
+      ],
+      "prepared_program_event_median_ms": 0.022799061611294746,
+      "native_program_sha256": "af5edd547541c9a95faa9b46d3956c5ab105f8406a906637e7b6b688753fe375",
+      "member_image_sha256": [
+        "2bbf6aeb8346c59e0e10e385fc7d36ab4744fad3230e28a4c704d100b06c6332"
+      ],
+      "frontend_graph_sha256": "ce5b4b40d068e51a4e4ad37a5bfbb00da283a9f2a6608240a9682d2cd22dd349",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "scale_format": "fp32",
+      "transposeB": false,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.2907796147487716e-06,
+      "cold_public_wall_ms": 454.683031,
+      "warm_public_wall_samples_ms": [
+        1.59867,
+        1.648335,
+        1.474663
+      ],
+      "warm_public_wall_median_ms": 1.59867,
+      "prepared_program_event_samples_ms": [
+        0.06452368944883347,
+        0.06482118368148804,
+        0.06353996694087982
+      ],
+      "prepared_program_event_median_ms": 0.06452368944883347,
+      "native_program_sha256": "1d471dc97b8307c2a8cd0a524c0f92b875fff1989c5f664e3452615fd130f407",
+      "member_image_sha256": [
+        "eaed51847852ace2f7176a8c08de3b4fadfff685777f592097ed5354a169f754",
+        "e1d18f91d8335649c7d79d1c17e7bf06a6eaa3ca73507a074e53502fd3f59d9f",
+        "928415342643d179a210040bef6c101ec524a0f7d93c3518cd78478753e6ed08",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "bc4d7a9c749e685f664a3f76acfb6b753e76b46647215154d375acf0376bb144",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "scale_format": "fp32",
+      "transposeB": false,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "max_abs_error": 3.3125287153268346e-06,
+      "cold_public_wall_ms": 175.910388,
+      "warm_public_wall_samples_ms": [
+        1.793852,
+        1.620321,
+        1.670958
+      ],
+      "warm_public_wall_median_ms": 1.670958,
+      "prepared_program_event_samples_ms": [
+        0.679847776889801,
+        0.5455154180526733,
+        0.5396255254745483
+      ],
+      "prepared_program_event_median_ms": 0.5455154180526733,
+      "native_program_sha256": "bd5d0793348e11054258ec449a1ae39a1eb42181d55e90359e8aa66c7149c3c0",
+      "member_image_sha256": [
+        "3b168ff9e80ba0fff3f8e21e437f5e58d7a421abeea066e8746d942243e66091",
+        "990959511de3cd11590591867ecc06ddffb4a6f32adc5b8ac7d0d9602e2429da"
+      ],
+      "frontend_graph_sha256": "6b922909631eec709384a3f06c63f03cdbf22d1bd30c6f350692d18e8abc5435",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "scale_format": "fp32",
+      "transposeB": false,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.1310932457320177e-06,
+      "cold_public_wall_ms": 280.953928,
+      "warm_public_wall_samples_ms": [
+        1.242515,
+        1.19006,
+        0.892032
+      ],
+      "warm_public_wall_median_ms": 1.19006,
+      "prepared_program_event_samples_ms": [
+        0.022678500041365623,
+        0.02256225049495697,
+        0.022687280550599098
+      ],
+      "prepared_program_event_median_ms": 0.022678500041365623,
+      "native_program_sha256": "32c7b9b03a2a636bc067ac162a25e0902c18168ccb5acc0748833fdd5e7cc16f",
+      "member_image_sha256": [
+        "ce85e0c0470d9e5c18a14a4c823817030b1c8fc538d4807251d3823aa91d35ec"
+      ],
+      "frontend_graph_sha256": "d847fa58f1320481ff9e6e9175f134d90e1c011207d2653ae762880cfbf5294a",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "scale_format": "fp32",
+      "transposeB": false,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.1310932457320177e-06,
+      "cold_public_wall_ms": 451.428207,
+      "warm_public_wall_samples_ms": [
+        1.778934,
+        1.744794,
+        1.583571
+      ],
+      "warm_public_wall_median_ms": 1.744794,
+      "prepared_program_event_samples_ms": [
+        0.0723569393157959,
+        0.072407566010952,
+        0.07245565950870514
+      ],
+      "prepared_program_event_median_ms": 0.072407566010952,
+      "native_program_sha256": "b3c64aea466ac2c81d3f1031fdd0f29482d8cac3e252f68d35253fa6f2baaa6f",
+      "member_image_sha256": [
+        "ce09dc17e0519a60130bf6ca63ac43327bcf3e8d7d119860c6ad9839eb5525fe",
+        "5a84e95b60ed2e15addf4b63b0724f9a1b22d082d41f7b3311652dcbf3e76d93",
+        "0bdd21f7d247e4760667ecefc5829bd96a15f786fd2fad7ecb90d4210fe67d2b",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "6097e04c80ef7d02066489cc390108870c27a1ae126992ebd24a94926523d342",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "scale_format": "fp32",
+      "transposeB": false,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "max_abs_error": 1.5864017970379507e-06,
+      "cold_public_wall_ms": 165.381951,
+      "warm_public_wall_samples_ms": [
+        2.639295,
+        2.488342,
+        2.548622
+      ],
+      "warm_public_wall_median_ms": 2.548622,
+      "prepared_program_event_samples_ms": [
+        1.187782883644104,
+        0.8934560418128967,
+        0.8823696374893188
+      ],
+      "prepared_program_event_median_ms": 0.8934560418128967,
+      "native_program_sha256": "909ef2a806c4dc3d4858d60f65e55d97ba1bf054cda83c32975581b0340e297c",
+      "member_image_sha256": [
+        "89a65f52fb34bd4f54dd1b7163a2766f34ee8600c773c577b8ed73229cf08f59",
+        "e364db9e0a88983de10394c1d428985efec943ccf195ac677a21fcf4e02cb051"
+      ],
+      "frontend_graph_sha256": "4080e1387f7992022aaed44a7202deb29f7ae4c0fdb6bf71e0c573a90d6e351b",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "scale_format": "fp32",
+      "transposeB": true,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.2907796147487716e-06,
+      "cold_public_wall_ms": 257.597938,
+      "warm_public_wall_samples_ms": [
+        1.140676,
+        0.851485,
+        0.879167
+      ],
+      "warm_public_wall_median_ms": 0.879167,
+      "prepared_program_event_samples_ms": [
+        0.03919596970081329,
+        0.03922596946358681,
+        0.03924724832177162
+      ],
+      "prepared_program_event_median_ms": 0.03922596946358681,
+      "native_program_sha256": "286c2fc9443dea9502ae26f799eda1cb02f7c34066c259de3977d53cf4869837",
+      "member_image_sha256": [
+        "538ff2fa74f9fb51fca9131fed1667bf4982bc09acf45151b47f871a10602248"
+      ],
+      "frontend_graph_sha256": "de6dc10bb48bb0f26de704fb17c9afa28e1ee88cbc0dd80e77730936e15bcf31",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "scale_format": "fp32",
+      "transposeB": true,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.2907796147487716e-06,
+      "cold_public_wall_ms": 403.030574,
+      "warm_public_wall_samples_ms": [
+        2.01774,
+        1.601626,
+        1.650008
+      ],
+      "warm_public_wall_median_ms": 1.650008,
+      "prepared_program_event_samples_ms": [
+        0.12202206254005432,
+        0.12486018985509872,
+        0.12122049927711487
+      ],
+      "prepared_program_event_median_ms": 0.12202206254005432,
+      "native_program_sha256": "9bcad0c2958134b3a6771fccbce2d53757c3ca3aa6360c1d9b2a8965628f906d",
+      "member_image_sha256": [
+        "2588be51a17b28a7f49cf7771f1f4c9687fede9d2c9974c2aab42f0049a3bc65",
+        "33d2fb85dc7897ac13b0deebdaac0ca8da6fd54681bb0aa5806b3ed54df18776",
+        "654b9a106f2f5b532b0c7217c9da1119bd1b07b2fa648b9cd0d33cb31bee4a2c",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "2dfbcd831b9b0f86b4a4a5c71ed10e0a2a693abd09de9e5b0bf8fda53373aace",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "scale_format": "fp32",
+      "transposeB": true,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          2,
+          3,
+          2,
+          1
+        ]
+      ],
+      "max_abs_error": 3.3125287153268346e-06,
+      "cold_public_wall_ms": 162.279142,
+      "warm_public_wall_samples_ms": [
+        1.785646,
+        1.711235,
+        1.626634
+      ],
+      "warm_public_wall_median_ms": 1.711235,
+      "prepared_program_event_samples_ms": [
+        0.38219791650772095,
+        0.3821788430213928,
+        0.37400108575820923
+      ],
+      "prepared_program_event_median_ms": 0.3821788430213928,
+      "native_program_sha256": "9879fa486115962d03f6f12fb6b32ebcd95728ce0ebfd84e4be3b5980d0294ae",
+      "member_image_sha256": [
+        "60c435a7ebadc3ae79b8ae4878b1d8d51ce9100310cbf7510490560b1e77e9d1",
+        "1e7d2e57f49c884a93a958e8b1eb2379a643a3d1650e4358a8d12265e730e796"
+      ],
+      "frontend_graph_sha256": "ed53b0193c3d20509333d4509ab7ce0d00793919e2c6e3728d226618a8212a5c",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "scale_format": "fp32",
+      "transposeB": true,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.1310932457320177e-06,
+      "cold_public_wall_ms": 254.272558,
+      "warm_public_wall_samples_ms": [
+        1.157909,
+        1.013905,
+        0.99061
+      ],
+      "warm_public_wall_median_ms": 1.013905,
+      "prepared_program_event_samples_ms": [
+        0.04220474883913994,
+        0.04202225059270859,
+        0.0421997494995594
+      ],
+      "prepared_program_event_median_ms": 0.0421997494995594,
+      "native_program_sha256": "373b536567fa7382e2a1716c2c998d55316f45f1eb09f1ea5f13dbcd53ed9937",
+      "member_image_sha256": [
+        "1e7dee9fbdbe74b5a40ff98984245bc9edd80a19e4450446c31f964883908a08"
+      ],
+      "frontend_graph_sha256": "8fae780808dcc9c408e94f5974accc6ecb6089b05520bb6836639d146f98299d",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "scale_format": "fp32",
+      "transposeB": true,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 1.1310932457320177e-06,
+      "cold_public_wall_ms": 402.712912,
+      "warm_public_wall_samples_ms": [
+        1.8716,
+        1.71407,
+        1.653324
+      ],
+      "warm_public_wall_median_ms": 1.71407,
+      "prepared_program_event_samples_ms": [
+        0.13084575533866882,
+        0.13224731385707855,
+        0.13183856010437012
+      ],
+      "prepared_program_event_median_ms": 0.13183856010437012,
+      "native_program_sha256": "f4a3ece08fe90ed35406d33ce04062836360f92b024e61816298614381d96bd1",
+      "member_image_sha256": [
+        "daf0c573659133b9b013e552213d7c993262d7b75a38c57fb95817eb1dc98df8",
+        "93fc5a15b45e931cd4f67d55fab27284fb91feab76ba098d203fd3c2bc7ac41b",
+        "523a8b7a2e036663b7837d75ef41b0f61da693b6f975a9f083a0b69473c10af9",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "e44c5365c44231d529b4bea36b648dab2879f477e574c40eae3efc3c78cdb0c7",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "scale_format": "fp32",
+      "transposeB": true,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          1
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          2
+        ],
+        [
+          3,
+          2,
+          1
+        ]
+      ],
+      "max_abs_error": 1.5864017970379507e-06,
+      "cold_public_wall_ms": 164.613426,
+      "warm_public_wall_samples_ms": [
+        2.813478,
+        2.244988,
+        2.716652
+      ],
+      "warm_public_wall_median_ms": 2.716652,
+      "prepared_program_event_samples_ms": [
+        1.1081645488739014,
+        0.6843765377998352,
+        0.6823806166648865
+      ],
+      "prepared_program_event_median_ms": 0.6843765377998352,
+      "native_program_sha256": "0adb0c457cdf154970a77295670fc3bb70d509b90f2c504880571421ea0c9ea7",
+      "member_image_sha256": [
+        "419f3aa7da7363e81f4c1ac21c6ffeb7640dd13c56fe0b377e727b757b69e239",
+        "ef46f5d3a5d227c7bb29246c2f2e39885abaa506809364a5eab264e38d493331"
+      ],
+      "frontend_graph_sha256": "388612b7854260c228efd8d72273b034fca3dd20f685a019f1b1e6b39fae201f",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "scale_format": "e8m0",
+      "transposeB": false,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          8
+        ],
+        [
+          2,
+          3,
+          8,
+          5
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          8
+        ],
+        [
+          2,
+          3,
+          8,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 250.916319,
+      "warm_public_wall_samples_ms": [
+        1.242581,
+        1.009747,
+        1.01167
+      ],
+      "warm_public_wall_median_ms": 1.01167,
+      "prepared_program_event_samples_ms": [
+        0.05142971873283386,
+        0.05145846679806709,
+        0.05150468647480011
+      ],
+      "prepared_program_event_median_ms": 0.05145846679806709,
+      "native_program_sha256": "96479f3267ff92ee237069b3b8aa8984005c700b8b98dad38588e5238d4700a2",
+      "member_image_sha256": [
+        "eb034f4f4a420c4d2834752b56020907c3a099b3c804261602b647d9f220c175"
+      ],
+      "frontend_graph_sha256": "5d5166e636698d62098c63ccd0ebe69fe0b44beea291adb167951dbb0a7ce8c0",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "scale_format": "e8m0",
+      "transposeB": false,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          3,
+          8
+        ],
+        [
+          3,
+          8,
+          5
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          256,
+          5
+        ],
+        [
+          2,
+          1,
+          3,
+          8
+        ],
+        [
+          1,
+          3,
+          8,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 251.675212,
+      "warm_public_wall_samples_ms": [
+        1.188628,
+        1.05847,
+        1.030286
+      ],
+      "warm_public_wall_median_ms": 1.05847,
+      "prepared_program_event_samples_ms": [
+        0.056347157806158066,
+        0.05612465739250183,
+        0.05645090714097023
+      ],
+      "prepared_program_event_median_ms": 0.056347157806158066,
+      "native_program_sha256": "cabe57e1bca859d82ae23b5c1c78b6f37bcba206952275623db57e55fa04c91a",
+      "member_image_sha256": [
+        "8d7798ca5faa58119cfd479d648cf7dbb95423d8f1bf2e15b4d25486f65148b7"
+      ],
+      "frontend_graph_sha256": "8114123553212c02cc3be6f7b4a380f56edd94ec42a662ad1e16fab6b93c341d",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "scale_format": "e8m0",
+      "transposeB": true,
+      "cartesian_maps": false,
+      "map_level_axes": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          8
+        ],
+        [
+          2,
+          3,
+          8,
+          5
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          2,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          8
+        ],
+        [
+          2,
+          3,
+          8,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 248.77256,
+      "warm_public_wall_samples_ms": [
+        1.344926,
+        1.092374,
+        1.223264
+      ],
+      "warm_public_wall_median_ms": 1.223264,
+      "prepared_program_event_samples_ms": [
+        0.13166315853595734,
+        0.13220562040805817,
+        0.13176940381526947
+      ],
+      "prepared_program_event_median_ms": 0.13176940381526947,
+      "native_program_sha256": "31eca36d430940a5aed172f533728d8bd4ff5115fc044402c63a2241c418db7c",
+      "member_image_sha256": [
+        "6499a8748123fadc9968858e3db82da94704e624e6cc3558551bc630cd47720a"
+      ],
+      "frontend_graph_sha256": "d0143b31ecbf0789665f79d77c5056f0c04d1f675c866e378cb6acc8d48fe600",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "scale_format": "e8m0",
+      "transposeB": true,
+      "cartesian_maps": true,
+      "map_level_axes": [
+        [
+          0,
+          null,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          null,
+          0
+        ]
+      ],
+      "input_shapes": [
+        [
+          2,
+          3,
+          256
+        ],
+        [
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          3,
+          8
+        ],
+        [
+          3,
+          8,
+          5
+        ]
+      ],
+      "normalized_input_shapes": [
+        [
+          2,
+          1,
+          3,
+          256
+        ],
+        [
+          1,
+          3,
+          5,
+          256
+        ],
+        [
+          2,
+          1,
+          3,
+          8
+        ],
+        [
+          1,
+          3,
+          8,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 241.7623,
+      "warm_public_wall_samples_ms": [
+        1.218655,
+        1.104187,
+        1.003505
+      ],
+      "warm_public_wall_median_ms": 1.104187,
+      "prepared_program_event_samples_ms": [
+        0.13317175209522247,
+        0.13453049957752228,
+        0.13118550181388855
+      ],
+      "prepared_program_event_median_ms": 0.13317175209522247,
+      "native_program_sha256": "340d50e0d07215919e5fd671468447950dac9ef304b5b3776a5d649d483a3ef1",
+      "member_image_sha256": [
+        "54d43256d029c1b64739624bb631348f9f8a9304bff001a23cf31d9ba7ffd1a6"
+      ],
+      "frontend_graph_sha256": "ecaf40fa4d7b019150addf2aa52493d30288c8b7f493a672fb68d08471443501",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    }
+  ]
+}

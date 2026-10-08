@@ -1,0 +1,22 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2128,6 +2128,19 @@
+           mma.addTypes(accFragmentTy);
+           partial[mi * nt + ni] = kb.create(mma)->getResult(0);
+         }
++      if (foldedFullK && prefetch == 1) {
++        // Bound the folded prefetch body's LDS-read/WMMA overlap by K16
++        // panel rather than keeping all four panels live through the chain.
++        auto i32 = kb.getI32Type();
++        kb.create<ROCDL::SchedGroupBarrier>(
++            l, ROCDL::SchedGroupMaskAttr::get(kb.getContext(),
++                                              ROCDL::SchedGroupMask::ds_read),
++            IntegerAttr::get(i32, mt + nt), IntegerAttr::get(i32, 0));
++        kb.create<ROCDL::SchedGroupBarrier>(
++            l, ROCDL::SchedGroupMaskAttr::get(kb.getContext(),
++                                              ROCDL::SchedGroupMask::mfma_wmma),
++            IntegerAttr::get(i32, mt * nt), IntegerAttr::get(i32, 0));
++      }
+     }
+     if (groupStageReads) {
+       // All of the stage's LDS fragment reads, then its WMMA chain (see

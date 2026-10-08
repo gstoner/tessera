@@ -1,0 +1,163 @@
+{
+  "schema": "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1",
+  "target": "nvidia_sm120",
+  "architecture": "sm_120a",
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "host": {
+    "node": "The-Super-Bear",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "wsl": true
+  },
+  "source_revision": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "worktree_dirty": true,
+  "method": "bounded dynamic M+N+K; Graph->Schedule->Tile packages; correctness checked before separate resident CUDA-event stage timings",
+  "edge": {
+    "producer": "tessera.rmsnorm",
+    "consumer": "tessera.matmul",
+    "storage": "bf16",
+    "layout": "compact row_major intermediate",
+    "shape_bounds_mnk": [
+      16,
+      8,
+      16
+    ],
+    "dynamic_m_bound": 16,
+    "dynamic_n_bound": 8,
+    "dynamic_k_bound": 16,
+    "measured_active_mnk": [
+      [
+        8,
+        4,
+        8
+      ],
+      [
+        12,
+        6,
+        12
+      ],
+      [
+        16,
+        8,
+        16
+      ]
+    ],
+    "same_allocation": true,
+    "same_stream": true,
+    "rhs_layout": "padded host column-major view packed to compact column-major device storage",
+    "host_input_layout": "padded row-major source and padded column-major RHS views; pack/upload excluded from device-event stage timings",
+    "output_layout": "compact row-major storage"
+  },
+  "packages": {
+    "producer_image": "32120860cecf1a28d19cbd6738503455553cccd7ba280cb660f9bee5ad53ccd6",
+    "consumer_image": "6ceb933dd10b2cb0b95f57ddaccd064880bbb9a6fd912e448f95f28c526b0c1c",
+    "consumer_descriptor": "10ccef6ddd67fa73c0a9a06e9b3ced7adf99896c690e23870f9038ab9a48e967",
+    "consumer_schedule": "7afe8323b5ad19e7c2179756286e74f3cafba0069746a56e38a89d70b558833e",
+    "consumer_tile": "be4ecf433b6df954af15cb30b1176af9f25eb90566a759d4852b3fdf87c82d46"
+  },
+  "cases": [
+    {
+      "active_m": 8,
+      "active_n": 4,
+      "active_k": 8,
+      "output_shape": [
+        8,
+        4
+      ],
+      "correctness": {
+        "producer_max_abs_error": 0.0,
+        "consumer_max_abs_error": 0.0,
+        "producer_execution_kind": "native_gpu",
+        "consumer_execution_kind": "native_gpu",
+        "same_intermediate_pointer": true,
+        "image_digest_stable": true
+      },
+      "timing": {
+        "domain": "CUDA events around repeated native launches on resident buffers; producer and consumer measured separately",
+        "producer_ms": [
+          0.009283839724957943,
+          0.009082240052521229,
+          0.009117440320551395
+        ],
+        "producer_median_ms": 0.009117440320551395,
+        "producer_cov": 0.009597086762166933,
+        "consumer_ms": [
+          0.00931967981159687,
+          0.010532159358263016,
+          0.010749760083854198
+        ],
+        "consumer_median_ms": 0.010532159358263016,
+        "consumer_cov": 0.0616791775366833
+      }
+    },
+    {
+      "active_m": 12,
+      "active_n": 6,
+      "active_k": 12,
+      "output_shape": [
+        12,
+        6
+      ],
+      "correctness": {
+        "producer_max_abs_error": 0.0,
+        "consumer_max_abs_error": 2.9802322387695312e-08,
+        "producer_execution_kind": "native_gpu",
+        "consumer_execution_kind": "native_gpu",
+        "same_intermediate_pointer": true,
+        "image_digest_stable": true
+      },
+      "timing": {
+        "domain": "CUDA events around repeated native launches on resident buffers; producer and consumer measured separately",
+        "producer_ms": [
+          0.009042560122907162,
+          0.008561599999666214,
+          0.009163199923932552
+        ],
+        "producer_median_ms": 0.009042560122907162,
+        "producer_cov": 0.029125572799672525,
+        "consumer_ms": [
+          0.018433598801493645,
+          0.009200320579111576,
+          0.009154560044407845
+        ],
+        "consumer_median_ms": 0.009200320579111576,
+        "consumer_cov": 0.3558262002836189
+      }
+    },
+    {
+      "active_m": 16,
+      "active_n": 8,
+      "active_k": 16,
+      "output_shape": [
+        16,
+        8
+      ],
+      "correctness": {
+        "producer_max_abs_error": 0.0,
+        "consumer_max_abs_error": 1.1920928955078125e-07,
+        "producer_execution_kind": "native_gpu",
+        "consumer_execution_kind": "native_gpu",
+        "same_intermediate_pointer": true,
+        "image_digest_stable": true
+      },
+      "timing": {
+        "domain": "CUDA events around repeated native launches on resident buffers; producer and consumer measured separately",
+        "producer_ms": [
+          0.010136320255696774,
+          0.009397760033607483,
+          0.009753599762916565
+        ],
+        "producer_median_ms": 0.009753599762916565,
+        "producer_cov": 0.030891744474721178,
+        "consumer_ms": [
+          0.008759680204093456,
+          0.009310719557106495,
+          0.009545919485390186
+        ],
+        "consumer_median_ms": 0.009310719557106495,
+        "consumer_cov": 0.035794114222807635
+      }
+    }
+  ],
+  "selector_changed": false,
+  "promotion": "none; bounded dynamic-M/N/K SM120 envelope"
+}

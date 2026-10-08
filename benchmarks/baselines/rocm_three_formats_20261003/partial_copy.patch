@@ -1,0 +1,102 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2021,13 +2021,22 @@
+     int64_t bufElems;
+     SmallVector<Value> rowBase;  // (row*K + kVec) in global elements
+     SmallVector<Value> ldsDst;   // row*stride + kVec in LDS elements
++    SmallVector<Value> active;   // optional mask for a partial copy round
+   };
+   auto planCopy = [&](Value src, Value dst, int64_t rows, Value origin,
+                       Value bound, bool whole) {
+-    CopyPlan plan{src, dst, rows * ldsStride, {}, {}};
+-    const int64_t trips = rows * vecsPerRow / nthreads;
++    CopyPlan plan{src, dst, rows * ldsStride, {}, {}, {}};
++    const int64_t vectors = rows * vecsPerRow;
++    const int64_t trips = (vectors + nthreads - 1) / nthreads;
+     for (int64_t i = 0; i < trips; ++i) {
+       Value e = b.create<arith::AddIOp>(loc, tx, ci(i * nthreads));
++      // A narrow slab can have fewer vectors than threads. Only its final
++      // round needs a mask; the ordinary evenly divided copy emits exactly
++      // the prior IR. Every workgroup barrier remains outside this mask.
++      plan.active.push_back((i + 1) * nthreads > vectors
++          ? Value(b.create<arith::CmpIOp>(
++                loc, arith::CmpIPredicate::ult, e, ci(vectors)))
++          : Value());
+       Value row = b.create<arith::DivUIOp>(loc, e, ci(vecsPerRow));
+       Value kVec = b.create<arith::MulIOp>(
+           loc, b.create<arith::RemUIOp>(loc, e, ci(vecsPerRow)), ci(vecW));
+@@ -2057,9 +2066,29 @@
+     SmallVector<Value> vals;
+     for (size_t i = 0; i < plan.rowBase.size(); ++i) {
+       Value idx = kb.create<arith::AddIOp>(l, plan.rowBase[i], k0);
+-      vals.push_back(kb.create<vector::LoadOp>(l, vecTy, plan.src,
+-                                               ValueRange{idx},
+-                                               /*nontemporal=*/false, align16));
++      auto load = [&]() -> Value {
++        return kb.create<vector::LoadOp>(l, vecTy, plan.src,
++                                        ValueRange{idx},
++                                        /*nontemporal=*/false, align16);
++      };
++      if (!plan.active[i]) {
++        vals.push_back(load());
++      } else {
++        // Inactive lanes may compute an out-of-range address, but must never
++        // dereference it, even when the output tile is fully in bounds.
++        auto branch = kb.create<scf::IfOp>(
++            l, TypeRange{vecTy}, plan.active[i], true);
++        {
++          OpBuilder::InsertionGuard guard(kb);
++          kb.setInsertionPointToStart(branch.thenBlock());
++          kb.create<scf::YieldOp>(l, load());
++          kb.setInsertionPointToStart(branch.elseBlock());
++          Value zero = kb.create<arith::ConstantOp>(
++              l, vecTy, kb.getZeroAttr(vecTy));
++          kb.create<scf::YieldOp>(l, zero);
++        }
++        vals.push_back(branch.getResult(0));
++      }
+     }
+     return vals;
+   };
+@@ -2072,8 +2101,17 @@
+             l, dst, kb.create<arith::MulIOp>(l, buf, ci(plan.bufElems)));
+       // The row stride is a multiple of 16 bytes (checked at admission),
+       // so every LDS vector is 16-byte aligned: one ds_store_b128.
+-      kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
+-                                 /*nontemporal=*/false, align16);
++      if (!plan.active[i]) {
++        kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
++                                   /*nontemporal=*/false, align16);
++      } else {
++        auto branch = kb.create<scf::IfOp>(
++            l, plan.active[i], /*withElseRegion=*/false);
++        OpBuilder::InsertionGuard guard(kb);
++        kb.setInsertionPointToStart(branch.thenBlock());
++        kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
++                                   /*nontemporal=*/false, align16);
++      }
+     }
+   };
+ 
+@@ -3569,7 +3607,6 @@
+                         .str();
+           }
+           const int64_t wgM = mt * 16, wgN = nt * 16;
+-          const int64_t threads = request.warps * 32;
+           const int64_t nbuf = blockscalePrefetchMode == 2 ? 2 : 1;
+           const int64_t stride = blockscaleStage + blockscaleLdsPadBytes;
+           // The physical budget, checked once the wave grid is admitted.
+@@ -3588,13 +3625,6 @@
+             if (blockscaleLdsPadBytes < 0 || blockscaleLdsPadBytes % 16 != 0)
+               return "blockscale-lds-pad-bytes must be a non-negative "
+                      "multiple of 16 so every LDS row stays 16-byte aligned";
+-            if ((wgM * blockscaleStage / 16) % threads != 0 ||
+-                (wgN * blockscaleStage / 16) % threads != 0)
+-              return (Twine("a ") + Twine(wgM) + "x" + Twine(wgN) +
+-                      " tile at stage K=" + Twine(blockscaleStage) +
+-                      " does not divide into whole 16-byte copies for " +
+-                      Twine(threads) + " threads")
+-                  .str();
+             if (nbuf * (wgM + wgN) * stride > 65536)
+               return (Twine(nbuf * (wgM + wgN) * stride) +
+                       " LDS bytes exceed the 64 KiB workgroup limit")

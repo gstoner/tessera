@@ -1,0 +1,18 @@
+--- reference/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ final/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -3247,7 +3247,14 @@
+       request.foldedFullK = true;
+       request.foldedPacked = packed;
+       request.foldedWaveGuard = rowGuard == "wave";
+-      request.foldedVectorScales = epilogue == "complete_tile_vector_scales";
++      // GFX1201-PACKED-VECTOR-SCALES-2026-10-06: paired forward/reverse
++      // three-format trials measured a small gain in the M256 long-K band.
++      // Preserve the packed scalar seed for runtime shapes and short/ragged
++      // problems. The Tile consumer retains its aligned/full-lane guard.
++      const bool packedVectorBand =
++          packed && m == 256 && n >= 1024 && k >= 1024;
++      request.foldedVectorScales =
++          packedVectorBand || epilogue == "complete_tile_vector_scales";
+       request.foldedPrefetch = prefetch == "register_next_slab" ? 1 : 0;
+       request.foldedCuMode = mode == "cu";
+       request.rasterOrder = group ? "grouped_m" : "row_major";

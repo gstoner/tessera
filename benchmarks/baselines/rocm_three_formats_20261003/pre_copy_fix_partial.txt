@@ -1,0 +1,35 @@
+{"shape": [200, 256, 128], "arms": {"fp8_k128_n128": {"device_us": 17.486953125, "quality_relative_rms": 0.03691079397371661}, "fp8_k32_n1_control": {"device_us": 18.383203125, "quality_relative_rms": 0.034045855340105693}, "mxfp8_k32_n1": {"device_us": 7.972587890625, "quality_relative_rms": 0.037363537114669484}, "mxfp4_folded": {"device_us": 16.93796875, "quality_relative_rms": 0.11364345026142773}}}
+{"shape": [200, 256, 1024], "arms": {"fp8_k128_n128": {"device_us": 346.280625, "quality_relative_rms": 0.03669604222900592}, "fp8_k32_n1_control": {"device_us": 443.368125, "quality_relative_rms": 0.0334963948413692}, "mxfp8_k32_n1": {"device_us": 33.112890625000006, "quality_relative_rms": 0.03729793256468171}, "mxfp4_folded": {"device_us": 25.3865625, "quality_relative_rms": 0.11847016609991434}}}
+{"shape": [200, 4096, 1536], "arms": {"fp8_k128_n128": {"device_us": 29.391679687499998, "quality_relative_rms": 0.036943141886061265}, "fp8_k32_n1_control": {"device_us": 42.79734375, "quality_relative_rms": 0.03403675313933286}, "mxfp8_k32_n1": {"device_us": 120.67046875, "quality_relative_rms": 0.03760656757726342}, "mxfp4_folded": {"device_us": 33.01953125, "quality_relative_rms": 0.11825395849158989}}}
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/benchmarks/rocm/benchmark_gfx1201_three_formats.py", line 296, in <module>
+    main()
+    ~~~~^^
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/benchmarks/rocm/benchmark_gfx1201_three_formats.py", line 284, in main
+    row = run(shape, args, hip, clock)
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/benchmarks/rocm/benchmark_gfx1201_three_formats.py", line 163, in run
+    package = compile_mxfp8(profile) if name.startswith("mxfp8") else compile_blockscale(profile)
+                                                                      ~~~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_fp8_blockscale.py", line 574, in compile_blockscale
+    return package_blockscale(lower_blockscale(shape, entry=entry, tessera_opt=tessera_opt),
+                              k_unroll=k_unroll, scale_group_panels=scale_group_panels)
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_fp8_blockscale.py", line 461, in package_blockscale
+    _compile_native_tile_ir(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        image_target, directive=_DIRECTIVE, family="matmul", architecture="gfx1201",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<5 lines>...
+        blockscale_prefetch=int(blockscale_prefetch),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_native.py", line 1528, in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_native.py", line 508, in _run_opt
+    raise RuntimeError(
+        "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+    )
+RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: ROCM_FP8_BLOCKSCALE_CONTRACT: a 128x64 tile at stage K=32 does not divide into whole 16-byte copies for 256 threads
+  tessera_rocm.scaled_wmma_gemm {abi = "a_bnk_lhs_scale_rhs_scale_d_m_n_k", block_m = 128 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_scale_group", m = 0 : i64, macro_k = 32 : i64, n = 0 : i64, name = "tessera_rocm_scaled_matmul_lds_5bd481a230a95469", numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, output = "bf16", package_abi = "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1", partial_combine = "scale_outer_product_then_add", physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", pipeline_depth = 1 : i64, runtime_k, runtime_mn, scale_format = "fp32", scale_k = 32 : i64, scale_n = 1 : i64, schedule_raster_group = 1 : i64, schedule_raster_order = "row_major", staging = "lds", warps = 8 : i64, whole_m = false, whole_n = true}
+  ^
+<stdin>:2:3: note: see current operation: "tessera_rocm.scaled_wmma_gemm"() <{abi = "a_bnk_lhs_scale_rhs_scale_d_m_n_k", block_m = 128 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_scale_group", m = 0 : i64, macro_k = 32 : i64, n = 0 : i64, name = "tessera_rocm_scaled_matmul_lds_5bd481a230a95469", output = "bf16", package_abi = "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1", partial_combine = "scale_outer_product_then_add", physical_contract = "rocm_fp8_w8a8_blockscale_nk_v1", pipeline_depth = 1 : i64, runtime_k, runtime_mn, scale_format = "fp32", scale_k = 32 : i64, scale_n = 1 : i64, schedule_raster_group = 1 : i64, schedule_raster_order = "row_major", staging = "lds", warps = 8 : i64, whole_m = false, whole_n = true}> {numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}} : () -> ()

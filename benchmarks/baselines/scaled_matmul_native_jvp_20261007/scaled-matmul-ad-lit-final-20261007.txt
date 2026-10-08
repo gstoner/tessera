@@ -1,0 +1,40 @@
+-- Testing: 4 tests, 4 workers --
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_encoded_invalid.mlir (1 of 4)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_core.mlir (2 of 4)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul.mlir (3 of 4)
+FAIL: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_tile.mlir (4 of 4)
+******************** TEST 'Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_tile.mlir' FAILED ********************
+Exit Code: 2
+
+Command Output (stdout):
+--
+# RUN: at line 1
+"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt" -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir --tessera-autodiff-forward --tessera-graph-to-schedule --tessera-schedule-to-tile | "/usr/lib/llvm-23/bin/FileCheck" /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir --tessera-autodiff-forward --tessera-graph-to-schedule --tessera-schedule-to-tile
+# .---command stderr------------
+# | /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir:10:10: error: requires exactly one matching Graph hash and schedule.artifact
+# |     %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+# |          ^
+# | /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir:10:10: note: see current operation: %1 = "schedule.matmul"(%0) <{a_layout = "row_major", accum = "f32", activation = "none", arch = "gfx1201", artifact_hash = "248ef92f25a529cc407da2d4bd06c1842a9c6c412d288336a10231fdc7288b10", b_layout = "col_major", bias = false, block_k = 128 : i64, macro_tile_m = 16 : i64, macro_tile_n = 16 : i64, output = "f32", physical_contract = "rocm_fp8_w8a8_blockscale_v1", pipeline_depth = 1 : i64, raster_group = 1 : i64, raster_order = "row_major", residual = false, scale_format = "fp32", scale_k = 128 : i64, scale_n = 128 : i64, split_k = 1 : i64, split_k_reduction = "", staging = "global", storage = "e4m3", storage_b = "e4m3", tile_k = 16 : i64, tile_m = 16 : i64, tile_n = 16 : i64, warps = 1 : i64}> : (tensor<17x19xf32>) -> tensor<17x19xf32>
+# `-----------------------------
+# error: command failed with exit status: 1
+# executed command: /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+# .---command stderr------------
+# | FileCheck error: '<stdin>' is empty.
+# | FileCheck command line:  /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+# `-----------------------------
+# error: command failed with exit status: 2
+
+--
+
+********************
+********************
+Failed Tests (1):
+  Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+
+
+Testing Time: 0.11s
+
+Total Discovered Tests: 4
+  Passed: 3 (75.00%)
+  Failed: 1 (25.00%)

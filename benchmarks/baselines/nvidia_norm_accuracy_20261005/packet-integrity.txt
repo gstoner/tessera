@@ -1,0 +1,1 @@
+96 numerical arms, 48 candidate arms passing the original gate; 36 norm performance cases and 40 composed program cases. Graph/Schedule/Tile byte-identical across frozen/current Target implementations. Current numerical/performance source and compiler fingerprints match.

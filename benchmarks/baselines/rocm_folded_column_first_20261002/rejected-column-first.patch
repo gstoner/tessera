@@ -1,0 +1,16 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2121,8 +2121,11 @@
+         bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, kOff, c, ldsColMajor),
+                               bFragmentTy);
+       }
+-      for (int64_t mi = 0; mi < mt; ++mi)
+-        for (int64_t ni = 0; ni < nt; ++ni) {
++      // Column-first consumption tests whether the native scheduler can
++      // retire each B fragment before advancing to the next column.
++      // Accumulator ownership and each accumulator's K order are unchanged.
++      for (int64_t ni = 0; ni < nt; ++ni)
++        for (int64_t mi = 0; mi < mt; ++mi) {
+           OperationState mma(l, "tile.mma");
+           mma.addOperands({af[mi], bf[ni], partial[mi * nt + ni]});
+           mma.addTypes(accFragmentTy);

@@ -1,0 +1,79 @@
+--- /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp
++++ /home/angstorms/scratch/nvidia-macro-producer-candidate-20261008/matmul_prepared.cpp
+@@ -96,6 +96,7 @@
+   CUdeviceptr producerScratch = 0;
+   bool cooperativeProducer = false, invoked = false, rowSymbol = false;
+   int dynamicAxes = 0, storage = 0;
++  bool macro = false;
+   bool bias = false, residual = false, rowB = false, halfOutput = false;
+   CUstream stream = nullptr;
+   std::shared_ptr<Scratch> arena;
+@@ -180,8 +181,9 @@
+   std::array<int64_t, 3> leading{dims[2], rhsLeading ? rhsLeading : owner.rowB ? dims[1] : dims[2], dims[1]};
+   if (owner.dynamicAxes)
+     for (auto &dimension : leading) args[arg++] = &dimension;
+-  return ok(cuLaunchKernel(owner.function, unsigned((dims[1] + 7) / 8),
+-      unsigned((dims[0] + 15) / 16), 1, 32, 1, 1, 0, stream, args, nullptr),
++  return ok(cuLaunchKernel(owner.function, unsigned((dims[1] + (owner.macro ? 31 : 7)) / (owner.macro ? 32 : 8)),
++      unsigned((dims[0] + (owner.macro ? 31 : 15)) / (owner.macro ? 32 : 16)),
++      1, owner.macro ? 128 : 32, 1, 1, 0, stream, args, nullptr),
+       "launch prepared matmul");
+ }
+ 
+@@ -195,7 +197,7 @@
+   std::lock_guard<std::mutex> lock(mutex);
+   if (!image || !imageBytes || !entry || !dims || !handle ||
+       std::strncmp(entry, "nvidia_sm120_scheduled_matmul_", 29) ||
+-      std::strstr(entry, "_macro_kernel") || (storage != 2 && storage != 3) ||
++      (std::strstr(entry, "_macro_kernel") && rowB) || (storage != 2 && storage != 3) ||
+       (bias != 0 && bias != 1) || (residual != 0 && residual != 1) ||
+       (rowB != 0 && rowB != 1) || (halfOutput != 0 && halfOutput != 1))
+     return bad("invalid static matmul image or ABI");
+@@ -207,6 +209,7 @@
+       return bad("prepared matmul requires live SM120 context");
+     owner->dims = {dims[0], dims[1], dims[2]};
+     owner->storage = storage; owner->bias = bias; owner->residual = residual;
++    owner->macro = std::strstr(entry, "_macro_kernel") != nullptr;
+     owner->rowB = rowB; owner->halfOutput = halfOutput;
+     owner->rowSymbol = std::strstr(entry, "_row_rhs_kernel") != nullptr;
+     const int64_t m = dims[0], n = dims[1], k = dims[2];
+@@ -243,6 +246,7 @@
+   Owner &owner = *found->second;
+   if (owner.invoked || owner.producer || owner.dynamicAxes)
+     return bad("dynamic axes require an unused owner");
++  if (owner.macro) return bad("dynamic axes require a strided typed consumer");
+   if (owner.rowB != owner.rowSymbol)
+     return bad("dynamic RHS storage differs from compiler entry");
+   // The native strided kernel has ordered pointer parameters followed by
+@@ -272,7 +276,9 @@
+       (cooperative != 0 && cooperative != 1))
+     return bad("invalid prepared tensor producer");
+   Owner &owner = *found->second;
+-  if ((!append && owner.producer) || (append && !owner.producer))
++  if (!append && owner.producer)
++    return bad("prepared tensor producer already attached");
++  if (append && !owner.producer)
+     return bad("prepared tensor producer attachment order differs");
+   if (append && owner.followingProducers.size() >= 62)
+     return bad("prepared tensor producer chain exceeds its bound");
+--- /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/prepared_nvidia_lhs.py
++++ /home/angstorms/scratch/nvidia-macro-producer-candidate-20261008/prepared_nvidia_lhs.py
+@@ -23,9 +23,16 @@
+         descriptor = consumer.descriptor
+         provenance = descriptor.provenance
+         dynamic=bool(edge.dynamic_m or edge.dynamic_k or edge.dynamic_n)
+-        if (provenance.get("physical_route") != "typed_fragment_global"
++        macro = (not dynamic and provenance.get("physical_route") ==
++                 "macro_cta_cp_async_2stage_shared_ab_" + provenance.get("storage", "")
++                 and provenance.get("storage") in {"f16", "bf16"}
++                 and provenance.get("b_layout") == "col_major"
++                 and descriptor.entry_symbol.endswith("_macro_kernel"))
++        policy = ("sm120_scheduled_macro_cta_32x32_mn" if macro
++                  else "sm120_scheduled_typed_16x8_mn")
++        if ((not macro and provenance.get("physical_route") != "typed_fragment_global")
+                 or bool(provenance.get("dynamic_shape_bounds") is not None) != dynamic
+-                or descriptor.geometry != LaunchGeometry(policy="sm120_scheduled_typed_16x8_mn")
++                or descriptor.geometry != LaunchGeometry(policy=policy)
+                 or descriptor.workspace != WorkspaceRequirement()
+                 or descriptor.dynamic_local_memory_bytes or descriptor.dynamic_local_memory_expression
+                 or descriptor.ordering != OrderingSemantics(

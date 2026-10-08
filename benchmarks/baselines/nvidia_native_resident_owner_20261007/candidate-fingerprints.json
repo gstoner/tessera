@@ -1,0 +1,9 @@
+{
+  "python/tessera/compiler/nvidia_native.py": "98efe61bac95c01f6b41379f8cc2a53de85a1b8530e01865221adbb8220287e8",
+  "python/tessera/compiler/resident_nvidia_tensor.py": "dd8aad7ae8a13f4f6072f316eec9b13ce03cee5e6f40c58acaa2d07550086e1f",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "1963607551ded65227d92ec76ac3e0e4ae97acfa7b209deb5ed9e9dc0fc87aa2",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "fb3d53f960c64c80023e12d42a1bac8005369d1713832ef823ca222cd3d879e4",
+  "libtessera_nvidia_ptx_launch.so": "2d552edb51377ea4fd74d7abbf9cd77f5941cce7a61bcbe5f7afa31fc8882bd5",
+  "test_native_resident_owner.py": "ca61c76717f16ec04d40ae8d8b7991f4689898fb64854c061a382385307bf926",
+  "benchmark_resident_owner.py": "604333bf5355c0c6c458bddb6930047c0e80e86e10cde89f76ba7546c3da94f0"
+}

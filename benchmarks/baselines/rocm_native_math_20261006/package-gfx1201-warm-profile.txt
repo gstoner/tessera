@@ -1,0 +1,87 @@
+OP sqrt 30 warm calls; cProfile-instrumented diagnostic, not a benchmark speedup
+         52891 function calls (50131 primitive calls) in 0.083 seconds
+
+   Ordered by: cumulative time
+   List reduced from 288 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       30    0.000    0.000    0.083    0.003 jit.py:951(__call__)
+       30    0.001    0.000    0.082    0.003 jit.py:1691(_try_native_descriptor_call)
+       30    0.000    0.000    0.074    0.002 runtime.py:35576(launch)
+       30    0.000    0.000    0.074    0.002 runtime.py:35398(_launch_native_descriptor)
+       30    0.061    0.002    0.065    0.002 runtime.py:4739(_submit_rocm_gfx1151_native)
+       60    0.001    0.000    0.005    0.000 rocm_math_native.py:152(_descriptor)
+       30    0.000    0.000    0.005    0.000 rocm_math_native.py:201(validate_math_runtime_artifact)
+       30    0.000    0.000    0.005    0.000 graph_ir.py:1341(to_mlir)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:1420(to_mlir)
+       30    0.000    0.000    0.003    0.000 rocm_math_native.py:229(runtime_projection)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:1027(to_mlir)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:749(_loc_suffix)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:767(_loc_path)
+       60    0.000    0.000    0.003    0.000 native_artifact.py:777(__post_init__)
+       30    0.000    0.000    0.002    0.000 rocm_math_native.py:63(_info)
+  1560/60    0.001    0.000    0.002    0.000 native_artifact.py:95(_json_value)
+13950/12930    0.001    0.000    0.001    0.000 {built-in method builtins.isinstance}
+       30    0.000    0.000    0.001    0.000 native_artifact.py:879(descriptor_digest)
+       30    0.000    0.000    0.001    0.000 __init__.py:475(relative_to)
+       30    0.000    0.000    0.001    0.000 graph_ir.py:1338(verify)
+
+
+OP add 30 warm calls; cProfile-instrumented diagnostic, not a benchmark speedup
+         60271 function calls (57271 primitive calls) in 0.144 seconds
+
+   Ordered by: cumulative time
+   List reduced from 288 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       30    0.000    0.000    0.145    0.005 jit.py:951(__call__)
+       30    0.001    0.000    0.143    0.005 jit.py:1691(_try_native_descriptor_call)
+       30    0.000    0.000    0.135    0.004 runtime.py:35576(launch)
+       30    0.000    0.000    0.135    0.004 runtime.py:35398(_launch_native_descriptor)
+       30    0.120    0.004    0.125    0.004 runtime.py:4739(_submit_rocm_gfx1151_native)
+       60    0.001    0.000    0.006    0.000 rocm_math_native.py:152(_descriptor)
+       30    0.000    0.000    0.006    0.000 rocm_math_native.py:201(validate_math_runtime_artifact)
+       30    0.000    0.000    0.005    0.000 graph_ir.py:1341(to_mlir)
+       30    0.000    0.000    0.003    0.000 rocm_math_native.py:229(runtime_projection)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:1420(to_mlir)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:1027(to_mlir)
+       60    0.000    0.000    0.003    0.000 native_artifact.py:777(__post_init__)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:749(_loc_suffix)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:767(_loc_path)
+  1680/60    0.001    0.000    0.002    0.000 native_artifact.py:95(_json_value)
+       30    0.000    0.000    0.002    0.000 rocm_math_native.py:63(_info)
+16050/14910    0.001    0.000    0.002    0.000 {built-in method builtins.isinstance}
+       30    0.000    0.000    0.001    0.000 runtime.py:35344(_split_native_arguments)
+       30    0.000    0.000    0.001    0.000 native_artifact.py:879(descriptor_digest)
+       30    0.000    0.000    0.001    0.000 jit.py:1381(_establish_tracer_authority)
+
+
+OP cumsum 30 warm calls; cProfile-instrumented diagnostic, not a benchmark speedup
+         54181 function calls (51421 primitive calls) in 0.092 seconds
+
+   Ordered by: cumulative time
+   List reduced from 291 to 20 due to restriction <20>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       30    0.000    0.000    0.093    0.003 jit.py:951(__call__)
+       30    0.001    0.000    0.091    0.003 jit.py:1691(_try_native_descriptor_call)
+       30    0.000    0.000    0.083    0.003 runtime.py:35576(launch)
+       30    0.000    0.000    0.083    0.003 runtime.py:35398(_launch_native_descriptor)
+       30    0.070    0.002    0.075    0.002 runtime.py:4739(_submit_rocm_gfx1151_native)
+       60    0.001    0.000    0.006    0.000 rocm_math_native.py:152(_descriptor)
+       30    0.000    0.000    0.005    0.000 rocm_math_native.py:201(validate_math_runtime_artifact)
+       30    0.000    0.000    0.005    0.000 graph_ir.py:1341(to_mlir)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:1420(to_mlir)
+       30    0.000    0.000    0.003    0.000 rocm_math_native.py:229(runtime_projection)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:1027(to_mlir)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:749(_loc_suffix)
+       30    0.000    0.000    0.003    0.000 graph_ir.py:767(_loc_path)
+       60    0.000    0.000    0.003    0.000 native_artifact.py:777(__post_init__)
+       30    0.000    0.000    0.002    0.000 rocm_math_native.py:63(_info)
+  1560/60    0.001    0.000    0.002    0.000 native_artifact.py:95(_json_value)
+14490/13470    0.001    0.000    0.002    0.000 {built-in method builtins.isinstance}
+       30    0.000    0.000    0.001    0.000 native_artifact.py:879(descriptor_digest)
+       30    0.000    0.000    0.001    0.000 __init__.py:475(relative_to)
+       30    0.000    0.000    0.001    0.000 graph_ir.py:1338(verify)
+
+

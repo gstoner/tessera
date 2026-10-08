@@ -1,0 +1,10 @@
+.....s..................ss...ss......................................... [ 20%]
+........................................................................ [ 41%]
+........................................................................ [ 62%]
+........................................................................ [ 83%]
+........................................................                 [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/unit/test_rocm_movement_compiler_spine.py:71: different owning architecture
+SKIPPED [2] tests/unit/test_public_movement_frontend.py:98: different owning architecture
+SKIPPED [2] tests/unit/test_public_movement_frontend.py:152: different owning architecture
+339 passed, 5 skipped in 11.38s

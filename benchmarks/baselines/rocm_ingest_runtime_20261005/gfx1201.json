@@ -1,0 +1,199 @@
+{
+  "architecture": "gfx1201",
+  "compiler_sha256": "601f0214d5ea02b5f9854906d4bfeb19174188963398bc7094b494506e216f39",
+  "device": "AMD Radeon RX 9070 XT",
+  "format_gates": "FP8, MXFP8 and MXFP4 remain independent correctness/quality/performance gates",
+  "route": "Python tracer -> Graph MLIR -> Schedule MLIR -> Tile MLIR -> ROCm Target -> LLVM -> HSACO -> checked runtime",
+  "rows": [
+    {
+      "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+      "cold_compile_and_call_wall_ms": 3550.566974,
+      "correctness": "bitwise_codes_exponents_and_f64_statistics_before_timing",
+      "image_digest": "c1833d5fd3e65d761b0053767f48131849628781469429ac56376595ff0144a8",
+      "provenance": {
+        "graph_digest": "55c8850c5b1fd47de111405ae7ff401337e3d356d05e4ba7a285b57a4985073b",
+        "numeric_policy": {
+          "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+          "destination_format": "mxfp4_e2m1_e8m0_k32",
+          "destination_scale_order": "k_group_n",
+          "execution_mode": "explicit_scale_requantization",
+          "lossy_steps": [
+            "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+          ],
+          "source_format": "nvfp4_e2m1_e4m3_k16",
+          "source_scale_application": "projection_global_times_e4m3"
+        },
+        "ownership": "private_outputs_distinct_readonly_inputs",
+        "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+        "row_offsets": [
+          0,
+          3,
+          7
+        ],
+        "schedule_digest": "fc5887e2ee71ce4917476ae76a199dfd6b334ff783cbe812b3a2f8b1bbd92bd5",
+        "schedule_ir_digest": "48f749e283d8dd04ba9f2243adeca051bda6fb47d63e7107f5d3578cdd8143b0",
+        "shape_nk": [
+          7,
+          64
+        ],
+        "tile_ir_digest": "83505678d7148f4599535e3fb4bd48c45d982fb7788c413cce48d77e448d02a0",
+        "work_item": "ROCM-NVFP4-INGEST-1"
+      },
+      "resident_event_median_ms": 0.3036628007888794,
+      "resident_event_samples_ms": [
+        0.3087538957595825,
+        0.30123879909515383,
+        0.3036628007888794
+      ],
+      "row_offsets": [
+        0,
+        3,
+        7
+      ],
+      "shape_nk": [
+        7,
+        64
+      ],
+      "warm_jit_wall_median_ms": 4.348381,
+      "warm_jit_wall_samples_ms": [
+        4.627854,
+        4.406402,
+        4.094086,
+        4.348381,
+        4.080881
+      ]
+    },
+    {
+      "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+      "cold_compile_and_call_wall_ms": 3604.563166,
+      "correctness": "bitwise_codes_exponents_and_f64_statistics_before_timing",
+      "image_digest": "4d98f0557fe5b48342b0129ef8a0960aa4cf6a9dd68484445d30c4b19415d766",
+      "provenance": {
+        "graph_digest": "b8a74aafa605a88b81a0676a857b8e637c92e2d4add42c83808551651864aa7a",
+        "numeric_policy": {
+          "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+          "destination_format": "mxfp4_e2m1_e8m0_k32",
+          "destination_scale_order": "k_group_n",
+          "execution_mode": "explicit_scale_requantization",
+          "lossy_steps": [
+            "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+          ],
+          "source_format": "nvfp4_e2m1_e4m3_k16",
+          "source_scale_application": "projection_global_times_e4m3"
+        },
+        "ownership": "private_outputs_distinct_readonly_inputs",
+        "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+        "row_offsets": [
+          0,
+          31,
+          67
+        ],
+        "schedule_digest": "52ad5769ed335d886b94276a4958f4f0b0be918cdc5d4709898445ab6e1620f8",
+        "schedule_ir_digest": "02e356ce8ac0eee59cfc86c36e015eab97c9f1270ce1dd4be377024ddd672d14",
+        "shape_nk": [
+          67,
+          256
+        ],
+        "tile_ir_digest": "f4d89bde5bb93cc3169ae2f0e590e5a2dec64ece920ce7ffd961f40cad6e99d9",
+        "work_item": "ROCM-NVFP4-INGEST-1"
+      },
+      "resident_event_median_ms": 0.4258899211883545,
+      "resident_event_samples_ms": [
+        0.4258899211883545,
+        0.42175798416137694,
+        0.4300098896026611
+      ],
+      "row_offsets": [
+        0,
+        31,
+        67
+      ],
+      "shape_nk": [
+        67,
+        256
+      ],
+      "warm_jit_wall_median_ms": 4.743335,
+      "warm_jit_wall_samples_ms": [
+        4.743335,
+        4.946153,
+        4.867291,
+        4.555086,
+        4.54705
+      ]
+    },
+    {
+      "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+      "cold_compile_and_call_wall_ms": 3681.430874,
+      "correctness": "bitwise_codes_exponents_and_f64_statistics_before_timing",
+      "image_digest": "89fba3d4b1c6e406901fe547898ba32eb7247ed883071e96da3c198dcb0cfa32",
+      "provenance": {
+        "graph_digest": "08393c001e08259fe076ce9b2bbedcc0e263045703642e15fc31f182a13344c7",
+        "numeric_policy": {
+          "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+          "destination_format": "mxfp4_e2m1_e8m0_k32",
+          "destination_scale_order": "k_group_n",
+          "execution_mode": "explicit_scale_requantization",
+          "lossy_steps": [
+            "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+          ],
+          "source_format": "nvfp4_e2m1_e4m3_k16",
+          "source_scale_application": "projection_global_times_e4m3"
+        },
+        "ownership": "private_outputs_distinct_readonly_inputs",
+        "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+        "row_offsets": [
+          0,
+          255,
+          513
+        ],
+        "schedule_digest": "ae80fb397dbb7cb1de6078268a264e600478af0ce516e3bbe4d7e66e751eabde",
+        "schedule_ir_digest": "b74163a5457ce52ae63197383e6c1bc1905da4268b8fef0610eea3eb07a4c878",
+        "shape_nk": [
+          513,
+          1024
+        ],
+        "tile_ir_digest": "270c6fc83ae51669c38fbd572d725ecc727e29a73b49279143a1e6e98b8246d7",
+        "work_item": "ROCM-NVFP4-INGEST-1"
+      },
+      "resident_event_median_ms": 0.3930425882339478,
+      "resident_event_samples_ms": [
+        0.4154224872589111,
+        0.3930425882339478,
+        0.39301860332489014
+      ],
+      "row_offsets": [
+        0,
+        255,
+        513
+      ],
+      "shape_nk": [
+        513,
+        1024
+      ],
+      "warm_jit_wall_median_ms": 8.300035,
+      "warm_jit_wall_samples_ms": [
+        8.62191,
+        8.277912,
+        8.436345,
+        8.15599,
+        8.300035
+      ]
+    }
+  ],
+  "schema": "tessera.rocm.nvfp4_ingest_jit.v1",
+  "scope": "isolated static checkpoint conversion; private device outputs; host readback; no resident consumer edge or model-quality/default promotion",
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_nvfp4_ingest_jit.py": "a5b268ea953453393c6d64796b7e137fddcd067bfc1a3b52347a13e65d4258c9",
+    "python/tessera/compiler/backend_manifest.py": "da7c95e507d2c5fdb9fa03a13e6ba6877ca2ce2bdb0cedabe24e9211449c7dd1",
+    "python/tessera/compiler/capabilities.py": "7d5acb09eb408cd388de0f353588c591321658f709639e48ae4d9e205fdb6e0e",
+    "python/tessera/compiler/driver.py": "9e41a05ba94266600c18f536c18617410f7b6e425abc76b5f26c0719be147d1e",
+    "python/tessera/compiler/graph_ir.py": "b19530654cacab772d403ec026360859d0a2d837a7517265677cd2acf57d7e76",
+    "python/tessera/compiler/jit.py": "b8b965ae80d27568bb09eb253840f239ef6567a8e81094ca2e350be31cfa1248",
+    "python/tessera/compiler/op_catalog.py": "9d69eae7c0440280ce4bc4f51b4cd74d32cdaee82e1cd5aadae1e1e7a981ab40",
+    "python/tessera/compiler/rocm_nvfp4_ingest.py": "83d297abb8824256113eca8a8a65018f9e97903e91c0d9155a2e3cc56a6b2559",
+    "python/tessera/compiler/rocm_nvfp4_ingest_native.py": "a11f45870f541a378962536cf5a154f1fa5af60684b8fca52c68e7ebf8d47e86",
+    "python/tessera/compiler/trace.py": "cb2f312ca8d2538beb7d27a6f2127edf0cec1ddbfdd53c68a34faffd7da62cf5",
+    "python/tessera/runtime.py": "136b2e66b5bc9225f9654ab5c0f5c9eafca86f2797ca0ebcb23ba18465109656"
+  },
+  "timing_scope": "cold wall includes trace/compile/execution; warm wall includes guards, allocation, upload, module launch, completion and readback; resident events exclude module/allocation/transfer"
+}

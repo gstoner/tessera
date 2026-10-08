@@ -1,0 +1,68 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "method": {
+    "device_repetitions": 25,
+    "end_to_end_repetitions": 3,
+    "samples": 5,
+    "selector_changed": false,
+    "timing_domains": [
+      "cuda_event",
+      "end_to_end"
+    ],
+    "warmup": 3
+  },
+  "rows": [
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "bad2d7b7ed8f40d9faa8f48f7adbdf8dba4fe3120432a136be7d9436e3610b1a",
+        "schedule_digest": "1c2f4f65f357aff8281b39c480321d97b9670a8dfac27133d130b2c3512d0d0e",
+        "schedule_ir_digest": "95c044dee84bd9b176d0f522d504b23a3e387084c89b47605fe92f6cd5fd8797",
+        "tile_ir_digest": "c7ede1a320f81ad4057d789450d6b5884662cbd8f786651e31c49f8ce9fda1d3"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 15.774621277856548,
+      "device_event_median_ms": 0.009126399643719196,
+      "device_event_samples_ms": [
+        0.010992640629410744,
+        0.009126399643719196,
+        0.007215359713882208,
+        0.010265599936246872,
+        0.0077747199684381485
+      ],
+      "end_to_end_cv_percent": 13.068816982643144,
+      "end_to_end_median_ms": 0.3131573515323301,
+      "end_to_end_samples_ms": [
+        0.4001783284669121,
+        0.3504079844181736,
+        0.2992336715882023,
+        0.3131573515323301,
+        0.2785500061387817
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "c14a3563536d79f659f72ae07ec4dc56398234da86e496b806b917309c36fa9f",
+      "max_abs_error": 8.344650268554688e-07,
+      "package_build_ms": 769.1746110212989,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        64,
+        64,
+        256
+      ],
+      "target_ir_digest": "f6d1492dd42349e9a73e8f3b80a1277d425923d77a598f31b3a2b895bd73999d",
+      "tolerance_rtol_atol": 0.0002
+    }
+  ],
+  "schema": "tessera.nvidia.sm120.typed_matmul_benchmark.v1",
+  "source_revision": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_scheduled_typed_matmul.py": "d3200263c4e761fb771c4366f947d40a055f5c3cb62275d1d7d8f6d645b728a3",
+    "python/tessera/compiler/driver.py": "d88d6c64a2d02c58aabcdbc819c858bb71500b3b3e9126dac78a321f519b34b0",
+    "python/tessera/compiler/nvidia_native.py": "3bb5b08c1c7f0459127e3df8114772689b4fc40b8bb1fd3ecc3ef92a6dd8dcf1",
+    "python/tessera/compiler/scheduled_matmul.py": "f0b6e427274b5efe351b59efd291014dcd10a46516a7443c190a26cf71f86d2a",
+    "tests/unit/test_scheduled_matmul_consumers.py": "309872a2723b474dd03c0dba848859266b8f9c920330a4dff1024dc1a2c14b7a"
+  },
+  "source_worktree_dirty": true,
+  "target": "nvidia_sm120",
+  "work_item": "W1.1"
+}

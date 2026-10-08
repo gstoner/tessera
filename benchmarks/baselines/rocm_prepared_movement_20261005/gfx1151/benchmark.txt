@@ -1,0 +1,68 @@
+[
+  {
+    "family": "paged",
+    "large": false,
+    "medians": {
+      "jit": 0.51426595,
+      "jit_unprepared": 0.7120419499999999,
+      "descriptor": 0.5342018500000001,
+      "retained": 0.63315045
+    },
+    "retained_over_jit": 1.2311731896696643
+  },
+  {
+    "family": "paged",
+    "large": true,
+    "medians": {
+      "jit": 0.5026766,
+      "jit_unprepared": 0.70353895,
+      "descriptor": 0.5349009,
+      "retained": 0.6222178
+    },
+    "retained_over_jit": 1.2378093589397239
+  },
+  {
+    "family": "paged_default",
+    "large": false,
+    "medians": {
+      "jit": 0.5070758,
+      "jit_unprepared": 0.7076107,
+      "descriptor": 0.52538785,
+      "retained": 0.6227269499999999
+    },
+    "retained_over_jit": 1.2280746783814174
+  },
+  {
+    "family": "paged_default",
+    "large": true,
+    "medians": {
+      "jit": 0.51139785,
+      "jit_unprepared": 0.71335605,
+      "descriptor": 0.5402952,
+      "retained": 0.6358442
+    },
+    "retained_over_jit": 1.2433454696768864
+  },
+  {
+    "family": "dispatched",
+    "large": false,
+    "medians": {
+      "jit": 0.49844885,
+      "jit_unprepared": 0.69307385,
+      "descriptor": 0.51917945,
+      "retained": 1.7784776
+    },
+    "retained_over_jit": 3.5680242817292087
+  },
+  {
+    "family": "dispatched",
+    "large": true,
+    "medians": {
+      "jit": 1.15581745,
+      "jit_unprepared": 1.3374606,
+      "descriptor": 1.1594373999999998,
+      "retained": 3.85538005
+    },
+    "retained_over_jit": 3.335630596336818
+  }
+]

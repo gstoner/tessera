@@ -1,0 +1,12 @@
+{
+  "python/tessera/compiler/jit.py": "f2a6e7330261a0a6450f9a63f4e2f755fe45dc359ad3a7c4151f3f24876d6973",
+  "python/tessera/runtime.py": "d8b57debe1eff8b13efe3d6e4f816e93117c7e6e6c49323eef2f54b3f66b6837",
+  "python/tessera/compiler/rocm_native.py": "9e7d2fb2d491bf1f5541563a7c8d9f205a2af7aa23feb58dc49bf5bb80d84351",
+  "python/tessera/compiler/rocm_nvfp4_ingest_native.py": "6240fb3d4df8389973966836dd1fb452bb68ae2b54a2ce096cc86f6dc36b280f",
+  "python/tessera/compiler/rocm_nvfp4_program.py": "49051665e604ba0c8ae330be23ec320e02155c26f8687d775bf5586c7cb6dad2",
+  "python/tessera/compiler/rocm_nvfp4_resident.py": "f83ccbf104de3bd89fb3d12f5f3b8bd67971c447e24303f0698b87ff19901bac",
+  "python/tessera/compiler/nvidia_native.py": "98efe61bac95c01f6b41379f8cc2a53de85a1b8530e01865221adbb8220287e8",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "de4dfd45373f3117748859faf17c80ce907a55efe8fca8130d10bb5fc438f802",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "2bbb73c0f7e17f330089da711b187337bace7705f2d202e2c55bd8faf613556c",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "34a2de94f8fdbe8105ba6f2f5f923f19c1bc870c37c3c6c8c6c357424461d260"
+}

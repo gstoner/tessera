@@ -1,0 +1,34 @@
+..FF..                                                                   [100%]
+=================================== FAILURES ===================================
+_______________________ test_batching_axis_has_zero_open _______________________
+
+    def test_batching_axis_has_zero_open():
+        open_status = {"partial", "planned"}
+        offenders = [
+            n
+            for n, c in _COVS.items()
+            if c.contract_status.get("batching_rule") in open_status
+        ]
+>       assert not offenders, f"batching_rule should be fully closed, open: {offenders}"
+E       AssertionError: batching_rule should be fully closed, open: ['scaled_matmul']
+E       assert not ['scaled_matmul']
+
+tests/unit/test_batching_rule_closure.py:68: AssertionError
+______________________ test_transpose_axis_has_zero_open _______________________
+
+    def test_transpose_axis_has_zero_open():
+        open_status = {"partial", "planned"}
+        offenders = [
+            n
+            for n, c in _COVS.items()
+            if c.contract_status.get("transpose_rule") in open_status
+        ]
+>       assert not offenders, f"transpose_rule should be fully closed, open: {offenders}"
+E       AssertionError: transpose_rule should be fully closed, open: ['scaled_matmul']
+E       assert not ['scaled_matmul']
+
+tests/unit/test_batching_rule_closure.py:78: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_batching_rule_closure.py::test_batching_axis_has_zero_open
+FAILED tests/unit/test_batching_rule_closure.py::test_transpose_axis_has_zero_open
+2 failed, 4 passed in 0.31s

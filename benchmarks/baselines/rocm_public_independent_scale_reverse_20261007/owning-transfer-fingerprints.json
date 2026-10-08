@@ -1,0 +1,11 @@
+{
+  "archive_sha256": "dbd753c617c5ed5a6ffeea94716abd4e358be509bfab284fbe2c19f1538ba44f",
+  "compiler_sha256": "1fcf742130a71ca0d6163aeaee071caba1052f084923cd77856ad87022653174",
+  "runtime_support_library_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "source_sha256": {
+    "python/tessera/compiler/native_vmap.py": "cfecd911146ebd3df4844f24a4997b56bdc02ce765ae9a1d4386bf1ad3ae2042",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "08ff87018a2a3f422030fbb2a69ab1c7e6fbdc58eb68ea4670947806fa8c9209",
+    "tests/unit/test_public_independent_scale_vmap.py": "423ec74054b8e62c5d58a0e2abffa22f265f79132f3068fb022e789827043659",
+    "tests/device/rocm/test_public_independent_scale_vjp.py": "9bd1c0b79b44dc24a0c061b87317061510d6af8983454f068ec8ce1c120829d7"
+  }
+}

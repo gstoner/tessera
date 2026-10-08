@@ -1,0 +1,138 @@
+
+File: benchmarks/baselines/gfx1201_m200_k1536_attribution_20261007/projected.hsaco
+Format: elf64-amdgpu
+Arch: amdgpu
+AddressSize: 64bit
+LoadName: <Not found>
+NoteSections [
+  NoteSection {
+    Name: .note
+    Offset: 0x200
+    Size: 0x74C
+    Notes [
+      {
+        Owner: AMDGPU
+        Data size: 0x736
+        Type: NT_AMDGPU_METADATA (AMDGPU Metadata)
+        AMDGPU Metadata: ---
+amdhsa.kernels:
+  - .args:
+      - .address_space:  generic
+        .offset:         0
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  generic
+        .offset:         8
+        .size:           8
+        .value_kind:     global_buffer
+      - .offset:         16
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         24
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         32
+        .size:           8
+        .value_kind:     by_value
+      - .address_space:  generic
+        .offset:         40
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  generic
+        .offset:         48
+        .size:           8
+        .value_kind:     global_buffer
+      - .offset:         56
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         64
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         72
+        .size:           8
+        .value_kind:     by_value
+      - .address_space:  generic
+        .offset:         80
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  generic
+        .offset:         88
+        .size:           8
+        .value_kind:     global_buffer
+      - .offset:         96
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         104
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         112
+        .size:           8
+        .value_kind:     by_value
+      - .address_space:  generic
+        .offset:         120
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  generic
+        .offset:         128
+        .size:           8
+        .value_kind:     global_buffer
+      - .offset:         136
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         144
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         152
+        .size:           8
+        .value_kind:     by_value
+      - .address_space:  generic
+        .offset:         160
+        .size:           8
+        .value_kind:     global_buffer
+      - .address_space:  generic
+        .offset:         168
+        .size:           8
+        .value_kind:     global_buffer
+      - .offset:         176
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         184
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         192
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         200
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         208
+        .size:           8
+        .value_kind:     by_value
+      - .offset:         216
+        .size:           8
+        .value_kind:     by_value
+    .group_segment_fixed_size: 0
+    .kernarg_segment_align: 8
+    .kernarg_segment_size: 224
+    .max_flat_workgroup_size: 256
+    .name:           tessera_rocm_scaled_matmul_9160add00a4b6aae
+    .private_segment_fixed_size: 0
+    .sgpr_count:     50
+    .sgpr_spill_count: 0
+    .symbol:         tessera_rocm_scaled_matmul_9160add00a4b6aae.kd
+    .uniform_work_group_size: 1
+    .uses_dynamic_stack: false
+    .vgpr_count:     85
+    .vgpr_spill_count: 0
+    .wavefront_size: 32
+    .workgroup_processor_mode: 1
+amdhsa.target:   amdgcn-amd-amdhsa-unknown-gfx1201
+amdhsa.version:
+  - 1
+  - 2
+...
+
+      }
+    ]
+  }
+]

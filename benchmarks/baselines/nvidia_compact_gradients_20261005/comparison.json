@@ -1,0 +1,88 @@
+{
+  "packet_sha256": "77241f081c568d119b374eafe6a6701395b8c76e5c7c310474108805af407fc8",
+  "finite_rows": 36,
+  "threshold_candidate_over_complete": 1.1,
+  "scope": "observed finite rows only; CUDA-event windows include submission gaps; no automatic route promotion",
+  "arms": {
+    "compact": {
+      "native_prepared_event_medians_ms": {
+        "minimum_ratio": 0.903178474884416,
+        "median_ratio": 1.000201613052042,
+        "maximum_ratio": 1.181550072808353,
+        "within_observed_10_percent": false
+      },
+      "native_resident_event_medians_ms": {
+        "minimum_ratio": 0.913219299883306,
+        "median_ratio": 0.9989907718349189,
+        "maximum_ratio": 1.2231144710770259,
+        "within_observed_10_percent": false
+      },
+      "checked_backward_wall_medians_ms": {
+        "minimum_ratio": 0.7108384399655272,
+        "median_ratio": 0.916508075341109,
+        "maximum_ratio": 1.065853556510359,
+        "within_observed_10_percent": true
+      }
+    },
+    "compact_logical": {
+      "native_prepared_event_medians_ms": {
+        "minimum_ratio": 0.9035357647243006,
+        "median_ratio": 0.9992763828006893,
+        "maximum_ratio": 1.0435111006833873,
+        "within_observed_10_percent": true
+      },
+      "native_resident_event_medians_ms": {
+        "minimum_ratio": 0.9053102587853165,
+        "median_ratio": 0.9994713189100521,
+        "maximum_ratio": 1.0817909801241414,
+        "within_observed_10_percent": true
+      },
+      "checked_backward_wall_medians_ms": {
+        "minimum_ratio": 0.6990300969903009,
+        "median_ratio": 0.9374095119318219,
+        "maximum_ratio": 1.036768316252442,
+        "within_observed_10_percent": true
+      }
+    },
+    "compact_t64": {
+      "native_prepared_event_medians_ms": {
+        "minimum_ratio": 0.903619423109448,
+        "median_ratio": 0.9975355857952162,
+        "maximum_ratio": 1.1101530464939813,
+        "within_observed_10_percent": false
+      },
+      "native_resident_event_medians_ms": {
+        "minimum_ratio": 0.9037374755629328,
+        "median_ratio": 0.9974817437305628,
+        "maximum_ratio": 1.1513451425663155,
+        "within_observed_10_percent": false
+      },
+      "checked_backward_wall_medians_ms": {
+        "minimum_ratio": 0.7120764114064783,
+        "median_ratio": 0.9232838304725972,
+        "maximum_ratio": 1.0925815467466513,
+        "within_observed_10_percent": true
+      }
+    },
+    "compact_logical_t64": {
+      "native_prepared_event_medians_ms": {
+        "minimum_ratio": 0.9092070329231146,
+        "median_ratio": 0.9977899570788008,
+        "maximum_ratio": 1.0678846426888264,
+        "within_observed_10_percent": true
+      },
+      "native_resident_event_medians_ms": {
+        "minimum_ratio": 0.8993292545453706,
+        "median_ratio": 0.9965147021656942,
+        "maximum_ratio": 1.064378614008896,
+        "within_observed_10_percent": true
+      },
+      "checked_backward_wall_medians_ms": {
+        "minimum_ratio": 0.72226586865123,
+        "median_ratio": 0.9205050571243456,
+        "maximum_ratio": 1.0622680634154213,
+        "within_observed_10_percent": true
+      }
+    }
+  }
+}

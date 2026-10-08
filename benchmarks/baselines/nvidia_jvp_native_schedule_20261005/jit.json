@@ -1,0 +1,337 @@
+{
+  "rows": [
+    {
+      "sk": 5,
+      "wrt": [
+        "q"
+      ],
+      "package": "7ef491795af0936fe5aa75d36ca276a53b2021756b239f78144d9ca68174b48e",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "device_dispatch_samples_ms": [
+        0.009754999540746212,
+        0.009174499660730362,
+        0.009719500318169594,
+        0.011030499823391438,
+        0.009130500257015228
+      ],
+      "device_dispatch_median_ms": 0.009719500318169594,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.4094830001122318,
+        0.3453519966569729,
+        0.2897809972637333,
+        0.25366200134158134,
+        0.250051001785323
+      ],
+      "checked_jvp_wall_median_ms": 0.2897809972637333
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "k"
+      ],
+      "package": "9b1878d42c87df3895578c2398e15b780c2b7eef8c88376ca5a3b5c937ddc4f7",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "device_dispatch_samples_ms": [
+        0.01058149989694357,
+        0.010982000268995762,
+        0.009380999952554703,
+        0.010247999802231789,
+        0.01075149979442358
+      ],
+      "device_dispatch_median_ms": 0.01058149989694357,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.3962920018238947,
+        0.25752199871931225,
+        0.24419200053671375,
+        0.26502100081415847,
+        0.27176199364475906
+      ],
+      "checked_jvp_wall_median_ms": 0.26502100081415847
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "q",
+        "k"
+      ],
+      "package": "354d6a3ecf1d9a763c10b585a6653425581ee56259754107cd9d97d4b96ec5d3",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "device_dispatch_samples_ms": [
+        0.010440999642014503,
+        0.009252499788999557,
+        0.009495999664068222,
+        0.009095500223338604,
+        0.010049499571323395
+      ],
+      "device_dispatch_median_ms": 0.009495999664068222,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.27651099662762135,
+        0.253712001722306,
+        0.38343200139934197,
+        0.246591996983625,
+        0.2790710059343837
+      ],
+      "checked_jvp_wall_median_ms": 0.27651099662762135
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "package": "b01374905ec792428731b566955eddd1d457307c68158d8fb53d2778b6780040",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "device_dispatch_samples_ms": [
+        0.010476999916136265,
+        0.011127999983727932,
+        0.010614999569952488,
+        0.010834500193595886,
+        0.010854999534785748
+      ],
+      "device_dispatch_median_ms": 0.010834500193595886,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.3707020005094819,
+        0.25206100690411404,
+        0.2741719945333898,
+        0.24952200328698382,
+        0.24305099941557273
+      ],
+      "checked_jvp_wall_median_ms": 0.25206100690411404
+    },
+    {
+      "sk": 5,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "package": "4ab9519be20129c4610996e616b6b6212ad6951c553a4e1cac0a66e52958a5b7",
+      "forward": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "device_dispatch_samples_ms": [
+        0.01009950041770935,
+        0.010017500258982182,
+        0.009879999794065952,
+        0.011311000213027,
+        0.011311500333249569
+      ],
+      "device_dispatch_median_ms": 0.01009950041770935,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.317202000587713,
+        0.2515820015105419,
+        0.24230100098066032,
+        0.2903319982578978,
+        0.24439099797746167
+      ],
+      "checked_jvp_wall_median_ms": 0.2515820015105419
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "q"
+      ],
+      "package": "b932c35c4a376568640cb03e1d4c0a501a0581ad6e789a7bc90538899b3b0a7b",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012010999955236912,
+        0.014019999653100967,
+        0.010750499553978443,
+        0.015452000312507153,
+        0.010822500102221966
+      ],
+      "device_dispatch_median_ms": 0.012010999955236912,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.39002300036372617,
+        0.2634720003698021,
+        0.25499099865555763,
+        0.26500200328882784,
+        0.30182100454112515
+      ],
+      "checked_jvp_wall_median_ms": 0.26500200328882784
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "k"
+      ],
+      "package": "13671dc9b2418a555ed10dfc9e4eb7013d04ef066688b06c383ffc827ec19c55",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.011579999700188637,
+        0.01239550020545721,
+        0.01204449962824583,
+        0.013747000135481358,
+        0.01099849957972765
+      ],
+      "device_dispatch_median_ms": 0.01204449962824583,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.409393003792502,
+        0.25961100618587807,
+        0.25750199711183086,
+        0.32346200168831274,
+        0.28079200274078175
+      ],
+      "checked_jvp_wall_median_ms": 0.28079200274078175
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "q",
+        "k"
+      ],
+      "package": "c8f8312e5431beeb3f11761c96cd774c9467db7b74ced2e1e63d0acd14e7adfe",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01431250013411045,
+        0.01268749963492155,
+        0.012919999659061432,
+        0.01045950036495924,
+        0.014569500461220741
+      ],
+      "device_dispatch_median_ms": 0.012919999659061432,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.32373199792345986,
+        0.3661819937406108,
+        0.38860199856571853,
+        0.26036099734483287,
+        0.2448820014251396
+      ],
+      "checked_jvp_wall_median_ms": 0.32373199792345986
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "package": "dd1851ad1b123c5d073e5ac673815951ef9a9943ebf94a334dca9bca8041b67c",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.010022999718785286,
+        0.01237650029361248,
+        0.012174500152468681,
+        0.012404999695718288,
+        0.012218000367283821
+      ],
+      "device_dispatch_median_ms": 0.012218000367283821,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.3602319993660785,
+        0.25405099586350843,
+        0.3260019948356785,
+        0.450273000751622,
+        0.45420199603540823
+      ],
+      "checked_jvp_wall_median_ms": 0.3602319993660785
+    },
+    {
+      "sk": 129,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "package": "9864fe7fc3eb31093dfe91c425bfaab6eb88426b6e3fb12666cf16217e2c217a",
+      "forward": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.013083499856293201,
+        0.01252949982881546,
+        0.013230499811470509,
+        0.013402000069618225,
+        0.016844000667333603
+      ],
+      "device_dispatch_median_ms": 0.013230499811470509,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      },
+      "checked_jvp_wall_samples_ms": [
+        0.3726419963641092,
+        0.3342620038893074,
+        0.3411920042708516,
+        0.3394919986021705,
+        0.3345619988976978
+      ],
+      "checked_jvp_wall_median_ms": 0.3394919986021705
+    }
+  ],
+  "backend": "nvidia_sm120",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "timing_scope": "preloaded raw kernel CUDA-event dispatch window; checked allocating JVP host wall measured separately",
+  "compiler_sha256": "6095c66a022daa8c936020d25853e30bcaa7626982ebe320fcc71b35cc8245df",
+  "source_hashes": {
+    "python/tessera/compiler/jit.py": "a6a73ac7cbc0987b1ed78b890c9e8595e1719e96b10f6260e6e8a00a3256a142",
+    "python/tessera/compiler/graph_ir.py": "74479ea3cacc5230c2074f9d67a86a18a934d7f5acbbd3151e678509e6ed4d75",
+    "python/tessera/compiler/native_attention_program.py": "3b4184070ef00a650ef2ca7793a97dad8a3ad0657725117d6b3f549978d2574d",
+    "python/tessera/compiler/native_attention_jvp.py": "1bc1fc1484c808adc31b7f03ac5232adbb50636f56b1b6ac928534ad24f05e14",
+    "python/tessera/compiler/resident_attention.py": "f862ecd9575ed89e1c44513f4735f065c16a363c47ef70fa8a17a7184c9c3e2e",
+    "python/tessera/compiler/nvidia_native.py": "8e8eb089c3b74c4f1e6f38e17e919643ea5c5e4077b750d56dfc4d08575cfac5",
+    "src/compiler/programming_model/lib/NativeAttentionJvp.h": "fb19e610174fc0c77644c71db11379d57168da5b184497b79416cf980bbddd45",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "b8cb08c7ce3b848288d5dabd48dd129fe0e99b681f5be9bc392ec693f5355eba"
+  },
+  "recorder_sha256": "6bed9cca95147db19c8f5a9a1f181ee9e213beeac03985bb23669f8a1e09ed46"
+}

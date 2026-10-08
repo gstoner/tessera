@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 92, in run_case
+    saved=session.empty(native.shapes[4],"fp32")
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/emit/nvidia_cuda.py", line 3600, in empty
+    nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
+                                   ~~~~~~~~^^^^^^^
+TypeError: data type 'fp32' not understood

@@ -1,0 +1,7 @@
+9dd62a82214d975707d4880ab365ea4605914e524e389976e929821104e5f0f9  /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt
+10c69f4c6e47e6225c3f16cd29895d00baf86230d848f55345969034ee361e8c  /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt
+c870e260f87134cec9ce71dad86892873032e57576323f66d15c0ee3f9c18237  /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so
+241bf4da7ec39bc00b68ed74f6be751516d9892ed990e8c7fa372bad18500247  /home/angstorms/scratch/tessera-validation-sdk/rocm-core/lib/llvm/bin/clang-23
+844f375436675da8948a340a3bd8b7efabd4703422f9c01e3721f11f1ab777b4  /home/angstorms/scratch/tessera-validation-sdk/rocm-core/llvm/bin/lld
+3b2eab29d80460e2c52d41f1e078b2e475d8e1fbfa58489c908776b33fe64196  src/compiler/ir/TesseraOps.cpp
+244b01fe2c90696cdba7c95a7cfd3df32250c7687fd398c4a1288c0f2b1a7cc5  src/compiler/programming_model/lib/PMPasses.cpp

@@ -1,0 +1,3 @@
+88 owning-device oracle rows; source fingerprints match final implementation.
+Three externally pinned fresh-process replays passed without compiler subprocesses.
+Graphify update blocked: graphify CLI is not installed in owning WSL (exit 127).

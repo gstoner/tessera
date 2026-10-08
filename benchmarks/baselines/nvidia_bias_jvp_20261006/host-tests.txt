@@ -1,0 +1,18 @@
+........................................................................ [ 12%]
+....................................................................ssss [ 25%]
+ssssssssssss............................................................ [ 38%]
+........................................................................ [ 51%]
+........................................................................ [ 64%]
+........................................................................ [ 77%]
+........................................................................ [ 90%]
+.......................................................                  [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/unit/test_native_jvp_compiled.py:114: AVX-512 production image unavailable
+SKIPPED [1] tests/unit/test_native_jvp_compiled.py:134: exact gfx1151 compiler/device required
+SKIPPED [1] tests/unit/test_native_jvp_compiled.py:159: AVX-512 spectral package unavailable
+SKIPPED [3] tests/unit/test_native_jvp_compiled.py:96: exact gfx1151 or gfx1201 compiler/device required
+SKIPPED [1] tests/unit/test_native_jvp_compiled.py:180: AVX-512 spectral package unavailable
+SKIPPED [4] tests/unit/test_native_jvp_compiled.py:262: AVX-512 production image unavailable
+SKIPPED [4] tests/unit/test_native_jvp_compiled.py:292: ROCm compiler or device unavailable
+SKIPPED [1] tests/unit/test_native_jvp_compiled.py:346: exact gfx1201 compiler/device required
+543 passed, 16 skipped in 10.58s

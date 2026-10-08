@@ -1,0 +1,373 @@
+--- a/python/tessera/compiler/nvidia_native.py
++++ b/python/tessera/compiler/nvidia_native.py
+@@ -514,6 +514,11 @@
+             result[binding.name] = np.array(array,copy=True,order="C")
+         return result
+ 
++    def prepare_resident(self) -> Any:
++        """Retain a native owner for repeated resident device submissions."""
++        from .resident_nvidia_tensor import ResidentTensorCall
++        return ResidentTensorCall(self)
++
+     def execute_resident(
+         self,
+         producer_input: Any,
+@@ -600,54 +605,15 @@
+                 if self.dynamic_n or self.dynamic_m or self.dynamic_k else "row_major",
+             )
+ 
+-            def runtime_artifact(package: NVIDIANativePackage) -> Any:
+-                return rt.RuntimeArtifact(
+-                    metadata={"target": "nvidia_sm120"},
+-                    native_image=package.image,
+-                    launch_descriptor=package.descriptor,
+-                    tile_ir=package.tile_ir,
+-                    target_ir=package.target_ir,
+-                )
+-
+-            producer_scalars = {"Rows": active_m, "Columns": active_k, "K": active_k}
+-            producer_args: dict[str, Any] = {
+-                self.producer_input_name: device_source,
+-                self.intermediate_name: edge,
+-            }
+-            for scalar in self.producer.descriptor.scalars:
+-                if scalar.name not in producer_scalars:
+-                    raise ValueError(
+-                        f"unsupported resident producer scalar {scalar.name!r}"
+-                    )
+-                producer_args[scalar.name] = producer_scalars[scalar.name]
+-            producer_receipt = rt.launch(
+-                runtime_artifact(self.producer),
+-                producer_args,
+-                stream=session.stream,
+-            )
+-            if (producer_receipt.get("ok") is not True
+-                    or producer_receipt.get("execution_kind") != "native_gpu"):
+-                raise RuntimeError(f"resident tensor producer failed: {producer_receipt}")
+-            consumer_receipt = rt.launch(
+-                runtime_artifact(self.consumer),
+-                {
+-                    **device_epilogue,
+-                    self.consumer_input_name: consumer_edge,
+-                    self.consumer_rhs_name: device_rhs,
+-                    self.output_name: result,
+-                    "M": active_m,
+-                    "N": active_n,
+-                    "K": active_k,
+-                    **({"LDA": active_k, "LDB": active_n if rhs_layout == "row_major" else active_k, "LDD": active_n}
+-                       if self.dynamic_n or self.dynamic_m or self.dynamic_k else {}),
+-                },
+-                stream=session.stream,
+-            )
+-            if (consumer_receipt.get("ok") is not True
+-                    or consumer_receipt.get("execution_kind") != "native_gpu"):
+-                raise RuntimeError(f"resident matmul consumer failed: {consumer_receipt}")
+-            if session.synchronize() != 0:
+-                raise RuntimeError("resident RMSNorm-to-matmul stream did not complete")
++            ordered = [device_source, device_rhs]
++            for binding in sorted(self.consumer.descriptor.buffers, key=lambda item: item.ordinal)[2:-1]:
++                ordered.append(device_epilogue[binding.name])
++            ordered.append(result)
++            # One native call owns both module launches and completion; Python
++            # supplies frontend values and retains the caller's result buffers.
++            with self.prepare_resident() as owner:
++                producer_receipt, consumer_receipt = owner.invoke(
++                    ordered, consumer_edge, stream=session.stream)
+             return NVIDIANativeTensorProgramResult(
+                 producer_receipt=producer_receipt,
+                 consumer_receipt=consumer_receipt,
+--- a/python/tessera/compiler/resident_nvidia_tensor.py
++++ b/python/tessera/compiler/resident_nvidia_tensor.py
+@@ -0,0 +1,125 @@
++"""Native submission of checked resident producer-to-matmul packages."""
++from __future__ import annotations
++import copy
++import ctypes as ct
++import os
++import weakref
++import numpy as np
++from .prepared_nvidia_matmul import HostView
++
++
++class ResidentTensorCall:
++    """Retain compiler images; caller buffers stay live until native completion."""
++    def __init__(self, program):
++        from tessera import runtime as rt
++        program.validate()
++        self.program = program
++        self.snapshot = copy.deepcopy(program)
++        self.pid = os.getpid()
++        self.lib = lib = rt._load_nvidia_ptx_launch()
++        if lib is None or not hasattr(lib, "tessera_nvidia_matmul_invoke_resident"):
++            raise RuntimeError("native resident tensor runtime unavailable")
++        lib.tessera_nvidia_matmul_prepare.argtypes = [
++            ct.c_void_p, ct.c_size_t, ct.c_char_p, ct.POINTER(ct.c_int64),
++            ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.c_int, ct.POINTER(ct.c_uint64)]
++        lib.tessera_nvidia_matmul_prepare.restype = ct.c_int
++        lib.tessera_nvidia_matmul_set_dynamic_axes.argtypes = [ct.c_uint64, ct.c_int]
++        lib.tessera_nvidia_matmul_set_dynamic_axes.restype = ct.c_int
++        lib.tessera_nvidia_matmul_attach_producer.argtypes = [
++            ct.c_uint64, ct.c_void_p, ct.c_size_t, ct.c_char_p, ct.c_int]
++        lib.tessera_nvidia_matmul_attach_producer.restype = ct.c_int
++        lib.tessera_nvidia_matmul_invoke_resident.argtypes = [
++            ct.c_uint64, ct.POINTER(HostView), ct.c_size_t, ct.c_void_p]
++        lib.tessera_nvidia_matmul_invoke_resident.restype = ct.c_int
++        lib.tessera_nvidia_matmul_close.argtypes = [ct.c_uint64]
++        lib.tessera_nvidia_matmul_close.restype = ct.c_int
++        lib.tessera_nvidia_matmul_last_error.restype = ct.c_char_p
++        consumer = program.consumer
++        provenance = consumer.descriptor.provenance
++        epilogue = provenance["epilogue"]
++        output = program._binding(consumer, program.output_name, "output")
++        image = ct.create_string_buffer(consumer.image.payload)
++        dims = (ct.c_int64 * 3)(program.m, program.n, program.k)
++        handle = ct.c_uint64()
++        self._check(lib.tessera_nvidia_matmul_prepare(
++            image, len(consumer.image.payload), consumer.descriptor.entry_symbol.encode(),
++            dims, 2 if program.dtype == "fp16" else 3,
++            int(epilogue["bias"]), int(epilogue["residual"]),
++            int(provenance["b_layout"] == "row_major"),
++            int(output.dtype == "fp16"), ct.byref(handle)))
++        self.handle = handle.value
++        self._finalizer = weakref.finalize(self, lib.tessera_nvidia_matmul_close, self.handle)
++        try:
++            axes = int(program.dynamic_m) | (int(program.dynamic_n) << 1) | (int(program.dynamic_k) << 2)
++            if axes:
++                self._check(lib.tessera_nvidia_matmul_set_dynamic_axes(self.handle, axes))
++            producer = program.producer
++            image = ct.create_string_buffer(producer.image.payload)
++            self._check(lib.tessera_nvidia_matmul_attach_producer(
++                self.handle, image, len(producer.image.payload),
++                producer.descriptor.entry_symbol.encode(),
++                int(producer.descriptor.provenance["schedule"] == "cooperative_128")))
++        except Exception:
++            self.close()
++            raise
++
++        receipts = []
++        for package in (self.program.producer, self.program.consumer):
++            artifact = rt.RuntimeArtifact(
++                metadata={"target": "nvidia_sm120"}, native_image=package.image,
++                launch_descriptor=package.descriptor, tile_ir=package.tile_ir,
++                target_ir=package.target_ir)
++            receipts.append(dict(
++                ok=True, execution_kind="native_gpu", runtime_status="executed",
++                compiler_path="canonical_scheduled_tile_consumer",
++                native_call_binding="prepared_cpp_resident_tensor_matmul",
++                image_digest=package.image.image_digest,
++                launch_descriptor_digest=package.descriptor.descriptor_digest,
++                artifact_hash=artifact.artifact_hash))
++        self.component_receipts = tuple(receipts)
++    def _check(self, status):
++        if status:
++            reason = self.lib.tessera_nvidia_matmul_last_error()
++            raise RuntimeError(reason.decode() if reason else "native resident tensor failure")
++
++    def close(self):
++        if self.pid != os.getpid():
++            raise ValueError("native resident tensor cannot cross fork")
++        self._finalizer()
++
++    def __enter__(self):
++        return self
++
++    def __exit__(self, *_):
++        self.close()
++
++    def invoke(self, buffers, edge, *, stream):
++        """Consumer-ordered device buffers, with producer source in LHS slot."""
++        from tessera import runtime as rt
++        if self.pid != os.getpid() or not self._finalizer.alive:
++            raise ValueError("native resident tensor is closed or belongs to another process")
++        if self.program != self.snapshot:
++            raise ValueError("native resident tensor package changed")
++        values = tuple(buffers) + (edge,)
++        interfaces = [value.__cuda_array_interface__ for value in values]
++        rt._validate_nvidia_cuda_buffer_streams(interfaces, stream)
++        views = (HostView * len(values))()
++        for ordinal, (view, value, interface) in enumerate(zip(views, values, interfaces, strict=True)):
++            shape = tuple(interface["shape"])
++            dtype = np.dtype(value.dtype)
++            if len(shape) not in {1, 2}:
++                raise ValueError("native resident tensor requires rank-one/two buffers")
++            if interface["data"][1] and ordinal >= len(values) - 2:
++                raise ValueError("native resident tensor requires writable output and edge buffers")
++            strides = interface["strides"]
++            if strides is None:
++                strides = (dtype.itemsize,) if len(shape) == 1 else (shape[1] * dtype.itemsize, dtype.itemsize)
++            view.data = int(interface["data"][0])
++            view.bytes = int(np.prod(shape)) * dtype.itemsize
++            view.dtype = {"float16": 2, "bfloat16": 3, "float32": 1}.get(dtype.name, 0)
++            view.rank = len(shape)
++            for axis in range(len(shape)):
++                view.shape[axis], view.strides[axis] = shape[axis], strides[axis]
++        self._check(self.lib.tessera_nvidia_matmul_invoke_resident(
++            self.handle, views, len(values), ct.c_void_p(stream)))
++        return tuple(dict(receipt) for receipt in self.component_receipts)
+--- a/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp
++++ b/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp
+@@ -140,6 +140,32 @@
+   owner.bytes[index] = expected.bytes;
+   return true;
+ }
++// Both host-staged and resident execution use the same sealed two-kernel ABI.
++bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
++            CUdeviceptr edge, std::array<int64_t, 3> dims, CUstream stream) {
++  if (owner.producer) {
++    int64_t rows = dims[0], columns = dims[2];
++    CUdeviceptr source = buffers[0];
++    void *producerArgs[] = {&source, &edge, &rows, &columns};
++    if (!ok(cuLaunchKernel(owner.producer,
++        unsigned(owner.cooperativeProducer ? rows : (rows + 127) / 128),
++        1, 1, 128, 1, 1, 0, stream, producerArgs, nullptr),
++        "launch prepared tensor producer")) return false;
++  }
++  CUdeviceptr input = owner.producer ? edge : buffers[0];
++  std::array<CUdeviceptr, 5> pointers = buffers;
++  void *args[11] = {}; size_t arg = 0;
++  args[arg++] = &input;
++  for (size_t i = 1; i < owner.count; ++i) args[arg++] = &pointers[i];
++  for (auto &dimension : dims) args[arg++] = &dimension;
++  std::array<int64_t, 3> leading{dims[2], owner.rowB ? dims[1] : dims[2], dims[1]};
++  if (owner.dynamicAxes)
++    for (auto &dimension : leading) args[arg++] = &dimension;
++  return ok(cuLaunchKernel(owner.function, unsigned((dims[1] + 7) / 8),
++      unsigned((dims[0] + 15) / 16), 1, 32, 1, 1, 0, stream, args, nullptr),
++      "launch prepared matmul");
++}
++
+ }
+ extern "C" const char *tessera_nvidia_matmul_last_error() { return error.c_str(); }
+ extern "C" int tessera_nvidia_matmul_prepare(
+@@ -351,25 +377,10 @@
+   for (size_t i = 0; i + 1 < count && submitted; ++i)
+     submitted = ok(cuMemcpyHtoDAsync(owner.buffers[i], host + hostOffsets[i],
+         frame.bytes[i], owner.stream), "upload prepared tensor input");
+-  CUdeviceptr consumerInput = owner.producer ? owner.arena->base + edgeOffset : owner.buffers[0];
+-  if (submitted && owner.producer) {
+-    int64_t rows = frame.dims[0], columns = frame.dims[2];
+-    void *producerArgs[] = {&owner.buffers[0], &consumerInput, &rows, &columns};
+-    submitted = ok(cuLaunchKernel(owner.producer,
+-        unsigned(owner.cooperativeProducer ? rows : (rows + 127) / 128),
+-        1, 1, 128, 1, 1, 0, owner.stream, producerArgs, nullptr), "launch prepared tensor producer");
+-  }
+-  void *args[11] = {}; size_t arg = 0;
+-  args[arg++] = &consumerInput;
+-  for (size_t i = 1; i < count; ++i) args[arg++] = &owner.buffers[i];
+-  for (size_t i = 0; i < 3; ++i) args[arg++] = &frame.dims[i];
+-  std::array<int64_t, 3> leading{frame.dims[2], owner.rowB ? frame.dims[1] : frame.dims[2], frame.dims[1]};
+-  if (owner.dynamicAxes)
+-    for (auto &dimension : leading) args[arg++] = &dimension;
+-  const auto m = frame.dims[0], n = frame.dims[1];
+   if (submitted)
+-    submitted = ok(cuLaunchKernel(owner.function, unsigned((n + 7) / 8), unsigned((m + 15) / 16),
+-        1, 32, 1, 1, 0, owner.stream, args, nullptr), "launch prepared matmul");
++    submitted = submit(owner, owner.buffers,
++        owner.producer ? owner.arena->base + edgeOffset : owner.buffers[0],
++        frame.dims, owner.stream);
+   if (submitted)
+     submitted = ok(cuMemcpyDtoHAsync(host + hostOffsets[count - 1], owner.buffers[count - 1],
+         frame.bytes[count - 1], owner.stream), "download prepared tensor output");
+@@ -382,6 +393,88 @@
+   std::memcpy(views[count - 1].data, host + hostOffsets[count - 1], frame.bytes[count - 1]);
+   return 0;
+ }
++
++// The final view is the caller's private edge allocation; the earlier views
++// follow the consumer ABI with source replacing its LHS. Native completion
++// retires all reads/writes before allocations may be released or reused.
++extern "C" int tessera_nvidia_matmul_invoke_resident(
++    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
++    void *launchStream) {
++  error.clear();
++  if (getpid() != process) return bad("prepared resident tensor cannot cross fork");
++  std::lock_guard<std::mutex> lock(mutex);
++  auto found = owners.find(handle);
++  if (found == owners.end()) return bad("prepared resident tensor is closed or unknown");
++  Owner &owner = *found->second;
++  if (!owner.producer || !views || count != owner.count + 1 || !launchStream)
++    return bad("prepared resident tensor buffer/stream arity");
++  CUcontext context = nullptr, streamContext = nullptr;
++  unsigned long long identity = 0;
++  CUstream stream = static_cast<CUstream>(launchStream);
++  if (!ok(cuCtxGetCurrent(&context), "get resident context") ||
++      context != owner.context ||
++      !ok(cuCtxGetId(context, &identity), "resident context identity") ||
++      identity != owner.identity ||
++      !ok(cuStreamGetCtx(stream, &streamContext), "resident stream context") ||
++      streamContext != context) return bad("prepared resident tensor context changed");
++  Owner frame;
++  frame.dims = {views[0].shape[0], views[1].shape[1], views[0].shape[1]};
++  for (size_t axis = 0; axis < 3; ++axis)
++    if (frame.dims[axis] <= 0 || frame.dims[axis] > owner.dims[axis] ||
++        (!(owner.dynamicAxes & (1 << axis)) && frame.dims[axis] != owner.dims[axis]))
++      return bad("prepared resident extent outside bound");
++  const auto m = frame.dims[0], n = frame.dims[1], k = frame.dims[2];
++  if (!view(frame, owner.storage, 2, m, k, false) ||
++      !view(frame, owner.storage, 2, k, n, !owner.rowB) ||
++      (owner.bias && !view(frame, 1, 1, n, 1, false)) ||
++      (owner.residual && !view(frame, 1, 2, m, n, false)) ||
++      !view(frame, owner.halfOutput ? 2 : 1, 2, m, n, false))
++    return bad("prepared resident frame capacity overflow");
++  std::array<CUdeviceptr, 6> pointers{};
++  for (size_t i = 0; i < count; ++i) {
++    const auto &actual = views[i];
++    const auto &expected = frame.expected[i == owner.count ? 0 : i];
++    const size_t width = expected.dtype == 1 ? 4 : 2;
++    if (!actual.data || reinterpret_cast<uintptr_t>(actual.data) % width ||
++        actual.bytes != expected.bytes || actual.dtype != expected.dtype ||
++        actual.rank != expected.rank || actual.shape[0] != expected.shape[0] ||
++        actual.shape[1] != expected.shape[1] ||
++        (expected.shape[0] > 1 && actual.strides[0] != expected.strides[0]) ||
++        (expected.rank == 2 && expected.shape[1] > 1 && actual.strides[1] != expected.strides[1]) ||
++        (expected.rank == 1 && actual.strides[1] != 0))
++      return bad("prepared resident shape/stride/dtype/capacity mismatch");
++    pointers[i] = reinterpret_cast<CUdeviceptr>(actual.data);
++    CUcontext allocationContext = nullptr;
++    unsigned int memoryType = 0;
++    CUdeviceptr base = 0; size_t capacity = 0;
++    if (!ok(cuPointerGetAttribute(&allocationContext, CU_POINTER_ATTRIBUTE_CONTEXT,
++          pointers[i]), "resident allocation context") ||
++        !ok(cuPointerGetAttribute(&memoryType, CU_POINTER_ATTRIBUTE_MEMORY_TYPE,
++          pointers[i]), "resident allocation type") ||
++        allocationContext != context || memoryType != CU_MEMORYTYPE_DEVICE ||
++        !ok(cuMemGetAddressRange(&base, &capacity, pointers[i]), "resident allocation capacity") ||
++        pointers[i] < base || pointers[i] - base > capacity ||
++        actual.bytes > capacity - size_t(pointers[i] - base))
++      return bad("prepared resident allocation context or capacity mismatch");
++    // Read-only inputs may alias. The edge and output must be disjoint from
++    // every other live buffer and from each other.
++    for (size_t j = 0; j < i; ++j) {
++      if (i != owner.count && i != owner.count - 1 &&
++          j != owner.count - 1) continue;
++      if (pointers[i] < pointers[j] + views[j].bytes &&
++          pointers[j] < pointers[i] + actual.bytes)
++        return bad("prepared resident output/edge aliases live storage");
++    }
++  }
++  std::array<CUdeviceptr, 5> buffers{};
++  for (size_t i = 0; i < owner.count; ++i) buffers[i] = pointers[i];
++  owner.invoked = true;
++  bool submitted = submit(owner, buffers, pointers[owner.count], frame.dims, stream);
++  const std::string launchError = error;
++  const bool completed = ok(cuStreamSynchronize(stream), "complete resident tensor/matmul");
++  if (!submitted) { error = launchError; return 1; }
++  return completed ? 0 : 1;
++}
+ extern "C" int tessera_nvidia_matmul_close(uint64_t handle) {
+   error.clear();
+   if (getpid() != process) return bad("prepared matmul cannot cross fork");
+--- a/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h
++++ b/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h
+@@ -40,6 +40,11 @@
+ int tessera_nvidia_matmul_context_identity(uint64_t *identity);
+ int tessera_nvidia_matmul_invoke(uint64_t handle,
+     const TesseraNvidiaMatmulHostView *views, size_t count);
++// Synchronous resident variant. Views contain device pointers; the last view
++// is the disjoint source-shaped intermediate. All buffers and the nondefault
++// stream must belong to the handle context. Earlier views follow consumer ABI.
++int tessera_nvidia_matmul_invoke_resident(uint64_t handle,
++    const TesseraNvidiaMatmulHostView *views, size_t count, void *stream);
+ int tessera_nvidia_matmul_close(uint64_t handle);
+ int tessera_nvidia_matmul_scratch_stats(uint64_t handle,
+     size_t *capacity, size_t *allocations);

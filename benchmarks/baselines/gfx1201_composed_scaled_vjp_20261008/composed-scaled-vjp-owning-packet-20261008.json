@@ -1,0 +1,182 @@
+{
+  "schema": "tessera.gfx1201.composed_scaled_vjp.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "hip_device": 0,
+  "hip_uuid_hex": "32386439653765666266326566373136",
+  "compiler_sha256": "6075bf1450770b22635f9a22959638e4845287030d716d37c513cd7a8db51eb0",
+  "runtime_path": "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "sources": {
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "921368e6f50c6cd28e3cb1c71cdb06e321d1a77be047a39fc4219fb4106b762a",
+    "src/compiler/programming_model/lib/NativeScaleTranspose.h": "ffa9e99bbfb21bf63cb8076137b32631cff18d165b8458d0856dfa319c5a804b",
+    "python/tessera/compiler/native_scaled_program.py": "f9187ccaa6f4bf947ad748c1b9290662c72c2c87c516b912066bdfb00df8fc65",
+    "python/tessera/compiler/jit.py": "d35021a43df5c8bf18d49d157c2399fd83a24fe6a2725fb25336224df5c58df4",
+    "python/tessera/compiler/native_vjp_plugins.py": "f0a48908c0321937236914289a37efda49ba80973d07ce4129a03e42b6f92e1c",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "ca02843adcdbe9bb7b9c8d0c73121cc52796b5eff9b28aba1dbce784c3d42d98",
+    "tests/unit/test_composed_scaled_vjp.py": "c70a713521fa090a63ad30a5c721221a1349904cedab4cd4a7a0b13a2329835f"
+  },
+  "rows": [
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "shared_scale": false,
+      "gradient_roles": [
+        "sb1",
+        "sa0",
+        "sb0",
+        "sa1"
+      ],
+      "members": 4,
+      "native_program_event_samples_ms": [
+        7.526605606079102,
+        7.722894191741943,
+        7.681257247924805,
+        7.703649520874023,
+        7.6819748878479
+      ],
+      "native_program_event_median_ms": 7.6819748878479,
+      "public_host_samples_ms": [
+        10.177752003073692,
+        9.901005457240073,
+        9.878225264732134,
+        9.812086545438929,
+        9.934779468246482
+      ],
+      "public_host_median_ms": 9.901005457240073,
+      "max_abs_error": 2.7590395479393237e-07,
+      "artifact_hash": "0275f32971fb9aee951f1934696680e300b60b778f2e7cbc2e63dffa265d702a",
+      "image_sha256": [
+        "12b427710e0f1675b281b56844bdba03c4b19cb8aa95f95e8a5317cc283af42d",
+        "18b185483458ae53f1edc1cd4bf71cf78d27319136a8187139ebba095ef21a6e",
+        "12b427710e0f1675b281b56844bdba03c4b19cb8aa95f95e8a5317cc283af42d",
+        "18b185483458ae53f1edc1cd4bf71cf78d27319136a8187139ebba095ef21a6e"
+      ],
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "shared_scale": true,
+      "gradient_roles": [
+        "sb1",
+        "sa",
+        "sb0"
+      ],
+      "members": 5,
+      "native_program_event_samples_ms": [
+        7.619495391845703,
+        7.707747936248779,
+        7.722512245178223,
+        7.715098857879639,
+        7.700408458709717
+      ],
+      "native_program_event_median_ms": 7.707747936248779,
+      "public_host_samples_ms": [
+        9.701528353616595,
+        9.571119634942574,
+        9.563300081274726,
+        9.587237526747314,
+        9.558493737131357
+      ],
+      "public_host_median_ms": 9.571119634942574,
+      "max_abs_error": 1.0778036618752651e-07,
+      "artifact_hash": "98a59d6b911236858e4f95384e0116d0e7ad8986fe48d5d5a3d3382772b7b8af",
+      "image_sha256": [
+        "12b427710e0f1675b281b56844bdba03c4b19cb8aa95f95e8a5317cc283af42d",
+        "18b185483458ae53f1edc1cd4bf71cf78d27319136a8187139ebba095ef21a6e",
+        "12b427710e0f1675b281b56844bdba03c4b19cb8aa95f95e8a5317cc283af42d",
+        "18b185483458ae53f1edc1cd4bf71cf78d27319136a8187139ebba095ef21a6e",
+        "ce03a6b78228b093e9c6d98fef1805162bf48bd8b7448b47fa37172e4a2ac4ef"
+      ],
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "shape_mnk": [
+        3,
+        5,
+        37
+      ],
+      "shared_scale": false,
+      "gradient_roles": [
+        "sb1",
+        "sa0",
+        "sb0",
+        "sa1"
+      ],
+      "members": 4,
+      "native_program_event_samples_ms": [
+        0.29914677143096924,
+        0.31275442242622375,
+        0.3148099482059479,
+        0.3139955699443817,
+        0.3123857378959656
+      ],
+      "native_program_event_median_ms": 0.31275442242622375,
+      "public_host_samples_ms": [
+        2.912454539909959,
+        2.5391951838338915,
+        2.549853641539812,
+        2.590452003377405,
+        2.578571184792302
+      ],
+      "public_host_median_ms": 2.578571184792302,
+      "max_abs_error": 8.122002639887604e-09,
+      "artifact_hash": "c0b64d6d8a106632f2288791c4b6aa62e74dc155eb08a1a8f99bbb008445734e",
+      "image_sha256": [
+        "c87c0913fe56ee0ad9388bedbf310f38bbe803232ecec603fdbc1fcbeb172d74",
+        "8f6d7d3b415da78cbe4ffa12e1a1e8f12e77a9692a1becad14af95a5ca34a89c",
+        "c87c0913fe56ee0ad9388bedbf310f38bbe803232ecec603fdbc1fcbeb172d74",
+        "8f6d7d3b415da78cbe4ffa12e1a1e8f12e77a9692a1becad14af95a5ca34a89c"
+      ],
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "shape_mnk": [
+        3,
+        5,
+        37
+      ],
+      "shared_scale": true,
+      "gradient_roles": [
+        "sb1",
+        "sa",
+        "sb0"
+      ],
+      "members": 5,
+      "native_program_event_samples_ms": [
+        0.2277207374572754,
+        0.20731858909130096,
+        0.19790643453598022,
+        0.19824083149433136,
+        0.20837771892547607
+      ],
+      "native_program_event_median_ms": 0.20731858909130096,
+      "public_host_samples_ms": [
+        2.306368180804632,
+        2.395203188908371,
+        2.3535109252076256,
+        2.302233087406917,
+        2.332328734072772
+      ],
+      "public_host_median_ms": 2.332328734072772,
+      "max_abs_error": 1.167721591643911e-08,
+      "artifact_hash": "0eb6527b4bac610f597f261b6342d61e048b90375077382ad1bc481e544aaf19",
+      "image_sha256": [
+        "c87c0913fe56ee0ad9388bedbf310f38bbe803232ecec603fdbc1fcbeb172d74",
+        "8f6d7d3b415da78cbe4ffa12e1a1e8f12e77a9692a1becad14af95a5ca34a89c",
+        "c87c0913fe56ee0ad9388bedbf310f38bbe803232ecec603fdbc1fcbeb172d74",
+        "8f6d7d3b415da78cbe4ffa12e1a1e8f12e77a9692a1becad14af95a5ca34a89c",
+        "221bcf6855b3583177c24d935c0df82a2ebdf150ba9fc78a6492885239d120ce"
+      ],
+      "correctness": "before_and_after_timing"
+    }
+  ],
+  "timing": "native HIP program event windows over four reductions and any shared-gradient sum; separate warm public host calls including copies/completion; no speedup claim"
+}

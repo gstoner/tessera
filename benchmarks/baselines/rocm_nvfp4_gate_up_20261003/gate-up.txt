@@ -1,0 +1,1 @@
+wrote benchmarks/baselines/rocm_nvfp4_gate_up_20261003/gate-up.json

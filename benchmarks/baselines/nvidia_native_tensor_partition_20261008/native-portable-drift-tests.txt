@@ -1,0 +1,1100 @@
+................................FFFFFFFFFFFF............................ [ 20%]
+........................................................................ [ 40%]
+........................................................................ [ 60%]
+........................................................................ [ 80%]
+......................................................................   [100%]
+=================================== FAILURES ===================================
+_ test_public_native_partition_and_portable_replay_without_graph_authors[False-fp16-tessera.rmsnorm] _
+
+producer = 'tessera.rmsnorm', dtype = 'fp16', fused = False
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794551c1edd0>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x79454d29a690>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[False-fp16-tessera.layer_norm] _
+
+producer = 'tessera.layer_norm', dtype = 'fp16', fused = False
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794332c10d00>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d1e690>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[False-fp16-tessera.softmax] _
+
+producer = 'tessera.softmax', dtype = 'fp16', fused = False
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794332572200>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x79454d29a5d0>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[False-bf16-tessera.rmsnorm] _
+
+producer = 'tessera.rmsnorm', dtype = 'bf16', fused = False
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x79454d1854e0>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d1e810>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[False-bf16-tessera.layer_norm] _
+
+producer = 'tessera.layer_norm', dtype = 'bf16', fused = False
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794550bcb930>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d1f350>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[False-bf16-tessera.softmax] _
+
+producer = 'tessera.softmax', dtype = 'bf16', fused = False
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794332c9b070>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d1e5d0>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[True-fp16-tessera.rmsnorm] _
+
+producer = 'tessera.rmsnorm', dtype = 'fp16', fused = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794551492890>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d48050>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[True-fp16-tessera.layer_norm] _
+
+producer = 'tessera.layer_norm', dtype = 'fp16', fused = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794551456f90>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d490d0>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[True-fp16-tessera.softmax] _
+
+producer = 'tessera.softmax', dtype = 'fp16', fused = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7945514554e0>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d48ad0>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[True-bf16-tessera.rmsnorm] _
+
+producer = 'tessera.rmsnorm', dtype = 'bf16', fused = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794551492580>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d48650>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[True-bf16-tessera.layer_norm] _
+
+producer = 'tessera.layer_norm', dtype = 'bf16', fused = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7945517cf700>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d484d0>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+_ test_public_native_partition_and_portable_replay_without_graph_authors[True-bf16-tessera.softmax] _
+
+producer = 'tessera.softmax', dtype = 'bf16', fused = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x794551c83770>
+
+    @pytest.mark.parametrize("producer",["tessera.rmsnorm","tessera.layer_norm","tessera.softmax"])
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    @pytest.mark.parametrize("fused",[False,True])
+    def test_public_native_partition_and_portable_replay_without_graph_authors(producer,dtype,fused,monkeypatch):
+        import numpy as np
+        import subprocess
+        from tessera import runtime as rt
+        from tessera.compiler import graph_ir,nvidia_tensor_lhs as lhs
+        from tessera.compiler.prepared_nvidia_lhs import PreparedLhsCall
+        if rt._nvidia_device_name()!="sm_120":
+            pytest.skip("owning SM120 GPU required")
+        semantics={"producer":producer,
+            "producer_attrs":{"axis":-1} if producer=="tessera.softmax" else {"eps":1e-5},
+            "consumer":"tessera.matmul","consumer_attrs":{"output_dtype":"fp16" if fused else "fp32",
+                "rhs_storage_order":"row_major"},
+            "roles":{"source":1,"rhs":0}}
+        if fused:
+            semantics["consumer_attrs"].update(bias="bias",residual="residual",activation="relu")
+            semantics["roles"].update(bias=3,residual=2)
+        module=lhs._semantic_graph(17,35,19,dtype,semantics)
+        before=module.to_mlir(target="nvidia_sm120",canonical=True)
+        def forbidden(*args,**kwargs):
+            pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+        monkeypatch.setattr(graph_ir.GraphIRFunction,"__init__",forbidden)
+        monkeypatch.setattr(graph_ir.IROp,"__init__",forbidden)
+        monkeypatch.setattr(lhs,"_semantic_graph",forbidden)
+        monkeypatch.setattr(lhs,"_partitions",forbidden)
+        program=lhs.package_traced_lhs(module)
+        assert module.to_mlir(target="nvidia_sm120",canonical=True)==before
+        assert program.native_plan_json is not None
+        manifest=program.manifest()
+        assert manifest["schema"]=="tessera.nvidia.lhs_tensor_program.v2"
+>       from tests.device.nvidia.test_lhs_tensor_jit import _oracle
+
+tests/unit/test_native_sm120_tensor_partition.py:186: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+<frozen importlib._bootstrap>:1371: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1342: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:938: in _load_unlocked
+    ???
+.venv/lib/python3.14/site-packages/_pytest/assertion/rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests/device/nvidia/test_lhs_tensor_jit.py:11: in <module>
+    @ts.jit(target="nvidia_sm120")
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/jit.py:4282: in _decorate
+    analysis = _jit_analyze_frontend(
+python/tessera/compiler/jit.py:3902: in _jit_analyze_frontend
+    inferred_effect = lattice.infer(fn, source_text=source_text)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/effects.py:243: in infer
+    builder.lower(fn, source_text=source)
+python/tessera/compiler/graph_ir.py:4764: in lower
+    ops = self._extract_ops(fn, arg_names, {a.name: a.ir_type for a in args},
+python/tessera/compiler/graph_ir.py:4834: in _extract_ops
+    extractor.visit(stmt)
+/usr/lib/python3.14/ast.py:506: in visit
+    return visitor(node)
+           ^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2004: in visit_Return
+    ssa = self._emit_expr(elt)
+          ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2539: in _try_map_call
+    operand = self._emit_expr(arg)
+              ^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2370: in _emit_expr
+    op = self._try_map_call(node)
+         ^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/graph_ir.py:2675: in _try_map_call
+    return IROp(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+args = (<[AttributeError("'IROp' object has no attribute 'result'") raised in repr()] IROp object at 0x794332d4b650>,)
+kwargs = {'result': None, 'op_name': 'tessera.rmsnorm', 'operands': ['%source'], 'operand_types': ['tensor<*x?>'], ...}
+
+    def forbidden(*args,**kwargs):
+>       pytest.fail("public native route reconstructed Python Graph or recompiled portable replay")
+E       Failed: public native route reconstructed Python Graph or recompiled portable replay
+
+tests/unit/test_native_sm120_tensor_partition.py:176: Failed
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[False-fp16-tessera.rmsnorm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[False-fp16-tessera.layer_norm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[False-fp16-tessera.softmax]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[False-bf16-tessera.rmsnorm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[False-bf16-tessera.layer_norm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[False-bf16-tessera.softmax]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[True-fp16-tessera.rmsnorm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[True-fp16-tessera.layer_norm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[True-fp16-tessera.softmax]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[True-bf16-tessera.rmsnorm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[True-bf16-tessera.layer_norm]
+FAILED tests/unit/test_native_sm120_tensor_partition.py::test_public_native_partition_and_portable_replay_without_graph_authors[True-bf16-tessera.softmax]
+12 failed, 346 passed in 29.09s

@@ -1,0 +1,10 @@
+....sss..............ssssssssss......................................... [ 20%]
+........................................................................ [ 41%]
+........................................................................ [ 62%]
+........................................................................ [ 83%]
+........................................................                 [100%]
+=========================== short test summary info ============================
+SKIPPED [3] tests/unit/test_rocm_movement_compiler_spine.py:69: explicit owning-device movement gate
+SKIPPED [5] tests/unit/test_public_movement_frontend.py:96: explicit owning-device movement gate
+SKIPPED [5] tests/unit/test_public_movement_frontend.py:150: explicit owning-device movement gate
+331 passed, 13 skipped in 3.90s

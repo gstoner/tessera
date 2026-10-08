@@ -1,0 +1,273 @@
+{
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "pci_bus_id": "0000:03:00.0",
+    "architecture": "gfx1201",
+    "ordinal": 0
+  },
+  "rows": [
+    {
+      "family": "paged",
+      "large": false,
+      "correctness": "bit_exact_rebind_and_retained_host_outputs",
+      "stale_generation_rejected": true,
+      "bad_indices_rejected": true,
+      "warm_compiler_subprocesses": "forbidden",
+      "entry": "tessera_rocm_paged_kv_90e7b68ce1b16054",
+      "image_digest": "0f568eefa366b5eae3262e8fa17feed7bed20e527f34bc0976740ecb33a1602a",
+      "samples_ms": {
+        "public_host": [
+          0.481789,
+          0.521335,
+          0.481589,
+          0.460839,
+          0.512237,
+          0.482511,
+          0.47144,
+          0.47664,
+          0.477651
+        ],
+        "common_resident_download": [
+          0.233726,
+          0.24653,
+          0.238004,
+          0.229708,
+          0.248884,
+          0.244317,
+          0.238265,
+          0.244096,
+          0.250838
+        ],
+        "direct_resident_download": [
+          0.228325,
+          0.246861,
+          0.221042,
+          0.271598,
+          0.234247,
+          0.241931,
+          0.2464,
+          0.290093,
+          0.234237
+        ],
+        "resident_only": [
+          0.087758,
+          0.101614,
+          0.085212,
+          0.088749,
+          0.085173,
+          0.090112,
+          0.085703,
+          0.122273,
+          0.108477
+        ]
+      },
+      "medians_ms": {
+        "public_host": 0.481589,
+        "common_resident_download": 0.244096,
+        "direct_resident_download": 0.241931,
+        "resident_only": 0.088749
+      },
+      "native_kernel_event_samples_ms": [
+        0.008599000051617622,
+        0.008639000356197357,
+        0.008759000338613987,
+        0.00860000029206276,
+        0.008599000051617622,
+        0.008719000034034252,
+        0.008479000069200993,
+        0.008798999711871147,
+        0.008438999764621258,
+        0.008678999729454517,
+        0.008678999729454517,
+        0.008519000373780727,
+        0.008599000051617622,
+        0.008958999998867512,
+        0.008599000051617622,
+        0.008719000034034252,
+        0.008519000373780727,
+        0.008678999729454517
+      ],
+      "native_kernel_event_median_ms": 0.008619500324130058,
+      "common_resident_over_public": 0.5068554306680593
+    },
+    {
+      "family": "paged",
+      "large": true,
+      "correctness": "bit_exact_rebind_and_retained_host_outputs",
+      "stale_generation_rejected": true,
+      "bad_indices_rejected": true,
+      "warm_compiler_subprocesses": "forbidden",
+      "entry": "tessera_rocm_paged_kv_90e7b68ce1b16054",
+      "image_digest": "0f568eefa366b5eae3262e8fa17feed7bed20e527f34bc0976740ecb33a1602a",
+      "samples_ms": {
+        "public_host": [
+          0.555755,
+          0.548587,
+          0.553817,
+          0.546593,
+          0.541623,
+          0.539589,
+          0.58732,
+          0.588673,
+          0.54542
+        ],
+        "common_resident_download": [
+          0.276237,
+          0.266187,
+          0.257912,
+          0.252101,
+          0.266639,
+          0.253233,
+          0.301485,
+          0.274364,
+          0.28268
+        ],
+        "direct_resident_download": [
+          0.249126,
+          0.304491,
+          0.260657,
+          0.243304,
+          0.304712,
+          0.248213,
+          0.247863,
+          0.264805,
+          0.276187
+        ],
+        "resident_only": [
+          0.127302,
+          0.104088,
+          0.09952,
+          0.104289,
+          0.100542,
+          0.104329,
+          0.102806,
+          0.140368,
+          0.104189
+        ]
+      },
+      "medians_ms": {
+        "public_host": 0.548587,
+        "common_resident_download": 0.266639,
+        "direct_resident_download": 0.260657,
+        "resident_only": 0.104189
+      },
+      "native_kernel_event_samples_ms": [
+        0.014719000086188316,
+        0.014519999735057354,
+        0.014800000004470348,
+        0.014558999799191952,
+        0.014480000361800194,
+        0.014759999699890614,
+        0.014839000068604946,
+        0.014839000068604946,
+        0.014639999717473984,
+        0.014560000039637089,
+        0.014680000022053719,
+        0.014600000344216824,
+        0.014519000425934792,
+        0.014759000390768051,
+        0.014599000103771687,
+        0.014879999682307243,
+        0.014839000068604946,
+        0.014759000390768051
+      ],
+      "native_kernel_event_median_ms": 0.014699500054121017,
+      "common_resident_over_public": 0.4860468804401125
+    },
+    {
+      "family": "full",
+      "large": true,
+      "correctness": "bit_exact_rebind_and_retained_host_outputs",
+      "stale_generation_rejected": true,
+      "bad_indices_rejected": true,
+      "warm_compiler_subprocesses": "forbidden",
+      "entry": "tessera_rocm_paged_kv_90e7b68ce1b16054",
+      "image_digest": "0f568eefa366b5eae3262e8fa17feed7bed20e527f34bc0976740ecb33a1602a",
+      "samples_ms": {
+        "public_host": [
+          3.284205,
+          2.992144,
+          3.051356,
+          3.480875,
+          2.957016,
+          3.045916,
+          3.278905,
+          3.636216,
+          2.803974
+        ],
+        "common_resident_download": [
+          10.241302,
+          1.609606,
+          1.925273,
+          1.717342,
+          2.074172,
+          1.561094,
+          1.980458,
+          1.788381,
+          1.900701
+        ],
+        "direct_resident_download": [
+          3.191278,
+          2.687782,
+          3.584072,
+          2.14423,
+          2.551808,
+          2.498386,
+          2.165596,
+          2.320898,
+          2.549684
+        ],
+        "resident_only": [
+          0.256489,
+          0.319124,
+          0.213547,
+          0.227454,
+          0.300003,
+          0.224077,
+          0.221102,
+          0.202076,
+          0.283561
+        ]
+      },
+      "medians_ms": {
+        "public_host": 3.051356,
+        "common_resident_download": 1.900701,
+        "direct_resident_download": 2.549684,
+        "resident_only": 0.227454
+      },
+      "native_kernel_event_samples_ms": [
+        0.03335899859666824,
+        0.03283900022506714,
+        0.03283900022506714,
+        0.03391899913549423,
+        0.03275899961590767,
+        0.03303899988532066,
+        0.032958999276161194,
+        0.03291900083422661,
+        0.03383899852633476,
+        0.03291900083422661,
+        0.032719001173973083,
+        0.03431899845600128,
+        0.032878998667001724,
+        0.0331990011036396,
+        0.032519999891519547,
+        0.032999999821186066,
+        0.03288000077009201,
+        0.03275899961590767
+      ],
+      "native_kernel_event_median_ms": 0.03291900083422661,
+      "common_resident_over_public": 0.6229037188712165
+    }
+  ],
+  "compiler_sha256": "42b6b3864c2e00ad01a612c2f7defbf34c1381965d95a745cbff53fcab40ff9b",
+  "runtime_library_sha256": "6ac1cfbb78276e998b3aadea5f015c7cf2d0e4763f739a3841bb4beda9c35573",
+  "fingerprints": {
+    "python/tessera/compiler/resident_rocm_movement.py": "ca87749ee22c93a9646b10cc8d843b9b64eb9a73c45618f5ccd9c635efa5eefe",
+    "python/tessera/compiler/prepared_rocm_movement.py": "39c3592f8de358a4636d5e655fb04da31956bd1f7b3d09fdf440b76cb30f65fc",
+    "python/tessera/compiler/jit.py": "ec1fbd5088a1b53b2ee998e184bbfb2361fbbf1268eb1d42b590008e9c83cb65",
+    "python/tessera/runtime.py": "29a6c4015b0d18b3eaf5953727a954b3099d6e93f3c083777f1415929c664631",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "29b4d1a6b900d81286ec6364c09870d0c775b646cbb82a180e8297ad6fc8d228",
+    "benchmarks/rocm/benchmark_resident_movement.py": "11ead7000e2acb90a4b8e6dce666214882f1f2f35a1a64cf6e979905d77ea4ec"
+  },
+  "timing_scope": "separate synchronous host wall arms and native one-kernel HIP event windows; compilation/uploads excluded from resident warm arms"
+}

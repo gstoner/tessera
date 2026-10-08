@@ -1,0 +1,993 @@
+{
+  "schema": "tessera.direct_broadcast_scaled.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "device_uuid": "32386439653765666266326566373136",
+  "compiler_sha256": "65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "source_sha256": {
+    "python/tessera/compiler/graph_ir.py": "68d3c34708292bb95cefbbccbd43a26bd74a97bb969f9da5d2c844a3402da394",
+    "python/tessera/compiler/native_scaled_program.py": "f21f04c9bbe3d29a79c1cc638861d566a9d2201524da893f2a6e72908b30e87d",
+    "python/tessera/compiler/native_jvp_plugins.py": "c1a005b2c1ff0710ae5ba99d536690b2e5972a787426e15fba3d545c0052e28d",
+    "python/tessera/compiler/native_vjp_plugins.py": "dd032662e338c5c71ff11c20bf83573ed2e35f8dfaacdf4e9dd996e64b779de5",
+    "src/compiler/ir/include/Tessera/IR/ScaledBatchContract.h": "adacc9988726dc7f722b888233342b0c8b9e285adbdfc5441a464531fc44793e",
+    "src/compiler/ir/LinearTransposeInterface.cpp": "6353a615043ffa58d7d2d3d3e0c219d173293039c35e81c1d05e7e70fb89f1a6",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "de4dfd45373f3117748859faf17c80ce907a55efe8fca8130d10bb5fc438f802",
+    "tests/unit/test_direct_broadcast_scaled_frontend.py": "b050b6bbf1cd8a51d60c597de0abbd2de0b2e3637b954a0cc41ad90d2c5af7eb",
+    "tests/device/rocm/test_direct_broadcast_scaled_frontend.py": "e7d373648dc71060116f534fe3b8be78917558c7a8776bd1e744b075c99cc2c1",
+    "benchmarks/rocm/benchmark_direct_broadcast_scaled.py": "747a8fe3373d7f6fdea177bb75d15a73101265140fd5c46e9f00119bd27de018"
+  },
+  "timing_scope": "cold/warm public wall includes checked package/host transfers; prepared HIP event window covers native program dispatch and member kernels; not an isolated single-kernel metric",
+  "selector_promotion": false,
+  "rows": [
+    {
+      "kind": "primal",
+      "encoded_e8m0": false,
+      "transposeA": false,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 6.117284168105641e-08,
+      "cold_public_wall_ms": 375.809248,
+      "warm_public_wall_samples_ms": [
+        6.144813,
+        0.865753,
+        0.805918
+      ],
+      "warm_public_wall_median_ms": 0.865753,
+      "prepared_program_event_samples_ms": [
+        0.012212499976158142,
+        0.008486250415444374,
+        0.008483749814331532
+      ],
+      "prepared_program_event_median_ms": 0.008486250415444374,
+      "native_program_sha256": "feacea4507520cf6a0a2b93443b7336aaf5546e3b571213ba93daa1fa6024d26",
+      "member_image_sha256": [
+        "a94eb1c8154ca2137d5e085471ff36b45139fae3473d1331f16707e7bfda9d12"
+      ],
+      "frontend_graph_sha256": "b0aaa864b0df60c80d3bf46ee864eff8e0c741af99c3bb174cc4a33b2e05e337",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "encoded_e8m0": false,
+      "transposeA": false,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 6.895285054042688e-08,
+      "cold_public_wall_ms": 255.613333,
+      "warm_public_wall_samples_ms": [
+        1.057729,
+        0.939022,
+        0.920097
+      ],
+      "warm_public_wall_median_ms": 0.939022,
+      "prepared_program_event_samples_ms": [
+        0.01333503145724535,
+        0.013345031067728996,
+        0.013313781470060349
+      ],
+      "prepared_program_event_median_ms": 0.01333503145724535,
+      "native_program_sha256": "48cb386aaa9b2c1f1f36b31bb59fa5559b27f2740c92bc81070594c6d7998667",
+      "member_image_sha256": [
+        "96f26e7f91ae91f68f7cbf69c8da5377740c29a5703a28b2522d61ae6494c0e7"
+      ],
+      "frontend_graph_sha256": "39fba75bb16d5873118ab4601862e8fe711226e5f42e592bf91478695c6ea52e",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "encoded_e8m0": false,
+      "transposeA": true,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 7.054787043436761e-08,
+      "cold_public_wall_ms": 252.711142,
+      "warm_public_wall_samples_ms": [
+        1.024165,
+        0.840314,
+        0.838581
+      ],
+      "warm_public_wall_median_ms": 0.840314,
+      "prepared_program_event_samples_ms": [
+        0.015085031278431416,
+        0.014791280962526798,
+        0.014805031009018421
+      ],
+      "prepared_program_event_median_ms": 0.014805031009018421,
+      "native_program_sha256": "71f7f49f88bb224e4d8c9df424021b0526277638106c8b0272bf159ab7d2ca02",
+      "member_image_sha256": [
+        "f53d4387bb8bf724af342de436ddae9327579e5a469783128d0c72c2e04689fb"
+      ],
+      "frontend_graph_sha256": "a6d736e2d1a52df5627314a4f783c2edf1d0a14e847cbc68f96fba65ac1ae064",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "encoded_e8m0": false,
+      "transposeA": true,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 4.681300491693463e-08,
+      "cold_public_wall_ms": 261.741413,
+      "warm_public_wall_samples_ms": [
+        1.039054,
+        0.947458,
+        0.902313
+      ],
+      "warm_public_wall_median_ms": 0.947458,
+      "prepared_program_event_samples_ms": [
+        0.018781250342726707,
+        0.018783750012516975,
+        0.018804999068379402
+      ],
+      "prepared_program_event_median_ms": 0.018783750012516975,
+      "native_program_sha256": "57ccae60e2d1df906af04b7c5f54dd4d50ce0a72bb0d13b05eb149a55ead8545",
+      "member_image_sha256": [
+        "60f16177370a553fb32c32fd4fd394230f87b6d237a75a666150ebd399a87918"
+      ],
+      "frontend_graph_sha256": "f9aa70234ac13f21026a9a3587722ed5ad6ce2f55f3ae67e2b62c3973fe94b21",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "encoded_e8m0": true,
+      "transposeA": false,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 252.318413,
+      "warm_public_wall_samples_ms": [
+        1.181496,
+        0.888446,
+        0.938411
+      ],
+      "warm_public_wall_median_ms": 0.938411,
+      "prepared_program_event_samples_ms": [
+        0.01345875021070242,
+        0.01351246889680624,
+        0.01345496904104948
+      ],
+      "prepared_program_event_median_ms": 0.01345875021070242,
+      "native_program_sha256": "72d6cf813626a4e69142124157f4b871c0bb8c817cf96287697b08df1e74f1f7",
+      "member_image_sha256": [
+        "614d522d7dd67bc567be91d6b5b498f166dd8511588f67f78eaf587fb6d7c149"
+      ],
+      "frontend_graph_sha256": "d38afd4a51fafffd77345a72e2f579e75a372f62d4340c71cfe55b14854fbc46",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "encoded_e8m0": true,
+      "transposeA": false,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 254.013243,
+      "warm_public_wall_samples_ms": [
+        1.189838,
+        1.003015,
+        0.984139
+      ],
+      "warm_public_wall_median_ms": 1.003015,
+      "prepared_program_event_samples_ms": [
+        0.013271249830722809,
+        0.013371218927204609,
+        0.013252468779683113
+      ],
+      "prepared_program_event_median_ms": 0.013271249830722809,
+      "native_program_sha256": "402b6a96884b76e11d2c9b1d204bc2c843f15847921ce4cb8ecc1500420e6f9c",
+      "member_image_sha256": [
+        "c9c054d44e2f1d0d9ad534dc441d1862819765bf5e82438c4aaaf004099d55a2"
+      ],
+      "frontend_graph_sha256": "af686718c84b052045a29319f8f6aa057bcfb67985ba8a5a17681fe3683efd8e",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "encoded_e8m0": true,
+      "transposeA": true,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 253.501169,
+      "warm_public_wall_samples_ms": [
+        1.044695,
+        0.873127,
+        0.949353
+      ],
+      "warm_public_wall_median_ms": 0.949353,
+      "prepared_program_event_samples_ms": [
+        0.014983718283474445,
+        0.015064968727529049,
+        0.014956219121813774
+      ],
+      "prepared_program_event_median_ms": 0.014983718283474445,
+      "native_program_sha256": "371599b9c71cd20abc1ba8b95e002bcc0d5915cee59e3121d8b308cbcf8149cc",
+      "member_image_sha256": [
+        "01fcfca1bc2bf45285eed33883eb7fa371e4a48c38af7763376b06e2d20ae407"
+      ],
+      "frontend_graph_sha256": "fff5e5a9b4115492411d1ad6cd90e2489b33d346f33a98d132e2686e2863fa18",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "primal",
+      "encoded_e8m0": true,
+      "transposeA": true,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          5
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 0.0,
+      "cold_public_wall_ms": 245.713371,
+      "warm_public_wall_samples_ms": [
+        1.095612,
+        0.947168,
+        0.974811
+      ],
+      "warm_public_wall_median_ms": 0.974811,
+      "prepared_program_event_samples_ms": [
+        0.01077496912330389,
+        0.010511218570172787,
+        0.010532468557357788
+      ],
+      "prepared_program_event_median_ms": 0.010532468557357788,
+      "native_program_sha256": "7038a5c1126d5a5c347ece902da010ad3a6fa09f11968d01bd67f0867a9eb675",
+      "member_image_sha256": [
+        "2ddd1b77a0104693dc89ad9ee97063a409ad900394795b1a4a23b74f7323b470"
+      ],
+      "frontend_graph_sha256": "161a706538713f964b927318b9494b96b5aa992d45d359fea26513c8fe6a67e6",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "encoded_e8m0": false,
+      "transposeA": false,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 6.117284168105641e-08,
+      "cold_public_wall_ms": 450.13738,
+      "warm_public_wall_samples_ms": [
+        1.718862,
+        1.542976,
+        1.797613
+      ],
+      "warm_public_wall_median_ms": 1.718862,
+      "prepared_program_event_samples_ms": [
+        0.044705845415592194,
+        0.04460206255316734,
+        0.044993311166763306
+      ],
+      "prepared_program_event_median_ms": 0.044705845415592194,
+      "native_program_sha256": "b73ecf083829e9596ef53561bbcac65476716174c4764f0408c6190879ae6a2d",
+      "member_image_sha256": [
+        "af6e78ab60e83e36c712ae78ce8dd1abd77801c46fd1b27e03e0f48a5d4a8da9",
+        "e1bc3d3844d3b3ffb9258f687a0921935fb46651cc243d48ba7875686b96b653",
+        "69f47eadc48d5ce5659393c3f756352568fc456ae768356a456e176755357927",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "7f6dc0e805dfd6a5154f440d613da2b69f1aae391c79463cdb3512819dd36986",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "encoded_e8m0": false,
+      "transposeA": false,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "max_abs_error": 1.0195906896548479e-07,
+      "cold_public_wall_ms": 131.23398,
+      "warm_public_wall_samples_ms": [
+        2.191384,
+        1.771172,
+        1.996472
+      ],
+      "warm_public_wall_median_ms": 1.996472,
+      "prepared_program_event_samples_ms": [
+        0.5771632194519043,
+        0.48023101687431335,
+        0.4697229266166687
+      ],
+      "prepared_program_event_median_ms": 0.48023101687431335,
+      "native_program_sha256": "cfe512c5cd833635ad52aa41c736399fc49c9aa777963d28aee5d1aaa05c2fcd",
+      "member_image_sha256": [
+        "69e668283f67d3c72af5b1c71832304eb1fbf05e241f01052a93cd8c4d18636c",
+        "2b21f0f8f5b271fc783455a2eb3325b7c636003eaa2b0f14610777b0d3411007"
+      ],
+      "frontend_graph_sha256": "5be927bf3ba5161b1fba13c62f723f65f1b079c74e7f7ef0c569f2835d35cd92",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "encoded_e8m0": false,
+      "transposeA": false,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 6.895285054042688e-08,
+      "cold_public_wall_ms": 459.548459,
+      "warm_public_wall_samples_ms": [
+        1.802832,
+        1.59222,
+        1.978217
+      ],
+      "warm_public_wall_median_ms": 1.802832,
+      "prepared_program_event_samples_ms": [
+        0.0445120632648468,
+        0.04420359432697296,
+        0.044579874724149704
+      ],
+      "prepared_program_event_median_ms": 0.0445120632648468,
+      "native_program_sha256": "93970aaa77e7fbde13d3e4c15d5fcca28fbdf01b51677dd70b2ffafab8a479db",
+      "member_image_sha256": [
+        "8f096e84ed2d0a66765068d8a386391f38c1d1328ad42a59b0a4c60d3355bffc",
+        "144b30d2c73bc864a9ee82c0c7f048bec2773458e20a2719602c1f64a8c210e5",
+        "9364d400b8c5210951ea9c7fad50d1f333bf756812aeab3d264ace44a7e61246",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "ff23b3f42bbd126b48e06341970b8f7d0de3d5b757d4568a788d7c4383707bc9",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "encoded_e8m0": false,
+      "transposeA": false,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          3,
+          35
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "max_abs_error": 8.714603039194913e-08,
+      "cold_public_wall_ms": 128.521008,
+      "warm_public_wall_samples_ms": [
+        2.254985,
+        1.95385,
+        1.977155
+      ],
+      "warm_public_wall_median_ms": 1.977155,
+      "prepared_program_event_samples_ms": [
+        0.669743001461029,
+        0.533687174320221,
+        0.4665883183479309
+      ],
+      "prepared_program_event_median_ms": 0.533687174320221,
+      "native_program_sha256": "1f587b252b243785c7063cdf8af1c4d39772f0a1dfb53029ca29d8ebe003873f",
+      "member_image_sha256": [
+        "e41bdfed67c2bb3e151958eef5defb6811dcd57abdbc43a21f8475d187ced4f7",
+        "bb7ad1a0cdd2523ace1135941b20435f8d2d0bf726f5681c9ee4b10ae4298145"
+      ],
+      "frontend_graph_sha256": "12104a3d074777297d64d95ee1763b0c6fda9566efe7b30872cb20ba4c51dc67",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "encoded_e8m0": false,
+      "transposeA": true,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 7.054787043436761e-08,
+      "cold_public_wall_ms": 439.083015,
+      "warm_public_wall_samples_ms": [
+        1.765891,
+        2.1576,
+        1.688925
+      ],
+      "warm_public_wall_median_ms": 1.765891,
+      "prepared_program_event_samples_ms": [
+        0.04956424981355667,
+        0.04941456392407417,
+        0.04965362325310707
+      ],
+      "prepared_program_event_median_ms": 0.04956424981355667,
+      "native_program_sha256": "a5c4c9f58b9803ea62257af9fb637b99ace7d67cbe58330298c85099ec16e466",
+      "member_image_sha256": [
+        "0fa4c1d4fa6c652f21e509e3822290a220989b6d0f09b211bd11380ab3e9f308",
+        "fede0fc9aaab0ba74435a10833c75da348513f33eb45ea705867ec30f6693734",
+        "babe19b52bdf8d14c53f825cd2ed78d8d75a4e4e1d8f6dfabaaedd06858509ac",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "3484367bf12c1ffab0b37bf7b3022c0153d67374a81d48dc5afdfd5e288a4f30",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "encoded_e8m0": false,
+      "transposeA": true,
+      "transposeB": false,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          35,
+          5
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "max_abs_error": 7.902265175552259e-08,
+      "cold_public_wall_ms": 128.893662,
+      "warm_public_wall_samples_ms": [
+        2.190002,
+        1.601167,
+        2.031439
+      ],
+      "warm_public_wall_median_ms": 2.031439,
+      "prepared_program_event_samples_ms": [
+        0.6740484833717346,
+        0.48170769214630127,
+        0.3896666467189789
+      ],
+      "prepared_program_event_median_ms": 0.48170769214630127,
+      "native_program_sha256": "361cc98fb44850678548cf548be87d2e971262ae83898dfdd36ef4d0ae952867",
+      "member_image_sha256": [
+        "e47d823d034c0d3c7d1609277c3c50df1cf5987c9a78300fce36168cc950a9ad",
+        "3f6df73131cb4484ef6e26e001f435ced27e32abbbed1d0c3c7b6488559b2ccb"
+      ],
+      "frontend_graph_sha256": "ed3742fc37a7b61ad0d3ba38deb4fc14f2760780c91ad08fc06a1529ee7467c3",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "jvp",
+      "encoded_e8m0": false,
+      "transposeA": true,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          2,
+          3,
+          3,
+          5
+        ],
+        [
+          2,
+          3,
+          3,
+          5
+        ]
+      ],
+      "max_abs_error": 4.681300491693463e-08,
+      "cold_public_wall_ms": 433.407143,
+      "warm_public_wall_samples_ms": [
+        1.645231,
+        1.508841,
+        1.486809
+      ],
+      "warm_public_wall_median_ms": 1.508841,
+      "prepared_program_event_samples_ms": [
+        0.06270512193441391,
+        0.06272540241479874,
+        0.06192103028297424
+      ],
+      "prepared_program_event_median_ms": 0.06270512193441391,
+      "native_program_sha256": "bc637628e151a15b42d320f06cc96ae4bb3f0a7e72eaa216c9e9004522bc7115",
+      "member_image_sha256": [
+        "67c248f134175885e10257a5118f71bc369223ed94f58f85be8244238a6860ba",
+        "0585c328dbbb4504dc3a55ab0a5ba3784f05a521fa4c6a73acaa1162a1b19252",
+        "222960d84e3e549a10209b8a7eef07c936b80ceadb740e5ef7f6ceeac7c88861",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "frontend_graph_sha256": "6d7f74492b9f779d254d6f0d27342e1a299bbd654cbc3578d1a29ce275fe0988",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    },
+    {
+      "kind": "vjp",
+      "encoded_e8m0": false,
+      "transposeA": true,
+      "transposeB": true,
+      "input_shapes": [
+        [
+          2,
+          1,
+          35,
+          3
+        ],
+        [
+          3,
+          5,
+          35
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "output_shapes": [
+        [
+          3,
+          2
+        ],
+        [
+          1,
+          3,
+          2,
+          2
+        ]
+      ],
+      "max_abs_error": 6.10785910737377e-08,
+      "cold_public_wall_ms": 130.762301,
+      "warm_public_wall_samples_ms": [
+        2.056035,
+        1.567904,
+        2.007333
+      ],
+      "warm_public_wall_median_ms": 2.007333,
+      "prepared_program_event_samples_ms": [
+        0.8162388205528259,
+        0.4373677372932434,
+        0.4081662893295288
+      ],
+      "prepared_program_event_median_ms": 0.4373677372932434,
+      "native_program_sha256": "e601de26c79bd31d4fa4dcb9c96fe6a25db2a78b9bab862769bec492069c8963",
+      "member_image_sha256": [
+        "b96418e730e6cfa302e78ef82dcc815daa61748698ef561f6cd04dbce60ff83b",
+        "4a4a4a3016dd4d1b39183cdb3522a2d5f66c2410b1255dfee37892adb2de9205"
+      ],
+      "frontend_graph_sha256": "fbc213bb9f64b8d98cafe1aec9ef1a60a11f8e4939243694cbfbaca514b2d320",
+      "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+    }
+  ]
+}

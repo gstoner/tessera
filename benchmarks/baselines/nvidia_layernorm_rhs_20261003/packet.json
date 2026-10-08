@@ -1,0 +1,990 @@
+{
+  "compiler_sha256": "a08f60eb362c492b04f87cfabad73e383488831a048b2e6049f14f6967b16e7f",
+  "decision_gate": "FP8/MXFP8/MXFP4 correctness and performance required before tuning/default strategy decisions",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "normalization_kind": "layernorm",
+  "rows": [
+    {
+      "cold_call_wall_ms": 1762.406236,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "a71a359330c63939221f68bdfbb154aee4923b16b3b56e6401952eed6d01e22e",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "00f569b0e16467fc2e0c10144c3aa104dbf46c5ba010f434d0eed421c7aaa8c9",
+        "schedule_ir_digest": "4e46df94bb42cd6294067f5e33e0f519f95c32fb54019bbcba35c1b0b1987593",
+        "shape": [
+          16,
+          8,
+          16
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "b853e1404e775658be4395222704fd382c51fa7f4bb20022b63672fdb828129a",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "fp16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "92e2352fa0ed9cbaf1e0ac3331123bf45555d5a6b521404b988edb0a4f3e5405",
+        "a40103613191240ac70173e50d99f679ae1d4fe2d04b2294a7bbba249b1adb82"
+      ],
+      "max_abs_consumer_error": 1.1548399925231934e-07,
+      "max_abs_pipeline_error": 1.1548399925231934e-07,
+      "max_abs_producer_error": 0.0,
+      "native_graph_sha256": "01e9b0dd234ca5e7f3bbce0a5a8006c995f6b5dfaa1044c42e344c10fab62d7c",
+      "portable_contract_digest": "5223fe2eb9a230acba7524f78076bcefd6495b13ad72268b3c7e1866b5fb7287",
+      "portable_replay_median_ms": 32.083623,
+      "portable_replay_samples_ms": [
+        32.083623,
+        52.077487,
+        3.11018
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "b75842c602a9a36f9f53754d0acd7d580f4f2102d608b83a9f2937303b255294",
+        "shape": [
+          16,
+          8
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "24d8e4c867ee6c3250bfd072fb44b36314821dabb99a8faf80c90559c31fcce6",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.00988095998764038,
+          0.008543040603399277,
+          0.00896287988871336
+        ],
+        "producer": [
+          0.009244480170309544,
+          0.007933760061860085,
+          0.008977599442005157
+        ]
+      },
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "warm_call_median_ms": 49.18836,
+      "warm_call_samples_ms": [
+        49.18836,
+        18.449339,
+        50.057788
+      ]
+    },
+    {
+      "cold_call_wall_ms": 551.739719,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "e2c2b68c1d05bedcdf1a4b3109d17803e9f36d8ed3990b0ca060809a7fb191bb",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "c2370ef556dfdc31ebee1b2fad73fb494876e305e392f901500ce344186dc676",
+        "schedule_ir_digest": "0597afdb2e43624067bd27af4f25acb59e77ce9d7eb5c44a70ccbfaf57cd293a",
+        "shape": [
+          17,
+          19,
+          35
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "64f8bbc6b324fc381aef0b4ab690512fcc7b5b381a4f60d3a2f50e92d934ba59",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "fp16",
+      "frontend_argument_names": [
+        "lhs",
+        "source"
+      ],
+      "image_digests": [
+        "14057b123b28f2168362a6cc5541fc72b38f59bd1875b30fade6e15640aebb91",
+        "5923e47f6eb5d2086a1911f008824d266bb8db607e1f189a3904fc45251c9f29"
+      ],
+      "max_abs_consumer_error": 5.569308996200562e-07,
+      "max_abs_pipeline_error": 5.569308996200562e-07,
+      "max_abs_producer_error": 0.0,
+      "native_graph_sha256": "7e650a81259632bd5ac72a649524a3e2d77844ee9e03fd99d93cf1e987764a4c",
+      "portable_contract_digest": "64d36903ee6bffa4400cbff9d963a72bbc297af3a87613fd61236aa8599ed6f1",
+      "portable_replay_median_ms": 3.214721,
+      "portable_replay_samples_ms": [
+        3.195611,
+        3.214721,
+        3.370743
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "0af09d3937894ad379abd5ef2dd970f5c75af663125c7b228df0f800b0757743",
+        "shape": [
+          35,
+          19
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "c07fd7674829c02dd524ad43ca06a4dcdcdba928ab32f274e23021c749b5f10a",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.0086284801363945,
+          0.007997119799256325,
+          0.00782656017690897
+        ],
+        "producer": [
+          0.007658879738301039,
+          0.007203519809991121,
+          0.007932160049676895
+        ]
+      },
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "warm_call_median_ms": 4.302512,
+      "warm_call_samples_ms": [
+        4.483556,
+        4.21647,
+        4.302512
+      ]
+    },
+    {
+      "cold_call_wall_ms": 539.277609,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "d13308624526e9cf059447ed33122b1d8688c43b9b19a54df91bfd0fd0819e1a",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "7705d95f714ed4187115d1fc921ccf73adb3f168a5596a6734e5933374accb06",
+        "schedule_ir_digest": "5a4f916fee4d007282c74d0b9a5651243d299351bc446693fa404c66680872b2",
+        "shape": [
+          64,
+          64,
+          256
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "c525eba87bcc2f9f28a3a12597d3a44ac87961ba247a147a84cef96a4e06324d",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "fp16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "f09725fe18f1c7ba9a6ee19c76fb080fd655a1fbde5e2ea8052cb9df9ca2a3dc",
+        "0fa3bc90f8df64ab07a600461ea1538e61ec4913b2f992d6a6d046b7323114e3"
+      ],
+      "max_abs_consumer_error": 5.693058483302593e-06,
+      "max_abs_pipeline_error": 5.693058483302593e-06,
+      "max_abs_producer_error": 0.0,
+      "native_graph_sha256": "5d66a1eedb69224d1da2915e774c769376d74b5f26aa0ab7df32eb4d0b3b6846",
+      "portable_contract_digest": "61cc9edcbcfee3a582221ec1fc4acc408b49eff2eb3bea7f2a131c2c146bd5ce",
+      "portable_replay_median_ms": 3.307401,
+      "portable_replay_samples_ms": [
+        2.97112,
+        3.307401,
+        3.335213
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "bf4c64f35556b36ba397b609864317e6e929ce276d5cb79abde68d42c883ab81",
+        "shape": [
+          256,
+          64
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "698615a33537eadf68c60425d1b654280c915aa809b762d76ca884cabe9d5396",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.008621119894087315,
+          0.007333120331168175,
+          0.00786495953798294
+        ],
+        "producer": [
+          0.02032671868801117,
+          0.02041728049516678,
+          0.02038239873945713
+        ]
+      },
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "warm_call_median_ms": 4.132671,
+      "warm_call_samples_ms": [
+        4.24223,
+        4.132671,
+        4.016368
+      ]
+    },
+    {
+      "cold_call_wall_ms": 567.863408,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "6b00ea021410216478e6d0f1ad088fa6b8cdf03970f1434d4e3b38a8214c60e3",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "7c1124d2d8b17d655b9c31bf0d8fc527c20ba7b4e9547f4313d08702f4f90dda",
+        "schedule_ir_digest": "a5cb9069c492059d3bc606df9a88d30177c4d83ba44ea8d6ce473f37602568ff",
+        "shape": [
+          128,
+          64,
+          1024
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "436803c1d6b69c4cab50c62cc42657e1ce8a27ebca78f9a9b3839bfb60730ec3",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "fp16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "2065b5a6dee3400358affb15c3cc546d67c26b44df159acfe86e665bce4f44d8",
+        "5e63dcdb0b137755376e4cf8648e8f592d1d566c487cc37b9c636dafbba784b9"
+      ],
+      "max_abs_consumer_error": 3.6208657547831535e-05,
+      "max_abs_pipeline_error": 0.0005433840669866186,
+      "max_abs_producer_error": 0.0009765625,
+      "native_graph_sha256": "c77dde162454e5ccb7c47c92c30fe86229b45d5e5963aa7ba72afd0512d23046",
+      "portable_contract_digest": "c894672afb43f759322ce4f5506e023a8e4c9c60c5c2d94592ec9ebf4cad722d",
+      "portable_replay_median_ms": 3.03633,
+      "portable_replay_samples_ms": [
+        2.841577,
+        3.238651,
+        3.03633
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "7462a18e94155d811ff03cd74e78b6b8d3022838e19b07ecda7830745ae8d694",
+        "shape": [
+          1024,
+          64
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "71f5fc2c76ab1582a2375c6e357a0bb78aa5b0398773d5e6f816e69b22332aaa",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.012163840234279633,
+          0.011068160645663738,
+          0.011481599882245064
+        ],
+        "producer": [
+          0.020692160353064537,
+          0.02039455808699131,
+          0.020394880324602127
+        ]
+      },
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "warm_call_median_ms": 18.304748,
+      "warm_call_samples_ms": [
+        35.555637,
+        18.304748,
+        4.340962
+      ]
+    },
+    {
+      "cold_call_wall_ms": 530.941263,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "14d75de88580adb42e602eeaa5523b2cb10e3b1859693b01a8b0996b9b65a242",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "ae78ccc3db2e5927843a32f50325dfe3ceb2df8ca2e941d7faa3d2328697a85d",
+        "schedule_ir_digest": "ade55fff4a4a4798e9f2139ace4b55027bdf42bcfbbab5fad2e346fa2c31ddcd",
+        "shape": [
+          256,
+          128,
+          1024
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "3dda926de6b07bd913fa61221fc1595b02d7cd078e10cb68e5b4d96848920d1a",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "fp16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "93df99edfee1b411f0b80e39785b196c05276f85a9266b3e6a2e036d9e98b531",
+        "49b8d15137e0cbee0666b91cc5ce2e0455f62b86cbc58fa626fece7ac724f17d"
+      ],
+      "max_abs_consumer_error": 4.207307938486338e-05,
+      "max_abs_pipeline_error": 0.0012247940467204899,
+      "max_abs_producer_error": 0.001953125,
+      "native_graph_sha256": "f5bc31861766904dc1096fdcca4c2a0b6b9496fc6acb92f91d3022d3615bd8f4",
+      "portable_contract_digest": "9b73c16c6c42171ef7ea85538e3afd239759f683dc07a8723e3b49e2012214ef",
+      "portable_replay_median_ms": 3.487193,
+      "portable_replay_samples_ms": [
+        3.655736,
+        3.222112,
+        3.487193
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "1f5119357ca48a30629fca03be7b651f61f75de9e62699fb5a151b181930b414",
+        "shape": [
+          1024,
+          128
+        ],
+        "storage": "f16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "f50701be397ab69ce734a53a368c4f7f655ee56c5d831f73a962a0fc9c4d011a",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.014410879462957382,
+          0.014396799728274345,
+          0.014516480267047882
+        ],
+        "producer": [
+          0.03696991875767708,
+          0.03695743903517723,
+          0.036991678178310394
+        ]
+      },
+      "shape_mkn": [
+        256,
+        1024,
+        128
+      ],
+      "warm_call_median_ms": 4.470553,
+      "warm_call_samples_ms": [
+        4.430733,
+        4.928788,
+        4.470553
+      ]
+    },
+    {
+      "cold_call_wall_ms": 552.982892,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "e97c88d224328e5abf766f221b7038ba47be1d4c33967b01f22d4c69412098cd",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "018c9e3f5a71d820c8ef2b400c76eb88a807cac4c3294b55c0cc9f651a333f01",
+        "schedule_ir_digest": "9441e4dea7888c9aa6574b873b68428788553bc6b3bf6c04eb3c2d0d81e5a0eb",
+        "shape": [
+          16,
+          8,
+          16
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "19df1f583513f910090ca14dd90382be42dbba78fd8e3fb152b05620a389ff56",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "bf16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "4220495791bb58ddbaed7125321ebc01838380f4b37d23f577a8bc9ebc42ce75",
+        "56ac1ccc827488ccb48b76e35022b0a85d87749679cdbdd70304190f19b2286f"
+      ],
+      "max_abs_consumer_error": 8.940696716308594e-08,
+      "max_abs_pipeline_error": 8.940696716308594e-08,
+      "max_abs_producer_error": 0.0,
+      "native_graph_sha256": "31da277db57adc97bfe7289c6db76f1da5311c43a427110f679ae8b04820274d",
+      "portable_contract_digest": "d11ca53ed196212dc2a06a42faf5bceae228527824f7ef853cd61e9d37036a8a",
+      "portable_replay_median_ms": 3.03468,
+      "portable_replay_samples_ms": [
+        3.04405,
+        3.03468,
+        2.938888
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "33a91d4f43c7df19b14e2b070e8ee6bd4cf8edc48a8a0690f4337e19a4a6dc2f",
+        "shape": [
+          16,
+          8
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "14706cede59a34fe28485ac2ca9863a419b8336197d49745670f6e1118d625c0",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.00812384020537138,
+          0.006569920107722282,
+          0.006603839807212353
+        ],
+        "producer": [
+          0.0065580797381699085,
+          0.007999680005013943,
+          0.0065593598410487175
+        ]
+      },
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "warm_call_median_ms": 4.723066,
+      "warm_call_samples_ms": [
+        4.723066,
+        4.457094,
+        4.764667
+      ]
+    },
+    {
+      "cold_call_wall_ms": 549.098344,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "48fa7ff74c6d292afa1c1c31b6a7590fa5f51288a2e7cd5fb2fd2f00cbaaab33",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "fa709a526e220f707c069e989805d388d6200454b218be41fc4495ee5f95a960",
+        "schedule_ir_digest": "201c57ad3fcb14bf456cdd98b4fc411540b3963aca56daf94d0141da7517bf45",
+        "shape": [
+          17,
+          19,
+          35
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "2c994a63d6adf6cb9ef7b057c9fbc388cd6fb2e17afa1c1b240569f90214e063",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "bf16",
+      "frontend_argument_names": [
+        "lhs",
+        "source"
+      ],
+      "image_digests": [
+        "27b702f0dc706dea943ffc540750f04e4a8260bca0bd48b5c63462ec7532321f",
+        "6f6b01cac9e99c873ac78d6111febf143dfcf70a164c54d301b1ff31159c3ba7"
+      ],
+      "max_abs_consumer_error": 2.4400651454925537e-07,
+      "max_abs_pipeline_error": 2.4400651454925537e-07,
+      "max_abs_producer_error": 0.0,
+      "native_graph_sha256": "b02135857c775f6a48c51e82e93a5c78e68859f3fee5409b69067337d4827aa5",
+      "portable_contract_digest": "e2129b4bd2a9482ac48cc4a42c918a685d1f2030297bff9961d7bb70adb2387b",
+      "portable_replay_median_ms": 3.151781,
+      "portable_replay_samples_ms": [
+        3.151781,
+        2.954939,
+        3.362833
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "f4c9d2134773c19782edb1d2af30817619cc0a2de877e9db1daac1277d54044a",
+        "shape": [
+          35,
+          19
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "a853cf8e7809d52f9e815060023710d945f9b7e62e583c4b0bcd496ca3c37bfe",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.007959039881825447,
+          0.008549760095775127,
+          0.008012800477445126
+        ],
+        "producer": [
+          0.007818239741027355,
+          0.00860895961523056,
+          0.007831680588424206
+        ]
+      },
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "warm_call_median_ms": 4.292462,
+      "warm_call_samples_ms": [
+        4.523694,
+        4.07818,
+        4.292462
+      ]
+    },
+    {
+      "cold_call_wall_ms": 530.235969,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "bb6eaa059ad84f16738b77846420c5d716cd7cb7eaf79cfdcdd661e3c3e8a8d1",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "804bd056c1f9122160d80df145cb846e54c878f430ab2ff2f6696588831d59d1",
+        "schedule_ir_digest": "f785ace4d0bd83afb501863b57f073f549af09b0325eea944f9024b30bc7daf6",
+        "shape": [
+          64,
+          64,
+          256
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "9fe60859a3bb01285725508f7c70e2fcdfbf076b2e896ea9ce542835ef989754",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "bf16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "e078e5aa41161d59959f7c245a6518679f787d776721ffa891a122bdcacec182",
+        "189bf6114e2c542e88661acdb7f1f45054d0e1b72e8f14f58173964d1d0324f0"
+      ],
+      "max_abs_consumer_error": 4.86522912979126e-06,
+      "max_abs_pipeline_error": 4.86522912979126e-06,
+      "max_abs_producer_error": 0.0,
+      "native_graph_sha256": "65216ef3ad1a9428bce0d6d678025d2b033c00ce92a206551d6b9bd10f9e7202",
+      "portable_contract_digest": "35c13c48f4b0bc4b3e98ccba04b3670970503d41b730a94d0473450e13bc9766",
+      "portable_replay_median_ms": 3.0074,
+      "portable_replay_samples_ms": [
+        3.224412,
+        2.952319,
+        3.0074
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "4571cca82a024064a00b6ce8075ef579cea018968ab77c27a3fcfa85f1c88b8e",
+        "shape": [
+          256,
+          64
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "ea40cd69d09421b87ab51f1b86b8ac09125233a8306dc645c30f6c19b646e9a3",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.008265280164778233,
+          0.008029759861528873,
+          0.008035839535295963
+        ],
+        "producer": [
+          0.0202735997736454,
+          0.020439039915800095,
+          0.020385921001434326
+        ]
+      },
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "warm_call_median_ms": 4.401444,
+      "warm_call_samples_ms": [
+        4.479414,
+        4.401444,
+        4.398293
+      ]
+    },
+    {
+      "cold_call_wall_ms": 531.547233,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "ce06824ac81b8bac2bd9bb4886c9061c7a770748ab1769dcbfa79cf17855524b",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "acaf795c57fe4ed7920ff41b8e89addc9c51775b1fbe473fac54f174347bc81b",
+        "schedule_ir_digest": "ee34afbef161bcd23f8ef69c95e75a78d6d3c2423411d53f91d2f2d2872abed2",
+        "shape": [
+          128,
+          64,
+          1024
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "db3f0c191e149485cd0a401aef82a762e986f4ee6cc01d2c9289b83e51320492",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "bf16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "21d413e674ea7b8edef36a01bdf2ce3f1005cf0c026a26809b0e6a8a0be94c21",
+        "d50e1b917029d802fa565a169e11d77edb765b4849243d978e5d9e0843858101"
+      ],
+      "max_abs_consumer_error": 2.5583431124687195e-05,
+      "max_abs_pipeline_error": 0.0034795543178915977,
+      "max_abs_producer_error": 0.0078125,
+      "native_graph_sha256": "03d34b2a3d36b8a580673f87079b2db690f8006c22b83b1ba67e8b7b7281c1f7",
+      "portable_contract_digest": "b03ac659fb13c88e3096c7bc43acf51ef9b5de697b3a0f5aa2c9479d50667e26",
+      "portable_replay_median_ms": 3.000558,
+      "portable_replay_samples_ms": [
+        3.399773,
+        3.000558,
+        2.992549
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "30ada91d48eb5af410166b8da4a4baf95926a63df96606baa554823aceab0e1b",
+        "shape": [
+          1024,
+          64
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "0a07a371fbd43d4fd885fa1fd64dba4d6f79141203d840d9b098b8db485f5e61",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.011687999591231346,
+          0.010707199573516846,
+          0.011128319427371025
+        ],
+        "producer": [
+          0.0204185601323843,
+          0.020421121269464493,
+          0.02038528025150299
+        ]
+      },
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "warm_call_median_ms": 33.80623,
+      "warm_call_samples_ms": [
+        38.807269,
+        33.80623,
+        4.491384
+      ]
+    },
+    {
+      "cold_call_wall_ms": 521.122662,
+      "compiler_path": "canonical_nvidia_rhs_program",
+      "consumer_provenance": {
+        "b_layout": "row_major",
+        "dynamic_shape_bounds": null,
+        "epilogue": {
+          "activation": "none",
+          "bias": false,
+          "order": [
+            "matmul",
+            "bias",
+            "activation",
+            "residual"
+          ],
+          "output": "f32",
+          "residual": false
+        },
+        "graph_ir_digest": "e8ac0c8ffa2a0b2977278a091a8fbc11c6d97a35c770a1af409a831dca3002a4",
+        "leading_dimension_abi": "compact",
+        "physical_route": "typed_fragment_global",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "shared",
+        "schedule_digest": "e25a72befd0bf8b251c4425a149cd4e10e3b2cf0108a29448dac3687550fcb19",
+        "schedule_ir_digest": "a673cfacd3f5dcca3e7abfa933f6878c0787ef5e9b5483f6592a041632c4a636",
+        "shape": [
+          256,
+          128,
+          1024
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "c61293085afe85ad361f44b63dd01848fb05e4c1d940c3d4d78026df0ce1c13b",
+        "work_item": "NVIDIA-E2E-2"
+      },
+      "dtype": "bf16",
+      "frontend_argument_names": [
+        "source",
+        "lhs"
+      ],
+      "image_digests": [
+        "a038c4a003c9254e40b31bbb334e6acd0a9c32515c89af6ec2ac816aa42adb1a",
+        "3ed2a2cf8a19d1fd4994e49e07a92b2d2e4dc4bd28f195f4b992e1c6bf8c7365"
+      ],
+      "max_abs_consumer_error": 3.482401371002197e-05,
+      "max_abs_pipeline_error": 3.482401371002197e-05,
+      "max_abs_producer_error": 0.0,
+      "native_graph_sha256": "faf6fe7ba36beebc0ee0e877d67af3fd2c5435e0762d1e0f0d813b0dbda6c8bd",
+      "portable_contract_digest": "0024df967a746948f7ea48de68f6df1174ce43d9a1c968b7df83fc1d8183e401",
+      "portable_replay_median_ms": 3.316493,
+      "portable_replay_samples_ms": [
+        3.316493,
+        3.386593,
+        3.222621
+      ],
+      "producer_provenance": {
+        "accum": "f32",
+        "axis": -1,
+        "epsilon": 9.999999747378752e-06,
+        "keepdims": false,
+        "kind": "layernorm",
+        "route": "canonical_scheduled_tile_consumer",
+        "schedule": "serial",
+        "schedule_digest": "79edbe73ff1c79e65a3e281b170373856a57b352cce8f64f20caf9ba1adbdef2",
+        "shape": [
+          1024,
+          128
+        ],
+        "storage": "bf16",
+        "sync_key": "IR-NATIVE-FOUNDATION-1",
+        "tile_ir_digest": "fdad3c7c9d9338b8747ef9a5aeb216dc570b7d17f0c2b485bfa7feafb84afeab",
+        "work_item": "E2E-REAL-5"
+      },
+      "resident_dispatch_window_samples_ms": {
+        "consumer": [
+          0.015156799927353859,
+          0.014654720202088356,
+          0.04004672169685364
+        ],
+        "producer": [
+          0.03734208270907402,
+          0.03694944083690643,
+          0.03699680045247078
+        ]
+      },
+      "shape_mkn": [
+        256,
+        1024,
+        128
+      ],
+      "warm_call_median_ms": 17.56906,
+      "warm_call_samples_ms": [
+        55.006594,
+        16.808353,
+        17.56906
+      ]
+    }
+  ],
+  "schema": "tessera.nvidia.rhs_jit_dispatch.v1",
+  "scope": "ordinary primal static half normalization RHS -> fp32 matmul calls; cached native packages; host compaction; no composed AD/general graph closure",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_rhs_jit_dispatch.py": "f2e6eea0b87f28913b6a5985abd274533d92c418818c6575606e437494c2e557",
+    "python/tessera/compiler/execution_matrix.py": "6df5ac09b2070fbbae6120c6aaa1a8c9ca5b3d35cd3ad753c530e267fdd82aaa",
+    "python/tessera/compiler/jit.py": "53aff83c83d46cf0bca07076b7c56e37593f1375a3d7e45004dddeb763cd28fc",
+    "python/tessera/compiler/nvidia_tensor_rhs.py": "b1cb73fb6dcdcd996541aae6bb6e5dac2372e4fd141fbe7c0293cc4d5119c24d",
+    "python/tessera/runtime.py": "6772d3fbbcdf7497560791e3c37a6e5a7c6ae4ab5de3ce8a1b33150ffa86e99a",
+    "tests/device/nvidia/test_layernorm_rhs_jit.py": "06bd6b446b107fa9b281df72303a07597be2dea4491fcb778433c5440cf5b641",
+    "tests/device/nvidia/test_rhs_jit_dispatch.py": "b4fad97bba052533865e8933e9503e4c7b24420cfff91aa52acc1b2887ef3901"
+  },
+  "timing_scope": "cold wall includes trace/compile/execution; warm wall includes staging/module dispatch/download; resident producer/consumer event dispatch windows are separate, not isolated kernel-only timing"
+}

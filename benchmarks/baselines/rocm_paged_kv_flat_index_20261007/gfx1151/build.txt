@@ -1,0 +1,129 @@
+[1/4] Building CXX object src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/CMakeFiles/obj.TesseraROCMConversion.dir/GenerateROCMPagedKVReadKernel.cpp.o
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In lambda function:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:32:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIndexOp; Args = {long int&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   32 |     return b.create<arith::ConstantIndexOp>(loc, value);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+In file included from /usr/lib/llvm-23/include/mlir/IR/PatternMatch.h:12,
+                 from /usr/lib/llvm-23/include/mlir/Interfaces/ControlFlowInterfaces.h:19,
+                 from /usr/lib/llvm-23/include/mlir/Dialect/Arith/IR/Arith.h:17,
+                 from /home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:5:
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In lambda function:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:35:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   35 |     return b.create<arith::MulIOp>(loc, lhs, rhs);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In lambda function:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:38:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   38 |     return b.create<arith::AddIOp>(loc, lhs, rhs);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In function ‘void {anonymous}::emitBody(mlir::OpBuilder&, mlir::Location, mlir::gpu::GPUFuncOp)’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:41:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::BlockIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   41 |   Value block = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:42:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ThreadIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   42 |   Value thread = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:50:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   50 |   Value inBounds = b.create<arith::CmpIOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~^
+   51 |       loc, arith::CmpIPredicate::slt, linear, total);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:52:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::IfOp; Args = {mlir::Value&, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   52 |   auto guarded = b.create<scf::IfOp>(loc, inBounds, false);
+      |                  ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:55:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   55 |   Value token = b.create<arith::DivUIOp>(loc, linear, elementsPerToken);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:57:31: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::RemUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   57 |       b.create<arith::RemUIOp>(loc, linear, elementsPerToken);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:59:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   59 |   Value logicalPage = b.create<arith::DivUIOp>(loc, logical, pageSize);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:60:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::RemUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   60 |   Value pageOffset = b.create<arith::RemUIOp>(loc, logical, pageSize);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:61:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   61 |   Value physical32 = b.create<memref::LoadOp>(loc, table,
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+   62 |                                               ValueRange{logicalPage});
+      |                                               ~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:63:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastUIOp; Args = {mlir::IndexType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   63 |   Value physical = b.create<arith::IndexCastUIOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   64 |       loc, b.getIndexType(), physical32);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~          
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:68:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   68 |   Value value = b.create<memref::LoadOp>(loc, pages, ValueRange{pageIndex});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:69:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value&, mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   69 |   b.create<memref::StoreOp>(loc, value, output, ValueRange{linear});
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:72:26: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ReturnOp; Args = {}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   72 |   b.create<gpu::ReturnOp>(loc);
+      |   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In member function ‘virtual void {anonymous}::GenerateROCMPagedKVReadKernelPass::runOnOperation()’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:116:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUModuleOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  116 |           b.create<gpu::GPUModuleOp>(loc, kernelName + "_mod");
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:123:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUFuncOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, mlir::FunctionType}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  123 |       auto gpuFunction = b.create<gpu::GPUFuncOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~^
+  124 |           loc, kernelName, b.getFunctionType(arguments, {}));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[2/4] Linking CXX static library src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/libTesseraROCMConversion.a
+[3/4] Linking CXX executable src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt
+[4/4] Linking CXX executable tools/tessera-opt/tessera-opt

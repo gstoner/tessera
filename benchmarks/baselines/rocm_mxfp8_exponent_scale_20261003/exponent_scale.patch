@@ -1,0 +1,66 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
+@@ -1739,26 +1739,26 @@
+     Value acc = adaptor.getAcc();
+     Value partial = adaptor.getPartial();
+     Value result = acc;
+-    // Standard E8M0 differs from the folded ABI's row-reference encoding.
+-    // Code 0 is the exactly representable f32 subnormal 2^-127; 255 is NaN.
+-    // Decode on device, and retain the scale product in f64 until after the
+-    // isolated partial has been scaled, so reciprocal extreme exponents work.
+-    auto decodeE8M0 = [&](Value raw) -> Value {
+-      Value code = arith::ExtUIOp::create(rewriter, loc, rewriter.getI32Type(), raw);
+-      auto bits = [&](int64_t value) -> Value {
+-        return arith::ConstantIntOp::create(rewriter, loc, value, 32);
+-      };
+-      Value normal = arith::ShLIOp::create(rewriter, loc, code, bits(23));
+-      Value zeroCode = arith::CmpIOp::create(
+-          rewriter, loc, arith::CmpIPredicate::eq, code, bits(0));
+-      Value nanCode = arith::CmpIOp::create(
+-          rewriter, loc, arith::CmpIPredicate::eq, code, bits(255));
+-      Value encoded = arith::SelectOp::create(
+-          rewriter, loc, nanCode, bits(0x7fc00000),
+-          arith::SelectOp::create(rewriter, loc, zeroCode, bits(0x00400000), normal));
+-      Value decoded = arith::BitcastOp::create(
+-          rewriter, loc, rewriter.getF32Type(), encoded);
+-      return arith::ExtFOp::create(rewriter, loc, rewriter.getF64Type(), decoded);
++    // E8M0 finite codes represent exact powers of two, including code zero
++    // (2^-127). Combining the signed exponents avoids an intermediate scale
++    // product; ldexp rounds the scaled partial once to f32. Code 255 is NaN.
++    auto scaleE8M0 = [&](Value p, Value lhsRaw, Value rhsRaw) -> Value {
++      Value lhs = arith::ExtUIOp::create(rewriter, loc, rewriter.getI32Type(), lhsRaw);
++      Value rhs = arith::ExtUIOp::create(rewriter, loc, rewriter.getI32Type(), rhsRaw);
++      Value c254 = arith::ConstantIntOp::create(rewriter, loc, 254, 32);
++      Value c255 = arith::ConstantIntOp::create(rewriter, loc, 255, 32);
++      Value exponent = arith::SubIOp::create(rewriter, loc,
++          arith::AddIOp::create(rewriter, loc, lhs, rhs), c254);
++      Value scaled = LLVM::LoadExpOp::create(rewriter, loc,
++          rewriter.getF32Type(), p, exponent);
++      Value lhsNaN = arith::CmpIOp::create(rewriter, loc,
++          arith::CmpIPredicate::eq, lhs, c255);
++      Value rhsNaN = arith::CmpIOp::create(rewriter, loc,
++          arith::CmpIPredicate::eq, rhs, c255);
++      Value nanBits = arith::ConstantIntOp::create(rewriter, loc, 0x7fc00000, 32);
++      Value nan = arith::BitcastOp::create(rewriter, loc, rewriter.getF32Type(), nanBits);
++      return arith::SelectOp::create(rewriter, loc,
++          arith::OrIOp::create(rewriter, loc, lhsNaN, rhsNaN), nan, scaled);
+     };
+     auto slt = arith::CmpIPredicate::slt;
+     // A weight-scale block that is a whole number of fragment widths holds
+@@ -1818,15 +1818,7 @@
+                                           ArrayRef<int64_t>{i});
+       Value scaled;
+       if (op.getScaleFormat() == "e8m0") {
+-        Value widePartial = arith::ExtFOp::create(
+-            rewriter, loc, rewriter.getF64Type(), p);
+-        Value wideScaled = arith::MulFOp::create(
+-            rewriter, loc,
+-            arith::MulFOp::create(rewriter, loc, widePartial,
+-                                 decodeE8M0(lhsScale)),
+-            decodeE8M0(rhsScale));
+-        scaled = arith::TruncFOp::create(
+-            rewriter, loc, rewriter.getF32Type(), wideScaled);
++        scaled = scaleE8M0(p, lhsScale, rhsScale);
+       } else {
+         Value scale = arith::MulFOp::create(rewriter, loc, lhsScale, rhsScale);
+         scaled = arith::MulFOp::create(rewriter, loc, p, scale);

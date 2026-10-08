@@ -1,0 +1,34 @@
+--- python/tessera/compiler/nvidia_native.py
++++ candidate/nvidia_native.py
+@@ -3760,13 +3760,19 @@
+             raise ValueError("scheduled norm epsilon disagrees with native IR")
+     elif softmax:
+         if (artifact.axis != -1 or shape != output_shape or artifact.keepdims is not False
+-                or artifact.kind != "softmax" or artifact.schedule != "serial"):
++                or artifact.kind != "softmax"):
+             raise ValueError("NVIDIA scheduled softmax requires shape-preserving last axis and fixed policy")
+-        entry = f"tessera_tile_softmax_{storage}"
++        entry = f"tessera_tile_softmax_{storage}" + ("_cooperative_128" if artifact.schedule == "cooperative_128" else "")
+         abi = {"f16": SM120_SOFTMAX_F16_ABI, "bf16": SM120_SOFTMAX_BF16_ABI, "f32": SM120_SOFTMAX_F32_ABI}[storage]
+         scalar_names = ("Rows", "K")
+-        geometry = "sm120_softmax_thread_per_row_128"
++        geometry = ("sm120_softmax_cooperative_128_rows" if artifact.schedule == "cooperative_128"
++                    else "sm120_softmax_thread_per_row_128")
+         required = {'exp_mode': '"approx_exp2"', 'ftz': 'false'}
++        if artifact.schedule == "cooperative_128":
++            required["schedule"] = '"cooperative_128"'
++        elif (re.search(r'\bschedule = "(?!serial")[^"]+"', artifact.schedule_ir)
++              or re.search(r'\bschedule = "(?!serial")[^"]+"', artifact.tile_ir)):
++            raise ValueError("NVIDIA serial softmax schedule disagrees with native IR")
+     else:
+         if (artifact.kind not in {"sum", "mean", "max", "min"}
+                 or not 0 <= artifact.axis < len(shape)
+@@ -3804,7 +3810,7 @@
+     if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
+         raise ValueError("unary Tile IR disagrees with native Schedule replay")
+     lowered, ptx, metrics, compiler, toolchain, libraries, state = _compile_tile_ir(artifact.tile_ir, entry)
+-    if norm and artifact.schedule == "cooperative_128" and "nvvm.barrier" not in lowered:
++    if (norm or softmax) and artifact.schedule == "cooperative_128" and "nvvm.barrier" not in lowered:
+         raise RuntimeError("selected NVIDIA compiler did not materialize the cooperative norm schedule")
+     image = NativeImageArtifact(
+         target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,

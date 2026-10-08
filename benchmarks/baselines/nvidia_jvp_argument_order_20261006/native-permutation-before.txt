@@ -1,0 +1,42 @@
+verified ('q', 'k', 'v') ('q',) 5 False
+verified ('q', 'k', 'v') ('k',) 5 False
+verified ('q', 'k', 'v') ('v',) 5 False
+verified ('q', 'k', 'v') ('k', 'q') 5 False
+verified ('q', 'k', 'v') ('v', 'q') 5 False
+verified ('q', 'k', 'v') ('q', 'k', 'v') 5 False
+verified ('q', 'k', 'v') ('q',) 129 True
+verified ('q', 'k', 'v') ('k',) 129 True
+verified ('q', 'k', 'v') ('v',) 129 True
+verified ('q', 'k', 'v') ('k', 'q') 129 True
+verified ('q', 'k', 'v') ('v', 'q') 129 True
+verified ('q', 'k', 'v') ('q', 'k', 'v') 129 True
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_jvp_argument_order.py", line 124, in <module>
+    if __name__=="__main__": main()
+                             ~~~~^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_jvp_argument_order.py", line 114, in main
+    rows.append(run(device,order,wrt,sk,causal,compiler,artifacts));print("verified",order,wrt,sk,causal,flush=True)
+                ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_jvp_argument_order.py", line 38, in run
+    program=fn.compile_native_attention_jvp(*(values[n] for n in order),
+                                           compiler=compiler,llvm_bin=Path("/usr/lib/llvm-23/bin"))
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py", line 1956, in compile_native_attention_jvp
+    return compile_attention_program(source, request.wrt_indices, compiler=compiler, llvm_bin=llvm_bin)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_program.py", line 91, in compile_attention_program
+    tangent=materialize_generated(source,dims,policy['scale'],policy['causal'],compiler=compiler,llvm_bin=llvm_bin)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_jvp.py", line 79, in materialize_generated
+    product=run_tessera_opt(Path(compiler),graph_source,
+                           '--tessera-autodiff-forward=export-attention-jvp')
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/scheduled_matmul.py", line 998, in run_tessera_opt
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+RuntimeError: scheduled compiler boundary --tessera-autodiff-forward=export-attention-jvp failed: <stdin>:2:3: error: attention JVP export requires direct Q/K/V and return bindings
+  func.func @qvk(%a0: tensor<1x2x3x4xf32>, %a1: tensor<1x1x5x3xf32>, %a2: tensor<1x1x5x4xf32>) -> (tensor<1x2x3x3xf32>) attributes {tessera.frontend.authority = "tracer", tessera.structured_cfg.schema = "tessera.structured_cfg.v1", tessera.structured_cfg.digest = "5c9bf6ef7d6217021c5d7e6b0d346c3c09244d4e683f810cd45f8028aa20df75", tessera.structured_cfg.blocks = 2, tessera.autodiff = "forward", tessera.autodiff.wrt = ["q"], tessera.autodiff.wrt_indices = [0]} {
+  ^
+<stdin>:2:3: note: see current operation: 
+"func.func"() <{function_type = (tensor<1x2x3x4xf32>, tensor<1x1x5x3xf32>, tensor<1x1x5x4xf32>) -> tensor<1x2x3x3xf32>, sym_name = "qvk"}> ({
+^bb0(%arg0: tensor<1x2x3x4xf32>, %arg1: tensor<1x1x5x3xf32>, %arg2: tensor<1x1x5x4xf32>):
+  %0 = "tessera.flash_attn"(%arg0, %arg2, %arg1) <{causal = false, head_dim = 4 : i64, operandSegmentSizes = array<i32: 1, 1, 1, 0>}> {tessera.effect_kind = "pure"} : (tensor<1x2x3x4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>) -> tensor<1x2x3x3xf32>
+  "func.return"(%0) : (tensor<1x2x3x3xf32>) -> ()
+}) {tessera.autodiff = "forward", tessera.autodiff.wrt = ["q"], tessera.autodiff.wrt_indices = [0], tessera.frontend.authority = "tracer", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = "5c9bf6ef7d6217021c5d7e6b0d346c3c09244d4e683f810cd45f8028aa20df75", tessera.structured_cfg.schema = "tessera.structured_cfg.v1"} : () -> ()

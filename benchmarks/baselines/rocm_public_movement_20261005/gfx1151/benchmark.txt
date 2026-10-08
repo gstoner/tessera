@@ -1,0 +1,62 @@
+[
+  {
+    "family": "paged",
+    "large": false,
+    "medians": {
+      "jit": 0.6969143,
+      "descriptor": 0.53418085,
+      "retained": 0.6358942000000001
+    },
+    "retained_over_jit": 0.9124424624376342
+  },
+  {
+    "family": "paged",
+    "large": true,
+    "medians": {
+      "jit": 0.7204599,
+      "descriptor": 0.5464690000000001,
+      "retained": 0.6394743
+    },
+    "retained_over_jit": 0.8875918007372791
+  },
+  {
+    "family": "paged_default",
+    "large": false,
+    "medians": {
+      "jit": 0.7034607,
+      "descriptor": 0.5344419,
+      "retained": 0.62823815
+    },
+    "retained_over_jit": 0.8930678714532312
+  },
+  {
+    "family": "paged_default",
+    "large": true,
+    "medians": {
+      "jit": 0.71042635,
+      "descriptor": 0.5448509500000001,
+      "retained": 0.6409326499999999
+    },
+    "retained_over_jit": 0.9021802893431528
+  },
+  {
+    "family": "dispatched",
+    "large": false,
+    "medians": {
+      "jit": 0.7044733,
+      "descriptor": 0.5289423,
+      "retained": 1.7654705499999999
+    },
+    "retained_over_jit": 2.506085823266829
+  },
+  {
+    "family": "dispatched",
+    "large": true,
+    "medians": {
+      "jit": 1.42038335,
+      "descriptor": 1.24894255,
+      "retained": 4.0989103
+    },
+    "retained_over_jit": 2.885777490985092
+  }
+]

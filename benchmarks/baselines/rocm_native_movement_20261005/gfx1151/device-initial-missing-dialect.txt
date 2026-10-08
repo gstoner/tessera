@@ -1,0 +1,26 @@
+Traceback (most recent call last):
+  File "<frozen runpy>", line 198, in _run_module_as_main
+  File "<frozen runpy>", line 88, in _run_code
+  File "/home/gstoner/scratch/rocm-native-movement-20261005/benchmarks/rocm/benchmark_native_movement.py", line 196, in <module>
+    main()
+    ~~~~^^
+  File "/home/gstoner/scratch/rocm-native-movement-20261005/benchmarks/rocm/benchmark_native_movement.py", line 178, in main
+    rows.append(run_case(hip,movement,image_cache,args.architecture,family,shape,
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         args.repeats,directory))
+                         ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/gstoner/scratch/rocm-native-movement-20261005/benchmarks/rocm/benchmark_native_movement.py", line 50, in run_case
+    package = rocm_native.package_paged_kv_read(module,
+        pipeline_name="tessera-lower-to-rocm", architecture=arch)
+  File "/home/gstoner/scratch/rocm-native-movement-20261005/python/tessera/compiler/rocm_native.py", line 2534, in package_paged_kv_read
+    artifact = lower_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}")
+  File "/home/gstoner/scratch/rocm-native-movement-20261005/python/tessera/compiler/scheduled_paged_kv.py", line 93, in lower_scheduled_paged_kv_graph
+    schedule = run_tessera_opt(tool, graph, "--tessera-graph-to-schedule")
+  File "/home/gstoner/scratch/rocm-native-movement-20261005/python/tessera/compiler/scheduled_matmul.py", line 998, in run_tessera_opt
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+RuntimeError: scheduled compiler boundary --tessera-graph-to-schedule failed: <stdin>:3:14: error: Dialect `tessera' not found for custom op 'tessera.paged_kv_read' 
+    %slice = tessera.paged_kv_read %pages, %page_table {start = 1, end = 6} : (tensor<4x4x3x8xf32>, tensor<4xi32>) -> tensor<5x3x8xf32>
+             ^
+<stdin>:3:14: note: Available dialects: amdgpu, arith, bufferization, builtin, dlti, func, gpu, llvm, math, memref, nvgpu, nvvm, rocdl, scf, schedule, tessera_collective, tessera_nvidia, tessera_rocm, tile, vector ; for more info on dialect registration see https://mlir.llvm.org/getting_started/Faq/#registered-loaded-dependent-whats-up-with-dialects-management

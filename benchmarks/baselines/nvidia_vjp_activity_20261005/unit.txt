@@ -1,0 +1,633 @@
+.......................FFFFFFFF................F.FF..................... [ 16%]
+..F......................................................FFFFFF......... [ 33%]
+........................................................................ [ 50%]
+........................................................................ [ 67%]
+........................................................................ [ 84%]
+...................................................................      [100%]
+=================================== FAILURES ===================================
+_ test_native_checkpoint_pruning_derives_activity_from_backward_ssa[0-activity0] _
+
+indices = '0', activity = (1, 0, 0)
+
+    @pytest.mark.parametrize("indices,activity", [
+        ("0", (1,0,0)), ("2", (0,0,1)), ("1, 0", (1,1,0)),
+        ("2, 0, 1", (1,1,1)),
+    ])
+    def test_native_checkpoint_pruning_derives_activity_from_backward_ssa(indices, activity):
+        from dataclasses import replace
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = ["+indices+"]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        legacy = lower_generated_checkpoint(text, backward=True)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        assert legacy.gradient_activity == ()
+>       assert artifact.gradient_activity == activity
+E       assert (1, 1, 1) == (1, 0, 0)
+E         
+E         At index 1 diff: 1 != 0
+E         Use -v to get more diff
+
+tests/unit/test_native_attention_ad_products.py:185: AssertionError
+_ test_native_checkpoint_pruning_derives_activity_from_backward_ssa[2-activity1] _
+
+indices = '2', activity = (0, 0, 1)
+
+    @pytest.mark.parametrize("indices,activity", [
+        ("0", (1,0,0)), ("2", (0,0,1)), ("1, 0", (1,1,0)),
+        ("2, 0, 1", (1,1,1)),
+    ])
+    def test_native_checkpoint_pruning_derives_activity_from_backward_ssa(indices, activity):
+        from dataclasses import replace
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = ["+indices+"]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        legacy = lower_generated_checkpoint(text, backward=True)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        assert legacy.gradient_activity == ()
+>       assert artifact.gradient_activity == activity
+E       assert (1, 1, 1) == (0, 0, 1)
+E         
+E         At index 0 diff: 1 != 0
+E         Use -v to get more diff
+
+tests/unit/test_native_attention_ad_products.py:185: AssertionError
+_ test_native_checkpoint_pruning_derives_activity_from_backward_ssa[1, 0-activity2] _
+
+indices = '1, 0', activity = (1, 1, 0)
+
+    @pytest.mark.parametrize("indices,activity", [
+        ("0", (1,0,0)), ("2", (0,0,1)), ("1, 0", (1,1,0)),
+        ("2, 0, 1", (1,1,1)),
+    ])
+    def test_native_checkpoint_pruning_derives_activity_from_backward_ssa(indices, activity):
+        from dataclasses import replace
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = ["+indices+"]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        legacy = lower_generated_checkpoint(text, backward=True)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        assert legacy.gradient_activity == ()
+>       assert artifact.gradient_activity == activity
+E       assert (1, 1, 1) == (1, 1, 0)
+E         
+E         At index 2 diff: 1 != 0
+E         Use -v to get more diff
+
+tests/unit/test_native_attention_ad_products.py:185: AssertionError
+_ test_native_checkpoint_pruning_derives_activity_from_backward_ssa[2, 0, 1-activity3] _
+
+indices = '2, 0, 1', activity = (1, 1, 1)
+
+    @pytest.mark.parametrize("indices,activity", [
+        ("0", (1,0,0)), ("2", (0,0,1)), ("1, 0", (1,1,0)),
+        ("2, 0, 1", (1,1,1)),
+    ])
+    def test_native_checkpoint_pruning_derives_activity_from_backward_ssa(indices, activity):
+        from dataclasses import replace
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = ["+indices+"]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        legacy = lower_generated_checkpoint(text, backward=True)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        assert legacy.gradient_activity == ()
+        assert artifact.gradient_activity == activity
+        assert artifact.names == legacy.names
+        assert artifact.schedule_digest != legacy.schedule_digest
+        assert 'inactive_gradient = "zero_fill_v1"' in artifact.tile_ir
+        with pytest.raises(ValueError, match="activity"):
+            replace(artifact, gradient_activity=()).validate()
+        sealed = "gradient_activity = array<i64: "+", ".join(map(str,activity))+">"
+        changed = artifact.schedule_ir.replace(sealed, "gradient_activity = array<i64: 0, 0, 0>")
+        assert changed != artifact.schedule_ir
+>       with pytest.raises(RuntimeError, match="contract changed"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'contract changed'
+E         Actual message: 'scheduled compiler boundary --tessera-schedule-to-tile failed: <stdin>:3:34: error: checkpoint gradient activity requires nonempty binary backward result roles\n    %d_query, %d_key, %d_value = tessera_attn.checkpoint_backward %arg0, %arg1, %arg2, %arg3, %arg4, %arg5 {causal = true, scale = 0.353553385 : f32, schedule.artifact_hash = "3c22a6b9cca0bc4c77bc299c097ebbac0b41f9dab154ce92052aeae866ebcd0f"} : (tensor<1x2x4x8xf32>, tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>, tensor<1x2x4x8xf32>, tensor<1x2x4xf32>) -> (tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>)\n                                 ^\n<stdin>:3:34: note: see current operation: %0:3 = "tessera_attn.checkpoint_backward"(%arg0, %arg1, %arg2, %arg3, %arg4, %arg5) <{causal = true, scale = 0.353553385 : f32}> {schedule.artifact_hash = "3c22a6b9cca0bc4c77bc299c097ebbac0b41f9dab154ce92052aeae866ebcd0f"} : (tensor<1x2x4x8xf32>, tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>, tensor<1x2x4x8xf32>, tensor<1x2x4xf32>) -> (tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>)'
+
+tests/unit/test_native_attention_ad_products.py:194: AssertionError
+_ test_checkpoint_rejects_invalid_native_gradient_activity[array<i64: 0, 0, 0>] _
+
+value = 'array<i64: 0, 0, 0>'
+
+    @pytest.mark.parametrize("value", ["array<i64: 0, 0, 0>", "array<i64: 1, 2, 0>", "array<i64: 1, 0>", '"bad"'])
+    def test_checkpoint_rejects_invalid_native_gradient_activity(value):
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = [2]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        changed = artifact.graph_ir.replace("tessera.checkpoint_gradient_activity = array<i64: 0, 0, 1>",
+                                           "tessera.checkpoint_gradient_activity = "+value)
+>       assert changed != artifact.graph_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...True, bias=False, bias_gradient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(1, 1, 1)).graph_ir
+
+tests/unit/test_native_attention_ad_products.py:209: AssertionError
+_ test_checkpoint_rejects_invalid_native_gradient_activity[array<i64: 1, 2, 0>] _
+
+value = 'array<i64: 1, 2, 0>'
+
+    @pytest.mark.parametrize("value", ["array<i64: 0, 0, 0>", "array<i64: 1, 2, 0>", "array<i64: 1, 0>", '"bad"'])
+    def test_checkpoint_rejects_invalid_native_gradient_activity(value):
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = [2]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        changed = artifact.graph_ir.replace("tessera.checkpoint_gradient_activity = array<i64: 0, 0, 1>",
+                                           "tessera.checkpoint_gradient_activity = "+value)
+>       assert changed != artifact.graph_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...True, bias=False, bias_gradient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(1, 1, 1)).graph_ir
+
+tests/unit/test_native_attention_ad_products.py:209: AssertionError
+__ test_checkpoint_rejects_invalid_native_gradient_activity[array<i64: 1, 0>] __
+
+value = 'array<i64: 1, 0>'
+
+    @pytest.mark.parametrize("value", ["array<i64: 0, 0, 0>", "array<i64: 1, 2, 0>", "array<i64: 1, 0>", '"bad"'])
+    def test_checkpoint_rejects_invalid_native_gradient_activity(value):
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = [2]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        changed = artifact.graph_ir.replace("tessera.checkpoint_gradient_activity = array<i64: 0, 0, 1>",
+                                           "tessera.checkpoint_gradient_activity = "+value)
+>       assert changed != artifact.graph_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...True, bias=False, bias_gradient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(1, 1, 1)).graph_ir
+
+tests/unit/test_native_attention_ad_products.py:209: AssertionError
+_______ test_checkpoint_rejects_invalid_native_gradient_activity["bad"] ________
+
+value = '"bad"'
+
+    @pytest.mark.parametrize("value", ["array<i64: 0, 0, 0>", "array<i64: 1, 2, 0>", "array<i64: 1, 0>", '"bad"'])
+    def test_checkpoint_rejects_invalid_native_gradient_activity(value):
+        from tessera.compiler.scheduled_checkpoint import lower_generated_checkpoint
+        from tessera.compiler.scheduled_matmul import run_tessera_opt
+        if find_tessera_opt() is None:
+            pytest.skip("native compiler unavailable")
+        text = source("reverse", ", tessera.autodiff.wrt_indices = [2]")
+        text = text.replace("module {", 'module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {', 1)
+        artifact = lower_generated_checkpoint(text, backward=True, prune_inactive=True)
+        changed = artifact.graph_ir.replace("tessera.checkpoint_gradient_activity = array<i64: 0, 0, 1>",
+                                           "tessera.checkpoint_gradient_activity = "+value)
+>       assert changed != artifact.graph_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module attributes {tessera.arch = \\22sm_120...2>)\n    return %d_query, %d_key, %d_value : tensor<1x2x4x8xf32>, tensor<1x1x6x8xf32>, tensor<1x1x6x8xf32>\n  }\n}\n\n' = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...True, bias=False, bias_gradient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(1, 1, 1)).graph_ir
+
+tests/unit/test_native_attention_ad_products.py:209: AssertionError
+_ test_permuted_frontend_capture_and_cotangents_execute_on_sm120[k_bias_v_q-wrt0-active0] _
+
+order = 'k_bias_v_q', wrt = ('bias', 'q'), active = [3, 0]
+
+    @pytest.mark.parametrize("order,wrt,active",[
+        ("k_bias_v_q",("bias","q"),[3,0]),
+        ("bias_v_q_k",("v","bias","k","q"),[2,3,1,0]),
+        ("v_q_k",("v","q"),[2,0]),
+    ])
+    def test_permuted_frontend_capture_and_cotangents_execute_on_sm120(order,wrt,active):
+        from tests._support.nvidia import nvidia_cuda_host_ready
+        if not nvidia_cuda_host_ready():pytest.skip("requires owning SM120 host")
+        from benchmarks.nvidia.benchmark_attention_argument_order import run_case
+>       result=run_case((1,2,1,3,5,4,3),order,wrt,True,samples=3)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+benchmarks/nvidia/benchmark_attention_argument_order.py:65: in run_case
+    program=function(order,wrt,causal).compile_native_attention_vjp(
+python/tessera/compiler/jit.py:1867: in compile_native_attention_vjp
+    return compile_attention_vjp_program(source, request.wrt_indices, compiler=compiler)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer", tessera.autodiff = "reverse", t...4xf32>, tensor<1x1x5x3xf32>, tensor<1x2x3x5xf32>) -> tensor<1x2x3x3xf32>\n    return %v0 : tensor<1x2x3x3xf32>\n  }\n}'
+active = (1, 3)
+compiler = PosixPath('/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt')
+
+    def compile_attention_vjp_program(source, active, *, compiler):
+        from pathlib import Path
+        from .scheduled_matmul import find_tessera_opt
+        selected = find_tessera_opt()
+        if selected is None or Path(selected).resolve() != Path(compiler).resolve():
+            raise ValueError("attention reverse program requires the selected TESSERA_OPT compiler")
+        active = tuple(active)
+        if (not active or len(set(active)) != len(active) or
+                any(type(i) is not int or i not in range(4) for i in active)):
+            raise ValueError("automatic attention reverse program requires unique Q/K/V/bias inputs")
+        if 'tessera.autodiff = "reverse"' not in source:
+            raise ValueError("automatic attention reverse program requires a reverse request")
+        pair = package_generated_attention_checkpoint_pair(
+            source, pipeline_name="tessera-nvidia-pipeline-sm120", prune_inactive=True)
+        mapping = tuple(pair.backward.descriptor.provenance.get("frontend_argument_indices", ()))
+        if (any(type(i) is not int for i in mapping) or
+                sorted(mapping) != list(range(3 + int(pair.backward.descriptor.provenance.get("bias", False)))) or
+                any(i not in mapping for i in active)):
+            raise ValueError("native checkpoint frontend argument mapping disagrees")
+        physical_active = tuple(mapping.index(index) for index in active)
+        activity = tuple(pair.backward.descriptor.provenance.get("gradient_activity", ()))
+        expected = tuple(int(i in physical_active) for i in range(
+            3 + int(pair.backward.descriptor.provenance.get("bias_gradient", False))))
+        if activity != expected:
+>           raise ValueError("native checkpoint gradient activity disagrees with requested frontend results")
+E           ValueError: native checkpoint gradient activity disagrees with requested frontend results
+
+python/tessera/compiler/native_attention_program.py:156: ValueError
+_ test_permuted_frontend_capture_and_cotangents_execute_on_sm120[v_q_k-wrt2-active2] _
+
+order = 'v_q_k', wrt = ('v', 'q'), active = [2, 0]
+
+    @pytest.mark.parametrize("order,wrt,active",[
+        ("k_bias_v_q",("bias","q"),[3,0]),
+        ("bias_v_q_k",("v","bias","k","q"),[2,3,1,0]),
+        ("v_q_k",("v","q"),[2,0]),
+    ])
+    def test_permuted_frontend_capture_and_cotangents_execute_on_sm120(order,wrt,active):
+        from tests._support.nvidia import nvidia_cuda_host_ready
+        if not nvidia_cuda_host_ready():pytest.skip("requires owning SM120 host")
+        from benchmarks.nvidia.benchmark_attention_argument_order import run_case
+>       result=run_case((1,2,1,3,5,4,3),order,wrt,True,samples=3)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:56: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+benchmarks/nvidia/benchmark_attention_argument_order.py:65: in run_case
+    program=function(order,wrt,causal).compile_native_attention_vjp(
+python/tessera/compiler/jit.py:1867: in compile_native_attention_vjp
+    return compile_attention_vjp_program(source, request.wrt_indices, compiler=compiler)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer", tessera.autodiff = "reverse", t...4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>) -> tensor<1x2x3x3xf32>\n    return %v0 : tensor<1x2x3x3xf32>\n  }\n}'
+active = (0, 1)
+compiler = PosixPath('/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt')
+
+    def compile_attention_vjp_program(source, active, *, compiler):
+        from pathlib import Path
+        from .scheduled_matmul import find_tessera_opt
+        selected = find_tessera_opt()
+        if selected is None or Path(selected).resolve() != Path(compiler).resolve():
+            raise ValueError("attention reverse program requires the selected TESSERA_OPT compiler")
+        active = tuple(active)
+        if (not active or len(set(active)) != len(active) or
+                any(type(i) is not int or i not in range(4) for i in active)):
+            raise ValueError("automatic attention reverse program requires unique Q/K/V/bias inputs")
+        if 'tessera.autodiff = "reverse"' not in source:
+            raise ValueError("automatic attention reverse program requires a reverse request")
+        pair = package_generated_attention_checkpoint_pair(
+            source, pipeline_name="tessera-nvidia-pipeline-sm120", prune_inactive=True)
+        mapping = tuple(pair.backward.descriptor.provenance.get("frontend_argument_indices", ()))
+        if (any(type(i) is not int for i in mapping) or
+                sorted(mapping) != list(range(3 + int(pair.backward.descriptor.provenance.get("bias", False)))) or
+                any(i not in mapping for i in active)):
+            raise ValueError("native checkpoint frontend argument mapping disagrees")
+        physical_active = tuple(mapping.index(index) for index in active)
+        activity = tuple(pair.backward.descriptor.provenance.get("gradient_activity", ()))
+        expected = tuple(int(i in physical_active) for i in range(
+            3 + int(pair.backward.descriptor.provenance.get("bias_gradient", False))))
+        if activity != expected:
+>           raise ValueError("native checkpoint gradient activity disagrees with requested frontend results")
+E           ValueError: native checkpoint gradient activity disagrees with requested frontend results
+
+python/tessera/compiler/native_attention_program.py:156: ValueError
+_____ test_pruned_activity_uses_physical_roles_after_frontend_permutation ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbcf547c0>
+
+    def test_pruned_activity_uses_physical_roles_after_frontend_permutation(monkeypatch):
+        artifact = lower_generated_checkpoint(traced(monkeypatch), backward=True, prune_inactive=True)
+        assert artifact.frontend_argument_indices == (3,0,2,1)
+>       assert artifact.gradient_activity == (1,0,0,1)
+E       assert (1, 1, 1, 1) == (1, 0, 0, 1)
+E         
+E         At index 1 diff: 1 != 0
+E         Use -v to get more diff
+
+tests/unit/test_attention_argument_order.py:64: AssertionError
+_______ test_generated_pair_rejects_physical_mismatch_before_compilation _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbc61fbd0>
+
+    def test_generated_pair_rejects_physical_mismatch_before_compilation(monkeypatch):
+        forward = artifact((1, 4, 5, 7), False)
+        backward = artifact((2, 1, 5, 7), True)
+        monkeypatch.setattr(checkpoint, "lower_generated_checkpoint",
+                            lambda source, backward=False: products[backward])
+        products = {False: forward, True: backward}
+        monkeypatch.setattr(native, "package_scheduled_checkpoint",
+                            lambda *args, **kwargs: pytest.fail("mismatched pair compiled"))
+        with pytest.raises(ValueError, match="policies disagree"):
+>           native.package_generated_attention_checkpoint_pair(
+                "generated source", pipeline_name="tessera-nvidia-pipeline-sm120")
+
+tests/unit/test_checkpoint_broadcast_contract.py:126: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'generated source', pipeline_name = 'tessera-nvidia-pipeline-sm120'
+prune_inactive = False
+
+    def package_generated_attention_checkpoint_pair(
+        source: str, *, pipeline_name: str, prune_inactive: bool = False,
+    ) -> AttentionCheckpointPair:
+        """Package compiler-generated paired AD directly through native Schedule IR."""
+        from .scheduled_checkpoint import lower_generated_checkpoint
+        forward = lower_generated_checkpoint(source)
+>       backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: test_generated_pair_rejects_physical_mismatch_before_compilation.<locals>.<lambda>() got an unexpected keyword argument 'prune_inactive'
+
+python/tessera/compiler/nvidia_native.py:4771: TypeError
+___ test_generated_pair_matches_both_saved_output_and_lse_slots[None-False] ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbb7e0830>
+broken = None, bias = False
+
+    @pytest.mark.parametrize("bias", [False, True])
+    @pytest.mark.parametrize("broken", [None, "output", "lse"])
+    def test_generated_pair_matches_both_saved_output_and_lse_slots(monkeypatch, broken, bias):
+        from types import SimpleNamespace
+        import tessera.compiler.scheduled_checkpoint as scheduled
+        names = ["dO", "q", "k", "v", "output", "lse", "dq", "dk", "dv"]
+        if bias:
+            names.insert(5, "bias")
+            names.append("dbias")
+        if broken is not None:
+            names[4 if broken == "output" else 5 + int(bias)] = "other_generation"
+        def lower(source, *, backward=False):
+            return SimpleNamespace(dims=(1,2,1,3,5,4,3), scale=.5, causal=True,
+                bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
+        monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
+        monkeypatch.setattr(native, "package_scheduled_checkpoint", lambda artifact, **kwargs: artifact)
+        if broken is not None:
+            with pytest.raises(ValueError, match="bindings disagree"):
+                native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+        else:
+>           pair=native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_nvidia_checkpoint_pair.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'source', pipeline_name = 'test', prune_inactive = False
+
+    def package_generated_attention_checkpoint_pair(
+        source: str, *, pipeline_name: str, prune_inactive: bool = False,
+    ) -> AttentionCheckpointPair:
+        """Package compiler-generated paired AD directly through native Schedule IR."""
+        from .scheduled_checkpoint import lower_generated_checkpoint
+        forward = lower_generated_checkpoint(source)
+>       backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: test_generated_pair_matches_both_saved_output_and_lse_slots.<locals>.lower() got an unexpected keyword argument 'prune_inactive'
+
+python/tessera/compiler/nvidia_native.py:4771: TypeError
+____ test_generated_pair_matches_both_saved_output_and_lse_slots[None-True] ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbcbdc980>
+broken = None, bias = True
+
+    @pytest.mark.parametrize("bias", [False, True])
+    @pytest.mark.parametrize("broken", [None, "output", "lse"])
+    def test_generated_pair_matches_both_saved_output_and_lse_slots(monkeypatch, broken, bias):
+        from types import SimpleNamespace
+        import tessera.compiler.scheduled_checkpoint as scheduled
+        names = ["dO", "q", "k", "v", "output", "lse", "dq", "dk", "dv"]
+        if bias:
+            names.insert(5, "bias")
+            names.append("dbias")
+        if broken is not None:
+            names[4 if broken == "output" else 5 + int(bias)] = "other_generation"
+        def lower(source, *, backward=False):
+            return SimpleNamespace(dims=(1,2,1,3,5,4,3), scale=.5, causal=True,
+                bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
+        monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
+        monkeypatch.setattr(native, "package_scheduled_checkpoint", lambda artifact, **kwargs: artifact)
+        if broken is not None:
+            with pytest.raises(ValueError, match="bindings disagree"):
+                native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+        else:
+>           pair=native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_nvidia_checkpoint_pair.py:99: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'source', pipeline_name = 'test', prune_inactive = False
+
+    def package_generated_attention_checkpoint_pair(
+        source: str, *, pipeline_name: str, prune_inactive: bool = False,
+    ) -> AttentionCheckpointPair:
+        """Package compiler-generated paired AD directly through native Schedule IR."""
+        from .scheduled_checkpoint import lower_generated_checkpoint
+        forward = lower_generated_checkpoint(source)
+>       backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: test_generated_pair_matches_both_saved_output_and_lse_slots.<locals>.lower() got an unexpected keyword argument 'prune_inactive'
+
+python/tessera/compiler/nvidia_native.py:4771: TypeError
+__ test_generated_pair_matches_both_saved_output_and_lse_slots[output-False] ___
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbcbdc4b0>
+broken = 'output', bias = False
+
+    @pytest.mark.parametrize("bias", [False, True])
+    @pytest.mark.parametrize("broken", [None, "output", "lse"])
+    def test_generated_pair_matches_both_saved_output_and_lse_slots(monkeypatch, broken, bias):
+        from types import SimpleNamespace
+        import tessera.compiler.scheduled_checkpoint as scheduled
+        names = ["dO", "q", "k", "v", "output", "lse", "dq", "dk", "dv"]
+        if bias:
+            names.insert(5, "bias")
+            names.append("dbias")
+        if broken is not None:
+            names[4 if broken == "output" else 5 + int(bias)] = "other_generation"
+        def lower(source, *, backward=False):
+            return SimpleNamespace(dims=(1,2,1,3,5,4,3), scale=.5, causal=True,
+                bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
+        monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
+        monkeypatch.setattr(native, "package_scheduled_checkpoint", lambda artifact, **kwargs: artifact)
+        if broken is not None:
+            with pytest.raises(ValueError, match="bindings disagree"):
+>               native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+
+tests/unit/test_nvidia_checkpoint_pair.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'source', pipeline_name = 'test', prune_inactive = False
+
+    def package_generated_attention_checkpoint_pair(
+        source: str, *, pipeline_name: str, prune_inactive: bool = False,
+    ) -> AttentionCheckpointPair:
+        """Package compiler-generated paired AD directly through native Schedule IR."""
+        from .scheduled_checkpoint import lower_generated_checkpoint
+        forward = lower_generated_checkpoint(source)
+>       backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: test_generated_pair_matches_both_saved_output_and_lse_slots.<locals>.lower() got an unexpected keyword argument 'prune_inactive'
+
+python/tessera/compiler/nvidia_native.py:4771: TypeError
+___ test_generated_pair_matches_both_saved_output_and_lse_slots[output-True] ___
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbcbdcfa0>
+broken = 'output', bias = True
+
+    @pytest.mark.parametrize("bias", [False, True])
+    @pytest.mark.parametrize("broken", [None, "output", "lse"])
+    def test_generated_pair_matches_both_saved_output_and_lse_slots(monkeypatch, broken, bias):
+        from types import SimpleNamespace
+        import tessera.compiler.scheduled_checkpoint as scheduled
+        names = ["dO", "q", "k", "v", "output", "lse", "dq", "dk", "dv"]
+        if bias:
+            names.insert(5, "bias")
+            names.append("dbias")
+        if broken is not None:
+            names[4 if broken == "output" else 5 + int(bias)] = "other_generation"
+        def lower(source, *, backward=False):
+            return SimpleNamespace(dims=(1,2,1,3,5,4,3), scale=.5, causal=True,
+                bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
+        monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
+        monkeypatch.setattr(native, "package_scheduled_checkpoint", lambda artifact, **kwargs: artifact)
+        if broken is not None:
+            with pytest.raises(ValueError, match="bindings disagree"):
+>               native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+
+tests/unit/test_nvidia_checkpoint_pair.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'source', pipeline_name = 'test', prune_inactive = False
+
+    def package_generated_attention_checkpoint_pair(
+        source: str, *, pipeline_name: str, prune_inactive: bool = False,
+    ) -> AttentionCheckpointPair:
+        """Package compiler-generated paired AD directly through native Schedule IR."""
+        from .scheduled_checkpoint import lower_generated_checkpoint
+        forward = lower_generated_checkpoint(source)
+>       backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: test_generated_pair_matches_both_saved_output_and_lse_slots.<locals>.lower() got an unexpected keyword argument 'prune_inactive'
+
+python/tessera/compiler/nvidia_native.py:4771: TypeError
+____ test_generated_pair_matches_both_saved_output_and_lse_slots[lse-False] ____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbb92d400>
+broken = 'lse', bias = False
+
+    @pytest.mark.parametrize("bias", [False, True])
+    @pytest.mark.parametrize("broken", [None, "output", "lse"])
+    def test_generated_pair_matches_both_saved_output_and_lse_slots(monkeypatch, broken, bias):
+        from types import SimpleNamespace
+        import tessera.compiler.scheduled_checkpoint as scheduled
+        names = ["dO", "q", "k", "v", "output", "lse", "dq", "dk", "dv"]
+        if bias:
+            names.insert(5, "bias")
+            names.append("dbias")
+        if broken is not None:
+            names[4 if broken == "output" else 5 + int(bias)] = "other_generation"
+        def lower(source, *, backward=False):
+            return SimpleNamespace(dims=(1,2,1,3,5,4,3), scale=.5, causal=True,
+                bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
+        monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
+        monkeypatch.setattr(native, "package_scheduled_checkpoint", lambda artifact, **kwargs: artifact)
+        if broken is not None:
+            with pytest.raises(ValueError, match="bindings disagree"):
+>               native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+
+tests/unit/test_nvidia_checkpoint_pair.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'source', pipeline_name = 'test', prune_inactive = False
+
+    def package_generated_attention_checkpoint_pair(
+        source: str, *, pipeline_name: str, prune_inactive: bool = False,
+    ) -> AttentionCheckpointPair:
+        """Package compiler-generated paired AD directly through native Schedule IR."""
+        from .scheduled_checkpoint import lower_generated_checkpoint
+        forward = lower_generated_checkpoint(source)
+>       backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: test_generated_pair_matches_both_saved_output_and_lse_slots.<locals>.lower() got an unexpected keyword argument 'prune_inactive'
+
+python/tessera/compiler/nvidia_native.py:4771: TypeError
+____ test_generated_pair_matches_both_saved_output_and_lse_slots[lse-True] _____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7efcbb92faf0>
+broken = 'lse', bias = True
+
+    @pytest.mark.parametrize("bias", [False, True])
+    @pytest.mark.parametrize("broken", [None, "output", "lse"])
+    def test_generated_pair_matches_both_saved_output_and_lse_slots(monkeypatch, broken, bias):
+        from types import SimpleNamespace
+        import tessera.compiler.scheduled_checkpoint as scheduled
+        names = ["dO", "q", "k", "v", "output", "lse", "dq", "dk", "dv"]
+        if bias:
+            names.insert(5, "bias")
+            names.append("dbias")
+        if broken is not None:
+            names[4 if broken == "output" else 5 + int(bias)] = "other_generation"
+        def lower(source, *, backward=False):
+            return SimpleNamespace(dims=(1,2,1,3,5,4,3), scale=.5, causal=True,
+                bias_shape=(), names=tuple(names) if backward else (("q","k","v","bias","output","lse") if bias else ("q","k","v","output","lse")), bias=bias, frontend_argument_indices=tuple(range(3+int(bias))))
+        monkeypatch.setattr(scheduled, "lower_generated_checkpoint", lower)
+        monkeypatch.setattr(native, "package_scheduled_checkpoint", lambda artifact, **kwargs: artifact)
+        if broken is not None:
+            with pytest.raises(ValueError, match="bindings disagree"):
+>               native.package_generated_attention_checkpoint_pair("source", pipeline_name="test")
+
+tests/unit/test_nvidia_checkpoint_pair.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+source = 'source', pipeline_name = 'test', prune_inactive = False
+
+    def package_generated_attention_checkpoint_pair(
+        source: str, *, pipeline_name: str, prune_inactive: bool = False,
+    ) -> AttentionCheckpointPair:
+        """Package compiler-generated paired AD directly through native Schedule IR."""
+        from .scheduled_checkpoint import lower_generated_checkpoint
+        forward = lower_generated_checkpoint(source)
+>       backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: test_generated_pair_matches_both_saved_output_and_lse_slots.<locals>.lower() got an unexpected keyword argument 'prune_inactive'
+
+python/tessera/compiler/nvidia_native.py:4771: TypeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_attention_ad_products.py::test_native_checkpoint_pruning_derives_activity_from_backward_ssa[0-activity0]
+FAILED tests/unit/test_native_attention_ad_products.py::test_native_checkpoint_pruning_derives_activity_from_backward_ssa[2-activity1]
+FAILED tests/unit/test_native_attention_ad_products.py::test_native_checkpoint_pruning_derives_activity_from_backward_ssa[1, 0-activity2]
+FAILED tests/unit/test_native_attention_ad_products.py::test_native_checkpoint_pruning_derives_activity_from_backward_ssa[2, 0, 1-activity3]
+FAILED tests/unit/test_native_attention_ad_products.py::test_checkpoint_rejects_invalid_native_gradient_activity[array<i64: 0, 0, 0>]
+FAILED tests/unit/test_native_attention_ad_products.py::test_checkpoint_rejects_invalid_native_gradient_activity[array<i64: 1, 2, 0>]
+FAILED tests/unit/test_native_attention_ad_products.py::test_checkpoint_rejects_invalid_native_gradient_activity[array<i64: 1, 0>]
+FAILED tests/unit/test_native_attention_ad_products.py::test_checkpoint_rejects_invalid_native_gradient_activity["bad"]
+FAILED tests/unit/test_attention_argument_order.py::test_permuted_frontend_capture_and_cotangents_execute_on_sm120[k_bias_v_q-wrt0-active0]
+FAILED tests/unit/test_attention_argument_order.py::test_permuted_frontend_capture_and_cotangents_execute_on_sm120[v_q_k-wrt2-active2]
+FAILED tests/unit/test_attention_argument_order.py::test_pruned_activity_uses_physical_roles_after_frontend_permutation
+FAILED tests/unit/test_checkpoint_broadcast_contract.py::test_generated_pair_rejects_physical_mismatch_before_compilation
+FAILED tests/unit/test_nvidia_checkpoint_pair.py::test_generated_pair_matches_both_saved_output_and_lse_slots[None-False]
+FAILED tests/unit/test_nvidia_checkpoint_pair.py::test_generated_pair_matches_both_saved_output_and_lse_slots[None-True]
+FAILED tests/unit/test_nvidia_checkpoint_pair.py::test_generated_pair_matches_both_saved_output_and_lse_slots[output-False]
+FAILED tests/unit/test_nvidia_checkpoint_pair.py::test_generated_pair_matches_both_saved_output_and_lse_slots[output-True]
+FAILED tests/unit/test_nvidia_checkpoint_pair.py::test_generated_pair_matches_both_saved_output_and_lse_slots[lse-False]
+FAILED tests/unit/test_nvidia_checkpoint_pair.py::test_generated_pair_matches_both_saved_output_and_lse_slots[lse-True]
+18 failed, 409 passed in 12.34s

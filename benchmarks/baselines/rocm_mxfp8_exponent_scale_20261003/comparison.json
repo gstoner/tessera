@@ -1,0 +1,92 @@
+{
+  "rows": [
+    {
+      "shape_mnk": [
+        17,
+        19,
+        64
+      ],
+      "layout": "kn",
+      "reference_device_us": 10.33939453125,
+      "candidate_device_us": 9.657519531250001,
+      "reference_repeat_device_us": 10.3300390625,
+      "candidate_repeat_device_us": 9.63533203125,
+      "candidate_over_reference": 0.9340507804456937,
+      "candidate_over_reference_repeat": 0.932748847603886
+    },
+    {
+      "shape_mnk": [
+        17,
+        19,
+        64
+      ],
+      "layout": "nk",
+      "reference_device_us": 8.228408203125001,
+      "candidate_device_us": 7.469208984374999,
+      "reference_repeat_device_us": 8.2160546875,
+      "candidate_repeat_device_us": 7.47185546875,
+      "candidate_over_reference": 0.9077343758344815,
+      "candidate_over_reference_repeat": 0.9094213406487869
+    },
+    {
+      "shape_mnk": [
+        200,
+        256,
+        128
+      ],
+      "layout": "kn",
+      "reference_device_us": 18.4203125,
+      "candidate_device_us": 14.730742187499999,
+      "reference_repeat_device_us": 18.272109375000003,
+      "candidate_repeat_device_us": 15.623515625000001,
+      "candidate_over_reference": 0.7997009924505895,
+      "candidate_over_reference_repeat": 0.8550471817105133
+    },
+    {
+      "shape_mnk": [
+        200,
+        256,
+        128
+      ],
+      "layout": "nk",
+      "reference_device_us": 10.803242187499999,
+      "candidate_device_us": 8.446972656249999,
+      "reference_repeat_device_us": 10.541015625,
+      "candidate_repeat_device_us": 8.466005859375,
+      "candidate_over_reference": 0.7818923717200059,
+      "candidate_over_reference_repeat": 0.8031489716509171
+    },
+    {
+      "shape_mnk": [
+        256,
+        512,
+        1024
+      ],
+      "layout": "kn",
+      "reference_device_us": 71.653515625,
+      "candidate_device_us": 20.713632812500002,
+      "reference_repeat_device_us": 71.67999999999999,
+      "candidate_repeat_device_us": 20.6388671875,
+      "candidate_over_reference": 0.2890804817017658,
+      "candidate_over_reference_repeat": 0.2879306248256139
+    },
+    {
+      "shape_mnk": [
+        256,
+        512,
+        1024
+      ],
+      "layout": "nk",
+      "reference_device_us": 67.24953124999999,
+      "candidate_device_us": 14.550898437499999,
+      "reference_repeat_device_us": 66.59742187500001,
+      "candidate_repeat_device_us": 14.53400390625,
+      "candidate_over_reference": 0.21637174515621624,
+      "candidate_over_reference_repeat": 0.21823673495243692
+    }
+  ],
+  "physical_schedule_unchanged": true,
+  "mathematical_contract_unchanged": true,
+  "timing_scope": "GPU execution plus graph dispatch; not ISA phase timing",
+  "global_selector_promotion": false
+}

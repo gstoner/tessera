@@ -1,0 +1,1521 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "device_marketing_names": [
+    "Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor",
+    "Marketing Name:          AMD Radeon RX 9070 XT"
+  ],
+  "toolchain": "Ubuntu LLVM version 23.1.1\n  Optimized build.\n",
+  "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+  "scope": "packed consumer only; not dynamic semantic Graph or native ingest",
+  "timing": "resident graph event windows versus checked allocating launch wall",
+  "cases": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "arms": {
+        "static": {
+          "image_digest": "85f6eb3a44df0345e19a9a12b63b99a02603fe6a737f91bf7e5d1daa6b800db5",
+          "payload_sha256": "7dbd8f7dd003db37976434aeb9debbae3d38cbfb8cc4f6614c2daa492fc6bb3c",
+          "target_ir_sha256": "462a958e319d08affb689d9745f8fcd532039f355509587e0242bbe7aaa9050c",
+          "authored_target_ir_sha256": "234e4d021a7bb99eb8fd87e7f4a68d13b59c16135287af06eba455429037f680",
+          "entry": "packed_folded_w4a8",
+          "compile_state": "cold",
+          "packaging_wall_ms": 324.354838,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.310118,
+              "event_window_ms": 21.233760833740234,
+              "host_window_ms": 21.443014,
+              "device_window_ms": 21.19676,
+              "device_event_disagreement": 0.0017425473532432024
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.310118,
+              "event_window_ms": 20.54169273376465,
+              "host_window_ms": 20.617209,
+              "device_window_ms": 20.39192,
+              "device_event_disagreement": 0.007291158314254507
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.310118,
+              "event_window_ms": 20.43046760559082,
+              "host_window_ms": 20.505716,
+              "device_window_ms": 20.3668,
+              "device_event_disagreement": 0.0031163068227276526
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.310118,
+              "event_window_ms": 20.463716506958008,
+              "host_window_ms": 20.542596,
+              "device_window_ms": 20.40812,
+              "device_event_disagreement": 0.0027168333249292134
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.310118,
+              "event_window_ms": 20.445348739624023,
+              "host_window_ms": 20.52363,
+              "device_window_ms": 20.38992,
+              "device_event_disagreement": 0.002711068435658422
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.310118,
+              "event_window_ms": 20.4567813873291,
+              "host_window_ms": 20.531386,
+              "device_window_ms": 20.4004,
+              "device_event_disagreement": 0.002756122102571957
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.310118,
+              "event_window_ms": 20.46160125732422,
+              "host_window_ms": 20.553847,
+              "device_window_ms": 20.40376,
+              "device_event_disagreement": 0.002826819690053151
+            }
+          ],
+          "end_to_end_ms": [
+            3.796178333333333,
+            3.4654356666666666,
+            3.5039123333333335,
+            3.580750666666667,
+            3.5182063333333335,
+            3.4906780000000004,
+            3.6527596666666664
+          ],
+          "device_median_ms": 0.019922265625,
+          "end_to_end_median_ms": 3.5182063333333335
+        },
+        "runtime_mn": {
+          "image_digest": "33f2acfb97d84b059903cc3d97786b5697587c0b8202cbdc773cf05afd4c8ccc",
+          "payload_sha256": "af691f9d1902ca9e68412d900c7b7a55ec5abde53885e0d9b12e2fadcea23bc7",
+          "target_ir_sha256": "4e884c73c70f3d2f5d2505d122b058afb9d27f8909adbb8ba82d479a7d9b79e7",
+          "authored_target_ir_sha256": "234e4d021a7bb99eb8fd87e7f4a68d13b59c16135287af06eba455429037f680",
+          "entry": "tessera_rocm_folded_matmul_ec5321b72d77bcc2",
+          "compile_state": "cold",
+          "packaging_wall_ms": 263.760556,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.657269,
+              "event_window_ms": 21.487579345703125,
+              "host_window_ms": 21.589233,
+              "device_window_ms": 21.36652,
+              "device_event_disagreement": 0.005633921986067359
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.657269,
+              "event_window_ms": 20.417760848999023,
+              "host_window_ms": 20.493272,
+              "device_window_ms": 20.35448,
+              "device_event_disagreement": 0.003099304055279253
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.657269,
+              "event_window_ms": 20.445087432861328,
+              "host_window_ms": 20.520435,
+              "device_window_ms": 20.38956,
+              "device_event_disagreement": 0.002715930320360459
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.657269,
+              "event_window_ms": 20.46304702758789,
+              "host_window_ms": 20.53932,
+              "device_window_ms": 20.40376,
+              "device_event_disagreement": 0.002897272703716247
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.657269,
+              "event_window_ms": 20.456632614135742,
+              "host_window_ms": 20.531245,
+              "device_window_ms": 20.40104,
+              "device_event_disagreement": 0.0027175838362237994
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.657269,
+              "event_window_ms": 20.404151916503906,
+              "host_window_ms": 20.480067,
+              "device_window_ms": 20.34788,
+              "device_event_disagreement": 0.0027578659840495857
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 5.657269,
+              "event_window_ms": 20.451980590820312,
+              "host_window_ms": 20.527657,
+              "device_window_ms": 20.39564,
+              "device_event_disagreement": 0.0027547743148944826
+            }
+          ],
+          "end_to_end_ms": [
+            3.6463823333333334,
+            3.4784403333333334,
+            3.335574333333333,
+            3.4739419999999996,
+            3.6639393333333334,
+            3.4812893333333332,
+            3.626106
+          ],
+          "device_median_ms": 0.0199176171875,
+          "end_to_end_median_ms": 3.4812893333333332
+        }
+      },
+      "projected_over_static_device": 0.9997666712417403,
+      "projected_over_static_e2e": 0.9895068689831437
+    },
+    {
+      "shape_mnk": [
+        200,
+        80,
+        256
+      ],
+      "arms": {
+        "static": {
+          "image_digest": "f69760a6bb5e6f750c1e0c21c0b5cd3778cadd8a5c0de208716bdc3d62d5c23c",
+          "payload_sha256": "7dbd8f7dd003db37976434aeb9debbae3d38cbfb8cc4f6614c2daa492fc6bb3c",
+          "target_ir_sha256": "c8cea1a1bd2661f00a973004a7dcb924407e9f907cb930e2e66b2412fe7cf31e",
+          "authored_target_ir_sha256": "a1574a603f9fbebe2f452d17c72a7d2a33451c129a6a38d2229d4bcea6f9ecb4",
+          "entry": "packed_folded_w4a8",
+          "compile_state": "cold",
+          "packaging_wall_ms": 271.786701,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.902015,
+              "event_window_ms": 33.173728942871094,
+              "host_window_ms": 33.392459,
+              "device_window_ms": 33.09928,
+              "device_event_disagreement": 0.0022442138777736737
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.902015,
+              "event_window_ms": 20.40886878967285,
+              "host_window_ms": 20.493722,
+              "device_window_ms": 20.3676,
+              "device_event_disagreement": 0.0020221007885422152
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.902015,
+              "event_window_ms": 20.38619613647461,
+              "host_window_ms": 20.467644,
+              "device_window_ms": 20.34492,
+              "device_event_disagreement": 0.0020247100635297295
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.902015,
+              "event_window_ms": 20.394807815551758,
+              "host_window_ms": 20.480708,
+              "device_window_ms": 20.353,
+              "device_event_disagreement": 0.002049924467534151
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.902015,
+              "event_window_ms": 20.38975715637207,
+              "host_window_ms": 20.47395,
+              "device_window_ms": 20.34848,
+              "device_event_disagreement": 0.002024406473088969
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.902015,
+              "event_window_ms": 20.430965423583984,
+              "host_window_ms": 20.514383,
+              "device_window_ms": 20.36588,
+              "device_event_disagreement": 0.0031856264368620565
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.902015,
+              "event_window_ms": 20.453630447387695,
+              "host_window_ms": 20.535202,
+              "device_window_ms": 20.36208,
+              "device_event_disagreement": 0.004475999878026013
+            }
+          ],
+          "end_to_end_ms": [
+            3.5931806666666666,
+            3.5722826666666667,
+            3.8540603333333334,
+            3.6143183333333333,
+            3.6302566666666665,
+            3.6086856666666667,
+            3.641681666666667
+          ],
+          "device_median_ms": 0.01988484375,
+          "end_to_end_median_ms": 3.6143183333333333
+        },
+        "runtime_mn": {
+          "image_digest": "33f2acfb97d84b059903cc3d97786b5697587c0b8202cbdc773cf05afd4c8ccc",
+          "payload_sha256": "af691f9d1902ca9e68412d900c7b7a55ec5abde53885e0d9b12e2fadcea23bc7",
+          "target_ir_sha256": "4e884c73c70f3d2f5d2505d122b058afb9d27f8909adbb8ba82d479a7d9b79e7",
+          "authored_target_ir_sha256": "a1574a603f9fbebe2f452d17c72a7d2a33451c129a6a38d2229d4bcea6f9ecb4",
+          "entry": "tessera_rocm_folded_matmul_ec5321b72d77bcc2",
+          "compile_state": "warm_cache",
+          "packaging_wall_ms": 53.145689,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.922079,
+              "event_window_ms": 21.05702781677246,
+              "host_window_ms": 21.158031,
+              "device_window_ms": 20.86432,
+              "device_event_disagreement": 0.009151710224695858
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.922079,
+              "event_window_ms": 20.286758422851562,
+              "host_window_ms": 20.368925,
+              "device_window_ms": 20.24568,
+              "device_event_disagreement": 0.0020248884516360444
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.922079,
+              "event_window_ms": 20.306886672973633,
+              "host_window_ms": 20.391308,
+              "device_window_ms": 20.26572,
+              "device_event_disagreement": 0.002027227198171134
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.922079,
+              "event_window_ms": 20.308738708496094,
+              "host_window_ms": 20.405655,
+              "device_window_ms": 20.2436,
+              "device_event_disagreement": 0.0032074226484997063
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.922079,
+              "event_window_ms": 20.322357177734375,
+              "host_window_ms": 20.409191,
+              "device_window_ms": 20.25624,
+              "device_event_disagreement": 0.0032534207108029867
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.922079,
+              "event_window_ms": 20.30302619934082,
+              "host_window_ms": 20.400439,
+              "device_window_ms": 20.26044,
+              "device_event_disagreement": 0.002097529645221255
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.922079,
+              "event_window_ms": 20.27448081970215,
+              "host_window_ms": 20.368174,
+              "device_window_ms": 20.23276,
+              "device_event_disagreement": 0.002057799658258395
+            }
+          ],
+          "end_to_end_ms": [
+            3.7949859999999997,
+            3.615812666666667,
+            3.7488646666666665,
+            3.6347086666666666,
+            3.5118760000000004,
+            3.753789,
+            3.6351809999999998
+          ],
+          "device_median_ms": 0.019781484375,
+          "end_to_end_median_ms": 3.6351809999999998
+        }
+      },
+      "projected_over_static_device": 0.9948021027321373,
+      "projected_over_static_e2e": 1.005772227220347
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        256
+      ],
+      "arms": {
+        "static": {
+          "image_digest": "48b1de9ddb299e9680ad8e05a9421083e03ddae3f6e0db7b4cd11a41adc34741",
+          "payload_sha256": "b4b46bd97b8e4df5e10d6e03a2c03db98edb1f2ab7ecb91a99bb053a2d579738",
+          "target_ir_sha256": "2561f37a551583988cfeca5e4046c8a4e95c78bd9087cd7a78e8566d240b2add",
+          "authored_target_ir_sha256": "03137345cbb4889579dee429aa7aaffb22b4daae8f0bc22022acc28836038c3a",
+          "entry": "packed_folded_w4a8",
+          "compile_state": "cold",
+          "packaging_wall_ms": 258.684536,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.804178,
+              "event_window_ms": 30.657495498657227,
+              "host_window_ms": 30.869291,
+              "device_window_ms": 30.60441,
+              "device_event_disagreement": 0.0017315667112974124
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.804178,
+              "event_window_ms": 17.660579681396484,
+              "host_window_ms": 17.736391,
+              "device_window_ms": 17.60396,
+              "device_event_disagreement": 0.003205992239095435
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.804178,
+              "event_window_ms": 17.657922744750977,
+              "host_window_ms": 17.734749,
+              "device_window_ms": 17.60208,
+              "device_event_disagreement": 0.00316247531253786
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.804178,
+              "event_window_ms": 17.65448570251465,
+              "host_window_ms": 17.731201,
+              "device_window_ms": 17.59856,
+              "device_event_disagreement": 0.0031677899575790797
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.804178,
+              "event_window_ms": 17.666845321655273,
+              "host_window_ms": 17.742713,
+              "device_window_ms": 17.61096,
+              "device_event_disagreement": 0.00316328810479667
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.804178,
+              "event_window_ms": 17.66448402404785,
+              "host_window_ms": 17.743185,
+              "device_window_ms": 17.60788,
+              "device_event_disagreement": 0.003204397251048554
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.804178,
+              "event_window_ms": 17.66088104248047,
+              "host_window_ms": 17.737433,
+              "device_window_ms": 17.5962,
+              "device_event_disagreement": 0.0036623904733228806
+            }
+          ],
+          "end_to_end_ms": [
+            3.6213933333333332,
+            3.4252789999999997,
+            3.7830246666666665,
+            3.4861453333333334,
+            3.4931483333333335,
+            3.631479,
+            3.367302
+          ],
+          "device_median_ms": 0.0171913671875,
+          "end_to_end_median_ms": 3.4931483333333335
+        },
+        "runtime_mn": {
+          "image_digest": "c99573885b97ac46f59b3bf6cda80195aa5b3c2ae892289316418aafeb74f05b",
+          "payload_sha256": "30e3bbb2362f0a782da6abbbd83d9be83b044f5ef86286e1d329db0dcf69448d",
+          "target_ir_sha256": "6609829a01459e499d965f776a7f49c8786db1b5e5a90eb7fda709ff9138fa99",
+          "authored_target_ir_sha256": "03137345cbb4889579dee429aa7aaffb22b4daae8f0bc22022acc28836038c3a",
+          "entry": "tessera_rocm_folded_matmul_1e3502d4e15a9a05",
+          "compile_state": "cold",
+          "packaging_wall_ms": 241.394993,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.895944,
+              "event_window_ms": 18.382211685180664,
+              "host_window_ms": 18.460714,
+              "device_window_ms": 18.31192,
+              "device_event_disagreement": 0.0038238970579003305
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.895944,
+              "event_window_ms": 17.587291717529297,
+              "host_window_ms": 17.679253,
+              "device_window_ms": 17.52972,
+              "device_event_disagreement": 0.0032734839709239556
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.895944,
+              "event_window_ms": 17.63033676147461,
+              "host_window_ms": 17.709971,
+              "device_window_ms": 17.56504,
+              "device_event_disagreement": 0.0037036593434388917
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.895944,
+              "event_window_ms": 17.6069278717041,
+              "host_window_ms": 17.682509,
+              "device_window_ms": 17.55132,
+              "device_event_disagreement": 0.003158294968281655
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.895944,
+              "event_window_ms": 17.61211585998535,
+              "host_window_ms": 17.689332,
+              "device_window_ms": 17.5568,
+              "device_event_disagreement": 0.003140784470480908
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.895944,
+              "event_window_ms": 17.617345809936523,
+              "host_window_ms": 17.69338,
+              "device_window_ms": 17.55236,
+              "device_event_disagreement": 0.0036887400995370143
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.895944,
+              "event_window_ms": 17.707021713256836,
+              "host_window_ms": 17.781587,
+              "device_window_ms": 17.56544,
+              "device_event_disagreement": 0.007995794863166523
+            }
+          ],
+          "end_to_end_ms": [
+            3.5736156666666665,
+            3.45196,
+            3.4228206666666665,
+            3.500162,
+            3.4978006666666666,
+            3.546507,
+            3.4640663333333332
+          ],
+          "device_median_ms": 0.0171453125,
+          "end_to_end_median_ms": 3.4978006666666666
+        }
+      },
+      "projected_over_static_device": 0.9973210573075603,
+      "projected_over_static_e2e": 1.001331845341046
+    },
+    {
+      "shape_mnk": [
+        512,
+        128,
+        256
+      ],
+      "arms": {
+        "static": {
+          "image_digest": "0b1a08086eddba318d47dc8e54d0d66511852d4281b63e21b97dd111c931ae8d",
+          "payload_sha256": "b4b46bd97b8e4df5e10d6e03a2c03db98edb1f2ab7ecb91a99bb053a2d579738",
+          "target_ir_sha256": "cc838e2cfde9eb278051101ad9a6f83405f337704acb8d328476753c9311999c",
+          "authored_target_ir_sha256": "2b0050a9cd57a9dd3cc40a3f231911c0b92dbfe34df9eb4811184add29730fbe",
+          "entry": "packed_folded_w4a8",
+          "compile_state": "cold",
+          "packaging_wall_ms": 245.34337,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              2,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.85257,
+              "event_window_ms": 30.758316040039062,
+              "host_window_ms": 30.860564,
+              "device_window_ms": 30.70773,
+              "device_event_disagreement": 0.0016446296986223675
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.85257,
+              "event_window_ms": 17.18692398071289,
+              "host_window_ms": 17.264282,
+              "device_window_ms": 17.1302,
+              "device_event_disagreement": 0.0033004149419958773
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.85257,
+              "event_window_ms": 16.582382202148438,
+              "host_window_ms": 16.659768,
+              "device_window_ms": 16.52552,
+              "device_event_disagreement": 0.003429073184736397
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.85257,
+              "event_window_ms": 16.78738784790039,
+              "host_window_ms": 16.939281,
+              "device_window_ms": 16.7486,
+              "device_event_disagreement": 0.002310535042844211
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.85257,
+              "event_window_ms": 16.53953742980957,
+              "host_window_ms": 16.616681,
+              "device_window_ms": 16.48456,
+              "device_event_disagreement": 0.0033240004469825717
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.85257,
+              "event_window_ms": 16.91180419921875,
+              "host_window_ms": 16.988074,
+              "device_window_ms": 16.7222,
+              "device_event_disagreement": 0.011211352555010544
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.85257,
+              "event_window_ms": 16.692995071411133,
+              "host_window_ms": 16.774285,
+              "device_window_ms": 16.6202,
+              "device_event_disagreement": 0.004360815485760435
+            }
+          ],
+          "end_to_end_ms": [
+            4.555598666666667,
+            5.443930333333333,
+            5.099684,
+            5.101485333333334,
+            5.181162666666666,
+            5.254659666666667,
+            5.352609666666667
+          ],
+          "device_median_ms": 0.0163302734375,
+          "end_to_end_median_ms": 5.181162666666666
+        },
+        "runtime_mn": {
+          "image_digest": "c99573885b97ac46f59b3bf6cda80195aa5b3c2ae892289316418aafeb74f05b",
+          "payload_sha256": "30e3bbb2362f0a782da6abbbd83d9be83b044f5ef86286e1d329db0dcf69448d",
+          "target_ir_sha256": "6609829a01459e499d965f776a7f49c8786db1b5e5a90eb7fda709ff9138fa99",
+          "authored_target_ir_sha256": "2b0050a9cd57a9dd3cc40a3f231911c0b92dbfe34df9eb4811184add29730fbe",
+          "entry": "tessera_rocm_folded_matmul_1e3502d4e15a9a05",
+          "compile_state": "warm_cache",
+          "packaging_wall_ms": 53.262849,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              2,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.656838,
+              "event_window_ms": 17.713211059570312,
+              "host_window_ms": 17.79276,
+              "device_window_ms": 17.62508,
+              "device_event_disagreement": 0.0049754422997571315
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.656838,
+              "event_window_ms": 17.36346435546875,
+              "host_window_ms": 17.440417,
+              "device_window_ms": 17.30596,
+              "device_event_disagreement": 0.003311801970592331
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.656838,
+              "event_window_ms": 16.790882110595703,
+              "host_window_ms": 16.951565,
+              "device_window_ms": 16.75236,
+              "device_event_disagreement": 0.002294227923343866
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.656838,
+              "event_window_ms": 16.634628295898438,
+              "host_window_ms": 16.793594,
+              "device_window_ms": 16.59568,
+              "device_event_disagreement": 0.002341398629751129
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.656838,
+              "event_window_ms": 16.578298568725586,
+              "host_window_ms": 16.665168,
+              "device_window_ms": 16.5202,
+              "device_event_disagreement": 0.0035044952583486383
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.656838,
+              "event_window_ms": 16.652463912963867,
+              "host_window_ms": 16.730162,
+              "device_window_ms": 16.5976,
+              "device_event_disagreement": 0.003294642357468553
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.656838,
+              "event_window_ms": 16.69022560119629,
+              "host_window_ms": 16.767813,
+              "device_window_ms": 16.63412,
+              "device_event_disagreement": 0.003361584351038867
+            }
+          ],
+          "end_to_end_ms": [
+            4.439641,
+            4.801912333333333,
+            5.237072333333333,
+            5.202987333333334,
+            5.186422666666666,
+            5.253393666666667,
+            5.224986333333333
+          ],
+          "device_median_ms": 0.0162442578125,
+          "end_to_end_median_ms": 5.202987333333334
+        }
+      },
+      "projected_over_static_device": 0.9947327504754159,
+      "projected_over_static_e2e": 1.0042123106473915
+    },
+    {
+      "shape_mnk": [
+        200,
+        80,
+        2048
+      ],
+      "arms": {
+        "static": {
+          "image_digest": "2cc86d889f3be6ccb539162a816ec11d9f94b0def9d327307e1ef6932dcac2ec",
+          "payload_sha256": "c00e624689493c38ff0003a9a86e9430c0d526ff4942756b688a4e1c2369cb0e",
+          "target_ir_sha256": "b230b1cd4bb5273bf62b90e46553111a36c97ffbd6454c8dde94aebba8efd36a",
+          "authored_target_ir_sha256": "d487e0eaa8e76edfdf6a257fc75f3cb83d2a835d197d0c7df9b839643b5ee0d3",
+          "entry": "packed_folded_w4a8",
+          "compile_state": "cold",
+          "packaging_wall_ms": 282.292414,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.939699,
+              "event_window_ms": 56.14316940307617,
+              "host_window_ms": 56.253755,
+              "device_window_ms": 56.08569,
+              "device_event_disagreement": 0.001023800467399742
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.939699,
+              "event_window_ms": 38.5259895324707,
+              "host_window_ms": 38.612475,
+              "device_window_ms": 38.4846,
+              "device_event_disagreement": 0.0010743275636260709
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.939699,
+              "event_window_ms": 38.43356704711914,
+              "host_window_ms": 38.515579,
+              "device_window_ms": 38.3906,
+              "device_event_disagreement": 0.0011179562663664374
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.939699,
+              "event_window_ms": 38.41978454589844,
+              "host_window_ms": 38.501212,
+              "device_window_ms": 38.37728,
+              "device_event_disagreement": 0.0011063192154984686
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.939699,
+              "event_window_ms": 38.40846252441406,
+              "host_window_ms": 38.492725,
+              "device_window_ms": 38.36748,
+              "device_event_disagreement": 0.001067018092380339
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.939699,
+              "event_window_ms": 38.466102600097656,
+              "host_window_ms": 38.548262,
+              "device_window_ms": 38.42512,
+              "device_event_disagreement": 0.0010654211715629461
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.939699,
+              "event_window_ms": 38.43455505371094,
+              "host_window_ms": 38.515099,
+              "device_window_ms": 38.3934,
+              "device_event_disagreement": 0.0010707826239545382
+            }
+          ],
+          "end_to_end_ms": [
+            6.141020666666667,
+            6.285911333333334,
+            5.9417816666666665,
+            5.987408666666667,
+            6.064995666666667,
+            6.270368333333334,
+            5.889033333333334
+          ],
+          "device_median_ms": 0.0374935546875,
+          "end_to_end_median_ms": 6.064995666666667
+        },
+        "runtime_mn": {
+          "image_digest": "da734e2eb56cacdf11cce610a8b5f8506aa3b700324adee5bf85ca3e4be8f8c4",
+          "payload_sha256": "8d9c3d2005f9d9c07ab972987b24f57428960493c99c04d63f908a0c6c346b33",
+          "target_ir_sha256": "feea93c07ba14e030d3054d648f63b050cf3312fe33fa934f1ee50e82e831394",
+          "authored_target_ir_sha256": "d487e0eaa8e76edfdf6a257fc75f3cb83d2a835d197d0c7df9b839643b5ee0d3",
+          "entry": "tessera_rocm_folded_matmul_93639235795023c0",
+          "compile_state": "cold",
+          "packaging_wall_ms": 261.197076,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.87262,
+              "event_window_ms": 39.68956756591797,
+              "host_window_ms": 39.823461,
+              "device_window_ms": 39.6452,
+              "device_event_disagreement": 0.0011178646843223656
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.87262,
+              "event_window_ms": 38.35063171386719,
+              "host_window_ms": 38.446448,
+              "device_window_ms": 38.22052,
+              "device_event_disagreement": 0.0033926876312741407
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.87262,
+              "event_window_ms": 38.3199577331543,
+              "host_window_ms": 38.397805,
+              "device_window_ms": 38.26464,
+              "device_event_disagreement": 0.0014435750044274234
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.87262,
+              "event_window_ms": 38.4165153503418,
+              "host_window_ms": 38.501321,
+              "device_window_ms": 38.3752,
+              "device_event_disagreement": 0.0010754580410279131
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.87262,
+              "event_window_ms": 38.29753494262695,
+              "host_window_ms": 38.381654,
+              "device_window_ms": 38.25576,
+              "device_event_disagreement": 0.0010907997783547538
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.87262,
+              "event_window_ms": 38.361854553222656,
+              "host_window_ms": 38.481301,
+              "device_window_ms": 38.3188,
+              "device_event_disagreement": 0.0011223272108213625
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.87262,
+              "event_window_ms": 38.22206497192383,
+              "host_window_ms": 38.353206,
+              "device_window_ms": 38.18016,
+              "device_event_disagreement": 0.0010963555201585478
+            }
+          ],
+          "end_to_end_ms": [
+            6.256639,
+            6.043398,
+            6.1062590000000005,
+            5.9876846666666665,
+            6.090839,
+            6.037704333333333,
+            5.956218
+          ],
+          "device_median_ms": 0.0373678125,
+          "end_to_end_median_ms": 6.043398
+        }
+      },
+      "projected_over_static_device": 0.9966462985825689,
+      "projected_over_static_e2e": 0.9964389642048108
+    },
+    {
+      "shape_mnk": [
+        256,
+        80,
+        2048
+      ],
+      "arms": {
+        "static": {
+          "image_digest": "f6311deef47626f4cf8bbb11c620cdbdab0d6880569d515cf866568dfd34968f",
+          "payload_sha256": "edf521bca47a4b24c0274c78add6c05c99396653644ed79fa32eddd50edc28d0",
+          "target_ir_sha256": "882cc08d28020fcdb955b1c28e0e0180e7c407f45189ca59e7058da3841ea9c9",
+          "authored_target_ir_sha256": "4adb867b6c626d5bd8c871c6a9a05d4f0a642372f466769e8ccd72ad288eff58",
+          "entry": "packed_folded_w4a8",
+          "compile_state": "cold",
+          "packaging_wall_ms": 278.831984,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.932363,
+              "event_window_ms": 55.36601638793945,
+              "host_window_ms": 55.463587,
+              "device_window_ms": 55.30708,
+              "device_event_disagreement": 0.001064486697516715
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.932363,
+              "event_window_ms": 37.84121322631836,
+              "host_window_ms": 37.965357,
+              "device_window_ms": 37.79984,
+              "device_event_disagreement": 0.001093337733938755
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.932363,
+              "event_window_ms": 37.8476676940918,
+              "host_window_ms": 37.994788,
+              "device_window_ms": 37.8076,
+              "device_event_disagreement": 0.0010586568878074058
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.932363,
+              "event_window_ms": 37.846248626708984,
+              "host_window_ms": 37.929481,
+              "device_window_ms": 37.8034,
+              "device_event_disagreement": 0.0011321763256277309
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.932363,
+              "event_window_ms": 37.79845428466797,
+              "host_window_ms": 37.880969,
+              "device_window_ms": 37.75828,
+              "device_event_disagreement": 0.0010628552259150264
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.932363,
+              "event_window_ms": 37.72896957397461,
+              "host_window_ms": 37.811426,
+              "device_window_ms": 37.68784,
+              "device_event_disagreement": 0.0010901324483290197
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.932363,
+              "event_window_ms": 37.7122802734375,
+              "host_window_ms": 37.858433,
+              "device_window_ms": 37.67136,
+              "device_event_disagreement": 0.0010850649480965509
+            }
+          ],
+          "end_to_end_ms": [
+            5.8975203333333335,
+            5.612685,
+            5.6307849999999995,
+            5.806302,
+            5.470594999999999,
+            5.763694,
+            5.725004666666667
+          ],
+          "device_median_ms": 0.03691390625,
+          "end_to_end_median_ms": 5.725004666666667
+        },
+        "runtime_mn": {
+          "image_digest": "75d17652c2bb0016767a786d68de15b2825bf9a61ef845c0ab6b71c774650637",
+          "payload_sha256": "ccbe9399f011ff3446ed301e6ea27cd0097e9beecdc43e103805f6446c08a684",
+          "target_ir_sha256": "f33d001a5d8a460ae506edb822c2b997534a9d50fb27eb1ac960fdf0aab3576b",
+          "authored_target_ir_sha256": "4adb867b6c626d5bd8c871c6a9a05d4f0a642372f466769e8ccd72ad288eff58",
+          "entry": "tessera_rocm_folded_matmul_b351838da252e543",
+          "compile_state": "cold",
+          "packaging_wall_ms": 258.629037,
+          "correctness": "independent_oracle_bitwise_bf16",
+          "geometry": {
+            "grid": [
+              2,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.791234,
+              "event_window_ms": 38.64070510864258,
+              "host_window_ms": 38.861389,
+              "device_window_ms": 38.60068,
+              "device_event_disagreement": 0.0010358275950204882
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.791234,
+              "event_window_ms": 37.410423278808594,
+              "host_window_ms": 37.492107,
+              "device_window_ms": 37.36928,
+              "device_event_disagreement": 0.0010997811626444836
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.791234,
+              "event_window_ms": 37.40301513671875,
+              "host_window_ms": 37.523193,
+              "device_window_ms": 37.36188,
+              "device_event_disagreement": 0.0010997813028813309
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.791234,
+              "event_window_ms": 37.40093994140625,
+              "host_window_ms": 37.484116,
+              "device_window_ms": 37.36112,
+              "device_event_disagreement": 0.0010646775580676257
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.791234,
+              "event_window_ms": 37.34367752075195,
+              "host_window_ms": 37.463699,
+              "device_window_ms": 37.30276,
+              "device_event_disagreement": 0.001095701427081356
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.791234,
+              "event_window_ms": 37.41691970825195,
+              "host_window_ms": 37.498429,
+              "device_window_ms": 37.30216,
+              "device_event_disagreement": 0.0030670538661856576
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.791234,
+              "event_window_ms": 37.29247283935547,
+              "host_window_ms": 37.377247,
+              "device_window_ms": 37.14064,
+              "device_event_disagreement": 0.004071407117718377
+            }
+          ],
+          "end_to_end_ms": [
+            5.650429666666667,
+            5.552030333333334,
+            5.693135333333333,
+            5.781975666666667,
+            5.569644333333333,
+            5.662799333333333,
+            5.772637666666667
+          ],
+          "device_median_ms": 0.03648546875,
+          "end_to_end_median_ms": 5.662799333333333
+        }
+      },
+      "projected_over_static_device": 0.9883936016660387,
+      "projected_over_static_e2e": 0.9891344484493578
+    }
+  ]
+}

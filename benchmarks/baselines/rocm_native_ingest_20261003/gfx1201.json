@@ -1,0 +1,128 @@
+{
+  "schema": "tessera.gfx1201.native_ingest_leaf.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "host": "tajasarus",
+  "rows": [
+    {
+      "shape_nk": [
+        67,
+        256
+      ],
+      "row_offsets": [
+        0,
+        33,
+        67
+      ],
+      "projection_globals": [
+        0.5,
+        2.0
+      ],
+      "host_oracle_ms": 3.662399,
+      "compile_ms": 3617.371797,
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "522500d7ffd26d16874ed6b17d4d8919dfe01f372dd8022d7695906141fb03a2",
+      "target_sha256": "dd3f6a5df95713a396109557bc3e99f34cce472a235ac373f2bc28f54125f8dd",
+      "hsaco_sha256": "4b3ace31777aa346fd9448bb13770dc2ce8863a8a591dd6579f4f10a96be4d46",
+      "route": "native ROCm Target IR->GPU MLIR->ROCDL/LLVM->HSACO",
+      "frontend_schedule_tile_integrated": false,
+      "selector_promotion": false,
+      "resident_event_ms": [
+        0.17555389404296876,
+        0.163762104511261,
+        0.16308209896087647
+      ],
+      "timing_scope": "HIP event window over ten resident launches; includes device dispatch",
+      "correctness": "packed codes/exponents bitwise and independent f64 signal/error verified after timing",
+      "resident_event_median_ms": 0.163762104511261,
+      "source_sha256": {
+        "gate": "972bcc4d97aa6160e95240a66ae6d2a5c9ded550009addf4dcf0d2d9bcfe6c0b",
+        "up": "cec3298360584a35e4016314ad580d4503e118db19d00dac9b2d2db8ca4a62d4"
+      }
+    },
+    {
+      "shape_nk": [
+        513,
+        1024
+      ],
+      "row_offsets": [
+        0,
+        256,
+        513
+      ],
+      "projection_globals": [
+        0.5,
+        2.0
+      ],
+      "host_oracle_ms": 82.703127,
+      "compile_ms": 3815.71422,
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "522500d7ffd26d16874ed6b17d4d8919dfe01f372dd8022d7695906141fb03a2",
+      "target_sha256": "d26468e44f36affa21e188a2e7b55c4d786ddb87839eed075c6457a662d30b0d",
+      "hsaco_sha256": "31c6c4b528bcefc44b2f6e38bfe00b4cef20419901b4d9b16345321dfb4ae3d7",
+      "route": "native ROCm Target IR->GPU MLIR->ROCDL/LLVM->HSACO",
+      "frontend_schedule_tile_integrated": false,
+      "selector_promotion": false,
+      "resident_event_ms": [
+        0.7372797966003418,
+        0.3708138942718506,
+        0.33934409618377687
+      ],
+      "timing_scope": "HIP event window over ten resident launches; includes device dispatch",
+      "correctness": "packed codes/exponents bitwise and independent f64 signal/error verified after timing",
+      "resident_event_median_ms": 0.3708138942718506,
+      "source_sha256": {
+        "gate": "1dac2fe4c382c0b8188ba55338d84bab3c158f6ed6d10764334f86725646e105",
+        "up": "f839b7d753bd74aeebeee157050787c1d7e7edfb5d9bc46c2bec438ec41c3f63"
+      }
+    },
+    {
+      "shape_nk": [
+        4097,
+        4096
+      ],
+      "row_offsets": [
+        0,
+        2048,
+        4097
+      ],
+      "projection_globals": [
+        0.5,
+        2.0
+      ],
+      "host_oracle_ms": 2606.914399,
+      "compile_ms": 3559.919857,
+      "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+      "toolchain_fingerprint": "522500d7ffd26d16874ed6b17d4d8919dfe01f372dd8022d7695906141fb03a2",
+      "target_sha256": "30cd11676aa1d4e28219867b83ffa1c714d1dbfc26f62e5e345d490904f52101",
+      "hsaco_sha256": "4e527296634298a22bbbb60f76272755889b2bfe244cca5d6c9a91dc70750bf1",
+      "route": "native ROCm Target IR->GPU MLIR->ROCDL/LLVM->HSACO",
+      "frontend_schedule_tile_integrated": false,
+      "selector_promotion": false,
+      "resident_event_ms": [
+        7.242225646972656,
+        7.034739685058594,
+        7.038248443603516
+      ],
+      "timing_scope": "HIP event window over ten resident launches; includes device dispatch",
+      "correctness": "packed codes/exponents bitwise and independent f64 signal/error verified after timing",
+      "resident_event_median_ms": 7.038248443603516,
+      "source_sha256": {
+        "gate": "e2855f29124ee29227458588134eb544bc1f8436e21e196d69a41b0d1ec65547",
+        "up": "ecfc8be605e8b2a6d3848658765df6b37273e649848bbac8932f2ef927b24fc8"
+      }
+    }
+  ],
+  "compiler_sha256": "5863a1bbd725dc948dc973d549d7f773a8520d73402577e125e0fc2941970d47",
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_native_nvfp4_ingest_leaf.py": "a3026696ca8712018bb079f74fcc86544f1207a3abc6ab4e189410464ab17eb6",
+    "tests/device/rocm/test_native_nvfp4_ingest_leaf.py": "c9a9ffd80136084a4cf37a31e6e14436d650e7c96edbd993f10881aab415865c",
+    "python/tessera/compiler/rocm_nvfp4_ingest.py": "c8b3420c8da62847da9730bbca38170b7a9c08f65911be887e772aed5220d37b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h": "8523a4b83a453d0522f6e57362633674d1cf648cd36562d3d66de6e16bb57b3c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp": "523bc7bdf0629e7e3831a761bfd05bd576f32f5931f3145e00fa544e53c1a9df",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/IR/TesseraROCMOps.cpp": "ee606de2e0a38e24f718359dee962a0698c2405158e1977fc7eb6b854a53ca25",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "5df53e9def9360ddbc46c105747b209f606f20c32d4d8fcb9de5871457e54fdd"
+  },
+  "boundary": "physical leaf; checked ABI and Graph/Schedule/Tile integration pending"
+}

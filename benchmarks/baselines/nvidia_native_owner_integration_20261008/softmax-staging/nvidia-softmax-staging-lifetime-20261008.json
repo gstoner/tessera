@@ -1,0 +1,174 @@
+{
+  "scope": "owning RTX5070 synchronous grow/shrink and interleaved matmul arena lifetime numerics; no concurrency or performance claim",
+  "runtime_path": "/home/angstorms/scratch/nvidia-softmax-staging-candidate-20261008/libtessera_nvidia_ptx_launch.so",
+  "runtime_sha256": "3e7ecd6be869d37cd074e3abc5a422e2598880058ba2247b3a78fc3895c44a88",
+  "source_sha256": "52e96727c535ccf08672c7de783f9869c196ebab25aa3c9367ad525509bb75e4",
+  "retained_results": 18,
+  "matmul_interleaves": 9,
+  "rows": [
+    {
+      "shape": [
+        3,
+        1
+      ],
+      "dtype": "fp32",
+      "kind": "safe",
+      "max_abs_error": 0.0
+    },
+    {
+      "shape": [
+        3,
+        1
+      ],
+      "dtype": "fp32",
+      "kind": "ordinary",
+      "max_abs_error": 0.0
+    },
+    {
+      "shape": [
+        17,
+        257
+      ],
+      "dtype": "fp16",
+      "kind": "safe",
+      "max_abs_error": 3.0051467845487734e-05
+    },
+    {
+      "shape": [
+        17,
+        257
+      ],
+      "dtype": "fp16",
+      "kind": "ordinary",
+      "max_abs_error": 3.0051467845487734e-05
+    },
+    {
+      "shape": [
+        129,
+        513
+      ],
+      "dtype": "bf16",
+      "kind": "safe",
+      "max_abs_error": 0.00011909012195368551
+    },
+    {
+      "shape": [
+        129,
+        513
+      ],
+      "dtype": "bf16",
+      "kind": "ordinary",
+      "max_abs_error": 0.00011909012195368551
+    },
+    {
+      "shape": [
+        1,
+        1
+      ],
+      "dtype": "bf16",
+      "kind": "safe",
+      "max_abs_error": 0.0
+    },
+    {
+      "shape": [
+        1,
+        1
+      ],
+      "dtype": "bf16",
+      "kind": "ordinary",
+      "max_abs_error": 0.0
+    },
+    {
+      "shape": [
+        257,
+        1025
+      ],
+      "dtype": "fp32",
+      "kind": "safe",
+      "max_abs_error": 3.257790566479901e-08
+    },
+    {
+      "shape": [
+        257,
+        1025
+      ],
+      "dtype": "fp32",
+      "kind": "ordinary",
+      "max_abs_error": 3.257790566479901e-08
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "dtype": "fp16",
+      "kind": "safe",
+      "max_abs_error": 0.00013947762264887587
+    },
+    {
+      "shape": [
+        3,
+        17
+      ],
+      "dtype": "fp16",
+      "kind": "ordinary",
+      "max_abs_error": 0.00013947762264887587
+    },
+    {
+      "shape": [
+        17,
+        35
+      ],
+      "dtype": "bf16",
+      "kind": "safe",
+      "max_abs_error": 0.0018467492672707975
+    },
+    {
+      "shape": [
+        17,
+        35
+      ],
+      "dtype": "bf16",
+      "kind": "ordinary",
+      "max_abs_error": 0.0018467492672707975
+    },
+    {
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "dtype": "fp32",
+      "kind": "safe",
+      "max_abs_error": 1.621461018924686e-08
+    },
+    {
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "dtype": "fp32",
+      "kind": "ordinary",
+      "max_abs_error": 1.621461018924686e-08
+    },
+    {
+      "shape": [
+        3,
+        1
+      ],
+      "dtype": "fp16",
+      "kind": "safe",
+      "max_abs_error": 0.0
+    },
+    {
+      "shape": [
+        3,
+        1
+      ],
+      "dtype": "fp16",
+      "kind": "ordinary",
+      "max_abs_error": 0.0
+    }
+  ]
+}

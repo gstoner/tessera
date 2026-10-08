@@ -1,0 +1,69 @@
+{
+  "emission_sha256": {
+    "a_base": "1dde16905bbe19bca402babf0a8819d436c802e493619f1bea0fcb5006788e96",
+    "a_offset32": "c4aa306e26504512383581452cb01c0f26442842b70161f24fa9638561462053",
+    "batched_a": "b41dcb58637b2548d05919d55cff4469a5ea565cdab6c7ddfdf857e94fdaff2e",
+    "batched_ab": "a1d5df05a0028a03ff334309d185e37c218da8d863bd5c7f1467413e7b816bab",
+    "batched_b": "efacaf21f409fd68a3c4a554f5e3e43e4c06abf40034cc7467f8962a513f297f",
+    "batched_b_pair_scale": "170a82d588f5a2ee75b577d8dec2fb6008daa8ba2baa26da6ea64cf00ebe21ea",
+    "integer": "862979724c50ad73970a998005c12fc0bfdbe5a9efc97b87029f06d755bb4c8a",
+    "permute": "64a80d5f8d0df8682de752cefd6cb203709472b02fa5b471913e6e46ab154bbb",
+    "table": "cea1ea848430ef034c1ecb10eee7939ded2247823cd78daa0c53b6e1f11335fe",
+    "vector_pair": "1f5b8ac3678b36866b48e0df8123fe1a8150fcf002d6004b32f872c84b4851cb"
+  },
+  "flags": {
+    "a_base": {
+      "a_base_hoist": true,
+      "batched_loads": true,
+      "integer_decode": false,
+      "permute_decode": true
+    },
+    "a_offset32": {
+      "a_offset32": true,
+      "batched_loads": true,
+      "integer_decode": false,
+      "permute_decode": true
+    },
+    "batched_a": {
+      "batched_a_loads": true,
+      "integer_decode": true
+    },
+    "batched_ab": {
+      "batched_a_loads": true,
+      "batched_loads": true,
+      "integer_decode": true
+    },
+    "batched_b": {
+      "batched_loads": true,
+      "integer_decode": true
+    },
+    "batched_b_pair_scale": {
+      "batched_loads": true,
+      "integer_decode": true,
+      "reuse_pair_scales": true
+    },
+    "integer": {
+      "integer_decode": true
+    },
+    "permute": {
+      "batched_loads": true,
+      "integer_decode": false,
+      "permute_decode": true
+    },
+    "table": {
+      "integer_decode": false
+    },
+    "vector_pair": {
+      "integer_decode": false,
+      "permute_decode": true,
+      "vector_pair_loads": true
+    }
+  },
+  "generator_path": "python/tessera/compiler/rocm_mxfp4_packed_folded.py",
+  "historical_generator_sha256": "5b1bb88cdaf5d32ad2f20964f7dcf09be6a191fa30f4bd7e7ea0e698b0b9601e",
+  "historical_revision": "993c009d7",
+  "inspected_current_file_sha256": "70b5177f955a88ad3c6d4d84821277b34f0edd2c0fc5ed7e125309b6c75c1d04",
+  "recorder_sha256": "033cd78e5af118bdddcbfb2a0a6da02d6df4a14d5b211d4d205cc4035fb0c6fb",
+  "schema": "tessera.rocm.packed_legacy_emission_identity.v1",
+  "scope": "all ten recorded packed probe variants; emitted HIP source only, not fresh device timings"
+}

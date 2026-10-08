@@ -1,0 +1,16 @@
+........................................................................ [ 13%]
+........................................................................ [ 26%]
+........................................................................ [ 40%]
+........................................................................ [ 53%]
+........................................................................ [ 67%]
+........................................................................ [ 80%]
+........................................................................ [ 93%]
+.................................                                        [100%]
+=============================== warnings summary ===============================
+tests/unit/test_native_artifact_contract.py::test_cached_dtype_spelling_does_not_cache_invocation_shape_or_layout
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_native_artifact_contract.py:376: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+  As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+    value.shape = (3, 2)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+537 passed, 1 warning in 14.22s

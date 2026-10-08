@@ -1,0 +1,1195 @@
+[  2%] Built target TesseraLinalgSolverTableGen
+[  6%] Built target tessera_solvers_passes
+[  6%] Built target tessera_layout_algebra
+[  6%] Building Tessera/AdjointInterface.h.inc...
+[  6%] Built target mlir-headers
+[  6%] Building Tessera/AdjointInterface.cpp.inc...
+[  6%] Built target mlir-generic-headers
+[  6%] Built target TesseraAdjointInterfaceTableGen
+[  8%] Built target TesseraCollectiveTypesIncGen
+[ 10%] Built target TesseraPMTableGen
+[ 12%] Built target TesseraAttnTableGen
+[ 15%] Built target TesseraNeighbors
+[ 15%] Building TesseraROCMDialect.h.inc...
+[ 15%] Built target DialectSR
+[ 16%] Building TesseraROCMDialect.cpp.inc...
+[ 16%] Building TesseraROCMTypes.h.inc...
+[ 19%] Built target TesseraTPPPasses
+[ 19%] Building TesseraROCMTypes.cpp.inc...
+[ 19%] Built target TPPGen
+[ 20%] Built target TesseraROCMTableGen
+[ 20%] Built target TesseraSpectralHIP
+[ 20%] Building Tessera/LinearTransposeInterface.h.inc...
+[ 21%] Built target tessera_linalg_solver_passes
+[ 21%] Building Tessera/LinearTransposeInterface.cpp.inc...
+[ 23%] Built target TesseraCollectiveOpsIncGen
+[ 23%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 24%] Built target obj.TesseraROCMIR
+[ 27%] Built target TesseraSR
+[ 28%] Built target TPPTypesGen
+[ 28%] Building Tessera/TangentInterface.h.inc...
+[ 30%] Built target obj.TesseraCollectiveDialect
+[ 31%] Building Tessera/TangentInterface.cpp.inc...
+[ 31%] Built target TesseraROCMIR
+[ 31%] Built target TesseraTangentInterfaceTableGen
+[ 32%] Built target TPPAttrsGen
+[ 34%] Built target TesseraCollectiveDialect
+[ 35%] Built target TPPOpsGen
+[ 35%] Building TesseraOpsDialect.h.inc...
+[ 35%] Built target obj.TesseraTPPDialect
+[ 36%] Building TesseraOpsDialect.cpp.inc...
+[ 36%] Building TesseraOpsEnums.h.inc...
+[ 36%] Building TesseraOpsEnums.cpp.inc...
+[ 36%] Building TesseraOpsTypes.h.inc...
+[ 38%] Building TesseraOpsTypes.cpp.inc...
+[ 39%] Built target TesseraTPPDialect
+[ 39%] Built target TesseraIRTableGen
+[ 39%] Built target TesseraTPPInit
+[ 41%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 41%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 42%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 42%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 42%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 42%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 42%] Built target TesseraTileIRTableGen
+[ 45%] Built target obj.TesseraIR
+[ 45%] Built target TesseraIR
+[ 45%] Built target TesseraScheduleIR
+[ 45%] Built target obj.TesseraAttnDialect
+[ 45%] Built target TesseraAttnDialect
+[ 46%] Built target TesseraPM
+[ 68%] Built target TesseraPasses
+[ 68%] Building CXX object src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/CMakeFiles/obj.TesseraROCMConversion.dir/GenerateROCMFpQuantKernel.cpp.o
+In file included from /home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:32:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In function ‘llvm::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp, mlir::Operation*)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:21:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUModuleOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   21 |   auto gm = b.create<gpu::GPUModuleOp>(l, name + "_mod");
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/PatternMatch.h:12,
+                 from /home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/Interfaces/ControlFlowInterfaces.h:19,
+                 from /home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/Dialect/Arith/IR/Arith.h:17,
+                 from /home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:20:
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:25:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUFuncOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, mlir::FunctionType}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   25 |   auto f = b.create<gpu::GPUFuncOp>(
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~^
+   26 |       l, name, b.getFunctionType({bytes, bytes, doubles, bytes, bytes, doubles}, {}));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:30:78: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIndexOp; Args = {long int&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   30 |   auto ci = [&](int64_t v) -> Value { return b.create<arith::ConstantIndexOp>(l, v); };
+      |                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:31:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   31 |   auto c32 = [&](int64_t v) -> Value { return b.create<arith::ConstantIntOp>(l, v, 32); };
+      |                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:32:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {long int&, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   32 |   auto c64 = [&](int64_t v) -> Value { return b.create<arith::ConstantIntOp>(l, v, 64); };
+      |                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:34:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::FloatType, mlir::FloatAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   34 |     return b.create<arith::ConstantOp>(l, b.getF64Type(), b.getF64FloatAttr(v));
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:36:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   36 |   auto add = [&](Value a, Value v) -> Value { return b.create<arith::AddFOp>(l, a, v); };
+      |                                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:37:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SubFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   37 |   auto sub = [&](Value a, Value v) -> Value { return b.create<arith::SubFOp>(l, a, v); };
+      |                                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:38:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   38 |   auto mul = [&](Value a, Value v) -> Value { return b.create<arith::MulFOp>(l, a, v); };
+      |                                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:39:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   39 |   auto div = [&](Value a, Value v) -> Value { return b.create<arith::DivFOp>(l, a, v); };
+      |                                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:41:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   41 |     return b.create<arith::CmpIOp>(l, arith::CmpIPredicate::eq, a, v);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:44:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   44 |     return b.create<arith::SelectOp>(l, predicate, a, v);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:47:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ExtSIOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   47 |     Value wide = b.create<arith::ExtSIOp>(l, b.getI64Type(), exponent);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:49:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   49 |         l, b.create<arith::AddIOp>(l, wide, c64(1023)), c64(52));
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:48:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ShLIOp; Args = {mlir::arith::AddIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   48 |     Value bits = b.create<arith::ShLIOp>(
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~^
+   49 |         l, b.create<arith::AddIOp>(l, wide, c64(1023)), c64(52));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:50:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::BitcastOp; Args = {mlir::FloatType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   50 |     return b.create<arith::BitcastOp>(l, b.getF64Type(), bits);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In function ‘llvm::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp, mlir::Operation*)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:64:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::BlockIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   64 |   Value block = b.create<gpu::BlockIdOp>(l, gpu::Dimension::x);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:65:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ThreadIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   65 |   Value thread = b.create<gpu::ThreadIdOp>(l, gpu::Dimension::x);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:67:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   67 |       l, b.create<arith::MulIOp>(l, block, ci(256)), thread);
+      |          ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:66:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::arith::MulIOp, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   66 |   Value index = b.create<arith::AddIOp>(
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~^
+   67 |       l, b.create<arith::MulIOp>(l, block, ci(256)), thread);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:68:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   68 |   Value active = b.create<arith::CmpIOp>(l, arith::CmpIPredicate::ult, index, ci(n * groups));
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:69:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::IfOp; Args = {mlir::Value&, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   69 |   auto guard = b.create<scf::IfOp>(l, active, false);
+      |                ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:71:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivUIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   71 |   Value row = b.create<arith::DivUIOp>(l, index, ci(groups));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:72:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::RemUIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   72 |   Value group = b.create<arith::RemUIOp>(l, index, ci(groups));
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:75:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   75 |     Value after = b.create<arith::CmpIOp>(
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^
+   76 |         l, arith::CmpIPredicate::uge, row, ci(cast<IntegerAttr>(offsets[p]).getInt()));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:79:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   79 |   Value global = b.create<memref::LoadOp>(l, f.getArgument(2), ValueRange{projection});
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:83:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   83 |         l, b.create<arith::MulIOp>(l, row, ci(k / 16)),
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:84:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   84 |         b.create<arith::AddIOp>(l, b.create<arith::MulIOp>(l, group, ci(2)), ci(half)));
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:84:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::arith::MulIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   84 |         b.create<arith::AddIOp>(l, b.create<arith::MulIOp>(l, group, ci(2)), ci(half)));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:82:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::arith::MulIOp, mlir::arith::AddIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   82 |     Value scaleIndex = b.create<arith::AddIOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~^
+   83 |         l, b.create<arith::MulIOp>(l, row, ci(k / 16)),
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   84 |         b.create<arith::AddIOp>(l, b.create<arith::MulIOp>(l, group, ci(2)), ci(half)));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:85:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   85 |     Value raw = b.create<memref::LoadOp>(l, f.getArgument(1), ValueRange{scaleIndex});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:86:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ExtUIOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   86 |     Value bits = b.create<arith::ExtUIOp>(l, b.getI32Type(), raw);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:88:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ShRUIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   88 |         l, b.create<arith::ShRUIOp>(l, bits, c32(3)), c32(15));
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:87:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::arith::ShRUIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   87 |     Value exponent = b.create<arith::AndIOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~^
+   88 |         l, b.create<arith::ShRUIOp>(l, bits, c32(3)), c32(15));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:89:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   89 |     Value fraction = b.create<arith::AndIOp>(l, bits, c32(7));
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:91:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   91 |         l, b.getF64Type(), b.create<arith::AddIOp>(l, fraction, c32(8))),
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:90:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::UIToFPOp; Args = {mlir::FloatType, mlir::arith::AddIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   90 |     Value normal = mul(b.create<arith::UIToFPOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~^
+   91 |         l, b.getF64Type(), b.create<arith::AddIOp>(l, fraction, c32(8))),
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:92:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SubIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   92 |         pow2(b.create<arith::SubIOp>(l, exponent, c32(10))));
+      |              ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:93:52: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::UIToFPOp; Args = {mlir::FloatType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   93 |     Value subnormal = mul(b.create<arith::UIToFPOp>(l, b.getF64Type(), fraction), cf(0x1p-9));
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:106:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  106 |       l, b.create<arith::MulIOp>(l, row, ci(k / 2)),
+      |          ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:107:30: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  107 |       b.create<arith::MulIOp>(l, group, ci(16)));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:105:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::arith::MulIOp, mlir::arith::MulIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  105 |   Value packedBase = b.create<arith::AddIOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~^
+  106 |       l, b.create<arith::MulIOp>(l, row, ci(k / 2)),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  107 |       b.create<arith::MulIOp>(l, group, ci(16)));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:109:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  109 |     Value address = b.create<arith::AddIOp>(l, packedBase, ci(j));
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:111:52: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  111 |         l, b.getI32Type(), b.create<memref::LoadOp>(l, f.getArgument(0), ValueRange{address})));
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:110:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ExtUIOp; Args = {mlir::IntegerType, mlir::memref::LoadOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  110 |     sourceBytes.push_back(b.create<arith::ExtUIOp>(
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~^
+  111 |         l, b.getI32Type(), b.create<memref::LoadOp>(l, f.getArgument(0), ValueRange{address})));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:116:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ShRUIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  116 |         l, b.create<arith::ShRUIOp>(l, sourceBytes[j / 2], c32((j % 2) * 4)), c32(15));
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:115:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::arith::ShRUIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  115 |     Value code = b.create<arith::AndIOp>(
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~^
+  116 |         l, b.create<arith::ShRUIOp>(l, sourceBytes[j / 2], c32((j % 2) * 4)), c32(15));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:117:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  117 |     Value magnitude = magnitudeValue(b.create<arith::AndIOp>(l, code, c32(7)));
+      |                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:119:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  119 |         l, arith::CmpIPredicate::ne, b.create<arith::AndIOp>(l, code, c32(8)), c32(0));
+      |                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:118:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::arith::AndIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  118 |     Value negative = b.create<arith::CmpIOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~^
+  119 |         l, arith::CmpIPredicate::ne, b.create<arith::AndIOp>(l, code, c32(8)), c32(0));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:120:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::NegFOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  120 |     Value value = mul(choose(negative, b.create<arith::NegFOp>(l, magnitude), magnitude), scales[j / 16]);
+      |                                        ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:128:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MaximumFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  128 |   Value maxScale = b.create<arith::MaximumFOp>(l, scales[0], scales[1]);
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:129:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  129 |   Value mean = choose(b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, total, cf(0)),
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:131:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::BitcastOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  131 |   Value meanBits = b.create<arith::BitcastOp>(l, b.getI64Type(), mean);
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:135:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ShRUIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  135 |               l, b.create<arith::ShRUIOp>(l, meanBits, c64(52)), c64(2047)), c64(1023)));
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:134:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::arith::ShRUIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  134 |           l, b.create<arith::AndIOp>(
+      |              ~~~~~~~~~~~~~~~~~~~~~~~^
+  135 |               l, b.create<arith::ShRUIOp>(l, meanBits, c64(52)), c64(2047)), c64(1023)));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:133:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SubIOp; Args = {mlir::arith::AndIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  133 |       l, b.getI32Type(), b.create<arith::SubIOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~^
+  134 |           l, b.create<arith::AndIOp>(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~            
+  135 |               l, b.create<arith::ShRUIOp>(l, meanBits, c64(52)), c64(2047)), c64(1023)));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:132:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::TruncIOp; Args = {mlir::IntegerType, mlir::arith::SubIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  132 |   Value floor = b.create<arith::TruncIOp>(
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  133 |       l, b.getI32Type(), b.create<arith::SubIOp>(
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  134 |           l, b.create<arith::AndIOp>(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+  135 |               l, b.create<arith::ShRUIOp>(l, meanBits, c64(52)), c64(2047)), c64(1023)));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:138:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MaxSIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  138 |         l, b.create<arith::MaxSIOp>(l, exponent, c32(-126)), c32(127));
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:137:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MinSIOp; Args = {mlir::arith::MaxSIOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  137 |     return b.create<arith::MinSIOp>(
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~^
+  138 |         l, b.create<arith::MaxSIOp>(l, exponent, c32(-126)), c32(127));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h: In function ‘llvm::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp, mlir::Operation*)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:140:68: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  140 |   Value lower = clamp(floor), upper = clamp(b.create<arith::AddIOp>(l, floor, c32(1)));
+      |                                             ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:150:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  150 |   Value seed = choose(b.create<arith::CmpFOp>(
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~^
+  151 |       l, arith::CmpFPredicate::OLT, seedError(upper), seedError(lower)), upper, lower);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:152:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  152 |   seed = choose(b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, mean, cf(0)), seed, c32(0));
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:157:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  157 |     Value exponent = b.create<arith::AddIOp>(l, seed, c32(delta));
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:159:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  159 |         l, b.create<arith::CmpIOp>(l, arith::CmpIPredicate::sge, exponent, c32(-126)),
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:160:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  160 |         b.create<arith::CmpIOp>(l, arith::CmpIPredicate::sle, exponent, c32(127)));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:158:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::arith::CmpIOp, mlir::arith::CmpIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  158 |     Value valid = b.create<arith::AndIOp>(
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^
+  159 |         l, b.create<arith::CmpIOp>(l, arith::CmpIPredicate::sge, exponent, c32(-126)),
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  160 |         b.create<arith::CmpIOp>(l, arith::CmpIPredicate::sle, exponent, c32(127)));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:167:52: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SubIOp; Args = {mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  167 |     Value reciprocal = pow2(b.create<arith::SubIOp>(l, c32(0), boundedExponent));
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:170:52: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::math::AbsFOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  170 |       Value normalized = mul(b.create<math::AbsFOp>(l, values[j]), reciprocal);
+      |                              ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:175:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  175 |                 l, b.getI32Type(), b.create<arith::CmpFOp>(
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~^
+  176 |                     l, arith::CmpFPredicate::OGT, normalized, cf(midpoint))));
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:174:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ExtUIOp; Args = {mlir::IntegerType, mlir::arith::CmpFOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  174 |             l, magnitude, b.create<arith::ExtUIOp>(
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~^
+  175 |                 l, b.getI32Type(), b.create<arith::CmpFOp>(
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  176 |                     l, arith::CmpFPredicate::OGT, normalized, cf(midpoint))));
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:173:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::arith::ExtUIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  173 |         magnitude = b.create<arith::AddIOp>(
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~^
+  174 |             l, magnitude, b.create<arith::ExtUIOp>(
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  175 |                 l, b.getI32Type(), b.create<arith::CmpFOp>(
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  176 |                     l, arith::CmpFPredicate::OGT, normalized, cf(midpoint))));
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:177:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  177 |       Value negative = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, values[j], cf(0));
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:178:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::OrIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  178 |       codes.push_back(b.create<arith::OrIOp>(l, magnitude, choose(negative, c32(8), c32(0))));
+      |                       ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:179:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::NegFOp; Args = {mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  179 |       Value decoded = mul(choose(negative, b.create<arith::NegFOp>(
+      |                                            ~~~~~~~~~~~~~~~~~~~~~~~^
+  180 |           l, magnitudeValue(magnitude)), magnitudeValue(magnitude)), scale);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                            
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:185:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  185 |     Value equal = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OEQ, error, bestError);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:187:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  187 |         l, b.create<arith::CmpIOp>(l, arith::CmpIPredicate::slt, c32(std::abs(delta)), bestDistance),
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:190:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  190 |             b.create<arith::CmpIOp>(l, arith::CmpIPredicate::slt, exponent, bestExponent)));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:188:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::Value, mlir::arith::CmpIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  188 |         b.create<arith::AndIOp>(
+      |         ~~~~~~~~~~~~~~~~~~~~~~~^
+  189 |             l, eq(c32(std::abs(delta)), bestDistance),
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  190 |             b.create<arith::CmpIOp>(l, arith::CmpIPredicate::slt, exponent, bestExponent)));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:186:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::OrIOp; Args = {mlir::arith::CmpIOp, mlir::arith::AndIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  186 |     Value tie = b.create<arith::OrIOp>(
+      |                 ~~~~~~~~~~~~~~~~~~~~~~^
+  187 |         l, b.create<arith::CmpIOp>(l, arith::CmpIPredicate::slt, c32(std::abs(delta)), bestDistance),
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  188 |         b.create<arith::AndIOp>(
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~       
+  189 |             l, eq(c32(std::abs(delta)), bestDistance),
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  190 |             b.create<arith::CmpIOp>(l, arith::CmpIPredicate::slt, exponent, bestExponent)));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:193:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  193 |             l, b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, error, bestError),
+      |                ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:194:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  194 |             b.create<arith::AndIOp>(l, equal, tie)));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:192:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::OrIOp; Args = {mlir::arith::CmpFOp, mlir::arith::AndIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  192 |         l, valid, b.create<arith::OrIOp>(
+      |                   ~~~~~~~~~~~~~~~~~~~~~~^
+  193 |             l, b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, error, bestError),
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  194 |             b.create<arith::AndIOp>(l, equal, tie)));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:191:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::Value&, mlir::arith::OrIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  191 |     Value better = b.create<arith::AndIOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~^
+  192 |         l, valid, b.create<arith::OrIOp>(
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+  193 |             l, b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, error, bestError),
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  194 |             b.create<arith::AndIOp>(l, equal, tie)));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:202:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  202 |   Value nonzero = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, signalSum, cf(0));
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:206:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ShLIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  206 |         b.create<arith::ShLIOp>(l, bestCodes[j * 2 + 1], c32(4)));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:204:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::OrIOp; Args = {mlir::Value&, mlir::arith::ShLIOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  204 |     Value code = b.create<arith::OrIOp>(
+      |                  ~~~~~~~~~~~~~~~~~~~~~~^
+  205 |         l, bestCodes[j * 2],
+      |         ~~~~~~~~~~~~~~~~~~~~            
+  206 |         b.create<arith::ShLIOp>(l, bestCodes[j * 2 + 1], c32(4)));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:208:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::TruncIOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  208 |     b.create<memref::StoreOp>(l, b.create<arith::TruncIOp>(l, b.getI8Type(), code),
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:209:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  209 |         f.getArgument(3), ValueRange{b.create<arith::AddIOp>(l, packedBase, ci(j))});
+      |                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:208:30: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::arith::TruncIOp, mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  208 |     b.create<memref::StoreOp>(l, b.create<arith::TruncIOp>(l, b.getI8Type(), code),
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  209 |         f.getArgument(3), ValueRange{b.create<arith::AddIOp>(l, packedBase, ci(j))});
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:211:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  211 |   Value anyScale = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, maxScale, cf(0));
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:212:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  212 |   Value encoded = choose(anyScale, b.create<arith::AddIOp>(
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~^
+  213 |       l, choose(nonzero, bestExponent, c32(0)), c32(127)), c32(0));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:215:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  215 |       l, b.create<arith::MulIOp>(l, group, ci(n)), row);
+      |          ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:214:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::arith::MulIOp, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  214 |   Value scaleIndex = b.create<arith::AddIOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~^
+  215 |       l, b.create<arith::MulIOp>(l, group, ci(n)), row);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:216:57: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::TruncIOp; Args = {mlir::IntegerType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  216 |   b.create<memref::StoreOp>(l, b.create<arith::TruncIOp>(l, b.getI8Type(), encoded),
+      |                                ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:216:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::arith::TruncIOp, mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  216 |   b.create<memref::StoreOp>(l, b.create<arith::TruncIOp>(l, b.getI8Type(), encoded),
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  217 |                           f.getArgument(4), ValueRange{scaleIndex});
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:218:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  218 |   Value statIndex = b.create<arith::MulIOp>(l, index, ci(2));
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:219:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value&, mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  219 |   b.create<memref::StoreOp>(l, signalSum, f.getArgument(5), ValueRange{statIndex});
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:221:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  221 |                           ValueRange{b.create<arith::AddIOp>(l, statIndex, ci(1))});
+      |                                      ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:220:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value, mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  220 |   b.create<memref::StoreOp>(l, choose(nonzero, bestError, cf(0)), f.getArgument(5),
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  221 |                           ValueRange{b.create<arith::AddIOp>(l, statIndex, ci(1))});
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h:223:26: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ReturnOp; Args = {}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  223 |   b.create<gpu::ReturnOp>(l);
+      |   ~~~~~~~~~~~~~~~~~~~~~~~^~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+In file included from /home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:33:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In function ‘llvm::LogicalResult emitNativeMXFP4Storage(mlir::ModuleOp, mlir::Operation*)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:13:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUModuleOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   13 |   auto gm = b.create<gpu::GPUModuleOp>(l,name+"_mod");
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:16:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUFuncOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, mlir::FunctionType}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   16 |   auto fn = b.create<gpu::GPUFuncOp>(l,name,
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+   17 |       b.getFunctionType({bytes,bytes,bytes,bytes},{}));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:21:78: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIndexOp; Args = {long int&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   21 |   auto ci = [&](int64_t v) -> Value { return b.create<arith::ConstantIndexOp>(l,v); };
+      |                                              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:22:76: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   22 |   auto add = [&](Value a,Value v) -> Value { return b.create<arith::AddIOp>(l,a,v); };
+      |                                                     ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:23:76: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   23 |   auto mul = [&](Value a,Value v) -> Value { return b.create<arith::MulIOp>(l,a,v); };
+      |                                                     ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:24:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   24 |   auto div = [&](Value a,Value v) -> Value { return b.create<arith::DivUIOp>(l,a,v); };
+      |                                                     ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:25:77: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::RemUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   25 |   auto rem = [&](Value a,Value v) -> Value { return b.create<arith::RemUIOp>(l,a,v); };
+      |                                                     ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In function ‘llvm::LogicalResult emitNativeMXFP4Storage(mlir::ModuleOp, mlir::Operation*)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:26:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::BlockIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   26 |   Value index=add(mul(b.create<gpu::BlockIdOp>(l,gpu::Dimension::x),ci(256)),
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:27:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ThreadIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   27 |                   b.create<gpu::ThreadIdOp>(l,gpu::Dimension::x));
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:29:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   29 |     return b.create<arith::CmpIOp>(l,arith::CmpIPredicate::ult,index,ci(extent));
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In function ‘llvm::LogicalResult emitNativeMXFP4Storage(mlir::ModuleOp, mlir::Operation*)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:31:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::IfOp; Args = {mlir::Value, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   31 |   auto codeGuard=b.create<scf::IfOp>(l,within(n*(k/2)),false);
+      |                  ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:38:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   38 |   Value value=b.create<memref::LoadOp>(l,fn.getArgument(0),ValueRange{index});
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:39:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value&, mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   39 |   b.create<memref::StoreOp>(l,value,fn.getArgument(2),ValueRange{destination});
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:41:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::IfOp; Args = {mlir::Value, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   41 |   auto scaleGuard=b.create<scf::IfOp>(l,within(n*(k/32)),false);
+      |                   ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:43:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   43 |   Value scale=b.create<memref::LoadOp>(l,fn.getArgument(1),ValueRange{index});
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:44:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value&, mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   44 |   b.create<memref::StoreOp>(l,scale,fn.getArgument(3),ValueRange{index});
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:46:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::IfOp; Args = {mlir::Value, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   46 |   auto rowGuard=b.create<scf::IfOp>(l,within(n),false);
+      |                 ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:48:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {int, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   48 |   Value zero=b.create<arith::ConstantIntOp>(l,0,8);
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:52:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   52 |             body.create<arith::MulIOp>(loc,group,ci(n)),index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:51:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::arith::MulIOp, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   51 |         Value address=body.create<arith::AddIOp>(loc,
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+   52 |             body.create<arith::MulIOp>(loc,group,ci(n)),index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:53:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   53 |         Value raw=body.create<memref::LoadOp>(loc,fn.getArgument(1),ValueRange{address});
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:54:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MaxUIOp; Args = {mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   54 |         Value result=body.create<arith::MaxUIOp>(loc,carried[0],raw);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:55:34: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::YieldOp; Args = {mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   55 |         body.create<scf::YieldOp>(loc,ValueRange{result});
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h: In function ‘llvm::LogicalResult emitNativeMXFP4Storage(mlir::ModuleOp, mlir::Operation*)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:49:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::ForOp; Args = {mlir::Value, mlir::Value, mlir::Value, mlir::ValueRange, emitNativeMXFP4Storage(mlir::ModuleOp, mlir::Operation*)::<lambda(mlir::OpBuilder&, mlir::Location, mlir::Value, mlir::ValueRange)>}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   49 |   auto maximum=b.create<scf::ForOp>(l,ci(0),ci(k/32),ci(1),ValueRange{zero},
+      |                ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   50 |       [&](OpBuilder &body,Location loc,Value group,ValueRange carried) {
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   51 |         Value address=body.create<arith::AddIOp>(loc,
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   52 |             body.create<arith::MulIOp>(loc,group,ci(n)),index);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   53 |         Value raw=body.create<memref::LoadOp>(loc,fn.getArgument(1),ValueRange{address});
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   54 |         Value result=body.create<arith::MaxUIOp>(loc,carried[0],raw);
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |         body.create<scf::YieldOp>(loc,ValueRange{result});
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |       });
+      |       ~~                            
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:57:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value, mlir::BlockArgument, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   57 |   b.create<memref::StoreOp>(l,maximum.getResult(0),fn.getArgument(3),
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   58 |       ValueRange{add(ci(n*(k/32)),index)});
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeMXFP4Storage.h:60:26: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ReturnOp; Args = {}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   60 |   b.create<gpu::ReturnOp>(l);
+      |   ~~~~~~~~~~~~~~~~~~~~~~~^~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp: In function ‘void {anonymous}::emitFpQuantBody(mlir::OpBuilder&, mlir::Location, mlir::gpu::GPUFuncOp, mlir::Type, double, int64_t, int64_t)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:48:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::BlockIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   48 |   Value bid = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:49:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ThreadIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   49 |   Value tid = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:50:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIndexOp; Args = {const long int&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   50 |   Value cBD = b.create<arith::ConstantIndexOp>(loc, BD);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:51:67: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   51 |   Value gid = b.create<arith::AddIOp>(loc, b.create<arith::MulIOp>(loc, bid, cBD),
+      |                                            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:51:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::arith::MulIOp, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   51 |   Value gid = b.create<arith::AddIOp>(loc, b.create<arith::MulIOp>(loc, bid, cBD),
+      |               ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   52 |                                       tid);
+      |                                       ~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:53:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   53 |   Value inb = b.create<arith::CmpIOp>(loc, slt, gid, N);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:54:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::IfOp; Args = {mlir::Value&, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   54 |   auto ifo = b.create<scf::IfOp>(loc, inb, /*withElse=*/false);
+      |              ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:57:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   57 |   Value rv = b.create<memref::LoadOp>(loc, X, ValueRange{gid});
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:58:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ExtFOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   58 |   Value v = isF32 ? rv : b.create<arith::ExtFOp>(loc, f32, rv);
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:60:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::Type&, mlir::FloatAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   60 |     return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(val))
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp: In function ‘void {anonymous}::emitFpQuantBody(mlir::OpBuilder&, mlir::Location, mlir::gpu::GPUFuncOp, mlir::Type, double, int64_t, int64_t)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:64:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   64 |   Value nan = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::UNO, v, v);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:65:69: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::math::AbsFOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   65 |   Value ax = b.create<arith::MinimumFOp>(loc, b.create<math::AbsFOp>(loc, v),
+      |                                               ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:65:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MinimumFOp; Args = {mlir::math::AbsFOp, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   65 |   Value ax = b.create<arith::MinimumFOp>(loc, b.create<math::AbsFOp>(loc, v),
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   66 |                                          vmax);
+      |                                          ~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:67:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   67 |   Value pos = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OGT, ax, zero);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:69:63: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::math::Log2Op; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   69 |       loc, b.create<math::FloorOp>(loc, b.create<math::Log2Op>(loc, ax)),
+      |                                         ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:69:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::math::FloorOp; Args = {mlir::math::Log2Op}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   69 |       loc, b.create<math::FloorOp>(loc, b.create<math::Log2Op>(loc, ax)),
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:68:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MaximumFOp; Args = {mlir::math::FloorOp, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   68 |   Value e = b.create<arith::MaximumFOp>(
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   69 |       loc, b.create<math::FloorOp>(loc, b.create<math::Log2Op>(loc, ax)),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   70 |       cst((double)minExp));
+      |       ~~~~~~~~~~~~~~~~~~~~              
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:72:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SubFOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   72 |       loc, b.create<arith::SubFOp>(loc, e, cst((double)mantissaBits)));
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:71:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::math::Exp2Op; Args = {mlir::arith::SubFOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   71 |   Value ulp = b.create<math::Exp2Op>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~^
+   72 |       loc, b.create<arith::SubFOp>(loc, e, cst((double)mantissaBits)));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:73:69: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   73 |   Value q = b.create<math::RoundEvenOp>(loc, b.create<arith::DivFOp>(loc, ax, ulp));
+      |                                              ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:73:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::math::RoundEvenOp; Args = {mlir::arith::DivFOp}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   73 |   Value q = b.create<math::RoundEvenOp>(loc, b.create<arith::DivFOp>(loc, ax, ulp));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:75:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   75 |       loc, b.create<arith::MulFOp>(loc, q, ulp), vmax);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:74:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MinimumFOp; Args = {mlir::arith::MulFOp, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   74 |   Value rounded = b.create<arith::MinimumFOp>(
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   75 |       loc, b.create<arith::MulFOp>(loc, q, ulp), vmax);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:76:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   76 |   rounded = b.create<arith::SelectOp>(loc, pos, rounded, zero);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:77:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpFOp; Args = {mlir::arith::CmpFPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   77 |   Value neg = b.create<arith::CmpFOp>(loc, arith::CmpFPredicate::OLT, v, zero);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:79:66: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::NegFOp; Args = {mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   79 |       b.create<arith::SelectOp>(loc, neg, b.create<arith::NegFOp>(loc, rounded),
+      |                                           ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:79:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, mlir::arith::NegFOp, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   79 |       b.create<arith::SelectOp>(loc, neg, b.create<arith::NegFOp>(loc, rounded),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   80 |                                 rounded);
+      |                                 ~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:81:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   81 |   Value y = b.create<arith::SelectOp>(loc, nan, cst(std::numeric_limits<double>::quiet_NaN()),
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   82 |                                       signed_);
+      |                                       ~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:83:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::TruncFOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   83 |   Value sv = isF32 ? y : b.create<arith::TruncFOp>(loc, storeTy, y);
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:84:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value&, mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   84 |   b.create<memref::StoreOp>(loc, sv, O, ValueRange{gid});
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:86:26: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ReturnOp; Args = {}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   86 |   b.create<gpu::ReturnOp>(loc);
+      |   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp: In member function ‘virtual void {anonymous}::GenerateROCMFpQuantKernelPass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:154:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUModuleOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  154 |       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMFpQuantKernel.cpp:159:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUFuncOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, mlir::FunctionType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  159 |       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[100%] Built target obj.TesseraROCMConversion
+[100%] Linking CXX static library libTesseraROCMConversion.a
+[100%] Built target TesseraROCMConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt

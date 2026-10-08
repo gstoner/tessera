@@ -1,0 +1,48 @@
+fp16 rmsnorm (1, 32) {'serial': 0.9626631894024326, 'cooperative_128': 1.0105070733685513}
+fp16 rmsnorm (17, 35) {'serial': 0.9670390390865078, 'cooperative_128': 0.9909548666137424}
+fp16 rmsnorm (129, 257) {'serial': 0.8665263123102387, 'cooperative_128': 0.9229634524171814}
+fp16 rmsnorm (128, 1024) {'serial': 1.0279011911979794, 'cooperative_128': 1.061602927876742}
+fp16 rmsnorm (256, 4096) {'serial': 1.0066360586406464, 'cooperative_128': 1.2161219017960831}
+fp16 rmsnorm (2, 4097) {'serial': 0.6462536152222832, 'cooperative_128': 0.9553844336827887}
+fp16 layernorm (1, 32) {'serial': 0.9931544153291321, 'cooperative_128': 1.0630485145005568}
+fp16 layernorm (17, 35) {'serial': 0.8534842060552356, 'cooperative_128': 1.1348225966763694}
+fp16 layernorm (129, 257) {'serial': 0.8836627455394526, 'cooperative_128': 0.9244704601526641}
+fp16 layernorm (128, 1024) {'serial': 1.0228828237891823, 'cooperative_128': 0.9907724998203434}
+fp16 layernorm (256, 4096) {'serial': 1.0028410434640642, 'cooperative_128': 1.0406013443845359}
+fp16 layernorm (2, 4097) {'serial': 0.6350455696138635, 'cooperative_128': 1.0171172300985656}
+bf16 rmsnorm (1, 32) {'serial': 1.0593575064787772, 'cooperative_128': 1.07855626165006}
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_norm_accuracy_performance.py", line 100, in <module>
+    Path(os.environ["TESSERA_COOP_NORM_PACKET"]).write_text(json.dumps(record(),indent=2,sort_keys=True)+"\n")
+                                                                       ~~~~~~^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_norm_accuracy_performance.py", line 37, in record
+    artifact,native=package(kind,source,mode)
+                    ~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/tests/device/nvidia/test_cooperative_norm.py", line 35, in package
+    native=nvidia_native.package_scheduled_kernel(artifact,pipeline_name="tessera-nvidia-pipeline-sm120")
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/nvidia_native.py", line 3734, in package_scheduled_kernel
+    lowered, ptx, metrics, compiler, toolchain, libraries, state = _compile_tile_ir(artifact.tile_ir, entry)
+                                                                   ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/nvidia_native.py", line 2808, in _compile_tile_ir
+    ptx = _run(
+          ~~~~^
+        [
+        ^
+    ...<5 lines>...
+        llvm_ir,
+        ^^^^^^^^
+    ).decode()
+    ^
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/nvidia_native.py", line 1133, in _run
+    result = subprocess.run(command, input=source, capture_output=True)
+  File "/usr/lib/python3.14/subprocess.py", line 557, in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 1221, in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/subprocess.py", line 2153, in _communicate
+    ready = selector.select(timeout)
+  File "/usr/lib/python3.14/selectors.py", line 398, in select
+    fd_event_list = self._selector.poll(timeout)
+KeyboardInterrupt

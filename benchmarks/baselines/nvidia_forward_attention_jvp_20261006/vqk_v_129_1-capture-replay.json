@@ -1,0 +1,15 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "program_digest": "ad2fa47a91e9552cd1fb72a0dd53e3e1f465e6b59548cbac313fae94d925b7b7",
+  "frontend_indices": [
+    1,
+    2,
+    0
+  ],
+  "physical_active": [
+    2
+  ],
+  "max_abs_error": 4.109988654965591e-09,
+  "compiler_subprocesses": "forbidden",
+  "correctness": "passed"
+}

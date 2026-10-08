@@ -1,0 +1,8 @@
+........................................................................ [ 40%]
+s...s.s.s.s.s.s.s.s..................................................... [ 80%]
+..................................                                       [100%]
+=========================== short test summary info ============================
+SKIPPED [1] tests/unit/test_rocm_shape_free_cache_key.py:367: set TESSERA_ROCM_E2E_DEVICE_TEST=1 on the exact owning device
+SKIPPED [4] tests/unit/test_rocm_shape_free_cache_key.py:476: requires exact owning gfx1151 device
+SKIPPED [4] tests/unit/test_rocm_shape_free_cache_key.py:529: requires exact owning gfx1151 device
+169 passed, 9 skipped in 11.95s

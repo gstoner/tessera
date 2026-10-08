@@ -1,0 +1,9 @@
+-- Testing: 3 tests, 3 workers --
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul.mlir (1 of 3)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_reverse_scaled_matmul.mlir (2 of 3)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_linear_transpose.mlir (3 of 3)
+
+Testing Time: 0.12s
+
+Total Discovered Tests: 3
+  Passed: 3 (100.00%)

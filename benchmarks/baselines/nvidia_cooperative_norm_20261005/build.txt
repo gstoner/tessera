@@ -1,0 +1,123 @@
+[  3%] Built target TesseraLinalgSolverTableGen
+[ 10%] Built target tessera_solvers_passes
+[ 11%] Built target tessera_layout_algebra
+[ 11%] Building Tessera/AdjointInterface.h.inc...
+[ 11%] Built target mlir-headers
+[ 13%] Building Tessera/AdjointInterface.cpp.inc...
+[ 13%] Built target mlir-generic-headers
+[ 13%] Built target TesseraAdjointInterfaceTableGen
+[ 15%] Built target TesseraCollectiveTypesIncGen
+[ 18%] Built target TesseraNVIDIATableGen
+[ 18%] Building ScheduleDialect.h.inc...
+[ 20%] Building AttnDialect.cpp.inc...
+[ 22%] Building ScheduleDialect.cpp.inc...
+[ 22%] Building AttnDialect.h.inc...
+[ 25%] Built target TesseraPMTableGen
+[ 27%] Built target TesseraAttnTableGen
+[ 32%] Built target TesseraNeighbors
+[ 33%] Built target DialectSR
+[ 33%] Built target TPPGen
+[ 38%] Built target TesseraTPPPasses
+[ 38%] Building Tessera/LinearTransposeInterface.h.inc...
+[ 40%] Built target tessera_linalg_solver_passes
+[ 42%] Building Tessera/LinearTransposeInterface.cpp.inc...
+[ 44%] Built target TesseraCollectiveOpsIncGen
+[ 44%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 44%] Built target obj.TesseraNVIDIAIR
+[ 47%] Built target TesseraSR
+[ 47%] Built target TPPTypesGen
+[ 47%] Building Tessera/TangentInterface.h.inc...
+[ 49%] Built target obj.TesseraCollectiveDialect
+[ 49%] Building Tessera/TangentInterface.cpp.inc...
+[ 49%] Built target TesseraNVIDIAIR
+[ 49%] Built target TesseraTangentInterfaceTableGen
+[ 50%] Built target TesseraCollectiveDialect
+[ 50%] Built target TPPAttrsGen
+[ 52%] Building TesseraOpsDialect.h.inc...
+[ 52%] Built target TPPOpsGen
+[ 54%] Building TesseraOpsDialect.cpp.inc...
+[ 55%] Building TesseraOpsEnums.h.inc...
+[ 55%] Building TesseraOpsEnums.cpp.inc...
+[ 55%] Building TesseraOpsTypes.h.inc...
+[ 55%] Building TesseraOpsTypes.cpp.inc...
+[ 55%] Built target TesseraIRTableGen
+[ 55%] Built target obj.TesseraTPPDialect
+[ 55%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 55%] Built target TesseraTPPDialect
+[ 57%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 57%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 62%] Built target TesseraTPPInit
+[ 62%] Built target TesseraTileIRTableGen
+[ 66%] Built target obj.TesseraIR
+[ 66%] Built target TesseraIR
+[ 66%] Built target obj.TesseraAttnDialect
+[ 66%] Built target TesseraScheduleIR
+[ 66%] Built target TesseraAttnDialect
+[ 66%] Built target TesseraPM
+[ 98%] Built target TesseraPasses
+[ 98%] Building CXX object src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/CMakeFiles/obj.TesseraNVIDIAConversion.dir/NVIDIALowering.cpp.o
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp: In function ‘mlir::LLVM::LLVMFuncOp tessera::{anonymous}::declareVoidMarker(mlir::ModuleOp, llvm::StringRef)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:6171:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::LLVMFuncOp; Args = {llvm::StringRef&, mlir::LLVM::LLVMFunctionType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6171 |   return builder.create<LLVM::LLVMFuncOp>(module.getLoc(), name, fnType);
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/include/Tessera/Dialect/Tile/TileDialect.h:11,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:2:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp: In function ‘bool tessera::{anonymous}::tryLowerMmaSyncToNVVM(mlir::Operation*, mlir::OpBuilder&)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:6422:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::NVVM::MmaOp; Args = {mlir::LLVM::LLVMStructType&, mlir::ValueRange, mlir::ValueRange, mlir::ValueRange, llvm::ArrayRef<long int>, const std::nullopt_t&, std::optional<mlir::NVVM::MMAIntOverflow>&, std::array<mlir::NVVM::MMATypes, 2>, std::array<mlir::NVVM::MMALayout, 2>}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6422 |   auto mma = builder.create<NVVM::MmaOp>(
+      |              ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 6423 |       op->getLoc(), structTy, ValueRange(a), ValueRange(b), ValueRange(c),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 6424 |       ArrayRef<int64_t>{m, n, k}, /*b1Op=*/std::nullopt,
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 6425 |       /*intOverflow=*/intOverflow,
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~       
+ 6426 |       /*multiplicandPtxTypes=*/
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~          
+ 6427 |       std::array<NVVM::MMATypes, 2>{inputPtxType, inputPtxType},
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 6428 |       /*multiplicandLayouts=*/
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~           
+ 6429 |       std::array<NVVM::MMALayout, 2>{NVVM::MMALayout::row, NVVM::MMALayout::col});
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp: In member function ‘virtual void tessera::{anonymous}::LowerNVIDIAToNVVMPass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:6502:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::LLVM::CallOp; Args = {mlir::TypeRange, mlir::FlatSymbolRefAttr, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 6502 |       builder.create<LLVM::CallOp>(op->getLoc(), TypeRange{},
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 6503 |                                    SymbolRefAttr::get(marker), ValueRange{});
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp: In function ‘llvm::FailureOr<llvm::SmallVector<mlir::Value> > tessera::{anonymous}::materializeSm120Mma16Pack(tessera::tile::FragmentPackOp, mlir::OpBuilder&, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:3890:38: warning: ‘alignment’ may be used uninitialized [-Wmaybe-uninitialized]
+ 3890 |       fragment = LLVM::LoadOp::create(builder, loc, loadTy, ptr, alignment);
+      |                  ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:3712:12: note: ‘alignment’ was declared here
+ 3712 |   unsigned alignment;
+      |            ^~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:3767:32: warning: ‘columnsPerRegister’ may be used uninitialized [-Wmaybe-uninitialized]
+ 3767 |   Value registerColumn = mulI64(
+      |                          ~~~~~~^
+ 3768 |       builder, loc, tig, i64Constant(builder, loc, columnsPerRegister));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp:3713:11: note: ‘columnsPerRegister’ was declared here
+ 3713 |   int64_t columnsPerRegister;
+      |           ^~~~~~~~~~~~~~~~~~
+[100%] Built target obj.TesseraNVIDIAConversion
+[100%] Linking CXX static library libTesseraNVIDIAConversion.a
+[100%] Built target TesseraNVIDIAConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt
+[  0%] Building CXX object src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/CMakeFiles/tessera_nvidia_ptx_launch.dir/tessera_nvidia_ptx_launch.cpp.o
+[100%] Linking CXX shared library libtessera_nvidia_ptx_launch.so
+[100%] Built target tessera_nvidia_ptx_launch

@@ -1,0 +1,1265 @@
+{
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "pci_bus_id": "0000:03:00.0",
+    "architecture": "gfx1201",
+    "ordinal": 0
+  },
+  "architecture": "gfx1201",
+  "rows": [
+    {
+      "family": "paged_kv",
+      "shape": [
+        4,
+        4,
+        3,
+        8,
+        1,
+        5
+      ],
+      "correctness": "bit_exact_before_and_after_timing",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "schedule_digest": "abf0c28d727cb55186a0e9ac61d465f21ddc0cd4299bbce54587c03868d9db18",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "compile_package_wall_ms": 228.86123,
+      "resident_dispatch_samples_ms": [
+        0.004085890483111143,
+        0.0039129373617470264,
+        0.00391965638846159,
+        0.0039252969436347485,
+        0.004058093763887882
+      ],
+      "resident_dispatch_median_ms": 0.0039252969436347485,
+      "resources": {
+        "block_threads": 256,
+        "launch_blocks": 1,
+        "registers": 18,
+        "local_bytes": 0,
+        "shared_bytes": 0
+      },
+      "host_wall_samples_ms": {
+        "python": [
+          0.59685305,
+          0.5997049999999999,
+          0.6202577,
+          0.63213235,
+          0.63055335,
+          0.6411786,
+          0.6308624,
+          0.6435391,
+          0.6371124
+        ],
+        "native_unpooled": [
+          0.54243025,
+          0.54056865,
+          0.58632295,
+          0.5773544,
+          0.58388725,
+          0.57023975,
+          0.58026495,
+          0.59922505,
+          0.5730565999999999
+        ],
+        "native_pooled": [
+          0.5367945,
+          0.52800565,
+          0.5707582999999999,
+          0.5681218,
+          0.57945935,
+          0.5743977499999999,
+          0.5844724,
+          0.5715177,
+          0.58789045
+        ]
+      },
+      "host_wall_medians_ms": {
+        "python": 0.6308624,
+        "native_unpooled": 0.5773544,
+        "native_pooled": 0.5715177
+      },
+      "python_over_native_pooled": 1.1038370290193988,
+      "native_unpooled_over_pooled": 1.0102126320847107,
+      "staging_counter_deltas": {
+        "python": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          }
+        ],
+        "native_pooled": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          }
+        ]
+      },
+      "image_cache_counter_deltas": {
+        "python": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_pooled": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ]
+      }
+    },
+    {
+      "family": "paged_kv",
+      "shape": [
+        32,
+        16,
+        4,
+        64,
+        3,
+        31
+      ],
+      "correctness": "bit_exact_before_and_after_timing",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "schedule_digest": "913113a646d63738173a01386705d9ef704756d1e230843b1c038393a592fc98",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "compile_package_wall_ms": 89.447538,
+      "resident_dispatch_samples_ms": [
+        0.006177828181535006,
+        0.005603484343737364,
+        0.006171906366944313,
+        0.0062051876448094845,
+        0.005318500101566315
+      ],
+      "resident_dispatch_median_ms": 0.006171906366944313,
+      "resources": {
+        "block_threads": 256,
+        "launch_blocks": 31,
+        "registers": 18,
+        "local_bytes": 0,
+        "shared_bytes": 0
+      },
+      "host_wall_samples_ms": {
+        "python": [
+          1.4969706,
+          1.6600267,
+          1.6562189,
+          1.65928475,
+          1.6580448,
+          1.65086115,
+          1.65474155,
+          1.6505693000000001,
+          1.6422747999999998
+        ],
+        "native_unpooled": [
+          1.4501462999999999,
+          1.5426402,
+          1.6409362,
+          1.60514745,
+          1.6106394000000002,
+          1.5880884,
+          1.5960476,
+          1.58375065,
+          1.5994856499999999
+        ],
+        "native_pooled": [
+          1.44196915,
+          1.6037643,
+          1.59757595,
+          1.6075244999999998,
+          1.5590880999999999,
+          1.5875337999999999,
+          1.55876095,
+          1.5922959,
+          1.60666935
+        ]
+      },
+      "host_wall_medians_ms": {
+        "python": 1.65474155,
+        "native_unpooled": 1.5960476,
+        "native_pooled": 1.5922959
+      },
+      "python_over_native_pooled": 1.0392173653150774,
+      "native_unpooled_over_pooled": 1.002356157545843,
+      "staging_counter_deltas": {
+        "python": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          }
+        ],
+        "native_pooled": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          }
+        ]
+      },
+      "image_cache_counter_deltas": {
+        "python": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_pooled": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ]
+      }
+    },
+    {
+      "family": "paged_kv",
+      "shape": [
+        64,
+        32,
+        8,
+        128,
+        7,
+        249
+      ],
+      "correctness": "bit_exact_before_and_after_timing",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "schedule_digest": "05fb56372c40ab647b12c809917546e8aea66940c463252bfe1357b099b8bfff",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "compile_package_wall_ms": 117.95576,
+      "resident_dispatch_samples_ms": [
+        0.020908983424305916,
+        0.023962359875440598,
+        0.020662594586610794,
+        0.02064337581396103,
+        0.020546499639749527
+      ],
+      "resident_dispatch_median_ms": 0.020662594586610794,
+      "resources": {
+        "block_threads": 256,
+        "launch_blocks": 996,
+        "registers": 18,
+        "local_bytes": 0,
+        "shared_bytes": 0
+      },
+      "host_wall_samples_ms": {
+        "python": [
+          3.8392249,
+          3.8400892499999997,
+          3.83258295,
+          3.823724,
+          3.7833966500000002,
+          3.81951855,
+          3.7939963,
+          3.4527794,
+          3.4164877
+        ],
+        "native_unpooled": [
+          3.6886832,
+          3.7668287,
+          3.80158505,
+          3.7551232,
+          3.7509633,
+          3.7123606000000002,
+          3.7348737499999998,
+          3.79036695,
+          3.31869315
+        ],
+        "native_pooled": [
+          2.89173765,
+          2.9248233,
+          2.86346525,
+          2.9634951000000003,
+          2.9272064,
+          2.91611925,
+          2.9672562,
+          2.75244525,
+          2.6868123
+        ]
+      },
+      "host_wall_medians_ms": {
+        "python": 3.81951855,
+        "native_unpooled": 3.7509633,
+        "native_pooled": 2.91611925
+      },
+      "python_over_native_pooled": 1.3097950469618143,
+      "native_unpooled_over_pooled": 1.2862859775024633,
+      "staging_counter_deltas": {
+        "python": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          },
+          {
+            "allocations": 60,
+            "frees": 60,
+            "reuses": 0,
+            "launches": 20
+          }
+        ],
+        "native_pooled": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 60,
+            "launches": 20
+          }
+        ]
+      },
+      "image_cache_counter_deltas": {
+        "python": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_pooled": [
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 20,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ]
+      }
+    }
+  ],
+  "repeats": 20,
+  "timing_scope": "nine rotating paired trials of checked host launch wall; native image cache enabled for all arms, warm native staging verified by counters; separate preloaded resident HIP-event dispatch windows include host launch gaps; no kernel speedup claim",
+  "compiler_sha256": "3def20f9b8d9a12ecec5d4d7738c577741cdae2a993a54c312e4f04223cfd8ab",
+  "native_movement_library_sha256": "17d234f3d263f348622f636c4a8c91473608fcaea83c82d306a1e6dc5977c4b1",
+  "native_image_library_sha256": "55122befeb059b988ed9aae4ce8228fa227be06b2c8cd8cc818bbe95d44365bf",
+  "source_sha256": {
+    "python/tessera/runtime.py": "e1ec8a6566efc29c973b5d0a4a9a88382851108295e7b09a637d673302848bf2",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "d23990995061e254d100d4da851dde1d5d07adceab8b8b3b00b298dcabb2f8c1",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860",
+    "python/tessera/compiler/rocm_native.py": "3ea986802205e3495dfdaf6e26a8576eed72b6ae79af4b6321b508aa0aa5ac52",
+    "benchmarks/rocm/benchmark_native_movement.py": "2807ede7b5b1763be1a5e6b6504c0ada500df7940d564a6010ae7754c1948828"
+  }
+}

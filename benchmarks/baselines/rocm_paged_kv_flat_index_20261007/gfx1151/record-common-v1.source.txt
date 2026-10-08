@@ -1,0 +1,129 @@
+"""Same-allocation native paged-KV compiler A/B; no production kernel emitter."""
+import argparse,ctypes as C,hashlib,json,os
+from pathlib import Path
+from statistics import median
+import numpy as np
+from tessera import runtime as rt
+from tessera.compiler import rocm_native
+from tessera.compiler.graph_ir import tensor_ir_type
+from tessera.compiler.scheduled_paged_kv import lower_scheduled_paged_kv_graph
+from tessera.compiler.native_artifact import NativeImageArtifact,LaunchDescriptor
+from benchmarks.rocm.benchmark_rocm_e2e_movement import _paged_module,_ResidentDescriptor,_event_ms
+from benchmarks.rocm.benchmark_native_movement import device_identity
+from types import SimpleNamespace
+
+CASES=((4,4,16,3,8,7,41),(3,5,7,3,17,5,25),
+       (5,8,9,1,31,8,51),(4,3,1,2,257,0,3),
+       (2,3,3,1,1,2,5),(32,64,16,8,128,0,1024))
+ROOT=Path.cwd()
+def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+def graph(dims):
+ p,lp,ps,h,d,start,tokens=dims
+ m=_paged_module(p,ps,h,d,start,tokens)
+ ty=tensor_ir_type((lp,),"int32")
+ m.functions[0].args[1].ir_type=ty
+ m.functions[0].body[0].operand_types[1]=str(ty)
+ return m
+
+def package(args):
+ os.environ["TESSERA_OPT"]=str(args.tool.resolve())
+ result={"arm":args.arm,"architecture":args.architecture,"compiler_sha256":sha(args.tool),
+         "rows":[]}
+ for ordinal,dims in enumerate(CASES):
+  m=graph(dims)
+  scheduled=lower_scheduled_paged_kv_graph(m,target="rocm_"+args.architecture)
+  p=rocm_native.package_paged_kv_read(m,pipeline_name="tessera-lower-to-rocm",
+      architecture=args.architecture,scheduled_artifact=scheduled)
+  p.descriptor.validate_image(p.image)
+  texts={"graph":scheduled.graph_ir,"schedule":scheduled.schedule_ir,
+         "tile":scheduled.tile_ir,"target":p.target_ir,"backend":p.backend_ir}
+  for name,text in texts.items():(args.directory/f"{args.arm}_{ordinal}.{name}.mlir").write_text(text)
+  (args.directory/f"{args.arm}_{ordinal}.hsaco").write_bytes(p.image.payload)
+  result["rows"].append({"dims":dims,"image":p.image.to_dict(),
+    "descriptor":p.descriptor.to_dict(),
+    "payload_sha256":hashlib.sha256(p.image.payload).hexdigest(),
+    "stage_sha256":{name:hashlib.sha256(text.encode()).hexdigest() for name,text in texts.items()},
+    "backend_unsigned_divisions":p.backend_ir.count("udiv")})
+ (args.directory/f"{args.arm}.json").write_text(json.dumps(result,indent=2)+"\n")
+
+def benchmark(args):
+ assert rt._rocm_live_arch()==args.architecture
+ hip=rt._load_hip_for_launch()
+ assert hip is not None and hip.hipInit(0)==0
+ identity=device_identity(hip,args.architecture)
+ data={a:json.loads((args.directory/f"{a}.json").read_text()) for a in ("reference","candidate")}
+ assert data["reference"]["compiler_sha256"]!=data["candidate"]["compiler_sha256"]
+ rows=[]
+ for ordinal,dims in enumerate(CASES):
+  packages={}
+  for arm in data:
+   row=data[arm]["rows"][ordinal];assert tuple(row["dims"])==dims
+   packages[arm]=SimpleNamespace(image=NativeImageArtifact.from_dict(row["image"]),
+                               descriptor=LaunchDescriptor.from_dict(row["descriptor"]))
+   packages[arm].descriptor.validate_image(packages[arm].image)
+  r,c=packages["reference"].descriptor,packages["candidate"].descriptor
+  for field in ("abi_id","buffers","scalars","shape_guards","geometry","ordering","workspace"):
+   assert getattr(r,field)==getattr(c,field),field
+  p,lp,ps,h,d,start,tokens=dims
+  rng=np.random.default_rng(701+ordinal)
+  pages=rng.normal(size=(p,ps,h,d)).astype(np.float32)
+  table=rng.integers(0,p,lp,dtype=np.int32)
+  pages.view(np.uint32).flat[:min(pages.size,4)]=np.array(
+      [0x7fc12345,0x80000000,0x7f800000,0xff800000],np.uint32)[:min(pages.size,4)]
+  oracle=pages[table].reshape(-1,h,d)[start:start+tokens]
+  out=np.zeros_like(oracle)
+  owner=_ResidentDescriptor(hip,packages["reference"],(pages,table),out,dims,out.size)
+  borrowed=C.c_void_p();cf=C.c_void_p()
+  try:
+   assert hip.hipModuleLoadData(C.byref(borrowed),packages["candidate"].image.payload)==0
+   assert hip.hipModuleGetFunction(C.byref(cf),borrowed,packages["candidate"].descriptor.entry_symbol.encode())==0
+   functions={"reference":owner.function,"candidate":cf}
+   addresses=[x.value for x in owner.devices]
+   samples={a:[] for a in functions}
+   for arm in functions:
+    owner.function=functions[arm]
+    for _ in range(10):owner.launch()
+    np.testing.assert_array_equal(owner.read().view(np.uint32),oracle.view(np.uint32))
+   for window in range(args.samples):
+    order=("reference","candidate") if window%2==0 else ("candidate","reference")
+    for arm in order:
+     owner.function=functions[arm]
+     assert hip.hipMemset(owner.devices[-1],0xa5,out.nbytes)==0
+     samples[arm].append(_event_ms(hip,owner,args.iterations))
+     np.testing.assert_array_equal(owner.read().view(np.uint32),oracle.view(np.uint32))
+     assert [x.value for x in owner.devices]==addresses
+   medians={a:median(v) for a,v in samples.items()}
+   rows.append({"dims":dims,"samples_ms":samples,"medians_ms":medians,
+       "candidate_over_reference":medians["candidate"]/medians["reference"],
+       "shared_allocations":True,"correctness":"bit_exact_before_timing_and_each_poisoned_window",
+       "oracle_sha256":hashlib.sha256(oracle.tobytes()).hexdigest(),
+       "payload_sha256":{a:data[a]["rows"][ordinal]["payload_sha256"] for a in data},
+       "backend_unsigned_divisions":{a:data[a]["rows"][ordinal]["backend_unsigned_divisions"] for a in data}})
+  finally:
+   if borrowed.value:hip.hipModuleUnload(borrowed)
+   owner.close()
+ packet={"schema":"tessera.rocm.paged-kv-flat-index-ab.v1","work_item":"ROCM-E2E-2",
+     "device":identity,"architecture":args.architecture,"samples":args.samples,
+     "iterations":args.iterations,"compiler_sha256":{a:data[a]["compiler_sha256"] for a in data},
+     "recorder_sha256":sha(__file__),"rows":rows,
+     "timing_scope":"same-allocation resident HIP-event launch windows; Python enqueue gaps included; no uploads/readback/allocation inside events",
+     "selector_changed":False}
+ (args.directory/"ab.json").write_text(json.dumps(packet,indent=2)+"\n")
+ for row in rows:print(row["dims"],"candidate/reference",row["candidate_over_reference"])
+
+if __name__=="__main__":
+ ap=argparse.ArgumentParser()
+ ap.add_argument("--architecture",choices=("gfx1151","gfx1201"),default="gfx1151")
+ ap.add_argument("--phase",choices=("package","benchmark"),required=True)
+ ap.add_argument("--arm",choices=("reference","candidate"))
+ ap.add_argument("--tool",type=Path)
+ ap.add_argument("--directory",type=Path,required=True)
+ ap.add_argument("--samples",type=int,default=21)
+ ap.add_argument("--iterations",type=int,default=1000)
+ args=ap.parse_args()
+ if args.samples<3 or args.iterations<1:raise ValueError("positive timing counts and at least three samples required")
+ args.directory.mkdir(parents=True,exist_ok=True)
+ if args.phase=="package":
+  if args.arm is None or args.tool is None:raise ValueError("package needs arm and native tool")
+  package(args)
+ else:benchmark(args)

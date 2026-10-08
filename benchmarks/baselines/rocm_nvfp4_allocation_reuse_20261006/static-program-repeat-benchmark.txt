@@ -1,0 +1,38 @@
+[
+  {
+    "shape": [
+      128,
+      32,
+      256
+    ],
+    "wall_ms": {
+      "retained_static_contract": 3.28644,
+      "reconstructed_contract_control": 6.493899
+    },
+    "ratio": 0.5060811694176334
+  },
+  {
+    "shape": [
+      257,
+      80,
+      1024
+    ],
+    "wall_ms": {
+      "retained_static_contract": 4.428469,
+      "reconstructed_contract_control": 7.266353
+    },
+    "ratio": 0.6094486463842316
+  },
+  {
+    "shape": [
+      256,
+      64,
+      64
+    ],
+    "wall_ms": {
+      "retained_static_contract": 3.201477,
+      "reconstructed_contract_control": 6.142418
+    },
+    "ratio": 0.5212079347253802
+  }
+]

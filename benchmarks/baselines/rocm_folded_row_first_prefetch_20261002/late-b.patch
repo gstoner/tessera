@@ -1,0 +1,22 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2222,9 +2222,18 @@
+     }
+     Value kn = nextK(kb, l, k0);
+     SmallVector<Value> nextA = issue(kb, l, planA, kn);
+-    SmallVector<Value> nextB = issue(kb, l, planB, kn);
++    SmallVector<Value> nextB;
++    const bool lateB = foldedFullK && prefetch == 1;
++    if (!lateB)
++      nextB = issue(kb, l, planB, kn);
+     if (prefetch == 1) {
+       partial = compute(kb, l, Value(), std::move(partial));
++      if (lateB) {
++        // Isolate row-first WMMA consumption from the next B global
++        // prefetch. This is a compiler scheduling fence, not an LDS fence.
++        kb.create<ROCDL::SchedBarrier>(l, ROCDL::SchedGroupMask::none);
++        nextB = issue(kb, l, planB, kn);
++      }
+       barrier(kb, l);
+       drain(kb, l, planA, nextA, Value());
+       drain(kb, l, planB, nextB, Value());

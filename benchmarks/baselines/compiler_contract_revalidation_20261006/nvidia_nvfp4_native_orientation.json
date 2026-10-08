@@ -1,0 +1,1540 @@
+{
+  "schema": "tessera.nvfp4.native_orientation.v1",
+  "work_item": "W1.1",
+  "sync_key": "NVIDIA-NVFP4-NATIVE-ORIENTATION-2026-10-06",
+  "architecture": "sm_120a",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "source_revision": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "source_worktree_dirty": true,
+  "source_sha256": {
+    "python/tessera/compiler/graph_ir.py": "8007749039731ac7fff66be27c986bc20b6688f12f3576ab48a97bdd766ea7c0",
+    "python/tessera/compiler/scheduled_matmul.py": "f7d311a9801034afd7991cfabf38880afd5d5711fb50675ae008d7e060b2b448",
+    "python/tessera/compiler/nvidia_native.py": "3fcd5a175f2bfdb0c4ea71ef13814995a1068122fc22a8c4609975e031598d68",
+    "python/tessera/compiler/jit.py": "603e263766c6b64a4959aade8baa261bdfefb2fa78e7a8da80331106bd90be02",
+    "python/tessera/compiler/native_vmap.py": "5e9939789f3ac025a0ffbd766b4c4cf61ebcf91ee6daca4ea304b237f9151460",
+    "python/tessera/runtime.py": "bcae49f1020b9bf0b99b896b6e32a14acd64a8089f967e3ec82ec155691873bb",
+    "src/compiler/ir/TesseraOps.cpp": "32a4fbc95864e189fbba01972bce2f3f7df74f655e53c4e42a0128a063749056",
+    "src/compiler/ir/TileOps.cpp": "7bef9089b37d2d5a6fd1af9eb58f809801810491da23cb66808503afcaaaa2ad",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "006f8bbc4ac43b6b347e2d27dfd961b3db8492e1cc2bbcfce1313b50f070bd3d",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "49bccfae6a58d5ffc97686e091781f73d4fd21a131bb8eaab8a6fe2e0c1add1f",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "3a30a213571b74a779113f3989e95269a3abf25d794351a8d6a5e63b1ce4ba2b",
+    "tests/device/nvidia/test_nvfp4_transpose_jit.py": "156d43ed257a3ef4a739f2574e49cd545ac73b8006a89b75257bef210185812e",
+    "benchmarks/nvidia/record_nvfp4_transpose.py": "6ddaad39f67a6fc158b0123836b8886e72968839cdbeeba8fe8b0cefdb36240b"
+  },
+  "tool_sha256": {
+    "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt": "ad94d18c19082b10f1a4a14f64d4be2db6fc4e7ed18d0f81426cfb7e829e2b9c",
+    "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "32641f67e23a969ba2983c4af45ae4a5b218407ea344339f80a4dce346f9cce9",
+    "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so": "c870e260f87134cec9ce71dad86892873032e57576323f66d15c0ee3f9c18237"
+  },
+  "route": "Python frontend -> Graph MLIR -> Schedule -> Tile -> NVIDIA Target -> PTX -> checked ABI",
+  "selector_changed": false,
+  "strategy_promotion": false,
+  "correctness": "independent decoded fp64 oracle before timing, each public sample and final portable launch",
+  "timing_domains": {
+    "cold_public": "trace/compile/package/synchronized host-buffer launch wall",
+    "warm_public": "cached package validation, output allocation, copies and synchronized launch wall",
+    "device_event": "resident native 100-launch CUDA-event window; upload/readback excluded; dispatch gaps included"
+  },
+  "rows": [
+    {
+      "mode": "rank_two",
+      "transposeA": false,
+      "transposeB": false,
+      "shape_bmnk": [
+        1,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        17,
+        129
+      ],
+      "logical_b_shape": [
+        129,
+        19
+      ],
+      "physical_shapes": [
+        [
+          17,
+          65
+        ],
+        [
+          65,
+          19
+        ],
+        [
+          17,
+          9
+        ],
+        [
+          9,
+          19
+        ]
+      ],
+      "oracle_sha256": "c743c4782f6a76c21730cc2628b9537d003289b6f68508949fb01c08b19a1405",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 906.1020800145343,
+      "warm_public_ms": [
+        2.1973160037305206,
+        1.48052501026541,
+        2.5438540033064783,
+        1.3722309959121048,
+        1.3957849878352135,
+        1.3571449962910265,
+        1.2819939875043929
+      ],
+      "warm_public_median_ms": 1.3957849878352135,
+      "resident_device_event_ms": [
+        0.008731840178370476,
+        0.008175360038876534,
+        0.008710400201380253,
+        0.008199360221624374,
+        0.009043839760124683,
+        0.008976960554718971,
+        0.009172160178422928
+      ],
+      "resident_device_event_median_ms": 0.008731840178370476,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "9a0d413dc3fc480c63ee2aee73ee7eee66954ff4d761cc714e6634c7db036c81",
+      "tile_ir_digest": "b59770acbc3cf7a57d25fed4d41b018711bd92c44386f2b28d1f3e221d7d0f8c",
+      "image_sha256": "e795233585e3db693cae403d8489cf21bd874f1e0905f0a870634dcca66dbf5d",
+      "resources": {
+        "registers_per_thread": 92,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 20
+      }
+    },
+    {
+      "mode": "rank_two",
+      "transposeA": false,
+      "transposeB": true,
+      "shape_bmnk": [
+        1,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        17,
+        129
+      ],
+      "logical_b_shape": [
+        19,
+        129
+      ],
+      "physical_shapes": [
+        [
+          17,
+          65
+        ],
+        [
+          19,
+          65
+        ],
+        [
+          17,
+          9
+        ],
+        [
+          19,
+          9
+        ]
+      ],
+      "oracle_sha256": "c743c4782f6a76c21730cc2628b9537d003289b6f68508949fb01c08b19a1405",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 559.5341129810549,
+      "warm_public_ms": [
+        2.484597993316129,
+        2.571374992839992,
+        2.2820229933131486,
+        2.2867820225656033,
+        1.9754090171772987,
+        1.7329079855699092,
+        1.957498985575512
+      ],
+      "warm_public_median_ms": 2.2820229933131486,
+      "resident_device_event_ms": [
+        0.009335679933428764,
+        0.009618880227208138,
+        0.009124480187892914,
+        0.010279360227286816,
+        0.01444895938038826,
+        0.008926399983465672,
+        0.01560863945633173
+      ],
+      "resident_device_event_median_ms": 0.009618880227208138,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "aa4cbdff966adcf27d069f8e5899f6318cb9aedb91dac24eadffa184465d5d66",
+      "tile_ir_digest": "1b57b33d15357bfbce23ef632109c78d97ff90e4af35dcaf2981ffc0e6327900",
+      "image_sha256": "947f2afef5982add84e78295f7ed16b3936bff290bd38c8364318a460a871171",
+      "resources": {
+        "registers_per_thread": 104,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 16
+      }
+    },
+    {
+      "mode": "rank_two",
+      "transposeA": true,
+      "transposeB": false,
+      "shape_bmnk": [
+        1,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        129,
+        17
+      ],
+      "logical_b_shape": [
+        129,
+        19
+      ],
+      "physical_shapes": [
+        [
+          65,
+          17
+        ],
+        [
+          65,
+          19
+        ],
+        [
+          9,
+          17
+        ],
+        [
+          9,
+          19
+        ]
+      ],
+      "oracle_sha256": "c743c4782f6a76c21730cc2628b9537d003289b6f68508949fb01c08b19a1405",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 595.6968289974611,
+      "warm_public_ms": [
+        1.5092619869392365,
+        1.274340000236407,
+        1.2062489986419678,
+        1.1708679958246648,
+        1.186979003250599,
+        1.3399260060396045,
+        1.2708930007647723
+      ],
+      "warm_public_median_ms": 1.2708930007647723,
+      "resident_device_event_ms": [
+        0.008423999883234501,
+        0.009449919685721397,
+        0.009307839907705784,
+        0.008761600591242313,
+        0.00934848003089428,
+        0.0106047997251153,
+        0.008443200029432774
+      ],
+      "resident_device_event_median_ms": 0.009307839907705784,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "4123e6b34e4e846e83fbcbfca8b1eb4f0181d9bce1e5b78313b86d299266c339",
+      "tile_ir_digest": "a4ea92c0a9f2ffc6545a4afc232e3774b8495b4fc989738f60185304d8f55015",
+      "image_sha256": "b64e54fe5c5bfda8b4c329f0bd8d35ac40f7e770012f3002e930f8e592e4f7df",
+      "resources": {
+        "registers_per_thread": 72,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "rank_two",
+      "transposeA": true,
+      "transposeB": true,
+      "shape_bmnk": [
+        1,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        129,
+        17
+      ],
+      "logical_b_shape": [
+        19,
+        129
+      ],
+      "physical_shapes": [
+        [
+          65,
+          17
+        ],
+        [
+          19,
+          65
+        ],
+        [
+          9,
+          17
+        ],
+        [
+          19,
+          9
+        ]
+      ],
+      "oracle_sha256": "c743c4782f6a76c21730cc2628b9537d003289b6f68508949fb01c08b19a1405",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 579.6443780127447,
+      "warm_public_ms": [
+        1.4670109958387911,
+        1.4242100005503744,
+        1.2417590187396854,
+        1.1950079933740199,
+        1.2073389953002334,
+        1.3764799805358052,
+        1.2509490188676864
+      ],
+      "warm_public_median_ms": 1.2509490188676864,
+      "resident_device_event_ms": [
+        0.008593919686973095,
+        0.0091711999848485,
+        0.009852799586951733,
+        0.009481280110776424,
+        0.009004159830510616,
+        0.009078720584511757,
+        0.008800639770925045
+      ],
+      "resident_device_event_median_ms": 0.009078720584511757,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "01580e94e5918c6364aa1187437fb18a2c575acf66520fec27ae8fa96929c8bc",
+      "tile_ir_digest": "5dfd0f7e70c03a80428f471c0dd015fc4edcb954677589f4860055a15a60747e",
+      "image_sha256": "aa85f6053d18a8c11e1fcd5a685e0d227f9ae78aaa001962a189669f5e7cc3f0",
+      "resources": {
+        "registers_per_thread": 72,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": false,
+      "transposeB": false,
+      "shape_bmnk": [
+        3,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        3,
+        17,
+        129
+      ],
+      "logical_b_shape": [
+        3,
+        129,
+        19
+      ],
+      "physical_shapes": [
+        [
+          3,
+          17,
+          65
+        ],
+        [
+          3,
+          65,
+          19
+        ],
+        [
+          3,
+          17,
+          9
+        ],
+        [
+          3,
+          9,
+          19
+        ]
+      ],
+      "oracle_sha256": "13e0b4b7c63abe6d3fa8f9d27212b825e5543a9c2641f0dea8bcaf201f69eebb",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 562.0647459872998,
+      "warm_public_ms": [
+        1.5189209952950478,
+        1.3472299906425178,
+        1.269148982828483,
+        1.2341190013103187,
+        1.2199690099805593,
+        1.306919992202893,
+        1.2500089942477643
+      ],
+      "warm_public_median_ms": 1.269148982828483,
+      "resident_device_event_ms": [
+        0.008881920017302036,
+        0.009113919921219349,
+        0.00839392002671957,
+        0.00911295972764492,
+        0.008287999778985977,
+        0.009592319838702679,
+        0.008581439964473248
+      ],
+      "resident_device_event_median_ms": 0.008881920017302036,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "549410bdd77e06523a9398e1b9d2f78a7941c747edcac8d8850ddc465af6e13d",
+      "tile_ir_digest": "837bb5b38bf1aac88ec9c47d55543eb107b151cbe98b994bdd4a5d2af26302b7",
+      "image_sha256": "d36317d0db15ebd35ac2dd1ad7534922d0abcea05953fad73ab07ededb346190",
+      "resources": {
+        "registers_per_thread": 94,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 20
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": false,
+      "transposeB": true,
+      "shape_bmnk": [
+        3,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        3,
+        17,
+        129
+      ],
+      "logical_b_shape": [
+        3,
+        19,
+        129
+      ],
+      "physical_shapes": [
+        [
+          3,
+          17,
+          65
+        ],
+        [
+          3,
+          19,
+          65
+        ],
+        [
+          3,
+          17,
+          9
+        ],
+        [
+          3,
+          19,
+          9
+        ]
+      ],
+      "oracle_sha256": "13e0b4b7c63abe6d3fa8f9d27212b825e5543a9c2641f0dea8bcaf201f69eebb",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 555.6128890020773,
+      "warm_public_ms": [
+        1.5918009739834815,
+        1.2686799746006727,
+        1.2931200035382062,
+        1.8082440074067563,
+        1.5717530041001737,
+        1.3774209946859628,
+        1.4263410121202469
+      ],
+      "warm_public_median_ms": 1.4263410121202469,
+      "resident_device_event_ms": [
+        0.009143679402768612,
+        0.008826879784464836,
+        0.008244800381362438,
+        0.010086080059409142,
+        0.00973919965326786,
+        0.0084544001147151,
+        0.008176960051059723
+      ],
+      "resident_device_event_median_ms": 0.008826879784464836,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "d0a116512e5ab994a8c59548b87cf800f1d53eeb96581306814c3f3d5f25feff",
+      "tile_ir_digest": "031423873751e1370b2429ae35bf0d18d3dceb9e5b9ca7d583b5fe34349b6ae6",
+      "image_sha256": "9a299cedaa805e907e78057c19c4fd17f1779565eeb2b58a1e8a16255d917ca8",
+      "resources": {
+        "registers_per_thread": 56,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": true,
+      "transposeB": false,
+      "shape_bmnk": [
+        3,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        3,
+        129,
+        17
+      ],
+      "logical_b_shape": [
+        3,
+        129,
+        19
+      ],
+      "physical_shapes": [
+        [
+          3,
+          65,
+          17
+        ],
+        [
+          3,
+          65,
+          19
+        ],
+        [
+          3,
+          9,
+          17
+        ],
+        [
+          3,
+          9,
+          19
+        ]
+      ],
+      "oracle_sha256": "13e0b4b7c63abe6d3fa8f9d27212b825e5543a9c2641f0dea8bcaf201f69eebb",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 596.0317899880465,
+      "warm_public_ms": [
+        1.649653015192598,
+        1.3850700051989406,
+        1.372689992422238,
+        1.3159899972379208,
+        1.3339889992494136,
+        1.4176609984133393,
+        1.3580899976659566
+      ],
+      "warm_public_median_ms": 1.372689992422238,
+      "resident_device_event_ms": [
+        0.01021919958293438,
+        0.008021119982004166,
+        0.008406720124185085,
+        0.008665920235216618,
+        0.009405120275914669,
+        0.009373759850859642,
+        0.008289599791169167
+      ],
+      "resident_device_event_median_ms": 0.008665920235216618,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "ec7110b5ca415be706ce859a92e7d936f5086a8b6ab66d13b67df120621bbbf9",
+      "tile_ir_digest": "8da6dc2939cfb5f4f9a64a165544aa20079e16d56099d13374b8f16c00c741a2",
+      "image_sha256": "4e7cced24e013a3a583dc570919040319bb7543919b49e1e0556ad26e7abffc4",
+      "resources": {
+        "registers_per_thread": 80,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": true,
+      "transposeB": true,
+      "shape_bmnk": [
+        3,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        3,
+        129,
+        17
+      ],
+      "logical_b_shape": [
+        3,
+        19,
+        129
+      ],
+      "physical_shapes": [
+        [
+          3,
+          65,
+          17
+        ],
+        [
+          3,
+          19,
+          65
+        ],
+        [
+          3,
+          9,
+          17
+        ],
+        [
+          3,
+          19,
+          9
+        ]
+      ],
+      "oracle_sha256": "13e0b4b7c63abe6d3fa8f9d27212b825e5543a9c2641f0dea8bcaf201f69eebb",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 562.0588359888643,
+      "warm_public_ms": [
+        1.7173730011563748,
+        1.3723809970542789,
+        1.316720008617267,
+        1.3728799822274595,
+        1.5331419999711215,
+        1.5167210076469928,
+        1.3483799993991852
+      ],
+      "warm_public_median_ms": 1.3728799822274595,
+      "resident_device_event_ms": [
+        0.00866176001727581,
+        0.008770239539444447,
+        0.01072543952614069,
+        0.008167999796569347,
+        0.008340160362422466,
+        0.00844672042876482,
+        0.010313600301742554
+      ],
+      "resident_device_event_median_ms": 0.00866176001727581,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "25e1def6aaba966b270814ab1fa1884317076b31d99bb87b2d6146f7e88a3216",
+      "tile_ir_digest": "52d1ca6007bbda74fd48bd5b62af1556118550cc08cc53932ba7cbfa37fb18e0",
+      "image_sha256": "3c6b6f33d4cc0c244eaaaeaa1ee597c152150b5dff843290a1d82090572a53ec",
+      "resources": {
+        "registers_per_thread": 72,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "shared_rhs_rows",
+      "transposeA": false,
+      "transposeB": false,
+      "shape_bmnk": [
+        3,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        3,
+        17,
+        129
+      ],
+      "logical_b_shape": [
+        129,
+        19
+      ],
+      "physical_shapes": [
+        [
+          3,
+          17,
+          65
+        ],
+        [
+          65,
+          19
+        ],
+        [
+          3,
+          17,
+          9
+        ],
+        [
+          9,
+          19
+        ]
+      ],
+      "oracle_sha256": "fabd35e615ac225e331c5fadac94ae389aeb0aafe6f56c29aa69aab83a8b923d",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 575.6836300133727,
+      "warm_public_ms": [
+        1.7874629993457347,
+        2.555859013227746,
+        1.4454599877353758,
+        1.2884199968539178,
+        1.396310981363058,
+        1.3777499843854457,
+        1.4582110161427408
+      ],
+      "warm_public_median_ms": 1.4454599877353758,
+      "resident_device_event_ms": [
+        0.008029759861528873,
+        0.009354880079627037,
+        0.011307519860565662,
+        0.008939200080931187,
+        0.011021120473742485,
+        0.00946751981973648,
+        0.008958719670772552
+      ],
+      "resident_device_event_median_ms": 0.009354880079627037,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "81e090298e83847dc8c16c863d91c0761bb61c9e838263766dec71f57f524225",
+      "tile_ir_digest": "e0873338013b4bb5c12c8e862f2dae3d14e2467c743ea2db79264dac92ecc4f5",
+      "image_sha256": "e795233585e3db693cae403d8489cf21bd874f1e0905f0a870634dcca66dbf5d",
+      "resources": {
+        "registers_per_thread": 92,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 20
+      }
+    },
+    {
+      "mode": "shared_rhs_rows",
+      "transposeA": false,
+      "transposeB": true,
+      "shape_bmnk": [
+        3,
+        17,
+        19,
+        129
+      ],
+      "logical_a_shape": [
+        3,
+        17,
+        129
+      ],
+      "logical_b_shape": [
+        19,
+        129
+      ],
+      "physical_shapes": [
+        [
+          3,
+          17,
+          65
+        ],
+        [
+          19,
+          65
+        ],
+        [
+          3,
+          17,
+          9
+        ],
+        [
+          19,
+          9
+        ]
+      ],
+      "oracle_sha256": "fabd35e615ac225e331c5fadac94ae389aeb0aafe6f56c29aa69aab83a8b923d",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 569.6919950132724,
+      "warm_public_ms": [
+        2.0165589812677354,
+        1.4394659956451505,
+        1.3240809785202146,
+        1.3168959994800389,
+        1.452836993848905,
+        1.4364510134328157,
+        1.3501489884220064
+      ],
+      "warm_public_median_ms": 1.4364510134328157,
+      "resident_device_event_ms": [
+        0.008771520107984543,
+        0.011462719179689884,
+        0.008436480537056923,
+        0.008356800302863121,
+        0.008854719810187817,
+        0.007916159927845001,
+        0.010571520775556564
+      ],
+      "resident_device_event_median_ms": 0.008771520107984543,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "b452959a8c63524e16b33e7228a18f940e383e37df34517c8a43e3154b1bd707",
+      "tile_ir_digest": "b2634e2b7b78f6b9a31ad54bab5f6b3488c1df149e6d051aebd5b37b4f56e81f",
+      "image_sha256": "947f2afef5982add84e78295f7ed16b3936bff290bd38c8364318a460a871171",
+      "resources": {
+        "registers_per_thread": 104,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 16
+      }
+    },
+    {
+      "mode": "rank_two",
+      "transposeA": false,
+      "transposeB": false,
+      "shape_bmnk": [
+        1,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        128,
+        256
+      ],
+      "logical_b_shape": [
+        256,
+        128
+      ],
+      "physical_shapes": [
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          16
+        ],
+        [
+          16,
+          128
+        ]
+      ],
+      "oracle_sha256": "298c6f984d126c94574eed96cc320036849fa09413f6d949b13db8f436ae69cf",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 585.6833590078168,
+      "warm_public_ms": [
+        1.7669130174908787,
+        1.3921700010541826,
+        1.3760849833488464,
+        1.4918010274413973,
+        1.5353960043285042,
+        1.5370670007541776,
+        1.3761559966951609
+      ],
+      "warm_public_median_ms": 1.4918010274413973,
+      "resident_device_event_ms": [
+        0.011103680357336998,
+        0.010626239702105522,
+        0.008642559871077538,
+        0.011157440021634102,
+        0.009081599302589893,
+        0.00913248024880886,
+        0.009776639752089977
+      ],
+      "resident_device_event_median_ms": 0.009776639752089977,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "54df47106a0cdcfa531cefbe0c5e5f98c172847726f55382e5916ce724d884a4",
+      "tile_ir_digest": "3859c888165c0d8f4693c00a3ce43d2d3a97ae423c76f67dc7c3baba9e43edb1",
+      "image_sha256": "e795233585e3db693cae403d8489cf21bd874f1e0905f0a870634dcca66dbf5d",
+      "resources": {
+        "registers_per_thread": 92,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 20
+      }
+    },
+    {
+      "mode": "rank_two",
+      "transposeA": false,
+      "transposeB": true,
+      "shape_bmnk": [
+        1,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        128,
+        256
+      ],
+      "logical_b_shape": [
+        128,
+        256
+      ],
+      "physical_shapes": [
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          16
+        ],
+        [
+          128,
+          16
+        ]
+      ],
+      "oracle_sha256": "298c6f984d126c94574eed96cc320036849fa09413f6d949b13db8f436ae69cf",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 555.6649089849088,
+      "warm_public_ms": [
+        1.7312019772361964,
+        1.349529979052022,
+        1.3261499989312142,
+        1.3433200074359775,
+        1.3448200188577175,
+        1.3440859911497682,
+        1.2791799963451922
+      ],
+      "warm_public_median_ms": 1.3440859911497682,
+      "resident_device_event_ms": [
+        0.010649600066244602,
+        0.00985631998628378,
+        0.009890880435705185,
+        0.012716480530798435,
+        0.010958719998598099,
+        0.00917727965861559,
+        0.010322559624910355
+      ],
+      "resident_device_event_median_ms": 0.010322559624910355,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "46ebebd2e93a2e76ab0ba0127f7ba07fb0239e852f31fc34dc74c6795b90e7ae",
+      "tile_ir_digest": "1be88d3d43e5dbea1c3c15ced3595c9de85ca17fd1292be719d24c5be7530ce3",
+      "image_sha256": "947f2afef5982add84e78295f7ed16b3936bff290bd38c8364318a460a871171",
+      "resources": {
+        "registers_per_thread": 104,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 16
+      }
+    },
+    {
+      "mode": "rank_two",
+      "transposeA": true,
+      "transposeB": false,
+      "shape_bmnk": [
+        1,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        256,
+        128
+      ],
+      "logical_b_shape": [
+        256,
+        128
+      ],
+      "physical_shapes": [
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          16,
+          128
+        ],
+        [
+          16,
+          128
+        ]
+      ],
+      "oracle_sha256": "298c6f984d126c94574eed96cc320036849fa09413f6d949b13db8f436ae69cf",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 557.8116529795807,
+      "warm_public_ms": [
+        1.7225230112671852,
+        1.2799790129065514,
+        1.3145900156814605,
+        1.2472289963625371,
+        1.3124399993102998,
+        1.4009560109116137,
+        1.330539002083242
+      ],
+      "warm_public_median_ms": 1.3145900156814605,
+      "resident_device_event_ms": [
+        0.009970240294933319,
+        0.009801600128412247,
+        0.009294399991631508,
+        0.01035328023135662,
+        0.00952352024614811,
+        0.010126719251275063,
+        0.0119484793394804
+      ],
+      "resident_device_event_median_ms": 0.009970240294933319,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "b523e2175c557e1663e60c844e1add5c39009729905096d4b7616f465c006a11",
+      "tile_ir_digest": "ceb83c7ace93f85f8b143b38a05433f5a7d879504c343e891f6ea900060d5a26",
+      "image_sha256": "b64e54fe5c5bfda8b4c329f0bd8d35ac40f7e770012f3002e930f8e592e4f7df",
+      "resources": {
+        "registers_per_thread": 72,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "rank_two",
+      "transposeA": true,
+      "transposeB": true,
+      "shape_bmnk": [
+        1,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        256,
+        128
+      ],
+      "logical_b_shape": [
+        128,
+        256
+      ],
+      "physical_shapes": [
+        [
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          16,
+          128
+        ],
+        [
+          128,
+          16
+        ]
+      ],
+      "oracle_sha256": "298c6f984d126c94574eed96cc320036849fa09413f6d949b13db8f436ae69cf",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 583.0559899914078,
+      "warm_public_ms": [
+        1.6088580014184117,
+        1.3662140117958188,
+        1.488220994360745,
+        1.3069249980617315,
+        2.4857730022631586,
+        1.4300619950518012,
+        1.2776099902112037
+      ],
+      "warm_public_median_ms": 1.4300619950518012,
+      "resident_device_event_ms": [
+        0.013032319955527782,
+        0.014264639467000961,
+        0.011538560502231121,
+        0.012552959844470024,
+        0.011168640106916428,
+        0.010430079884827137,
+        0.010957119055092335
+      ],
+      "resident_device_event_median_ms": 0.011538560502231121,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "02762984ae6bcad8aa5fe85401bae216615ec261a97fbd90350cb56647e1eba2",
+      "tile_ir_digest": "f086bdb7e9e8263d9a569e7d3dd128ec38ea391843ef7cd06b17f5dc35dae6de",
+      "image_sha256": "aa85f6053d18a8c11e1fcd5a685e0d227f9ae78aaa001962a189669f5e7cc3f0",
+      "resources": {
+        "registers_per_thread": 72,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": false,
+      "transposeB": false,
+      "shape_bmnk": [
+        3,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        3,
+        128,
+        256
+      ],
+      "logical_b_shape": [
+        3,
+        256,
+        128
+      ],
+      "physical_shapes": [
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          16
+        ],
+        [
+          3,
+          16,
+          128
+        ]
+      ],
+      "oracle_sha256": "666927dce4363f8e9716ff0333b4b52c2283d91808737f2703cb1aaa63f89a25",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 594.258143013576,
+      "warm_public_ms": [
+        1.925099000800401,
+        1.6008719976525754,
+        1.4620820002164692,
+        1.4645209885202348,
+        1.4041409885976464,
+        1.6605769924353808,
+        1.6819179872982204
+      ],
+      "warm_public_median_ms": 1.6008719976525754,
+      "resident_device_event_ms": [
+        0.011411520652472973,
+        0.01079103909432888,
+        0.010969920083880424,
+        0.010510400868952274,
+        0.011320960707962513,
+        0.011008000001311302,
+        0.011944960802793503
+      ],
+      "resident_device_event_median_ms": 0.011008000001311302,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "ceb151513610ea20b8ecd72bd804efdac5bf185d5dd922564d76281bf3744805",
+      "tile_ir_digest": "ab1994ff7fcca6ee630156409e3781800baae6af2001fa7f5c5b98f824f793b5",
+      "image_sha256": "d36317d0db15ebd35ac2dd1ad7534922d0abcea05953fad73ab07ededb346190",
+      "resources": {
+        "registers_per_thread": 94,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 20
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": false,
+      "transposeB": true,
+      "shape_bmnk": [
+        3,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        3,
+        128,
+        256
+      ],
+      "logical_b_shape": [
+        3,
+        128,
+        256
+      ],
+      "physical_shapes": [
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          16
+        ],
+        [
+          3,
+          128,
+          16
+        ]
+      ],
+      "oracle_sha256": "666927dce4363f8e9716ff0333b4b52c2283d91808737f2703cb1aaa63f89a25",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 558.4615700063296,
+      "warm_public_ms": [
+        1.9733510271180421,
+        1.5016819816082716,
+        1.4688159862998873,
+        1.5594470023643225,
+        1.4660699816886336,
+        1.6530420107301325,
+        1.5444209857378155
+      ],
+      "warm_public_median_ms": 1.5444209857378155,
+      "resident_device_event_ms": [
+        0.01229408010840416,
+        0.012099839746952057,
+        0.01104671973735094,
+        0.010992319323122501,
+        0.012540160678327084,
+        0.01086719986051321,
+        0.012218240648508072
+      ],
+      "resident_device_event_median_ms": 0.012099839746952057,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "117a2639c25e50cfe7e2fef660307d464a4059718762ec4a602d26e8bd8d18a7",
+      "tile_ir_digest": "3aa50546132b99bdd1b79ee9578d83535d9809bd636499f2f19f686a1ca84ca1",
+      "image_sha256": "9a299cedaa805e907e78057c19c4fd17f1779565eeb2b58a1e8a16255d917ca8",
+      "resources": {
+        "registers_per_thread": 56,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": true,
+      "transposeB": false,
+      "shape_bmnk": [
+        3,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        3,
+        256,
+        128
+      ],
+      "logical_b_shape": [
+        3,
+        256,
+        128
+      ],
+      "physical_shapes": [
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          16,
+          128
+        ],
+        [
+          3,
+          16,
+          128
+        ]
+      ],
+      "oracle_sha256": "666927dce4363f8e9716ff0333b4b52c2283d91808737f2703cb1aaa63f89a25",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 568.5319379845168,
+      "warm_public_ms": [
+        2.4196470039896667,
+        2.0512200135271996,
+        1.8037830013781786,
+        1.4235310081858188,
+        1.717492996249348,
+        1.6311329964082688,
+        1.38774499646388
+      ],
+      "warm_public_median_ms": 1.717492996249348,
+      "resident_device_event_ms": [
+        0.013001919724047184,
+        0.010566719807684422,
+        0.010873599909245968,
+        0.01121888030320406,
+        0.010457919910550117,
+        0.011524800211191177,
+        0.011061119846999645
+      ],
+      "resident_device_event_median_ms": 0.011061119846999645,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "b3595e6a87752947b82cc8314f303eb31ffeccf5cd3ef30c10dfd62c10e27bd8",
+      "tile_ir_digest": "c19932805fd3daf2571a2f7ca323b477a7dcda6062cc593e653ff8b9ea561a94",
+      "image_sha256": "4e7cced24e013a3a583dc570919040319bb7543919b49e1e0556ad26e7abffc4",
+      "resources": {
+        "registers_per_thread": 80,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "independent_rhs",
+      "transposeA": true,
+      "transposeB": true,
+      "shape_bmnk": [
+        3,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        3,
+        256,
+        128
+      ],
+      "logical_b_shape": [
+        3,
+        128,
+        256
+      ],
+      "physical_shapes": [
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          3,
+          16,
+          128
+        ],
+        [
+          3,
+          128,
+          16
+        ]
+      ],
+      "oracle_sha256": "666927dce4363f8e9716ff0333b4b52c2283d91808737f2703cb1aaa63f89a25",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 577.279279998038,
+      "warm_public_ms": [
+        1.8089539953507483,
+        1.5564420027658343,
+        1.4867110003251582,
+        1.8349679885432124,
+        1.9816599960904568,
+        1.546740997582674,
+        1.3956610055174679
+      ],
+      "warm_public_median_ms": 1.5564420027658343,
+      "resident_device_event_ms": [
+        0.009755520150065422,
+        0.010037759318947792,
+        0.009784960187971592,
+        0.010936319828033447,
+        0.010677119717001915,
+        0.009985280223190784,
+        0.010351359844207764
+      ],
+      "resident_device_event_median_ms": 0.010037759318947792,
+      "entry_symbol": "tessera_tile_matmul_nvfp4_batched",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1",
+      "schedule_digest": "c28fe8f1110ea6425b276bdc291a243c5005cf359de7a516459e041f5eb9cbe4",
+      "tile_ir_digest": "a4324777db8ff455bb12d842138856f5746d9984bb02f51781537ebfb1116013",
+      "image_sha256": "3c6b6f33d4cc0c244eaaaeaa1ee597c152150b5dff843290a1d82090572a53ec",
+      "resources": {
+        "registers_per_thread": 72,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 24
+      }
+    },
+    {
+      "mode": "shared_rhs_rows",
+      "transposeA": false,
+      "transposeB": false,
+      "shape_bmnk": [
+        3,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        3,
+        128,
+        256
+      ],
+      "logical_b_shape": [
+        256,
+        128
+      ],
+      "physical_shapes": [
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          16
+        ],
+        [
+          16,
+          128
+        ]
+      ],
+      "oracle_sha256": "05a205786f39c17bda9002833d98a4a9fc67f59bb49509165d36bdb8e9539bce",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 608.5967140097637,
+      "warm_public_ms": [
+        1.8352030019741505,
+        1.4487710141111165,
+        1.503470994066447,
+        1.6058720066212118,
+        1.4465109852608293,
+        1.44791099592112,
+        1.5409320185426623
+      ],
+      "warm_public_median_ms": 1.503470994066447,
+      "resident_device_event_ms": [
+        0.010905920527875423,
+        0.011799040250480175,
+        0.011029119603335857,
+        0.01126047968864441,
+        0.011301440186798573,
+        0.011260800063610077,
+        0.01270816009491682
+      ],
+      "resident_device_event_median_ms": 0.011260800063610077,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "1ae7067f5c3021314cbd39a04e05e0ec7dd73d83b9b9d1d7337e2f8ba608f239",
+      "tile_ir_digest": "66c602c4c81fe55e2d6385700c7f1209d88a10170a2fce913452d937f9068819",
+      "image_sha256": "e795233585e3db693cae403d8489cf21bd874f1e0905f0a870634dcca66dbf5d",
+      "resources": {
+        "registers_per_thread": 92,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 20
+      }
+    },
+    {
+      "mode": "shared_rhs_rows",
+      "transposeA": false,
+      "transposeB": true,
+      "shape_bmnk": [
+        3,
+        128,
+        128,
+        256
+      ],
+      "logical_a_shape": [
+        3,
+        128,
+        256
+      ],
+      "logical_b_shape": [
+        128,
+        256
+      ],
+      "physical_shapes": [
+        [
+          3,
+          128,
+          128
+        ],
+        [
+          128,
+          128
+        ],
+        [
+          3,
+          128,
+          16
+        ],
+        [
+          128,
+          16
+        ]
+      ],
+      "oracle_sha256": "05a205786f39c17bda9002833d98a4a9fc67f59bb49509165d36bdb8e9539bce",
+      "maximum_absolute_error": 0.0,
+      "cold_public_ms": 561.3549769914243,
+      "warm_public_ms": [
+        1.8040729919448495,
+        1.669041987042874,
+        1.49267099914141,
+        1.4035610074643046,
+        1.9317149999551475,
+        1.5681610093452036,
+        1.529372006189078
+      ],
+      "warm_public_median_ms": 1.5681610093452036,
+      "resident_device_event_ms": [
+        0.012153919786214828,
+        0.011663999408483505,
+        0.012841599993407726,
+        0.011934719979763031,
+        0.012526719830930233,
+        0.01223072037100792,
+        0.010867520235478878
+      ],
+      "resident_device_event_median_ms": 0.012153919786214828,
+      "entry_symbol": "tessera_tile_matmul_nvfp4",
+      "abi_id": "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1",
+      "schedule_digest": "51d2d57480a1b5aa87698eafa2619f9c0e3f328d02d25375aa6fc92957fcf126",
+      "tile_ir_digest": "f1aebd16f3b2b6c50a52022b9e24afdfe5bb2bb4b6195bfff5a6c332ce477512",
+      "image_sha256": "947f2afef5982add84e78295f7ed16b3936bff290bd38c8364318a460a871171",
+      "resources": {
+        "registers_per_thread": 104,
+        "static_shared_memory_bytes": 0,
+        "dynamic_shared_memory_bytes": 0,
+        "local_memory_bytes": 0,
+        "active_blocks_per_sm": 16
+      }
+    }
+  ]
+}

@@ -1,0 +1,794 @@
+{
+  "schema": "tessera.sm120.native_producer_chain_benchmark.v1",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "target": "nvidia_sm120",
+  "compiler_sha256": "ac321f5090c4ebc66c9264003253c0317c8df3f107f02797e7910e03c37c8c4d",
+  "runtime_path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so",
+  "runtime_sha256": "ca860af9503bbb4733c64d3a1c51634de7f7f1e09a7e3ad7720c8c6f67c58d60",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_native_producer_chain.py": "dec1843ab39b0dd8ab18dd832cf3c49ec640595ab95b7b3725481dd61ff94118",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "b4f09399e6d55d9ced43c5fb84f5cb5a84f240680ac2f0e42b7069e7cf43778e",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "3f5f9c47150269ce00e147c7b5ccb3d10684e1b216cae8fcb5ee80db9eae1f51",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "9197c74ebdc0a9b424627b48b974988e21e55a699975495223461d4166d2c8f5",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "804872425d2f7a262c253c03e758a534f140376303954d4f02cea13a8acfe306",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "c0758845535dc38cec20ff641e73f3844018e47bf4f11414347a7c3074424324"
+  },
+  "method": "independent float64 oracle with each producer rounded to storage; separate resident stage CUDA events; prepared complete-program host wall includes copies and synchronization",
+  "profiles": [
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "storage": "fp16",
+      "producer_count": 2,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.885928213596344e-08,
+      "images": [
+        "5453cc624d487a873de051be99341705da48fac711e676abdc223149e1418db6",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "1f6c46f864fc83a1ebeaf787c024bc72eaf812497ff8572912c885a93b8f48e9"
+      ],
+      "descriptor_digests": [
+        "e32f9960d574e0626dd867ffe3bb61f738e5ffdd6f702e7df116e211453611a4",
+        "1d1a96f9aca77f0720b1915433934c8606c7c308bd25139a0f278a55834f4331",
+        "86f205bd8d4bd8c3ea4a5395eaeb44a6c318e29cac5d2834111e1bbae1d54a8c"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "f48e75a7c63c130100be90d675a224fe35974c93cc28a01acc247ebd655a01c3",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.010882999747991562,
+            0.010906999930739403,
+            0.008609999902546406
+          ],
+          "median_ms": 0.010882999747991562
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.009171999990940094,
+            0.010784000158309937,
+            0.012833000160753727
+          ],
+          "median_ms": 0.010784000158309937
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.012721999548375607,
+            0.008555999957025051,
+            0.010944999754428864
+          ],
+          "median_ms": 0.010944999754428864
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.2272268000524491,
+        0.22255769872572273,
+        0.22177670034579933
+      ],
+      "prepared_host_wall_median_ms": 0.22255769872572273
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "storage": "fp16",
+      "producer_count": 3,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 2.10711732506752e-08,
+      "images": [
+        "354af040fa589a89a4b4202ac1a71aeed890e4cdb8fc527122275f2a3d359640",
+        "5453cc624d487a873de051be99341705da48fac711e676abdc223149e1418db6",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "1f6c46f864fc83a1ebeaf787c024bc72eaf812497ff8572912c885a93b8f48e9"
+      ],
+      "descriptor_digests": [
+        "d0a0d5e4bdc84b0e7ac24932062ae528cca5fb68c7fc4d019044b6a1723cb118",
+        "e1e9e3f8d1cbce5766123e639ac8d16cebcd6c2a03b87cc67ffc7fdec4642743",
+        "3a821b513206aba14ff9454575cfd02a3930fd23b934f47d76faf025f9962cc9",
+        "13513b6acd0dc5ada7f28b32e0f5ae260274ec7ed7d25c0fb1f8f423d79b4aa0"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "ea254526bb626ada669b3a259fbc3bf1775182c1f81db5765663f30772cb76ca",
+      "stages": [
+        {
+          "kind": "layernorm",
+          "device_event_samples_ms": [
+            0.012768999673426151,
+            0.01176500041037798,
+            0.007921000011265278
+          ],
+          "median_ms": 0.01176500041037798
+        },
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.008395999670028687,
+            0.013670000247657299,
+            0.009975999593734741
+          ],
+          "median_ms": 0.009975999593734741
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.009070999920368195,
+            0.013408999890089035,
+            0.012140000239014626
+          ],
+          "median_ms": 0.012140000239014626
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.009731999598443508,
+            0.009665999561548233,
+            0.009126000106334686
+          ],
+          "median_ms": 0.009665999561548233
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.23669989896006882,
+        0.23454889887943864,
+        0.24143409973476082
+      ],
+      "prepared_host_wall_median_ms": 0.23669989896006882
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "storage": "bf16",
+      "producer_count": 2,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.0943040251731873e-08,
+      "images": [
+        "6b01a34b7648bbc2c2b5c6e3dcbfb53b624f134967b718e6447da4069ab23e8d",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "bf7909b397eec085b733f95c4b6c380461149e70aecb562791bf0c22bdde23f5"
+      ],
+      "descriptor_digests": [
+        "2a51dfa303cb08d1a332ca19044db26030024577777125343c1cda3d7aa99179",
+        "5b71858e185d610d4a12182edd90794aa4c0b0d2dcfd858b3276fceefbb30563",
+        "4e54853618a861a910e3095201d3059ce478ef39b19778a4cefce7d0a282e99c"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "2e70a100a63400d07ee6807f3e1c071f2a342551eb04485fecea55000716e55d",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.01083299983292818,
+            0.007495000027120113,
+            0.008435999974608421
+          ],
+          "median_ms": 0.008435999974608421
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.010444999672472477,
+            0.010088999755680561,
+            0.00902399979531765
+          ],
+          "median_ms": 0.010088999755680561
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.010091999545693398,
+            0.008317999541759491,
+            0.009405000135302544
+          ],
+          "median_ms": 0.009405000135302544
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.23395690077450126,
+        0.22367979981936514,
+        0.19371329981368035
+      ],
+      "prepared_host_wall_median_ms": 0.22367979981936514
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "storage": "bf16",
+      "producer_count": 3,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.30385160446167e-08,
+      "images": [
+        "728c1833622762953451b200fef29e72f079c87c5265d0cc6cee6322c7d6ca19",
+        "6b01a34b7648bbc2c2b5c6e3dcbfb53b624f134967b718e6447da4069ab23e8d",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "bf7909b397eec085b733f95c4b6c380461149e70aecb562791bf0c22bdde23f5"
+      ],
+      "descriptor_digests": [
+        "926c0107447d910cf442e465959ff5d54e77ee3465fec37632f5dab2456bdfeb",
+        "1fa8e2340247d242f7bb6746113086b29bf698bd0dd412a22f6860d3e94290f6",
+        "7f38367f1f724ff95078d3658c55328a4e5c7d87168e49b33140105d39c29041",
+        "28171c75f4134f5a9b1221e97329ced6cbaa6894fc970143360267f8325797f1"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "915a205ee9da435ddbcbf81544f288f404ab70cee11236e842fafc5ed6e9974c",
+      "stages": [
+        {
+          "kind": "layernorm",
+          "device_event_samples_ms": [
+            0.009750000201165676,
+            0.008186000399291515,
+            0.00954199954867363
+          ],
+          "median_ms": 0.00954199954867363
+        },
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.008310999721288681,
+            0.010517000220716,
+            0.011609000153839588
+          ],
+          "median_ms": 0.010517000220716
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.008669000118970871,
+            0.01169000007212162,
+            0.011846000328660011
+          ],
+          "median_ms": 0.01169000007212162
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.009246000088751316,
+            0.008972999639809132,
+            0.01000600028783083
+          ],
+          "median_ms": 0.009246000088751316
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.22701190027873963,
+        0.21339449740480632,
+        0.24321399978362024
+      ],
+      "prepared_host_wall_median_ms": 0.22701190027873963
+    },
+    {
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "storage": "fp16",
+      "producer_count": 2,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 7.798298611305654e-06,
+      "images": [
+        "89d8bd1630fb28fa45634071774a8aa670483cda86e8726af67afd2897660bcf",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "03c9cd07900e935866a1fb22a0941f45054c89b92d76d1f4fb6d8bbf13ad980c"
+      ],
+      "descriptor_digests": [
+        "fbb7cce22f7aa6b23c2722597292a699c00bc87a6a4caad8787c05ca151216bc",
+        "12c6706232beadff2c0396790d9e76bccef2f69f0607672b7fa9dc84f3b8d87e",
+        "cdc72eadc91639d00c4b72ebfefdb132ee825633556fa04f3782c17efb37c65e"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "45d5e1e01150eec87509a05e35e631182f02cb5945acb0c7c18767c2abf56f66",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.008724000304937363,
+            0.007375000044703484,
+            0.007606999948620796
+          ],
+          "median_ms": 0.007606999948620796
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.045194000005722046,
+            0.04637699946761131,
+            0.046195998787879944
+          ],
+          "median_ms": 0.046195998787879944
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.010266999714076519,
+            0.00912300031632185,
+            0.008995999582111835
+          ],
+          "median_ms": 0.00912300031632185
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.27208759856875986,
+        0.2722454984905198,
+        0.27118370053358376
+      ],
+      "prepared_host_wall_median_ms": 0.27208759856875986
+    },
+    {
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "storage": "fp16",
+      "producer_count": 3,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 2.0905572455376387e-06,
+      "images": [
+        "a28c85815c90c9bcf1e73f934796ea7337f43b6182053569d145bdf8b381712e",
+        "89d8bd1630fb28fa45634071774a8aa670483cda86e8726af67afd2897660bcf",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "03c9cd07900e935866a1fb22a0941f45054c89b92d76d1f4fb6d8bbf13ad980c"
+      ],
+      "descriptor_digests": [
+        "09e465587f0510622d8e03564fa05b5e62bae7b70c850fdb20233167b94c2fc7",
+        "2f52d497822058a4ed31623aa6587a5a8c1ada0ccfdc3961f137e1048fd1e7b4",
+        "e85539e85252c6e2bc9da430a4a041c0ea1f9986e22ce813073a2d075217707d",
+        "b5230ac49b1b68737f836fa00f4613b60227da5337b091871882d38cf1296b72"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "23153d11d19b3f9c5bf1cc15a477fbe3fbd18ffad733dd68ef020180c505b19d",
+      "stages": [
+        {
+          "kind": "layernorm",
+          "device_event_samples_ms": [
+            0.009740999899804592,
+            0.008875000290572643,
+            0.007908999919891357
+          ],
+          "median_ms": 0.008875000290572643
+        },
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.007555000018328428,
+            0.007544999942183495,
+            0.008465999737381935
+          ],
+          "median_ms": 0.007555000018328428
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.0451820008456707,
+            0.04523000121116638,
+            0.04608000069856644
+          ],
+          "median_ms": 0.04523000121116638
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.009708000347018242,
+            0.010177000425755978,
+            0.010489000007510185
+          ],
+          "median_ms": 0.010177000425755978
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.28416770219337195,
+        0.2684125007363036,
+        0.2755497000180185
+      ],
+      "prepared_host_wall_median_ms": 0.2755497000180185
+    },
+    {
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "storage": "bf16",
+      "producer_count": 2,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 3.259629011154175e-08,
+      "images": [
+        "d13cea1f6ce656a3df2423503064e8b631ecae9c1ad350811740e77dec630f33",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "4c554bd1eb02012acc3bc8b0e68c9c36e21ba304036e27080a33ad5a303a7f01"
+      ],
+      "descriptor_digests": [
+        "1fd813cbfa63045ccdefd19c110da0bd053f537526f71392673d55c9efa54594",
+        "d3f486357f87b45b24882d9e7638211c5a589186e1b3b6a12f2976b1a632a4d7",
+        "c5119a1cc324ca25d2822157910c180610f74dd30b023cf19d9c43436ceae704"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "c12d966561552b40facf985964c7304289f3585bba139ae1dce36de363900f05",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.010945999994874,
+            0.008901000022888184,
+            0.007195999845862389
+          ],
+          "median_ms": 0.008901000022888184
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.04548000171780586,
+            0.045180998742580414,
+            0.045246999710798264
+          ],
+          "median_ms": 0.045246999710798264
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.009743999689817429,
+            0.010036000050604343,
+            0.008352000266313553
+          ],
+          "median_ms": 0.009743999689817429
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.2851207013009116,
+        0.27478660049382597,
+        0.5309408996254206
+      ],
+      "prepared_host_wall_median_ms": 0.2851207013009116
+    },
+    {
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "storage": "bf16",
+      "producer_count": 3,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 5.963491275906563e-06,
+      "images": [
+        "0009c79c5f2fb0e034d8416cd434bf465e4836463bfc8e847dac45ccc2931740",
+        "d13cea1f6ce656a3df2423503064e8b631ecae9c1ad350811740e77dec630f33",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "4c554bd1eb02012acc3bc8b0e68c9c36e21ba304036e27080a33ad5a303a7f01"
+      ],
+      "descriptor_digests": [
+        "ccef45117f612a550d10f26f5d5262b96047c213f7fa8516446244b90cf0f62b",
+        "51409a7703a43620215eb7a3503a0a205139d090b11ff75a0def861ae1c02443",
+        "658d2e280813ccc1e3b691f50a1b89660fa479eaacf4926d82de4cb24503da8e",
+        "69ff9a15318ad2fba6864da38060cc20b2380203b94c2d52c346be1f11adf3a9"
+      ],
+      "consumer_physical_route": "typed_fragment_global",
+      "rhs_storage_order": "row_major",
+      "plan_digest": "8e7908d87bb4e4c96938195519ad16635a2a899361ed554facc542b0c820f3db",
+      "stages": [
+        {
+          "kind": "layernorm",
+          "device_event_samples_ms": [
+            0.008642000146210194,
+            0.009974000044167042,
+            0.009104999713599682
+          ],
+          "median_ms": 0.009104999713599682
+        },
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.009432000108063221,
+            0.009374000132083893,
+            0.00834100041538477
+          ],
+          "median_ms": 0.009374000132083893
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.04530800133943558,
+            0.04617699980735779,
+            0.045173000544309616
+          ],
+          "median_ms": 0.04530800133943558
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.010494999587535858,
+            0.007404999807476997,
+            0.007410000078380108
+          ],
+          "median_ms": 0.007410000078380108
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.2879218984162435,
+        0.2801376977004111,
+        0.2856378006981686
+      ],
+      "prepared_host_wall_median_ms": 0.2856378006981686
+    },
+    {
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "storage": "fp16",
+      "producer_count": 2,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.0340379574813596e-06,
+      "images": [
+        "7a9641561fb16a12eacc230b65fe57b4b935be1d0c423dc254696a73052fac91",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "c2872ecb2d7ab45e98d080ce102f1b0470abddb5f0cb04bb0f1b030573218c42"
+      ],
+      "descriptor_digests": [
+        "9ae831f7bc9149c07ba5014cbdec92c9335f8d1be10eca5a322abb649ebc87de",
+        "4b1236573be134905218f2a4b0d8660b2f1fe0364687976a5dbb80e6d7d7a19d",
+        "b1e407f7dd42eaee4f2c99ccf093ea0bf5c717c74922f0a87a03f2031bdc98e3"
+      ],
+      "consumer_physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "rhs_storage_order": "col_major",
+      "plan_digest": "64bf0990e5ff0620881f7728a5c8da20b5e47d84278124de54752ddcb881b771",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.010847999714314938,
+            0.010945999994874,
+            0.009607999585568905
+          ],
+          "median_ms": 0.010847999714314938
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.9924749732017517,
+            0.9915850162506104,
+            0.9917700290679932
+          ],
+          "median_ms": 0.9917700290679932
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.05724000185728073,
+            0.057135000824928284,
+            0.057193998247385025
+          ],
+          "median_ms": 0.057193998247385025
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        1.6712298995116726,
+        1.6368913988117129,
+        1.6007517027901486
+      ],
+      "prepared_host_wall_median_ms": 1.6368913988117129
+    },
+    {
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "storage": "fp16",
+      "producer_count": 3,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.9940613356084214e-06,
+      "images": [
+        "56f5342be42cf9d99429fd950117b59cfbf8f3289bde182d02ef435d84ca8213",
+        "7a9641561fb16a12eacc230b65fe57b4b935be1d0c423dc254696a73052fac91",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "c2872ecb2d7ab45e98d080ce102f1b0470abddb5f0cb04bb0f1b030573218c42"
+      ],
+      "descriptor_digests": [
+        "903ad98bde80433d889aa68e52daf31f522e5ab9591a05a8cb9378b3ee7ae0d6",
+        "aab077aa26b4c6796ed5f2152c5e4bb6d802b72ce9e034bb60782c0a17631012",
+        "77dc9e7430f9cdefa4cfff3d876c4f5270290ed72538b4446422cb4ce9403501",
+        "d271954e83029180dcdbff0ae464f89dddd308fe6e00127c3fe2b3a5a3c06fd0"
+      ],
+      "consumer_physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "rhs_storage_order": "col_major",
+      "plan_digest": "e824e2cef4371b048d316ea2521b08d48ea402025f0ec4f3eef442cdc5824856",
+      "stages": [
+        {
+          "kind": "layernorm",
+          "device_event_samples_ms": [
+            0.010604999959468842,
+            0.010487999767065048,
+            0.011928999796509743
+          ],
+          "median_ms": 0.010604999959468842
+        },
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.010017000138759613,
+            0.01128700003027916,
+            0.007949000224471092
+          ],
+          "median_ms": 0.010017000138759613
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.991320013999939,
+            0.9920840263366699,
+            0.9911310076713562
+          ],
+          "median_ms": 0.991320013999939
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.0566909983754158,
+            0.05705200135707855,
+            0.05810299888253212
+          ],
+          "median_ms": 0.05705200135707855
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        1.4512092981021851,
+        1.4258176990551874,
+        1.4330739999422804
+      ],
+      "prepared_host_wall_median_ms": 1.4330739999422804
+    },
+    {
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "storage": "bf16",
+      "producer_count": 2,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.4178317542246077e-05,
+      "images": [
+        "91517e21759415e2f34cb35a68604f21e6fbbb98a9ed5335d384594d4d128c14",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "7c91688079729d1621b4a6f6b008cededb0c920b79ea51180123286ac6fba64a"
+      ],
+      "descriptor_digests": [
+        "34d07c6b3974a7bda7383c1dc8041110d36d0b82f926a6ddc8d440d8120cc5b4",
+        "24246156c44af75114d3eef000c7200c8db373e235b07b9e2ca7d32afe6c65f5",
+        "b78f3e717c6a456f1ff762e11f4f5e9326279025437f6eeab2a2cd8fb24782a6"
+      ],
+      "consumer_physical_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "rhs_storage_order": "col_major",
+      "plan_digest": "ed2754ad17f3360ff4377533b81af03d2aa5ce34bbd624e33ed0ecfd4e4ecf3c",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.013904999941587448,
+            0.009393000043928623,
+            0.009286999702453613
+          ],
+          "median_ms": 0.009393000043928623
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.9928359985351562,
+            0.9916509985923767,
+            0.9921200275421143
+          ],
+          "median_ms": 0.9921200275421143
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.05721199885010719,
+            0.05795200169086456,
+            0.057128001004457474
+          ],
+          "median_ms": 0.05721199885010719
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        1.4386271010152996,
+        1.4254279987653717,
+        1.4474504016106948
+      ],
+      "prepared_host_wall_median_ms": 1.4386271010152996
+    },
+    {
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "storage": "bf16",
+      "producer_count": 3,
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.4894492963435368e-05,
+      "images": [
+        "84468ffdc300701b9d37cd17d7e6721aa823c30916f679cb9be9c81766eaec91",
+        "91517e21759415e2f34cb35a68604f21e6fbbb98a9ed5335d384594d4d128c14",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "7c91688079729d1621b4a6f6b008cededb0c920b79ea51180123286ac6fba64a"
+      ],
+      "descriptor_digests": [
+        "a78562644f93d4be99a9bc4715b7784ec2abc17a022c47c70cd8042e31386a4a",
+        "fed4eec6a5cb635f2008f04ee39daeb2bb021234900f11900cfd167b9115ba53",
+        "6d4d72928ff55c790ed3a2e5f4b3826a07564700a6daa29d1623be760b6d1e3a",
+        "d0da14555be27ace128a284b08b9846cd6119d808e1b450819b04859afcec17c"
+      ],
+      "consumer_physical_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "rhs_storage_order": "col_major",
+      "plan_digest": "11e66c04a18a0d64b4a1b6121c4dcf9d398bce65a3599048ed8ea5c51ed4f1db",
+      "stages": [
+        {
+          "kind": "layernorm",
+          "device_event_samples_ms": [
+            0.010200000368058681,
+            0.009891999885439873,
+            0.007540999911725521
+          ],
+          "median_ms": 0.009891999885439873
+        },
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.01172299962490797,
+            0.010335000231862068,
+            0.010975999757647514
+          ],
+          "median_ms": 0.010975999757647514
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.9926660060882568,
+            0.9922620058059692,
+            0.9922159910202026
+          ],
+          "median_ms": 0.9922620058059692
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.057071998715400696,
+            0.05719900131225586,
+            0.057020001113414764
+          ],
+          "median_ms": 0.057071998715400696
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        1.4395410980796441,
+        1.4256469992687926,
+        1.4325059979455546
+      ],
+      "prepared_host_wall_median_ms": 1.4325059979455546
+    }
+  ],
+  "promotion": "none; characterization only"
+}

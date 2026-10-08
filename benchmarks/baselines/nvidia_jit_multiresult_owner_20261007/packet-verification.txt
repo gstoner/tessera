@@ -1,0 +1,1 @@
+24 rows; 600 windows; source and core/NVIDIA compiler/runtime hashes matched.

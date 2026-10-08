@@ -1,0 +1,8 @@
+..........                                                               [100%]
+=============================== warnings summary ===============================
+tests/device/nvidia/test_prepared_attention_vjp.py::test_fork_rejects_before_inherited_lock_or_cuda
+  /home/angstorms/scratch/next-five-compiler-slices/tests/device/nvidia/test_prepared_attention_vjp.py:72: DeprecationWarning: This process (pid=739356) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    read,write=os.pipe();pid=os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+10 passed, 1 warning in 4.11s

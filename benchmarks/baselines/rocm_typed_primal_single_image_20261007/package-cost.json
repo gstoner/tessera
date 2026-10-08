@@ -1,0 +1,1129 @@
+{
+  "architecture": "gfx1201",
+  "measurement": "package_wall_time_excluding_graph_to_tile_with_explicit_image_cache_phases",
+  "control_sha256": "fd0c80ee1dc7b28685cc5b74ecf84e7c9b2b5f5678338471d87b7d2e8143f62d",
+  "candidate_sha256": "efefe2ba55636314912bd2a76f1c48d3adb799110222a886b0ba57f2e4d34c79",
+  "compiler_sha256": "25a4f542b0997ae4192d4e018830fff3aa78f7634a72e20ee1010cd2b9602b31",
+  "rows": [
+    {
+      "policy": null,
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          417.9402629379183,
+          282.63112087734044,
+          285.1878560613841
+        ],
+        "candidate": [
+          165.64592206850648,
+          167.1070398297161,
+          163.6101168114692
+        ]
+      },
+      "package_medians_ms": {
+        "control": 285.1878560613841,
+        "candidate": 165.64592206850648
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7216714574080394
+    },
+    {
+      "policy": null,
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          280.71560501120985,
+          148.31824507564306,
+          147.18389511108398
+        ],
+        "candidate": [
+          161.82063100859523,
+          166.62550694309175,
+          163.223183946684
+        ]
+      },
+      "package_medians_ms": {
+        "control": 148.31824507564306,
+        "candidate": 163.223183946684
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.9086836899596962
+    },
+    {
+      "policy": null,
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          251.95859279483557,
+          251.69348204508424,
+          253.15347989089787
+        ],
+        "candidate": [
+          142.42973318323493,
+          141.60331501625478,
+          142.37026893533766
+        ]
+      },
+      "package_medians_ms": {
+        "control": 251.95859279483557,
+        "candidate": 142.37026893533766
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7697416369233046
+    },
+    {
+      "policy": null,
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          250.02022902481258,
+          125.25085103698075,
+          126.97376986034214
+        ],
+        "candidate": [
+          139.97847703285515,
+          143.11396703124046,
+          140.34302602522075
+        ]
+      },
+      "package_medians_ms": {
+        "control": 126.97376986034214,
+        "candidate": 140.34302602522075
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.9047387209502235
+    },
+    {
+      "policy": null,
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          264.6006920840591,
+          260.6314260046929,
+          261.4731630310416
+        ],
+        "candidate": [
+          148.28655309975147,
+          147.80998905189335,
+          147.07465609535575
+        ]
+      },
+      "package_medians_ms": {
+        "control": 261.4731630310416,
+        "candidate": 147.80998905189335
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.768981681875663
+    },
+    {
+      "policy": null,
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          258.4352439735085,
+          128.57546703889966,
+          131.71451818197966
+        ],
+        "candidate": [
+          146.0564429871738,
+          146.44114603288472,
+          147.1766799222678
+        ]
+      },
+      "package_medians_ms": {
+        "control": 131.71451818197966,
+        "candidate": 146.44114603288472
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.8994365432813667
+    },
+    {
+      "policy": null,
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          248.9490930456668,
+          249.5791967958212,
+          251.65379093959928
+        ],
+        "candidate": [
+          141.25740807503462,
+          141.2030030041933,
+          141.02647104300559
+        ]
+      },
+      "package_medians_ms": {
+        "control": 249.5791967958212,
+        "candidate": 141.2030030041933
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7675204598050187
+    },
+    {
+      "policy": null,
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          249.0870119072497,
+          124.5839181356132,
+          126.69244292192161
+        ],
+        "candidate": [
+          142.3663089517504,
+          140.79555100761354,
+          139.52205004170537
+        ]
+      },
+      "package_medians_ms": {
+        "control": 126.69244292192161,
+        "candidate": 140.79555100761354
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.8998327149916172
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          289.0109729487449,
+          278.48190697841346,
+          287.06262400373816
+        ],
+        "candidate": [
+          165.42764496989548,
+          166.29013093188405,
+          163.86476182378829
+        ]
+      },
+      "package_medians_ms": {
+        "control": 287.06262400373816,
+        "candidate": 165.42764496989548
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7352760117934207
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          283.2204320002347,
+          148.9478510338813,
+          148.1785720679909
+        ],
+        "candidate": [
+          163.57723297551274,
+          164.42657401785254,
+          165.38640181533992
+        ]
+      },
+      "package_medians_ms": {
+        "control": 148.9478510338813,
+        "candidate": 164.42657401785254
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.9058624004274963
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          251.3016660232097,
+          253.2363198697567,
+          251.63276004604995
+        ],
+        "candidate": [
+          143.16199184395373,
+          141.28698408603668,
+          143.03302601911128
+        ]
+      },
+      "package_medians_ms": {
+        "control": 251.63276004604995,
+        "candidate": 143.03302601911128
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7592633467212544
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          250.15220884233713,
+          125.21306215785444,
+          126.03886006399989
+        ],
+        "candidate": [
+          146.47385897114873,
+          142.3717439174652,
+          143.30907305702567
+        ]
+      },
+      "package_medians_ms": {
+        "control": 126.03886006399989,
+        "candidate": 143.30907305702567
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.8794897446154466
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          262.0842840988189,
+          262.37165578641,
+          262.1093571651727
+        ],
+        "candidate": [
+          149.74109013564885,
+          146.65977889671922,
+          149.75569816306233
+        ]
+      },
+      "package_medians_ms": {
+        "control": 262.1093571651727,
+        "candidate": 149.74109013564885
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7504170493732258
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          263.43236304819584,
+          132.0232730358839,
+          132.2972089983523
+        ],
+        "candidate": [
+          147.77452102862298,
+          147.3437340464443,
+          148.5706048551947
+        ]
+      },
+      "package_medians_ms": {
+        "control": 132.2972089983523,
+        "candidate": 147.77452102862298
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.895264001381721
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          252.82562198117375,
+          250.8858449291438,
+          248.89471381902695
+        ],
+        "candidate": [
+          139.9876840878278,
+          141.24903082847595,
+          142.0585960149765
+        ]
+      },
+      "package_medians_ms": {
+        "control": 250.8858449291438,
+        "candidate": 141.24903082847595
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.776195160119746
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          248.9089600276202,
+          128.2286390196532,
+          127.85517587326467
+        ],
+        "candidate": [
+          142.30995601974428,
+          141.11972483806312,
+          141.53713104315102
+        ]
+      },
+      "package_medians_ms": {
+        "control": 128.2286390196532,
+        "candidate": 141.53713104315102
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.9059717268153443
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          291.33862094022334,
+          290.0597851257771,
+          290.7457042019814
+        ],
+        "candidate": [
+          168.30983199179173,
+          168.11731411144137,
+          167.32926992699504
+        ]
+      },
+      "package_medians_ms": {
+        "control": 290.7457042019814,
+        "candidate": 168.11731411144137
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7294215395878398
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          287.7232050523162,
+          153.28555507585406,
+          153.9582700934261
+        ],
+        "candidate": [
+          171.0236920043826,
+          166.65840009227395,
+          168.43518614768982
+        ]
+      },
+      "package_medians_ms": {
+        "control": 153.9582700934261,
+        "candidate": 168.43518614768982
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.9140505236146451
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          262.39067781716585,
+          260.9877190552652,
+          261.6348310839385
+        ],
+        "candidate": [
+          149.23103083856404,
+          145.90417686849833,
+          146.91510586999357
+        ]
+      },
+      "package_medians_ms": {
+        "control": 261.6348310839385,
+        "candidate": 146.91510586999357
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7808572476914755
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          260.4580349288881,
+          131.7689069546759,
+          133.15986096858978
+        ],
+        "candidate": [
+          148.78265094012022,
+          146.6671519447118,
+          147.14690600521863
+        ]
+      },
+      "package_medians_ms": {
+        "control": 133.15986096858978,
+        "candidate": 147.14690600521863
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.9049450279563963
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          267.17932312749326,
+          284.84564390964806,
+          267.6300429739058
+        ],
+        "candidate": [
+          149.89852998405695,
+          148.28301593661308,
+          149.71087197773159
+        ]
+      },
+      "package_medians_ms": {
+        "control": 267.6300429739058,
+        "candidate": 149.71087197773159
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7876460101956646
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          265.7363140024245,
+          134.26882913336158,
+          133.72164405882359
+        ],
+        "candidate": [
+          152.96930097974837,
+          149.67710804194212,
+          147.93700096197426
+        ]
+      },
+      "package_medians_ms": {
+        "control": 134.26882913336158,
+        "candidate": 149.67710804194212
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.8970565431805184
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          255.26116508990526,
+          258.8233440183103,
+          256.9509600289166
+        ],
+        "candidate": [
+          147.8853179141879,
+          145.08648589253426,
+          146.37965499423444
+        ]
+      },
+      "package_medians_ms": {
+        "control": 256.9509600289166,
+        "candidate": 146.37965499423444
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7553734502177731
+    },
+    {
+      "policy": "independent_rhs",
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          257.167172152549,
+          128.52804106660187,
+          130.75979007408023
+        ],
+        "candidate": [
+          145.68017912097275,
+          145.52132599055767,
+          145.81080805510283
+        ]
+      },
+      "package_medians_ms": {
+        "control": 130.75979007408023,
+        "candidate": 145.68017912097275
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.8975812005660521
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          287.3336561024189,
+          283.0480069387704,
+          281.23524598777294
+        ],
+        "candidate": [
+          165.822311071679,
+          165.48836301080883,
+          168.15989185124636
+        ]
+      },
+      "package_medians_ms": {
+        "control": 283.0480069387704,
+        "candidate": 165.822311071679
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.706935605404866
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "fp32",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          283.64170994609594,
+          149.55669594928622,
+          154.32228008285165
+        ],
+        "candidate": [
+          167.83721605315804,
+          164.31251913309097,
+          170.8253698889166
+        ]
+      },
+      "package_medians_ms": {
+        "control": 154.32228008285165,
+        "candidate": 167.83721605315804
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.9194759285924649
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          259.9934621248394,
+          271.82500599883497,
+          260.6792610604316
+        ],
+        "candidate": [
+          145.7674929406494,
+          147.69061305560172,
+          146.86316484585404
+        ]
+      },
+      "package_medians_ms": {
+        "control": 260.6792610604316,
+        "candidate": 146.86316484585404
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7749805496431843
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "fp32",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          262.22274801693857,
+          129.7216268721968,
+          130.6568409781903
+        ],
+        "candidate": [
+          145.89947485364974,
+          148.51694996468723,
+          146.21470612473786
+        ]
+      },
+      "package_medians_ms": {
+        "control": 130.6568409781903,
+        "candidate": 146.21470612473786
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.8935957568230181
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          265.604130923748,
+          261.40045817010105,
+          264.3506389576942
+        ],
+        "candidate": [
+          150.32379003241658,
+          150.94515611417592,
+          149.6830361429602
+        ]
+      },
+      "package_medians_ms": {
+        "control": 264.3506389576942,
+        "candidate": 150.32379003241658
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7585416047632132
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "e8m0",
+      "transpose_b": false,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          266.89511607401073,
+          133.2532069645822,
+          133.70053097605705
+        ],
+        "candidate": [
+          145.99038800224662,
+          148.29127001576126,
+          148.6608551349491
+        ]
+      },
+      "package_medians_ms": {
+        "control": 133.70053097605705,
+        "candidate": 148.29127001576126
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.901607565717433
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "empty_image_caches",
+      "package_samples_ms": {
+        "control": [
+          254.5049269683659,
+          251.6729631461203,
+          256.06365385465324
+        ],
+        "candidate": [
+          143.9603629987687,
+          146.34425402618945,
+          145.29114495962858
+        ]
+      },
+      "package_medians_ms": {
+        "control": 254.5049269683659,
+        "candidate": 145.29114495962858
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          11,
+          11
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 1.7516891827033512
+    },
+    {
+      "policy": "shared_lhs",
+      "format": "e8m0",
+      "transpose_b": true,
+      "cache_phase": "reused_image_caches",
+      "package_samples_ms": {
+        "control": [
+          250.17420295625925,
+          126.60050089471042,
+          127.34001106582582
+        ],
+        "candidate": [
+          142.43089593946934,
+          140.3890480287373,
+          143.82198196835816
+        ]
+      },
+      "package_medians_ms": {
+        "control": 127.34001106582582,
+        "candidate": 142.43089593946934
+      },
+      "subprocess_counts": {
+        "control": [
+          11,
+          5,
+          5
+        ],
+        "candidate": [
+          7,
+          7,
+          7
+        ]
+      },
+      "control_over_candidate": 0.894047672914612
+    }
+  ]
+}

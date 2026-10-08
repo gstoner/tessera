@@ -1,0 +1,14 @@
+{
+  "src/compiler/programming_model/lib/PMPasses.cpp": "6b75264c4556422db92669461774f649952839f944f5bf3c562380dc8c256bc6",
+  "src/compiler/ir/TileDialect.cpp": "d520ee902b0e8858f953776118a26eb6b1007dd3f1583f954b8c8cd8bfbcbdb7",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "1ad17c41cc86ef0e3dbf7aaeb7831d8d500bc8d54d26e3b84f6227b21671f95d",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "2bbb73c0f7e17f330089da711b187337bace7705f2d202e2c55bd8faf613556c",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "960d8049bdc20653375ea2b261a696ab8cb2fd358b9c304f1a297946096251b0",
+  "python/tessera/compiler/native_scaled_program.py": "f21f04c9bbe3d29a79c1cc638861d566a9d2201524da893f2a6e72908b30e87d",
+  "python/tessera/compiler/native_vmap.py": "a1c01cac53853ea9076cf2f6064e19e9d0257b442e0372255c81b68dc3c6d336",
+  "python/tessera/compiler/rocm_typed_scaled_native.py": "fd0c80ee1dc7b28685cc5b74ecf84e7c9b2b5f5678338471d87b7d2e8143f62d",
+  "tests/unit/test_public_partial_scaled_groups.py": "85300f8dcc898c3629b2c6af5b3a67f63f34dedacdb164da8cda946053d46a95",
+  "tests/device/rocm/test_public_partial_scaled_groups.py": "f2f51e7749727cb03b5a2a8879887e24a948f82d80550f05ee3b1ccfc94fd5b2",
+  "benchmarks/rocm/record_public_partial_scaled_groups.py": "2a47d6c5c9ebb4021a1c2d94d958d01f9aad01584c9c63bec28440668c6ac281",
+  "benchmarks/rocm/record_public_independent_scaled_primal.py": "d10078a34e42a8b98ec76626138507d37599555577d7394223892c756ed171f7"
+}

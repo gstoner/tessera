@@ -1,0 +1,533 @@
+........FFFFFFF                                                          [100%]
+=================================== FAILURES ===================================
+_ test_native_reverse_images_and_member_launch_binding[False-shared_rhs_rows] __
+
+policy = 'shared_rhs_rows', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x000057e743022bec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798bec)
+E            #1 0x000057e74301f994 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x0000776634045cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007766340a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x0000776634045b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007766340288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x0000776634029979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x000077663403bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x000057e73ac4b7b6 mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x000057e73b6ca28a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4028a)
+E           #10 0x000057e73b6c07d4 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe367d4)
+E           #11 0x000057e73b6239c5 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd999c5)
+E           #12 0x000057e73bc6d89f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e389f)
+E           #13 0x000057e73f139308 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af308)
+E           #14 0x000057e73cfd3f8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f8c)
+E           #15 0x000057e7428cd974 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043974)
+E           #16 0x000057e742930145 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x000057e7429316ff mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a76ff)
+E           #18 0x000057e7428d10cb (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x000057e7428d9841 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f841)
+E           #20 0x000057e7428db352 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x000057e7428db562 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051562)
+E           #22 0x000057e73cff52de (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x000057e73b759881 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf881)
+E           #24 0x000057e73b759bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #25 0x000057e73b75725d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd25d)
+E           #26 0x000057e73b759744 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf744)
+E           #27 0x000057e73b759bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #28 0x000057e73b75a30e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed030e)
+E           #29 0x000057e73b75bac8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1ac8)
+E           #30 0x000057e73d012237 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x000057e73d0130bf llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x000057e742bc01fb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83361fb)
+E           #33 0x000057e73d00e6bd mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x000057e73d01379c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278979c)
+E           #35 0x000057e73d0139fe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899fe)
+E           #36 0x000057e73b4a50ac main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b0ac)
+E           #37 0x000077663402a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x000077663402a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x000057e73b5537c5 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc97c5)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+_ test_native_reverse_images_and_member_launch_binding[False-independent_rhs] __
+
+policy = 'independent_rhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x000055d915c88bec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798bec)
+E            #1 0x000055d915c85994 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007a634f445cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007a634f4a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007a634f445b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007a634f4288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007a634f429979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007a634f43bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x000055d90d8b17b6 mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x000055d90e33028a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4028a)
+E           #10 0x000055d90e3267d4 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe367d4)
+E           #11 0x000055d90e2899c5 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd999c5)
+E           #12 0x000055d90e8d389f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e389f)
+E           #13 0x000055d911d9f308 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af308)
+E           #14 0x000055d90fc39f8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f8c)
+E           #15 0x000055d915533974 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043974)
+E           #16 0x000055d915596145 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x000055d9155976ff mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a76ff)
+E           #18 0x000055d9155370cb (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x000055d91553f841 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f841)
+E           #20 0x000055d915541352 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x000055d915541562 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051562)
+E           #22 0x000055d90fc5b2de (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x000055d90e3bf881 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf881)
+E           #24 0x000055d90e3bfbb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #25 0x000055d90e3bd25d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd25d)
+E           #26 0x000055d90e3bf744 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf744)
+E           #27 0x000055d90e3bfbb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #28 0x000055d90e3c030e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed030e)
+E           #29 0x000055d90e3c1ac8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1ac8)
+E           #30 0x000055d90fc78237 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x000055d90fc790bf llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x000055d9158261fb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83361fb)
+E           #33 0x000055d90fc746bd mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x000055d90fc7979c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278979c)
+E           #35 0x000055d90fc799fe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899fe)
+E           #36 0x000055d90e10b0ac main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b0ac)
+E           #37 0x00007a634f42a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007a634f42a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x000055d90e1b97c5 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc97c5)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+____ test_native_reverse_images_and_member_launch_binding[False-shared_lhs] ____
+
+policy = 'shared_lhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x0000556b23273bec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798bec)
+E            #1 0x0000556b23270994 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x0000732bd2045cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x0000732bd20a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x0000732bd2045b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x0000732bd20288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x0000732bd2029979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x0000732bd203bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x0000556b1ae9c7b6 mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x0000556b1b91b28a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4028a)
+E           #10 0x0000556b1b9117d4 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe367d4)
+E           #11 0x0000556b1b8749c5 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd999c5)
+E           #12 0x0000556b1bebe89f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e389f)
+E           #13 0x0000556b1f38a308 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af308)
+E           #14 0x0000556b1d224f8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f8c)
+E           #15 0x0000556b22b1e974 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043974)
+E           #16 0x0000556b22b81145 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x0000556b22b826ff mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a76ff)
+E           #18 0x0000556b22b220cb (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x0000556b22b2a841 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f841)
+E           #20 0x0000556b22b2c352 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x0000556b22b2c562 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051562)
+E           #22 0x0000556b1d2462de (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x0000556b1b9aa881 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf881)
+E           #24 0x0000556b1b9aabb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #25 0x0000556b1b9a825d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd25d)
+E           #26 0x0000556b1b9aa744 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf744)
+E           #27 0x0000556b1b9aabb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #28 0x0000556b1b9ab30e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed030e)
+E           #29 0x0000556b1b9acac8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1ac8)
+E           #30 0x0000556b1d263237 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x0000556b1d2640bf llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x0000556b22e111fb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83361fb)
+E           #33 0x0000556b1d25f6bd mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x0000556b1d26479c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278979c)
+E           #35 0x0000556b1d2649fe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899fe)
+E           #36 0x0000556b1b6f60ac main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b0ac)
+E           #37 0x0000732bd202a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x0000732bd202a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x0000556b1b7a47c5 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc97c5)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+__ test_native_reverse_images_and_member_launch_binding[True-shared_rhs_rows] __
+
+policy = 'shared_rhs_rows', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x0000593d5ee4cbec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798bec)
+E            #1 0x0000593d5ee49994 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007464bb645cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007464bb6a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007464bb645b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007464bb6288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007464bb629979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007464bb63bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x0000593d56a757b6 mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x0000593d574f428a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4028a)
+E           #10 0x0000593d574ea7d4 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe367d4)
+E           #11 0x0000593d5744d9c5 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd999c5)
+E           #12 0x0000593d57a9789f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e389f)
+E           #13 0x0000593d5af63308 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af308)
+E           #14 0x0000593d58dfdf8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f8c)
+E           #15 0x0000593d5e6f7974 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043974)
+E           #16 0x0000593d5e75a145 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x0000593d5e75b6ff mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a76ff)
+E           #18 0x0000593d5e6fb0cb (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x0000593d5e703841 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f841)
+E           #20 0x0000593d5e705352 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x0000593d5e705562 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051562)
+E           #22 0x0000593d58e1f2de (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x0000593d57583881 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf881)
+E           #24 0x0000593d57583bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #25 0x0000593d5758125d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd25d)
+E           #26 0x0000593d57583744 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf744)
+E           #27 0x0000593d57583bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #28 0x0000593d5758430e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed030e)
+E           #29 0x0000593d57585ac8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1ac8)
+E           #30 0x0000593d58e3c237 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x0000593d58e3d0bf llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x0000593d5e9ea1fb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83361fb)
+E           #33 0x0000593d58e386bd mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x0000593d58e3d79c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278979c)
+E           #35 0x0000593d58e3d9fe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899fe)
+E           #36 0x0000593d572cf0ac main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b0ac)
+E           #37 0x00007464bb62a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007464bb62a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x0000593d5737d7c5 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc97c5)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+__ test_native_reverse_images_and_member_launch_binding[True-independent_rhs] __
+
+policy = 'independent_rhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x00005fa7cad83bec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798bec)
+E            #1 0x00005fa7cad80994 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007042d9645cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007042d96a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007042d9645b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007042d96288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007042d9629979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007042d963bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x00005fa7c29ac7b6 mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x00005fa7c342b28a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4028a)
+E           #10 0x00005fa7c34217d4 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe367d4)
+E           #11 0x00005fa7c33849c5 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd999c5)
+E           #12 0x00005fa7c39ce89f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e389f)
+E           #13 0x00005fa7c6e9a308 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af308)
+E           #14 0x00005fa7c4d34f8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f8c)
+E           #15 0x00005fa7ca62e974 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043974)
+E           #16 0x00005fa7ca691145 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x00005fa7ca6926ff mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a76ff)
+E           #18 0x00005fa7ca6320cb (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x00005fa7ca63a841 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f841)
+E           #20 0x00005fa7ca63c352 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x00005fa7ca63c562 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051562)
+E           #22 0x00005fa7c4d562de (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x00005fa7c34ba881 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf881)
+E           #24 0x00005fa7c34babb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #25 0x00005fa7c34b825d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd25d)
+E           #26 0x00005fa7c34ba744 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf744)
+E           #27 0x00005fa7c34babb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #28 0x00005fa7c34bb30e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed030e)
+E           #29 0x00005fa7c34bcac8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1ac8)
+E           #30 0x00005fa7c4d73237 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x00005fa7c4d740bf llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x00005fa7ca9211fb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83361fb)
+E           #33 0x00005fa7c4d6f6bd mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x00005fa7c4d7479c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278979c)
+E           #35 0x00005fa7c4d749fe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899fe)
+E           #36 0x00005fa7c32060ac main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b0ac)
+E           #37 0x00007042d962a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007042d962a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x00005fa7c32b47c5 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc97c5)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+____ test_native_reverse_images_and_member_launch_binding[True-shared_lhs] _____
+
+policy = 'shared_lhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x000064007f67dbec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798bec)
+E            #1 0x000064007f67a994 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007c1d1dc45cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007c1d1dca61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007c1d1dc45b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007c1d1dc288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007c1d1dc29979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007c1d1dc3bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x00006400772a67b6 mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x0000640077d2528a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4028a)
+E           #10 0x0000640077d1b7d4 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe367d4)
+E           #11 0x0000640077c7e9c5 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd999c5)
+E           #12 0x00006400782c889f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e389f)
+E           #13 0x000064007b794308 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af308)
+E           #14 0x000064007962ef8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f8c)
+E           #15 0x000064007ef28974 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043974)
+E           #16 0x000064007ef8b145 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x000064007ef8c6ff mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a76ff)
+E           #18 0x000064007ef2c0cb (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x000064007ef34841 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f841)
+E           #20 0x000064007ef36352 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x000064007ef36562 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051562)
+E           #22 0x00006400796502de (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x0000640077db4881 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf881)
+E           #24 0x0000640077db4bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #25 0x0000640077db225d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd25d)
+E           #26 0x0000640077db4744 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf744)
+E           #27 0x0000640077db4bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #28 0x0000640077db530e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed030e)
+E           #29 0x0000640077db6ac8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1ac8)
+E           #30 0x000064007966d237 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x000064007966e0bf llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x000064007f21b1fb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83361fb)
+E           #33 0x00006400796696bd mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x000064007966e79c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278979c)
+E           #35 0x000064007966e9fe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899fe)
+E           #36 0x0000640077b000ac main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b0ac)
+E           #37 0x00007c1d1dc2a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007c1d1dc2a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x0000640077bae7c5 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc97c5)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+___ test_equal_shape_gradient_roles_cannot_be_swapped_without_output_binding ___
+
+    def test_equal_shape_gradient_roles_cannot_be_swapped_without_output_binding():
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+        graph = source("independent_rhs").replace("7x", "2x")
+>       package = package_native_scaled_vjp(graph)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x0000624e071babec llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798bec)
+E            #1 0x0000624e071b7994 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007fe824445cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007fe8244a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007fe824445b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007fe8244288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007fe824429979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007fe82443bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x0000624dfede37b6 mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x0000624dff86228a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4028a)
+E           #10 0x0000624dff8587d4 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe367d4)
+E           #11 0x0000624dff7bb9c5 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd999c5)
+E           #12 0x0000624dffe0589f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e389f)
+E           #13 0x0000624e032d1308 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af308)
+E           #14 0x0000624e0116bf8c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f8c)
+E           #15 0x0000624e06a65974 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043974)
+E           #16 0x0000624e06ac8145 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x0000624e06ac96ff mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a76ff)
+E           #18 0x0000624e06a690cb (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x0000624e06a71841 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f841)
+E           #20 0x0000624e06a73352 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x0000624e06a73562 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051562)
+E           #22 0x0000624e0118d2de (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x0000624dff8f1881 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf881)
+E           #24 0x0000624dff8f1bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #25 0x0000624dff8ef25d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd25d)
+E           #26 0x0000624dff8f1744 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf744)
+E           #27 0x0000624dff8f1bb6 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfbb6)
+E           #28 0x0000624dff8f230e mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed030e)
+E           #29 0x0000624dff8f3ac8 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1ac8)
+E           #30 0x0000624e011aa237 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x0000624e011ab0bf llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x0000624e06d581fb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83361fb)
+E           #33 0x0000624e011a66bd mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x0000624e011ab79c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278979c)
+E           #35 0x0000624e011ab9fe mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899fe)
+E           #36 0x0000624dff63d0ac main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b0ac)
+E           #37 0x00007fe82442a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007fe82442a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x0000624dff6eb7c5 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc97c5)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[False-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[False-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[False-shared_lhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[True-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[True-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[True-shared_lhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_equal_shape_gradient_roles_cannot_be_swapped_without_output_binding
+7 failed, 8 passed in 3.64s

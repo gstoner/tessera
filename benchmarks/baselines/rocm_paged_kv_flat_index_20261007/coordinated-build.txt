@@ -1,0 +1,210 @@
+[  1%] Built target mlir-generic-headers
+[  1%] Built target TesseraEBMTableGen
+[  1%] Built target TesseraCliffordTableGen
+[  1%] Built target tessera_layout_algebra
+[  3%] Building Tessera/AdjointInterface.h.inc...
+[  3%] Built target mlir-headers
+[  3%] Built target TesseraX86TableGen
+[  3%] Built target TesseraCollectiveTypesIncGen
+[  3%] Building Tessera/AdjointInterface.cpp.inc...
+[  5%] Built target TesseraNVIDIATableGen
+[  5%] Building ScheduleDialect.h.inc...
+[  5%] Building ScheduleDialect.cpp.inc...
+[  5%] Built target TesseraAdjointInterfaceTableGen
+[  5%] Building AttnDialect.cpp.inc...
+[  5%] Building AttnDialect.h.inc...
+[  9%] Built target TesseraPMTableGen
+[ 11%] Built target TesseraNeighbors
+[ 12%] Built target TesseraAttnTableGen
+[ 14%] Built target TesseraROCMTableGen
+[ 14%] Built target DialectSR
+[ 22%] Built target TesseraTPPPasses
+[ 22%] Built target tessera_solvers_passes
+[ 22%] Built target TPPGen
+[ 24%] Built target TesseraLinalgSolverTableGen
+[ 27%] Built target TesseraEBMPassesIncGen
+[ 27%] Built target TesseraCliffordPassesIncGen
+[ 27%] Building Tessera/LinearTransposeInterface.h.inc...
+[ 27%] Building Tessera/LinearTransposeInterface.cpp.inc...
+[ 29%] Built target TesseraCollectiveOpsIncGen
+[ 29%] Built target obj.TesseraX86IR
+[ 29%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 31%] Built target obj.TesseraNVIDIAIR
+[ 31%] Built target obj.TesseraROCMIR
+[ 33%] Built target TPPTypesGen
+[ 35%] Built target TesseraSR
+[ 37%] Built target tessera_linalg_solver_passes
+[ 38%] Built target obj.TesseraEBM
+[ 38%] Building Tessera/TangentInterface.h.inc...
+[ 40%] Built target obj.TesseraClifford
+[ 42%] Built target TesseraX86IR
+[ 42%] Built target obj.TesseraCollectiveDialect
+[ 42%] Building Tessera/TangentInterface.cpp.inc...
+[ 42%] Built target TesseraNVIDIAIR
+[ 42%] Built target TesseraROCMIR
+[ 44%] Built target TesseraTangentInterfaceTableGen
+[ 44%] Built target TPPAttrsGen
+[ 44%] Built target TesseraClifford
+[ 44%] Built target TesseraCollectiveDialect
+[ 44%] Building TesseraOps.cpp.inc...
+[ 44%] Built target TPPOpsGen
+[ 46%] Building TesseraOpsDialect.h.inc...
+[ 46%] Built target TesseraEBM
+[ 46%] Building TesseraOpsDialect.cpp.inc...
+[ 46%] Built target obj.TesseraTPPDialect
+[ 46%] Building TesseraOpsEnums.h.inc...
+[ 46%] Building TesseraOpsEnums.cpp.inc...
+[ 46%] Building TesseraOpsTypes.h.inc...
+[ 46%] Building TesseraOpsTypes.cpp.inc...
+[ 46%] Built target TesseraTPPDialect
+[ 46%] Built target TesseraTPPInit
+[ 46%] Built target TesseraIRTableGen
+[ 48%] Building Tessera/Dialect/Tile/TileOps.h.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileOps.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 48%] Built target TesseraTileIRTableGen
+[ 50%] Built target obj.TesseraIR
+[ 51%] Built target TesseraIR
+[ 51%] Built target obj.TesseraAttnDialect
+[ 51%] Built target TesseraScheduleIR
+[ 51%] Built target TesseraAttnDialect
+[ 51%] Built target TesseraPM
+[ 70%] Built target TesseraPasses
+[ 72%] Built target obj.TesseraNVIDIAConversion
+[ 72%] Built target TesseraNVIDIAConversion
+[ 72%] Building CXX object src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/CMakeFiles/obj.TesseraROCMConversion.dir/GenerateROCMPagedKVReadKernel.cpp.o
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:32:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIndexOp; Args = {long int&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   32 |     return b.create<arith::ConstantIndexOp>(loc, value);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/PatternMatch.h:12,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/ControlFlowInterfaces.h:19,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Dialect/Arith/IR/Arith.h:17,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:5:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:35:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   35 |     return b.create<arith::MulIOp>(loc, lhs, rhs);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:38:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   38 |     return b.create<arith::AddIOp>(loc, lhs, rhs);
+      |            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In function ‘void {anonymous}::emitBody(mlir::OpBuilder&, mlir::Location, mlir::gpu::GPUFuncOp)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:41:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::BlockIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   41 |   Value block = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::x);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:42:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ThreadIdOp; Args = {mlir::gpu::Dimension}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   42 |   Value thread = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:50:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   50 |   Value inBounds = b.create<arith::CmpIOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~^
+   51 |       loc, arith::CmpIPredicate::slt, linear, total);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:52:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::IfOp; Args = {mlir::Value&, bool}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   52 |   auto guarded = b.create<scf::IfOp>(loc, inBounds, false);
+      |                  ~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:55:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   55 |   Value token = b.create<arith::DivUIOp>(loc, linear, elementsPerToken);
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:57:31: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::RemUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   57 |       b.create<arith::RemUIOp>(loc, linear, elementsPerToken);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:59:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::DivUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   59 |   Value logicalPage = b.create<arith::DivUIOp>(loc, logical, pageSize);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:60:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::RemUIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   60 |   Value pageOffset = b.create<arith::RemUIOp>(loc, logical, pageSize);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:61:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   61 |   Value physical32 = b.create<memref::LoadOp>(loc, table,
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+   62 |                                               ValueRange{logicalPage});
+      |                                               ~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:63:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::IndexCastUIOp; Args = {mlir::IndexType, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   63 |   Value physical = b.create<arith::IndexCastUIOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   64 |       loc, b.getIndexType(), physical32);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~          
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:68:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::LoadOp; Args = {mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   68 |   Value value = b.create<memref::LoadOp>(loc, pages, ValueRange{pageIndex});
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:69:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::memref::StoreOp; Args = {mlir::Value&, mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   69 |   b.create<memref::StoreOp>(loc, value, output, ValueRange{linear});
+      |   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:72:26: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::ReturnOp; Args = {}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   72 |   b.create<gpu::ReturnOp>(loc);
+      |   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp: In member function ‘virtual void {anonymous}::GenerateROCMPagedKVReadKernelPass::runOnOperation()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:116:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUModuleOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  116 |           b.create<gpu::GPUModuleOp>(loc, kernelName + "_mod");
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp:123:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::gpu::GPUFuncOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, mlir::FunctionType}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  123 |       auto gpuFunction = b.create<gpu::GPUFuncOp>(
+      |                          ~~~~~~~~~~~~~~~~~~~~~~~~^
+  124 |           loc, kernelName, b.getFunctionType(arguments, {}));
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[ 98%] Built target obj.TesseraROCMConversion
+[ 98%] Linking CXX static library libTesseraROCMConversion.a
+[ 98%] Built target TesseraROCMConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt

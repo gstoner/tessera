@@ -1,0 +1,194 @@
+[
+  {
+    "shape_mnk": [
+      200,
+      8192,
+      1024
+    ],
+    "format": "fp8_k128_n128",
+    "max_device_event_disagreement": 0.012665041913357409,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": false
+  },
+  {
+    "shape_mnk": [
+      200,
+      8192,
+      1024
+    ],
+    "format": "fp8_k32_n1",
+    "max_device_event_disagreement": 0.014048002589859571,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      200,
+      8192,
+      1024
+    ],
+    "format": "mxfp8_k32_n1",
+    "max_device_event_disagreement": 0.012551858887335187,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      200,
+      8192,
+      1024
+    ],
+    "format": "mxfp4_folded",
+    "max_device_event_disagreement": 0.011610076746967365,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      200,
+      2048,
+      2048
+    ],
+    "format": "fp8_k128_n128",
+    "max_device_event_disagreement": 0.011663956121614139,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": false
+  },
+  {
+    "shape_mnk": [
+      200,
+      2048,
+      2048
+    ],
+    "format": "fp8_k32_n1",
+    "max_device_event_disagreement": 0.011668955432352583,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      200,
+      2048,
+      2048
+    ],
+    "format": "mxfp8_k32_n1",
+    "max_device_event_disagreement": 0.020055251787595162,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      200,
+      2048,
+      2048
+    ],
+    "format": "mxfp4_folded",
+    "max_device_event_disagreement": 0.010595307512649123,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      197,
+      1056,
+      1536
+    ],
+    "format": "fp8_k128_n128",
+    "max_device_event_disagreement": 0.18787689234180002,
+    "clock_agreement_within_5_percent": false,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      197,
+      1056,
+      1536
+    ],
+    "format": "fp8_k32_n1",
+    "max_device_event_disagreement": 0.005373854790208766,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      197,
+      1056,
+      1536
+    ],
+    "format": "mxfp8_k32_n1",
+    "max_device_event_disagreement": 0.034691794473499155,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      197,
+      1056,
+      1536
+    ],
+    "format": "mxfp4_folded",
+    "max_device_event_disagreement": 0.02122321259184054,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      256,
+      1024,
+      2304
+    ],
+    "format": "fp8_k128_n128",
+    "max_device_event_disagreement": 0.01597216399052,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      256,
+      1024,
+      2304
+    ],
+    "format": "fp8_k32_n1",
+    "max_device_event_disagreement": 0.45681618270926855,
+    "clock_agreement_within_5_percent": false,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      256,
+      1024,
+      2304
+    ],
+    "format": "mxfp8_k32_n1",
+    "max_device_event_disagreement": 0.02223338858546918,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  },
+  {
+    "shape_mnk": [
+      256,
+      1024,
+      2304
+    ],
+    "format": "mxfp4_folded",
+    "max_device_event_disagreement": 0.012860255192870058,
+    "clock_agreement_within_5_percent": true,
+    "duration_admitted": true,
+    "identical_images": true
+  }
+]

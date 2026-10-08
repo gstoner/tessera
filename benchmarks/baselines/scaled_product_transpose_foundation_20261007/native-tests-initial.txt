@@ -1,0 +1,65 @@
+-- Testing: 1 tests, 1 workers --
+FAIL: Tessera-IR v0.3.1 :: phase_f4/autodiff_reverse_scaled_matmul.mlir (1 of 1)
+******************** TEST 'Tessera-IR v0.3.1 :: phase_f4/autodiff_reverse_scaled_matmul.mlir' FAILED ********************
+Exit Code: 1
+
+Command Output (stdout):
+--
+# RUN: at line 1
+"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt" -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir --tessera-autodiff-paired | "/usr/lib/llvm-23/bin/FileCheck" /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir
+# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir --tessera-autodiff-paired
+# executed command: /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir
+# .---command stderr------------
+# | /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir:42:17: error: CHECK-LABEL: expected string not found in input
+# | // CHECK-LABEL: func.func private @shared_rhs_rows__bwd
+# |                 ^
+# | <stdin>:1:1: note: scanning from here
+# | module {
+# | ^
+# | <stdin>:2:224: note: possible intended match here
+# |  func.func @shared_rhs_rows(%arg0: tensor<2x3x7x256xf8E4M3FN>, %arg1: tensor<256x129xf8E4M3FN>, %arg2: tensor<2x3x7x2xf32>, %arg3: tensor<2x2xf32>) -> tensor<2x3x7x129xf32> attributes {tessera.autodiff = "reverse", tessera.autodiff.paired = @shared_rhs_rows__bwd, tessera.autodiff.residual_policy = "recompute_all", tessera.autodiff.wrt_indices = [2, 3]} {
+# |                                                                                                                                                                                                                                ^
+# | 
+# | Input file: <stdin>
+# | Check file: /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir
+# | 
+# | -dump-input=help explains the following input dump.
+# | 
+# | Input was:
+# | <<<<<<
+# |             1: module { 
+# | label:42'0    {           search range start (exclusive)
+# | label:42'1                error: no match found in search range
+# |             2:  func.func @shared_rhs_rows(%arg0: tensor<2x3x7x256xf8E4M3FN>, %arg1: tensor<256x129xf8E4M3FN>, %arg2: tensor<2x3x7x2xf32>, %arg3: tensor<2x2xf32>) -> tensor<2x3x7x129xf32> attributes {tessera.autodiff = "reverse", tessera.autodiff.paired = @shared_rhs_rows__bwd, tessera.autodiff.residual_policy = "recompute_all", tessera.autodiff.wrt_indices = [2, 3]} { 
+# | label:42'2                                                                                                                                                                                                                                    ?                                                                                                                                       possible intended match
+# |             3:  %0 = tessera.scaled_matmul %arg0, %arg1 scales(%arg2, %arg3) {batching = "shared_rhs_rows", numeric_policy = {accum = "fp32", execution_mode = "exact_per_block"}, scale_layout = {block = [128, 128], format = "fp32", granularity = "block"}, tessera.autodiff.activity = "active"} : (tensor<2x3x7x256xf8E4M3FN>, tensor<256x129xf8E4M3FN>, tensor<2x3x7x2xf32>, tensor<2x2xf32>) -> tensor<2x3x7x129xf32> 
+# |             4:  return %0 : tensor<2x3x7x129xf32> 
+# |             5:  } 
+# |             6:  func.func @independent_rhs(%arg0: tensor<2x3x7x256xf8E4M3FN>, %arg1: tensor<2x3x256x129xf8E4M3FN>, %arg2: tensor<2x3x7x2xf32>, %arg3: tensor<2x3x2x2xf32>) -> tensor<2x3x7x129xf32> attributes {tessera.autodiff = "reverse", tessera.autodiff.paired = @independent_rhs__bwd, tessera.autodiff.residual_policy = "recompute_all", tessera.autodiff.wrt_indices = [2, 3]} { 
+# |             7:  %0 = tessera.scaled_matmul %arg0, %arg1 scales(%arg2, %arg3) {batching = "independent_rhs", numeric_policy = {accum = "fp32", execution_mode = "exact_per_block"}, scale_layout = {block = [128, 128], format = "fp32", granularity = "block"}, tessera.autodiff.activity = "active"} : (tensor<2x3x7x256xf8E4M3FN>, tensor<2x3x256x129xf8E4M3FN>, tensor<2x3x7x2xf32>, tensor<2x3x2x2xf32>) -> tensor<2x3x7x129xf32> 
+# |             .
+# |             .
+# |             .
+# |           263:  %cst = arith.constant dense<0.000000e+00> : tensor<7x256xf8E4M3FN> 
+# |           264:  %cst_1 = arith.constant dense<0.000000e+00> : tensor<2x3x256x129xf8E4M3FN> 
+# |           265:  return %cst, %cst_1, %generated, %generated_0 : tensor<7x256xf8E4M3FN>, tensor<2x3x256x129xf8E4M3FN>, tensor<7x2xf32>, tensor<2x3x2x2xf32> 
+# |           266:  } 
+# |           267: } 
+# |           268:  
+# | label:42'3      } search range end (exclusive)
+# | >>>>>>
+# `-----------------------------
+# error: command failed with exit status: 1
+
+--
+
+********************
+********************
+Failed Tests (1):
+  Tessera-IR v0.3.1 :: phase_f4/autodiff_reverse_scaled_matmul.mlir
+
+
+Testing Time: 0.12s
+
+Total Discovered Tests: 1
+  Failed: 1 (100.00%)

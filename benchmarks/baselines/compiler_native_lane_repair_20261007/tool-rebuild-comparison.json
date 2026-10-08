@@ -1,0 +1,13 @@
+{
+  "before": {
+    ".build-sm120-w1-1/tools/tessera-opt/tessera-opt": "4bd4c1d8d0517f66bf29ee90d5c454d4bd661b742f5ec6be6f7d7e1316ed21c4",
+    ".build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "fe331f0d3ea962bbd1c797b53ed76e9ca6533f2e2b9d96f4ef406cf01f2b942c",
+    ".build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "5b143c54415a5a3e559e0061deaf9feececd1636984e474fb6de04814b13d144"
+  },
+  "after": {
+    ".build-sm120-w1-1/tools/tessera-opt/tessera-opt": "4bd4c1d8d0517f66bf29ee90d5c454d4bd661b742f5ec6be6f7d7e1316ed21c4",
+    ".build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": "fe331f0d3ea962bbd1c797b53ed76e9ca6533f2e2b9d96f4ef406cf01f2b942c",
+    ".build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "5b143c54415a5a3e559e0061deaf9feececd1636984e474fb6de04814b13d144"
+  },
+  "byte_identical": true
+}

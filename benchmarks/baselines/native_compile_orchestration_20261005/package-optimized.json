@@ -1,0 +1,909 @@
+{
+  "rows": [
+    {
+      "sk": 5,
+      "trial": 0,
+      "arm": "split",
+      "wall_ms": 959.117733000312,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 12.996135999856051
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 100.09227100090357
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 33.12334600195754
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 39.631974999792874
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-13dokldt/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-13dokldt/sizer.so"
+          ],
+          "wall_ms": 56.142371002351865
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 225.9171229961794
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 16.093494996312074
+        },
+        {
+          "kind": "hash",
+          "bytes": 63326,
+          "wall_ms": 0.04294099926482886
+        }
+      ],
+      "image_sha256": "89e78545db04566ef50f18134a206268ac42de1d477e062ed4673495932f7365",
+      "arena_sha256": "b999b9f9c148512ea33582e730f9f5e624734470b84e2bf0528fb5dc749a0e09"
+    },
+    {
+      "sk": 5,
+      "trial": 0,
+      "arm": "native",
+      "wall_ms": 879.3754370053648,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 15.376331000879873
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 112.41499899915652
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 35.16685700014932
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 38.652518996968865
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-bchkylaf/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-bchkylaf/sizer.so"
+          ],
+          "wall_ms": 55.906319998030085
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 96.96206399530638
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 8.661740001116414
+        },
+        {
+          "kind": "hash",
+          "bytes": 63326,
+          "wall_ms": 0.03614999877754599
+        }
+      ],
+      "image_sha256": "89e78545db04566ef50f18134a206268ac42de1d477e062ed4673495932f7365",
+      "arena_sha256": "b999b9f9c148512ea33582e730f9f5e624734470b84e2bf0528fb5dc749a0e09"
+    },
+    {
+      "sk": 5,
+      "trial": 1,
+      "arm": "native",
+      "wall_ms": 728.0645889986772,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 13.34926900017308
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 101.18943300039973
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 33.33015099633485
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 36.75612700317288
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-hqbtq_rx/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-hqbtq_rx/sizer.so"
+          ],
+          "wall_ms": 55.54655699961586
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 0.08675999561091885
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 0.03753100463654846
+        },
+        {
+          "kind": "hash",
+          "bytes": 63326,
+          "wall_ms": 0.04636100493371487
+        }
+      ],
+      "image_sha256": "89e78545db04566ef50f18134a206268ac42de1d477e062ed4673495932f7365",
+      "arena_sha256": "b999b9f9c148512ea33582e730f9f5e624734470b84e2bf0528fb5dc749a0e09"
+    },
+    {
+      "sk": 5,
+      "trial": 1,
+      "arm": "split",
+      "wall_ms": 944.0947339971899,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 12.817101000109687
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 101.70415500033414
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 32.8118440011167
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 37.682447997212876
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-t30aappg/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-t30aappg/sizer.so"
+          ],
+          "wall_ms": 54.96402000426315
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 180.66274599550525
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 13.002517000131775
+        },
+        {
+          "kind": "hash",
+          "bytes": 63326,
+          "wall_ms": 0.038670004869345576
+        }
+      ],
+      "image_sha256": "89e78545db04566ef50f18134a206268ac42de1d477e062ed4673495932f7365",
+      "arena_sha256": "b999b9f9c148512ea33582e730f9f5e624734470b84e2bf0528fb5dc749a0e09"
+    },
+    {
+      "sk": 5,
+      "trial": 2,
+      "arm": "split",
+      "wall_ms": 904.6837450005114,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 13.033077004365623
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 102.75096400437178
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 33.25580499949865
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 37.894203000178095
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-a0fbgj8x/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-a0fbgj8x/sizer.so"
+          ],
+          "wall_ms": 56.24347199773183
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 177.62713599950075
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 9.445425996091217
+        },
+        {
+          "kind": "hash",
+          "bytes": 63326,
+          "wall_ms": 0.03571999695850536
+        }
+      ],
+      "image_sha256": "89e78545db04566ef50f18134a206268ac42de1d477e062ed4673495932f7365",
+      "arena_sha256": "b999b9f9c148512ea33582e730f9f5e624734470b84e2bf0528fb5dc749a0e09"
+    },
+    {
+      "sk": 5,
+      "trial": 2,
+      "arm": "native",
+      "wall_ms": 735.7559509982821,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 12.800345000869129
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 104.62649099645205
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 32.82348300126614
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 36.71474600560032
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-_eni14yv/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-_eni14yv/sizer.so"
+          ],
+          "wall_ms": 57.65042999701109
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 0.08687099762028083
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 0.038539998058695346
+        },
+        {
+          "kind": "hash",
+          "bytes": 63326,
+          "wall_ms": 0.18212199938716367
+        }
+      ],
+      "image_sha256": "89e78545db04566ef50f18134a206268ac42de1d477e062ed4673495932f7365",
+      "arena_sha256": "b999b9f9c148512ea33582e730f9f5e624734470b84e2bf0528fb5dc749a0e09"
+    },
+    {
+      "sk": 129,
+      "trial": 0,
+      "arm": "split",
+      "wall_ms": 930.7763680044445,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 12.678766004682984
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 85.79951999854529
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 34.71250899747247
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 38.725342994439416
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-p7cr8hzf/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-p7cr8hzf/sizer.so"
+          ],
+          "wall_ms": 59.09338899800787
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 224.6072420020937
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 9.674936001829337
+        },
+        {
+          "kind": "hash",
+          "bytes": 54666,
+          "wall_ms": 0.03560999903129414
+        }
+      ],
+      "image_sha256": "8ab1b1fed48023e2320e8b5f9f7fa12620e7d335a9f58f1e7b0dd79c6efadb7f",
+      "arena_sha256": "68355ec39aaff6c868fb3d1704e141e123f68f9957931f14975f3ee2830c4bf0"
+    },
+    {
+      "sk": 129,
+      "trial": 0,
+      "arm": "native",
+      "wall_ms": 726.5813370031537,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 13.560109997342806
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 87.44328399916412
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 32.771922997199
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 36.3824640007806
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-8z5crh1s/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-8z5crh1s/sizer.so"
+          ],
+          "wall_ms": 55.5814580002334
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 0.08813000022200868
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 0.0397100011468865
+        },
+        {
+          "kind": "hash",
+          "bytes": 54666,
+          "wall_ms": 0.04379000165499747
+        }
+      ],
+      "image_sha256": "8ab1b1fed48023e2320e8b5f9f7fa12620e7d335a9f58f1e7b0dd79c6efadb7f",
+      "arena_sha256": "68355ec39aaff6c868fb3d1704e141e123f68f9957931f14975f3ee2830c4bf0"
+    },
+    {
+      "sk": 129,
+      "trial": 1,
+      "arm": "native",
+      "wall_ms": 728.899061003176,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 13.245292997453362
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 84.22496200364549
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 33.385568000085186
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 36.92113699798938
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-g68qt_87/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-g68qt_87/sizer.so"
+          ],
+          "wall_ms": 54.45618099474814
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 0.09063000470632687
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 0.03949999518226832
+        },
+        {
+          "kind": "hash",
+          "bytes": 54666,
+          "wall_ms": 0.04470100247999653
+        }
+      ],
+      "image_sha256": "8ab1b1fed48023e2320e8b5f9f7fa12620e7d335a9f58f1e7b0dd79c6efadb7f",
+      "arena_sha256": "68355ec39aaff6c868fb3d1704e141e123f68f9957931f14975f3ee2830c4bf0"
+    },
+    {
+      "sk": 129,
+      "trial": 1,
+      "arm": "split",
+      "wall_ms": 877.1236819957267,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 13.120403003995307
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 82.7626979953493
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 32.73791300307494
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 36.750956998730544
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-096eghdb/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-096eghdb/sizer.so"
+          ],
+          "wall_ms": 56.05569400358945
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 179.88924499513814
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 9.796216996619478
+        },
+        {
+          "kind": "hash",
+          "bytes": 54666,
+          "wall_ms": 0.03383000148460269
+        }
+      ],
+      "image_sha256": "8ab1b1fed48023e2320e8b5f9f7fa12620e7d335a9f58f1e7b0dd79c6efadb7f",
+      "arena_sha256": "68355ec39aaff6c868fb3d1704e141e123f68f9957931f14975f3ee2830c4bf0"
+    },
+    {
+      "sk": 129,
+      "trial": 2,
+      "arm": "split",
+      "wall_ms": 969.6047060060664,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 12.69821100140689
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 86.66492499469314
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 33.520267003041226
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 36.78287599905161
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-9ifhokhx/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-9ifhokhx/sizer.so"
+          ],
+          "wall_ms": 54.398501000832766
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 238.86855500313686
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 9.516165999229997
+        },
+        {
+          "kind": "hash",
+          "bytes": 54666,
+          "wall_ms": 0.03201999788871035
+        }
+      ],
+      "image_sha256": "8ab1b1fed48023e2320e8b5f9f7fa12620e7d335a9f58f1e7b0dd79c6efadb7f",
+      "arena_sha256": "68355ec39aaff6c868fb3d1704e141e123f68f9957931f14975f3ee2830c4bf0"
+    },
+    {
+      "sk": 129,
+      "trial": 2,
+      "arm": "native",
+      "wall_ms": 686.623811001482,
+      "events": [
+        {
+          "kind": "tool",
+          "tool": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "options": [
+            "--allow-unregistered-dialect",
+            "--tessera-tile-buffer-reuse",
+            "--tessera-tile-buffer-arena",
+            "--tessera-expand-lowp-conversions",
+            "--canonicalize"
+          ],
+          "wall_ms": 13.131261999660637
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)"
+          ],
+          "wall_ms": 82.80293799907668
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-opt",
+          "options": [
+            "--convert-to-llvm",
+            "--reconcile-unrealized-casts"
+          ],
+          "wall_ms": 36.872698001388926
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/mlir-translate",
+          "options": [
+            "--mlir-to-llvmir"
+          ],
+          "wall_ms": 37.26240299874917
+        },
+        {
+          "kind": "tool",
+          "tool": "/usr/lib/llvm-23/bin/clang",
+          "options": [
+            "-shared",
+            "-fPIC",
+            "-O2",
+            "/tmp/tessera-native-sizer-9k0q29_w/sizer.ll",
+            "-o",
+            "/tmp/tessera-native-sizer-9k0q29_w/sizer.so"
+          ],
+          "wall_ms": 54.753302996687125
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+          "wall_ms": 0.08629000512883067
+        },
+        {
+          "kind": "tool_identity",
+          "path": "/usr/lib/llvm-23/bin/mlir-opt",
+          "wall_ms": 0.039220001781359315
+        },
+        {
+          "kind": "hash",
+          "bytes": 54666,
+          "wall_ms": 0.04312999953981489
+        }
+      ],
+      "image_sha256": "8ab1b1fed48023e2320e8b5f9f7fa12620e7d335a9f58f1e7b0dd79c6efadb7f",
+      "arena_sha256": "68355ec39aaff6c868fb3d1704e141e123f68f9957931f14975f3ee2830c4bf0"
+    }
+  ],
+  "native_image_and_arena_parity": true,
+  "compiler_sha256": "6095c66a022daa8c936020d25853e30bcaa7626982ebe320fcc71b35cc8245df",
+  "compiler_bytes": 163850800,
+  "comparison": "split pass processes plus uncached exact tool hashes versus one native pass manager plus stable-file exact digest reuse; CUDA image validation unchanged",
+  "recorder_sha256": "21ccc4d1e2f91699d4b608db432e8a152faa0471e43c933a5d18d057f16ddaa8"
+}

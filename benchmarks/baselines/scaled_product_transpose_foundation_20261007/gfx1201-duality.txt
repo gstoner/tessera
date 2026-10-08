@@ -1,0 +1,3 @@
+Owning gfx1201: tests/device/rocm/test_scaled_product_transpose_duality.py
+12 passed, 1 warning in 7.70s
+Warning: pytest timeout option plugin unavailable.

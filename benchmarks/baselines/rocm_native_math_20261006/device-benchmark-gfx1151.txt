@@ -1,0 +1,250 @@
+[
+  {
+    "kind": "sqrt",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.002725430130958557,
+    "wall_ms": 1.907429
+  },
+  {
+    "kind": "exp",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.002066420018672943,
+    "wall_ms": 1.757641
+  },
+  {
+    "kind": "add",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.0020973099768161773,
+    "wall_ms": 2.007225
+  },
+  {
+    "kind": "add",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": true,
+    "device_ms": 0.0020360200107097624,
+    "wall_ms": 1.946802
+  },
+  {
+    "kind": "div",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.0022110199928283693,
+    "wall_ms": 1.978424
+  },
+  {
+    "kind": "div",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": true,
+    "device_ms": 0.0021184900403022765,
+    "wall_ms": 1.779572
+  },
+  {
+    "kind": "cumsum",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.002326299995183945,
+    "wall_ms": 1.659535
+  },
+  {
+    "kind": "cummax",
+    "shape": [
+      3,
+      17
+    ],
+    "reversed": false,
+    "device_ms": 0.002397499978542328,
+    "wall_ms": 1.586882
+  },
+  {
+    "kind": "sqrt",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.0021313199400901793,
+    "wall_ms": 1.877658
+  },
+  {
+    "kind": "exp",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.002140820026397705,
+    "wall_ms": 1.989854
+  },
+  {
+    "kind": "add",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.002059909999370575,
+    "wall_ms": 1.91903
+  },
+  {
+    "kind": "add",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": true,
+    "device_ms": 0.0021137000620365144,
+    "wall_ms": 1.676636
+  },
+  {
+    "kind": "div",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.0020451000332832336,
+    "wall_ms": 1.705548
+  },
+  {
+    "kind": "div",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": true,
+    "device_ms": 0.002129410058259964,
+    "wall_ms": 2.052308
+  },
+  {
+    "kind": "cumsum",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.0026235398650169372,
+    "wall_ms": 1.806814
+  },
+  {
+    "kind": "cummax",
+    "shape": [
+      2,
+      3,
+      257
+    ],
+    "reversed": false,
+    "device_ms": 0.0030349698662757874,
+    "wall_ms": 1.823275
+  },
+  {
+    "kind": "sqrt",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.005248209834098816,
+    "wall_ms": 3.611137
+  },
+  {
+    "kind": "exp",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.004860289990901947,
+    "wall_ms": 4.44784
+  },
+  {
+    "kind": "add",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.005921139717102051,
+    "wall_ms": 5.058831
+  },
+  {
+    "kind": "add",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": true,
+    "device_ms": 0.00562861979007721,
+    "wall_ms": 6.259144
+  },
+  {
+    "kind": "div",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.005211780071258545,
+    "wall_ms": 4.415363
+  },
+  {
+    "kind": "div",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": true,
+    "device_ms": 0.005757499933242798,
+    "wall_ms": 5.469719
+  },
+  {
+    "kind": "cumsum",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.00851144015789032,
+    "wall_ms": 3.90156
+  },
+  {
+    "kind": "cummax",
+    "shape": [
+      256,
+      1024
+    ],
+    "reversed": false,
+    "device_ms": 0.01014112949371338,
+    "wall_ms": 2.943365
+  }
+]

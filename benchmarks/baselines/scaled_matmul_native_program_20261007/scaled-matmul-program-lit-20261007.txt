@@ -1,0 +1,7 @@
+-- Testing: 1 tests, 1 workers --
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_program.mlir (1 of 1)
+
+Testing Time: 0.11s
+
+Total Discovered Tests: 1
+  Passed: 1 (100.00%)

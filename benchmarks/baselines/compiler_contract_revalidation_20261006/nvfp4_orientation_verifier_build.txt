@@ -1,0 +1,191 @@
+[  0%] Built target TesseraEBMTableGen
+[  0%] Built target mlir-generic-headers
+[  1%] Built target tessera_layout_algebra
+[  1%] Built target TesseraCliffordTableGen
+[  1%] Building Tessera/AdjointInterface.h.inc...
+[  1%] Built target mlir-headers
+[  1%] Building Tessera/AdjointInterface.cpp.inc...
+[  1%] Built target TesseraCollectiveTypesIncGen
+[  1%] Built target TesseraAdjointInterfaceTableGen
+[  3%] Built target TesseraX86TableGen
+[  5%] Built target TesseraNVIDIATableGen
+[  5%] Building ScheduleDialect.h.inc...
+[  5%] Building AttnDialect.cpp.inc...
+[  5%] Building ScheduleDialect.cpp.inc...
+[  7%] Building AttnDialect.h.inc...
+[  9%] Built target TesseraPMTableGen
+[ 11%] Built target TesseraAttnTableGen
+[ 12%] Built target TesseraNeighbors
+[ 14%] Built target TesseraROCMTableGen
+[ 18%] Built target tessera_solvers_passes
+[ 18%] Built target DialectSR
+[ 20%] Built target TPPGen
+[ 22%] Built target TesseraTPPPasses
+[ 25%] Built target TesseraLinalgSolverTableGen
+[ 25%] Built target TesseraEBMPassesIncGen
+[ 25%] Built target TesseraCliffordPassesIncGen
+[ 27%] Building Tessera/LinearTransposeInterface.h.inc...
+[ 27%] Building Tessera/LinearTransposeInterface.cpp.inc...
+[ 29%] Built target TesseraCollectiveOpsIncGen
+[ 29%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 29%] Built target obj.TesseraX86IR
+[ 29%] Built target obj.TesseraNVIDIAIR
+[ 31%] Built target obj.TesseraROCMIR
+[ 33%] Built target TesseraSR
+[ 35%] Built target TPPTypesGen
+[ 38%] Built target tessera_linalg_solver_passes
+[ 38%] Built target obj.TesseraEBM
+[ 38%] Building Tessera/TangentInterface.h.inc...
+[ 40%] Built target obj.TesseraClifford
+[ 40%] Building Tessera/TangentInterface.cpp.inc...
+[ 40%] Built target obj.TesseraCollectiveDialect
+[ 40%] Built target TesseraTangentInterfaceTableGen
+[ 42%] Built target TesseraX86IR
+[ 42%] Built target TesseraNVIDIAIR
+[ 42%] Built target TesseraROCMIR
+[ 44%] Built target TPPAttrsGen
+[ 44%] Built target TesseraClifford
+[ 44%] Building TesseraOps.cpp.inc...
+[ 44%] Built target TesseraCollectiveDialect
+[ 44%] Built target TPPOpsGen
+[ 44%] Built target TesseraEBM
+[ 44%] Built target obj.TesseraTPPDialect
+[ 46%] Building TesseraOpsDialect.h.inc...
+[ 46%] Building TesseraOpsDialect.cpp.inc...
+[ 46%] Building TesseraOpsEnums.h.inc...
+[ 46%] Building TesseraOpsEnums.cpp.inc...
+[ 46%] Building TesseraOpsTypes.h.inc...
+[ 46%] Building TesseraOpsTypes.cpp.inc...
+[ 46%] Built target TesseraTPPDialect
+[ 46%] Built target TesseraIRTableGen
+[ 46%] Built target TesseraTPPInit
+[ 48%] Building Tessera/Dialect/Tile/TileOps.h.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileOps.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 48%] Built target TesseraTileIRTableGen
+[ 48%] Building CXX object src/compiler/ir/CMakeFiles/obj.TesseraIR.dir/TileOps.cpp.o
+[ 50%] Built target obj.TesseraIR
+[ 51%] Linking CXX static library libTesseraIR.a
+[ 51%] Built target TesseraIR
+[ 51%] Building CXX object src/compiler/programming_model/CMakeFiles/TesseraScheduleIR.dir/ir/ScheduleDialect.cpp.o
+[ 51%] Built target obj.TesseraAttnDialect
+[ 51%] Built target TesseraAttnDialect
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp: In member function ‘llvm::LogicalResult tessera::schedule::MatmulOp::verify()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:151:19: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  151 |   if (getBlockK() < 0 || (getBlockK() > 0 && getBlockK() % getTileK() != 0))
+      |       ~~~~~~~~~~~~^~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:171:19: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  171 |   if (getScaleK() < 0)
+      |       ~~~~~~~~~~~~^~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:195:19: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  195 |   if (getScaleN() < 0 || (getScaleN() > 0) != fp8W8A8)
+      |       ~~~~~~~~~~~~^~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp: In member function ‘llvm::LogicalResult tessera::schedule::NormOp::verify()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:328:73: warning: comparison of integer expressions of different signedness: ‘uint64_t’ {aka ‘long unsigned int’} and ‘int’ [-Wsign-compare]
+  328 |   if ((!sm120 && !zen5 && !gfx1201) || getAccum() != "f32" || getAxis() != -1 ||
+      |                                                               ~~~~~~~~~~^~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp: In member function ‘llvm::LogicalResult tessera::schedule::ESLowRankCorrectionOp::verify()’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:782:56: warning: comparison of unsigned expression in ‘< 0’ is always false [-Wtype-limits]
+  782 |       getOutDim() <= 0 || getRank() != 1 || getEpoch() < 0)
+      |                                             ~~~~~~~~~~~^~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Support/TypeID.h:19,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/MLIRContext.h:13,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/DialectRegistry.h:16,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Dialect.h:16,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/include/tessera/ProgrammingModel/ScheduleDialect.h:6,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/ir/ScheduleDialect.cpp:3:
+In function ‘llvm::hash_code llvm::hashing::detail::combine_bytes(const char*, size_t)’,
+    inlined from ‘llvm::hash_code llvm::hash_combine(const Ts& ...) [with Ts = {}]’ at /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:312:40,
+    inlined from ‘static llvm::hash_code tessera::schedule::AwaitMovementOp::computePropertiesHash(const Properties&)’ at /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/programming_model/ScheduleMeshPipelineOps.cpp.inc:6457:28:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:51:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h: In static member function ‘static llvm::hash_code tessera::schedule::AwaitMovementOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::schedule::YieldOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+[ 51%] Linking CXX static library libTesseraScheduleIR.a
+[ 51%] Built target TesseraScheduleIR
+[ 51%] Built target TesseraPM
+[ 70%] Built target TesseraPasses
+[ 72%] Built target obj.TesseraNVIDIAConversion
+[ 72%] Built target TesseraNVIDIAConversion
+[ 98%] Built target obj.TesseraROCMConversion
+[ 98%] Built target TesseraROCMConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt
+[  0%] Building AttnDialect.cpp.inc...
+[  0%] Built target mlir-generic-headers
+[  0%] Building Tessera/AdjointInterface.h.inc...
+[  0%] Building AttnDialect.h.inc...
+[  4%] Building Tessera/AdjointInterface.cpp.inc...
+[  4%] Built target TesseraAttnTableGen
+[  4%] Built target TesseraAdjointInterfaceTableGen
+[  4%] Built target mlir-headers
+[  4%] Built target tessera_layout_algebra
+[  4%] Built target TesseraCollectiveTypesIncGen
+[ 13%] Built target TesseraX86TableGen
+[ 13%] Built target TesseraNVIDIATableGen
+[ 17%] Building ScheduleDialect.h.inc...
+[ 17%] Building Tessera/LinearTransposeInterface.h.inc...
+[ 17%] Building Tessera/LinearTransposeInterface.cpp.inc...
+[ 17%] Building ScheduleDialect.cpp.inc...
+[ 26%] Built target TesseraPMTableGen
+[ 26%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 30%] Built target obj.TesseraX86IR
+[ 30%] Built target TesseraCollectiveOpsIncGen
+[ 30%] Building Tessera/TangentInterface.h.inc...
+[ 30%] Built target obj.TesseraNVIDIAIR
+[ 30%] Building Tessera/TangentInterface.cpp.inc...
+[ 30%] Built target obj.TesseraCollectiveDialect
+[ 30%] Built target TesseraTangentInterfaceTableGen
+[ 34%] Built target TesseraX86IR
+[ 34%] Built target TesseraNVIDIAIR
+[ 34%] Building TesseraOps.cpp.inc...
+[ 34%] Built target TesseraCollectiveDialect
+[ 39%] Building TesseraOpsDialect.h.inc...
+[ 39%] Building TesseraOpsDialect.cpp.inc...
+[ 39%] Building TesseraOpsEnums.h.inc...
+[ 39%] Building TesseraOpsEnums.cpp.inc...
+[ 39%] Building TesseraOpsTypes.h.inc...
+[ 39%] Building TesseraOpsTypes.cpp.inc...
+[ 39%] Built target TesseraIRTableGen
+[ 43%] Building Tessera/Dialect/Tile/TileOps.h.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileOps.cpp.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 43%] Built target TesseraTileIRTableGen
+[ 47%] Built target obj.TesseraIR
+[ 52%] Built target TesseraIR
+[ 52%] Built target obj.TesseraAttnDialect
+[ 52%] Built target TesseraScheduleIR
+[ 52%] Built target TesseraAttnDialect
+[ 52%] Built target TesseraPM
+[ 95%] Built target TesseraPasses
+[100%] Built target obj.TesseraNVIDIAConversion
+[100%] Built target TesseraNVIDIAConversion
+[100%] Linking CXX executable tessera-nvidia-opt
+[100%] Built target tessera-nvidia-opt

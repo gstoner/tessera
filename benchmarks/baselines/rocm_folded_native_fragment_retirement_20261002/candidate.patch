@@ -1,0 +1,43 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2120,6 +2120,14 @@
+         bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, kOff, c, ldsColMajor),
+                               bFragmentTy);
+       }
++      if (foldedFullK) {
++        // The isolated K16 issue boundary allows only scalar/vector arithmetic
++        // to cross, not a later panel's LDS loads or WMMAs. This constrains
++        // compiler scheduling; it adds no workgroup synchronization.
++        kb.create<ROCDL::SchedBarrier>(
++            l, ROCDL::SchedGroupMaskAttr::get(kb.getContext(),
++                ROCDL::SchedGroupMask::valu | ROCDL::SchedGroupMask::salu));
++      }
+       for (int64_t mi = 0; mi < mt; ++mi)
+         for (int64_t ni = 0; ni < nt; ++ni) {
+           OperationState mma(l, "tile.mma");
+@@ -2311,6 +2319,14 @@
+       store.addAttribute("tile.layout", tileLayout);
+       store.addAttribute("tile.memory", gmemRowMajor);
+       b.create(store);
++      if (foldedFullK) {
++        // Retire this fragment before later scale/fallback state is hoisted
++        // across its stores. The cold FP64 epilogue must not inflate the live
++        // register set of every other fragment at the same time.
++        b.create<ROCDL::SchedBarrier>(
++            loc, ROCDL::SchedGroupMaskAttr::get(ctx,
++                                             ROCDL::SchedGroupMask::none));
++      }
+     }
+   b.create<gpu::ReturnOp>(loc);
+ }
+@@ -3790,6 +3806,10 @@
+                          b.getI64IntegerAttr(request.scaleK));
+         gpuFunc->setAttr("tessera.rocm.scale_n",
+                          b.getI64IntegerAttr(request.scaleN));
++        if (request.foldedFullK) {
++          gpuFunc->setAttr("tessera.rocm.folded_fragment_schedule",
++                           b.getStringAttr("k16_load_mma_and_fragment_scale_store_boundary"));
++        }
+         emitTypedLdsBlockScaleBody(
+             bodyB, loc, gpuFunc, /*mt=*/request.foldedFullK ? 4 : 2,
+             /*nt=*/nt / ldsWavesNScaled, ldsWavesMScaled, ldsWavesNScaled, T,

@@ -1,0 +1,6 @@
+{
+  "compiler_sha256": "7902427d50fca6fca99d329874e2f4e5e604bf7d5a4d9a41442993407380d693",
+  "nvidia_compiler_sha256": "e659bc19246badf53aecee727c53fcd194df139cbc708f30b22f7c4d3b2820f3",
+  "runtime_library_sha256": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0"
+}

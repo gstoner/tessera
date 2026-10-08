@@ -1,0 +1,54 @@
+{
+  "rows": [
+    {
+      "dtype": "fp16",
+      "frontend": "ordinary",
+      "schedule_digest": "d1b6b72f8e4afd0047197bb9d7adabf028c281afac00aef1f8b162dbaa2cc5ca",
+      "caller_graph": "unchanged",
+      "stage": "frontend_trace_to_native_schedule_tile",
+      "execution": "not_run"
+    },
+    {
+      "dtype": "fp16",
+      "frontend": "safe",
+      "schedule_digest": "d1b6b72f8e4afd0047197bb9d7adabf028c281afac00aef1f8b162dbaa2cc5ca",
+      "caller_graph": "unchanged",
+      "stage": "frontend_trace_to_native_schedule_tile",
+      "execution": "not_run"
+    },
+    {
+      "dtype": "bf16",
+      "frontend": "ordinary",
+      "schedule_digest": "c49459512612a437ab62f0cc312e82ee1a8b661a939895610aa9e2a6e5b2d0ea",
+      "caller_graph": "unchanged",
+      "stage": "frontend_trace_to_native_schedule_tile",
+      "execution": "not_run"
+    },
+    {
+      "dtype": "bf16",
+      "frontend": "safe",
+      "schedule_digest": "c49459512612a437ab62f0cc312e82ee1a8b661a939895610aa9e2a6e5b2d0ea",
+      "caller_graph": "unchanged",
+      "stage": "frontend_trace_to_native_schedule_tile",
+      "execution": "not_run"
+    },
+    {
+      "dtype": "fp32",
+      "frontend": "ordinary",
+      "schedule_digest": "9d3b4bf250bf3f9199314ab3950b38ef15c37cb05f576417bdcf98b0f374c29d",
+      "caller_graph": "unchanged",
+      "stage": "frontend_trace_to_native_schedule_tile",
+      "execution": "not_run"
+    },
+    {
+      "dtype": "fp32",
+      "frontend": "safe",
+      "schedule_digest": "9d3b4bf250bf3f9199314ab3950b38ef15c37cb05f576417bdcf98b0f374c29d",
+      "caller_graph": "unchanged",
+      "stage": "frontend_trace_to_native_schedule_tile",
+      "execution": "not_run"
+    }
+  ],
+  "aliases": "identical_tile",
+  "device_execution": "pending"
+}

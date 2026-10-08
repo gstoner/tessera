@@ -1,0 +1,2 @@
+Passed: src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/sm120_norm_kernel.mlir via tessera-nvidia-opt --tessera-lower-to-nvidia-sm120 + FileCheck (pipefail enabled).
+Passed: tests/tessera-ir/phase2/e2e_nvidia_norm_attention.mlir via tessera-opt --tessera-graph-to-schedule --tessera-schedule-to-tile --split-input-file + FileCheck (pipefail enabled).

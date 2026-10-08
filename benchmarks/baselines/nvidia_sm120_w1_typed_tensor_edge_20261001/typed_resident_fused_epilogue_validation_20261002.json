@@ -1,0 +1,40 @@
+{
+  "compiler_fixtures": [
+    "generic tiling T16",
+    "SM80 Tile FileCheck",
+    "SM90 Tile FileCheck",
+    "gfx1151 composed layout store shared verification"
+  ],
+  "compiler_sha256": "67c711f1b0bf14458541f5dda721b24b0805700eb3c9eec093b3efc4b3473de6",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "failed": 0,
+  "native_launch_library_sha256": "af964a3c90f472eed634b33cbcabc41f7a00c9c3fbf7ab8c6f8b6e8284e24f21",
+  "passed": 688,
+  "remaining": [
+    "arbitrary producer graphs/lifetimes",
+    "already-authored tensor K-step graphs",
+    "sibling residual-store consumers",
+    "typed macro-CTA fused epilogue optimization"
+  ],
+  "skipped": 49,
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_resident_tensor_epilogue.py": "067cb2961e9788ab8b59ed2ba6e1c5a671aa62d2df1afb6c83cee5c53992f8cc",
+    "python/tessera/compiler/diagnostic_codes.py": "bc4e8c14f17561937060f73eea2b5507693371807bfc83e85fb820de266be2ac",
+    "python/tessera/compiler/nvidia_native.py": "e444629f7bec579d6269a0de39a9bd64b81a3784c31e0df7a3a2011a7f0ec9ad",
+    "python/tessera/compiler/pass_metadata.py": "9e74e1feec2adc573144100e885b5ed27a3c0f6a83db737322d2413a15dfc386",
+    "python/tessera/compiler/scheduled_matmul.py": "129e55540d95fbec938aa4f12ed566f4502c466fe742f68821564abb6bfbfdd8",
+    "python/tessera/runtime.py": "5c8f04647113db13349173204236a7b4b38d8b7fc89572a6476aa478c52e03de",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "c04c9b47e3640666be32922f17c866c307d4a131b7b06af8c45b67a004ac98bf",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "0fd322fe836d2323546c3d95dcfeadde9f4be1d3fdf8fea5d92ef30a4bea1890",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "808193124283b4003017addcfb23038081f85ac91997df1ad366fbb4bc39e65c",
+    "src/compiler/ir/TileOps.cpp": "0f24d71924cae85e471f2dc8244746f10d4171a1bf8d89c470062f8bccce7bce",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "e4f4ea3d0829c26b8e97da22ea1ce90d3b0426a0adb419d29554701ad810841c",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "6ef5d8022e39b394a17fa33c9123d9bd108d4e6a488e0288344bb1f271e0eaef",
+    "tests/device/nvidia/test_scheduled_matmul_consumers.py": "bca197316fd040018a444816b69cf9ee94e2d755338c278f0b3e97557ab754f2",
+    "tests/unit/test_nvidia_tensor_program.py": "4a7983f2fafd37c364a797d076b98af36f71ebcb4b5829b38fbff87def0ee175",
+    "tests/unit/test_scheduled_matmul_consumers.py": "298dc9248d0f1b5879cebc2345643d1c8bf0fa490b93165643fdbbcccb9ee118"
+  },
+  "sync": "W1.1-SM120-TYPED-EPILOGUE-2026-10-02",
+  "target_compiler_sha256": "5a960a6f263778dcceb01019fabea04ccd1b7ad8c10b4ea01c2adbf0bdaa1322",
+  "work_item": "W1.1"
+}

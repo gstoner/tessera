@@ -1,0 +1,38 @@
+{
+  "scope": "explicit tile.mma constructors in the four named NVIDIA producer/lowering sources; not a universal compiler census",
+  "source_sha256": {
+    "src/transforms/lib/TileIRLoweringPass.cpp": "32878243a10992396438797d3c08d43ac4627e3ee0584a8fc9b6c9d8ff73a0b6",
+    "src/transforms/lib/TilingPass.cpp": "7bef22d6f209b54ccea8c2ccf4b3fc78255182b00ef80515bc281995de5adc24",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "6bcfb9e6b7c426d4f31405a32074c03b702485ed6c938ef74dad7644cac85b18",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "fc4d0d6019750530a8c55be27854b56bbb10866338b6965bc4f5f369c7ac9cfd"
+  },
+  "constructors": [
+    {
+      "source": "src/transforms/lib/TileIRLoweringPass.cpp",
+      "line": 1029,
+      "emission": "OperationState mmaState(loc, \"tile.mma\");",
+      "scope": "older SM tensor constructor"
+    },
+    {
+      "source": "src/transforms/lib/TileIRLoweringPass.cpp",
+      "line": 1102,
+      "emission": "OperationState mmaState(loc, \"tile.mma\");",
+      "scope": "older SM tensor constructor"
+    },
+    {
+      "source": "src/compiler/programming_model/lib/PMPasses.cpp",
+      "line": 4591,
+      "emission": "OperationState mmaState(loc, \"tile.mma\"); mmaState.addOperands({a, b, carry}); mmaState.addTypes(cType);",
+      "scope": "native Schedule typed fragments"
+    }
+  ],
+  "device": "NVIDIA GeForce RTX 5070",
+  "architecture": "sm_120",
+  "proof": "127 producer tests and twelve independent-oracle benchmark rows",
+  "remaining": [
+    "arbitrary tensor producer composition",
+    "noncanonical accumulators",
+    "generic dynamic loop recovery",
+    "older-SM physical proof"
+  ]
+}

@@ -1,0 +1,1213 @@
+{
+  "architecture": "gfx1201",
+  "device_probe": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "rows": [
+    {
+      "prefix": [
+        2,
+        3
+      ],
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "output_shape": [
+        2,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          9.775839333333334,
+          10.484414,
+          10.384584333333333,
+          10.465452666666666,
+          10.305836333333334,
+          10.460475666666667
+        ],
+        "wave_per_scale_element": [
+          1.353483,
+          1.248309,
+          1.499298,
+          1.3909443333333333,
+          1.4224746666666668,
+          1.4106486666666667
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.2911126911640167,
+          0.2901729941368103,
+          0.28825700283050537,
+          0.2900516390800476,
+          0.28328561782836914,
+          0.28282201290130615,
+          0.28365272283554077
+        ],
+        "wave_per_scale_element": [
+          0.008989658206701279,
+          0.00898104626685381,
+          0.008982579223811626,
+          0.008973623625934124,
+          0.008991250768303871,
+          0.008964911103248596,
+          0.008963347412645817
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 10.42253,
+        "wave_per_scale_element": 1.4007965
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.28825700283050537,
+        "wave_per_scale_element": 0.00898104626685381
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "10f266dcaf356990fc70a81bfd503d8cd83ea477ed6a54e0827096b25ac6a11c",
+        "wave_per_scale_element": "177946d2abd388b2579fbb5eb8b40e9ec5cc7a19d97ef641e6251551e71ad80a"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        3
+      ],
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "output_shape": [
+        2,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          15.390669333333333,
+          10.712226333333334,
+          10.775159666666667,
+          10.622368,
+          10.954585333333334,
+          10.710693
+        ],
+        "wave_per_scale_element": [
+          1.2609966666666668,
+          1.2628366666666666,
+          1.2437666666666667,
+          1.2253686666666668,
+          1.284728,
+          1.1916276666666668
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.30304110050201416,
+          0.30517491698265076,
+          0.3051562011241913,
+          0.3072975277900696,
+          0.30470511317253113,
+          0.3052882254123688,
+          0.30520105361938477
+        ],
+        "wave_per_scale_element": [
+          0.009093607775866985,
+          0.009098529815673828,
+          0.009090063162147999,
+          0.009079544804990292,
+          0.009100990369915962,
+          0.009091924875974655,
+          0.009080635383725166
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 10.743693,
+        "wave_per_scale_element": 1.2523816666666667
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.30517491698265076,
+        "wave_per_scale_element": 0.009091924875974655
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "51cf8c0ad181f14cbf574218db81508e4b5edb9b40826469d4954d903d2eefb2",
+        "wave_per_scale_element": "c8ad4290287b992f67eb25fe1c9ae6b217814430b53068872e470b4812b6f412"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        3
+      ],
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "output_shape": [
+        2,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          3.857051,
+          4.247813333333333,
+          4.118492666666667,
+          3.6528976666666666,
+          3.6458276666666665,
+          3.772302333333333
+        ],
+        "wave_per_scale_element": [
+          1.2493073333333333,
+          1.149764,
+          1.1672276666666668,
+          1.1893466666666668,
+          1.23503,
+          1.1484483333333333
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.07178790867328644,
+          0.06994107365608215,
+          0.07057933509349823,
+          0.07050469517707825,
+          0.07110317051410675,
+          0.07152768969535828,
+          0.07121561467647552
+        ],
+        "wave_per_scale_element": [
+          0.0019148476421833038,
+          0.0019006571965292096,
+          0.001897688489407301,
+          0.001898235292173922,
+          0.0018981571774929762,
+          0.001896633766591549,
+          0.0018977675354108214
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 3.8146766666666663,
+        "wave_per_scale_element": 1.1782871666666668
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.07110317051410675,
+        "wave_per_scale_element": 0.0018981571774929762
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "d499d22ab181f0e39e219c19c25113da62329d1d50728e0663b0a335977bdd07",
+        "wave_per_scale_element": "c53d0a6b4cbbe58288e9654cb1a4ff5e3457235246b525de935ffe1d59c28cc2"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        3
+      ],
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "output_shape": [
+        2,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          5.431512,
+          5.268734666666667,
+          5.339306,
+          5.245387,
+          4.3275353333333335,
+          3.558317
+        ],
+        "wave_per_scale_element": [
+          1.349455,
+          1.291718,
+          1.284271,
+          1.3339553333333334,
+          1.2282506666666666,
+          1.1954946666666666
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.06741780042648315,
+          0.06758062541484833,
+          0.06732151657342911,
+          0.06714817881584167,
+          0.0672616958618164,
+          0.06725320965051651,
+          0.06670379638671875
+        ],
+        "wave_per_scale_element": [
+          0.0019145449623465538,
+          0.00189764064271003,
+          0.0018794863717630506,
+          0.001883968710899353,
+          0.001874251989647746,
+          0.0018880312563851476,
+          0.001879212912172079
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 5.257060833333334,
+        "wave_per_scale_element": 1.2879945
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.0672616958618164,
+        "wave_per_scale_element": 0.001883968710899353
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "84bfaae075860f61b33d78ffcc116c13d57ca33ef0a44c342bbaecfb6e23af77",
+        "wave_per_scale_element": "90a4fe7d357c72a754288624543b0096aeb2e69f9fd529cb1dea98b2afddf27c"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        3
+      ],
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "output_shape": [
+        2,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          7.58921,
+          7.535586,
+          5.411223666666666,
+          4.692138,
+          4.586149,
+          4.818525666666667
+        ],
+        "wave_per_scale_element": [
+          1.4637163333333334,
+          1.3867966666666667,
+          1.2335476666666667,
+          1.2395556666666667,
+          1.2103233333333334,
+          1.241623
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.10572284460067749,
+          0.10566314309835434,
+          0.10608027875423431,
+          0.10810181498527527,
+          0.1063520610332489,
+          0.10625027120113373,
+          0.10582926869392395
+        ],
+        "wave_per_scale_element": [
+          0.003381473710760474,
+          0.003444958943873644,
+          0.0034182597883045673,
+          0.0033759649377316236,
+          0.003380653215572238,
+          0.0033869033213704824,
+          0.0033750664442777634
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 5.114874666666667,
+        "wave_per_scale_element": 1.2405893333333333
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.10608027875423431,
+        "wave_per_scale_element": 0.003381473710760474
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "5ddb44e2f8ceaa17b2a4fda90bdb4d0bb5d52a757e08dbbad2dc459b48b0bcc0",
+        "wave_per_scale_element": "28520c4b4e6b86b4da3197ac3265b767123d37f8b516d60289a37c4d84565a69"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        3
+      ],
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "output_shape": [
+        2,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          7.974144666666667,
+          7.741564,
+          4.135973,
+          4.266762666666667,
+          4.203699,
+          4.263142666666667
+        ],
+        "wave_per_scale_element": [
+          1.6796286666666667,
+          1.7129873333333334,
+          1.2995333333333334,
+          1.1553116666666667,
+          1.216328,
+          1.190011
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.08806333690881729,
+          0.08844172209501266,
+          0.08862815052270889,
+          0.08866967260837555,
+          0.08846722543239594,
+          0.0883202776312828,
+          0.08830586075782776
+        ],
+        "wave_per_scale_element": [
+          0.002951962873339653,
+          0.00293704099021852,
+          0.002935303607955575,
+          0.002943232422694564,
+          0.002924717729911208,
+          0.0029407714027911425,
+          0.0029609082266688347
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 4.264952666666667,
+        "wave_per_scale_element": 1.2579306666666668
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.08844172209501266,
+        "wave_per_scale_element": 0.0029407714027911425
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "ed3e7c831ba9235ca479089dfb89db1798e8788cc1bec72f27d090b8b6c6d889",
+        "wave_per_scale_element": "e6fc69b48c0a8fddc7e463e575464915f71edfd2093f27b9050f7b4c43bf851b"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "output_shape": [
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          15.296212666666667,
+          9.986050666666667,
+          9.969759666666667,
+          10.005521,
+          10.028431666666666,
+          10.056445
+        ],
+        "wave_per_scale_element": [
+          1.265465,
+          1.2875406666666667,
+          1.2697063333333334,
+          1.2549616666666668,
+          1.2802333333333333,
+          1.278383
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.28326737880706787,
+          0.282581090927124,
+          0.28390586376190186,
+          0.28709325194358826,
+          0.28497934341430664,
+          0.28405529260635376,
+          0.28466278314590454
+        ],
+        "wave_per_scale_element": [
+          0.00899733230471611,
+          0.008974852971732616,
+          0.008984997868537903,
+          0.008975242264568806,
+          0.008985955268144608,
+          0.008985859341919422,
+          0.008972080424427986
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 10.016976333333332,
+        "wave_per_scale_element": 1.2740446666666667
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.28405529260635376,
+        "wave_per_scale_element": 0.008984997868537903
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "0744e8d6bbe0ae6839e5761d3bac7013ea1584c9cda056910313b3908b21bb25",
+        "wave_per_scale_element": "4e9dd6f14a158f4c9f3cc6d6a301818bc67f275272405583ef7dd42bba1c0363"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "output_shape": [
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          15.997416,
+          10.733958333333334,
+          10.536444,
+          10.676875666666668,
+          10.928823333333334,
+          10.811024666666667
+        ],
+        "wave_per_scale_element": [
+          1.3842653333333332,
+          1.236052,
+          1.243039,
+          1.2835763333333334,
+          1.2449726666666667,
+          1.167745
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.30665308237075806,
+          0.3051873743534088,
+          0.3054441809654236,
+          0.30763325095176697,
+          0.30498450994491577,
+          0.3054965138435364,
+          0.30721843242645264
+        ],
+        "wave_per_scale_element": [
+          0.009110976941883564,
+          0.00909041054546833,
+          0.009085605852305889,
+          0.00908783171325922,
+          0.009101572446525097,
+          0.00908504705876112,
+          0.009104645811021328
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 10.772491500000001,
+        "wave_per_scale_element": 1.2440058333333335
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.3054965138435364,
+        "wave_per_scale_element": 0.00909041054546833
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "59ae579f7a92135152f6d04e3b432b7224f469732724d30737f7d093e0b3367b",
+        "wave_per_scale_element": "f60a651f345d8c42b3eb769e1166b0de2930581fcffb515f5e3de6fd0afa989b"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        1,
+        3
+      ],
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "output_shape": [
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          6.231669,
+          6.300530666666667,
+          5.847162333333333,
+          5.994974333333333,
+          4.157260666666667,
+          3.860768
+        ],
+        "wave_per_scale_element": [
+          1.6000033333333334,
+          1.5169213333333333,
+          1.503112,
+          1.5143833333333334,
+          1.3677166666666667,
+          1.3427293333333334
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.07223526388406754,
+          0.07101047784090042,
+          0.07219340652227402,
+          0.07122574746608734,
+          0.07063298672437668,
+          0.07069463282823563,
+          0.0707203596830368
+        ],
+        "wave_per_scale_element": [
+          0.001912220730446279,
+          0.0019146425183862448,
+          0.0019022206543013453,
+          0.0019253251375630498,
+          0.0019063613144680858,
+          0.0019251005724072456,
+          0.0019196132197976112
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 5.921068333333333,
+        "wave_per_scale_element": 1.5087476666666668
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.07101047784090042,
+        "wave_per_scale_element": 0.0019146425183862448
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "9e7934b38d7781c7e7a178fd52a70d6109240d139e647cadbf1646d6237b1377",
+        "wave_per_scale_element": "6c3abae6ec70cab7125c9cecb780ea6ee4a9e6eb3e7b4e8741052ca07178a79d"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        1,
+        3
+      ],
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "output_shape": [
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          6.492890666666667,
+          6.326847666666667,
+          5.883237333333334,
+          5.934559,
+          3.972611666666667,
+          3.713229666666667
+        ],
+        "wave_per_scale_element": [
+          1.6795986666666667,
+          1.555148,
+          1.626875,
+          1.4991543333333333,
+          1.43414,
+          1.3549193333333334
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.0678200051188469,
+          0.06733836233615875,
+          0.06722455471754074,
+          0.06755706667900085,
+          0.06775789707899094,
+          0.06765572726726532,
+          0.0675274133682251
+        ],
+        "wave_per_scale_element": [
+          0.0018989188829436898,
+          0.001892424770630896,
+          0.0019104130333289504,
+          0.0018976015271618962,
+          0.0018812821945175529,
+          0.001886633806861937,
+          0.001968342810869217
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 5.908898166666667,
+        "wave_per_scale_element": 1.5271511666666666
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.06755706667900085,
+        "wave_per_scale_element": 0.0018976015271618962
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "7346549bc32fa5f14dfd05f7c8cb494d628f36d894346bafa6c4411547f0acb3",
+        "wave_per_scale_element": "b867beb9339ff9c166d123d9b9b10d023f1ac1b8ef25dc57ba9af3a88c6892f5"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "output_shape": [
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          7.5803666666666665,
+          7.505879,
+          5.689254,
+          4.928452,
+          4.554415333333333,
+          4.9336253333333335
+        ],
+        "wave_per_scale_element": [
+          1.5696936666666668,
+          1.471739,
+          1.2753906666666666,
+          1.3673863333333334,
+          1.306727,
+          1.3154403333333333
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.10329586267471313,
+          0.10215968638658524,
+          0.10367310047149658,
+          0.10409258306026459,
+          0.10565095394849777,
+          0.10228026658296585,
+          0.10273416340351105
+        ],
+        "wave_per_scale_element": [
+          0.0034341670107096434,
+          0.0033904951997101307,
+          0.003401413094252348,
+          0.0033967841882258654,
+          0.003397448221221566,
+          0.003397018648684025,
+          0.0034059053286910057
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 5.311439666666667,
+        "wave_per_scale_element": 1.3414133333333333
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.10329586267471313,
+        "wave_per_scale_element": 0.003397448221221566
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "2e9c3fc24fa13d3eeb57e24a2f6d7afaa820a99521fcf24c1586aaf075abcce1",
+        "wave_per_scale_element": "cf4bc05a2424bf64a163d9f0ef5036b3d75dd8d5b9c3210d8b0898d4c84f99a6"
+      }
+    },
+    {
+      "prefix": [
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "output_shape": [
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          8.020023666666667,
+          8.460486,
+          4.292785666666667,
+          4.3394346666666666,
+          4.311735,
+          4.5129193333333335
+        ],
+        "wave_per_scale_element": [
+          1.7432533333333333,
+          1.6494146666666667,
+          1.379603,
+          1.3257066666666666,
+          1.3981983333333334,
+          1.4418313333333332
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.08860384672880173,
+          0.08873392641544342,
+          0.088943712413311,
+          0.08857820928096771,
+          0.0877562016248703,
+          0.08861132711172104,
+          0.08876396715641022
+        ],
+        "wave_per_scale_element": [
+          0.0029560341499745846,
+          0.0029406151734292507,
+          0.002949012676253915,
+          0.002948076231405139,
+          0.002947918837890029,
+          0.0029397939797490835,
+          0.0029415518511086702
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 4.426177,
+        "wave_per_scale_element": 1.4200148333333333
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.08861132711172104,
+        "wave_per_scale_element": 0.002947918837890029
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "e5ea262acab788dfa04a7c490657ea6605c8f48f8ddb13895350a1c2799a8ba6",
+        "wave_per_scale_element": "970c3ef6521f877297cbc1f263d570ed4a2f5da161994967fe8e41636a8f9493"
+      }
+    },
+    {
+      "prefix": [
+        1,
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "output_shape": [
+        1,
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          11.438249,
+          10.130853666666667,
+          10.108544333333333,
+          10.126271666666666,
+          9.909558333333333,
+          10.18276
+        ],
+        "wave_per_scale_element": [
+          1.3483866666666666,
+          1.3007723333333334,
+          1.2453636666666668,
+          1.1701433333333333,
+          1.244495,
+          1.2166686666666666
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.2868472635746002,
+          0.28362902998924255,
+          0.2846733629703522,
+          0.28458988666534424,
+          0.2846170961856842,
+          0.28492218255996704,
+          0.28482383489608765
+        ],
+        "wave_per_scale_element": [
+          0.009035741910338402,
+          0.00898356456309557,
+          0.008987822569906712,
+          0.008987274952232838,
+          0.008990507572889328,
+          0.008990250527858734,
+          0.008988053537905216
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 10.128562666666667,
+        "wave_per_scale_element": 1.2449293333333333
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.2846733629703522,
+        "wave_per_scale_element": 0.008988053537905216
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "2e6d794ec177ac41fff9b64870de26d1995627042059e95572538492aea21fbd",
+        "wave_per_scale_element": "9859f086644f325b3c1ed86669e1b694b4b46c4586a9223e35c362d113e49577"
+      }
+    },
+    {
+      "prefix": [
+        1,
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "output_shape": [
+        1,
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          15.527696666666667,
+          10.700384,
+          10.667928666666667,
+          10.657946333333333,
+          10.73135,
+          10.617636
+        ],
+        "wave_per_scale_element": [
+          1.3471343333333334,
+          1.305094,
+          1.2595936666666667,
+          1.2982376666666666,
+          1.238594,
+          1.2366836666666667
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.3031891882419586,
+          0.30462172627449036,
+          0.30535581707954407,
+          0.30532190203666687,
+          0.30504515767097473,
+          0.30563509464263916,
+          0.3048539459705353
+        ],
+        "wave_per_scale_element": [
+          0.009149390272796154,
+          0.00908852182328701,
+          0.009109693579375744,
+          0.009176334366202354,
+          0.009106802754104137,
+          0.009106500074267387,
+          0.009087702259421349
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 10.684156333333334,
+        "wave_per_scale_element": 1.2789156666666668
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.30504515767097473,
+        "wave_per_scale_element": 0.009106802754104137
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "40899a3d80116874ecd0ff12db5495b817d22150cb3f3ad56a2c16d845e54db6",
+        "wave_per_scale_element": "27894998656d97088b99bf0ca4bdfc65c411501b11070ad5e5b9a4d51b7c772b"
+      }
+    },
+    {
+      "prefix": [
+        1,
+        2,
+        1,
+        3
+      ],
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "output_shape": [
+        1,
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          3.7617286666666665,
+          3.8077603333333334,
+          3.894088,
+          3.788987666666667,
+          3.816881,
+          3.700933
+        ],
+        "wave_per_scale_element": [
+          1.3065903333333333,
+          1.1488756666666666,
+          1.2195006666666666,
+          1.190128,
+          1.2084293333333334,
+          1.1194563333333334
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.07361853122711182,
+          0.07115282863378525,
+          0.07140254974365234,
+          0.07423969358205795,
+          0.07203605026006699,
+          0.07153277844190598,
+          0.07174890488386154
+        ],
+        "wave_per_scale_element": [
+          0.001948801800608635,
+          0.0019113213056698442,
+          0.0019200419774278998,
+          0.0019079619087278843,
+          0.0019275224767625332,
+          0.0019088604021817446,
+          0.0019044071668758988
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 3.798374,
+        "wave_per_scale_element": 1.1992786666666668
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.07174890488386154,
+        "wave_per_scale_element": 0.0019113213056698442
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "4adfe5743f2f60555aadf802440d6f899640dff50229891fc4c66461539b6ee4",
+        "wave_per_scale_element": "f3048107b273cf88f8a480824109fa1000ce60fc0699a2e197a84832d4b50ae1"
+      }
+    },
+    {
+      "prefix": [
+        1,
+        2,
+        1,
+        3
+      ],
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "output_shape": [
+        1,
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          3.7555473333333333,
+          3.675043666666667,
+          3.6647503333333336,
+          3.564462333333333,
+          3.6429826666666667,
+          3.5935683333333333
+        ],
+        "wave_per_scale_element": [
+          1.2335976666666666,
+          1.2140903333333333,
+          1.181064,
+          1.1723306666666666,
+          1.152035,
+          1.15632
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.06927299499511719,
+          0.06679531931877136,
+          0.06688788533210754,
+          0.06709354370832443,
+          0.06766460090875626,
+          0.06719633936882019,
+          0.06736475974321365
+        ],
+        "wave_per_scale_element": [
+          0.001932581071741879,
+          0.0019003935158252716,
+          0.0018792899791151285,
+          0.0019015849102288485,
+          0.0018842900171875954,
+          0.0019012920092791319,
+          0.001881789998151362
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 3.6538665000000004,
+        "wave_per_scale_element": 1.1766973333333333
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.06719633936882019,
+        "wave_per_scale_element": 0.0019003935158252716
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "176395b49e8a4befb4628f195315a96ce477ab90d81eeda05872fe84fd3956fe",
+        "wave_per_scale_element": "80ec170edbecde14809676d00290251eac222bfd98c863585700dc81a5c105ee"
+      }
+    },
+    {
+      "prefix": [
+        1,
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "output_shape": [
+        1,
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          7.614504666666667,
+          7.572324333333333,
+          5.6740916666666665,
+          4.990497333333333,
+          4.654739666666667,
+          4.920951333333333
+        ],
+        "wave_per_scale_element": [
+          1.6470013333333333,
+          1.5071163333333333,
+          1.3074516666666667,
+          1.320517,
+          1.3323963333333333,
+          1.392501
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.10277511179447174,
+          0.1031685322523117,
+          0.10395098477602005,
+          0.1033639907836914,
+          0.10399987548589706,
+          0.1025812029838562,
+          0.10285361856222153
+        ],
+        "wave_per_scale_element": [
+          0.003458961844444275,
+          0.003403620095923543,
+          0.0033994014374911785,
+          0.0033985809423029423,
+          0.003404674818739295,
+          0.0033918232657015324,
+          0.0033959639258682728
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 5.3322945,
+        "wave_per_scale_element": 1.3624486666666666
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.1031685322523117,
+        "wave_per_scale_element": 0.0033994014374911785
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "251c7a577fe006963e4993ac4028ab631d1952fd018b6ee61d3370d249eb7d00",
+        "wave_per_scale_element": "83801ab750e47bd01117b80725e41cc4d08c0463ade8048e09cb4bd613b443b9"
+      }
+    },
+    {
+      "prefix": [
+        1,
+        2,
+        1,
+        3
+      ],
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "output_shape": [
+        1,
+        2,
+        1,
+        3,
+        7,
+        19
+      ],
+      "correctness": "independent_f64_before_after_and_changed_cotangent",
+      "public_samples_ms": {
+        "serial_per_scale_element": [
+          8.091561666666667,
+          7.954911,
+          4.092617,
+          4.337090333333333,
+          4.215758666666667,
+          4.299221333333334
+        ],
+        "wave_per_scale_element": [
+          1.6895406666666666,
+          1.5881676666666666,
+          1.2194806666666667,
+          1.1870453333333333,
+          1.1452623333333334,
+          1.153695
+        ]
+      },
+      "native_event_window_samples_ms": {
+        "serial_per_scale_element": [
+          0.09085194766521454,
+          0.08846621960401535,
+          0.08895128965377808,
+          0.08891425281763077,
+          0.0881982371211052,
+          0.08801272511482239,
+          0.08846209943294525
+        ],
+        "wave_per_scale_element": [
+          0.0029697841964662075,
+          0.0029365518130362034,
+          0.002935653319582343,
+          0.0029448915738612413,
+          0.0029481141828000546,
+          0.0029448720160871744,
+          0.002949266694486141
+        ]
+      },
+      "public_medians_ms": {
+        "serial_per_scale_element": 4.318155833333334,
+        "wave_per_scale_element": 1.203263
+      },
+      "native_event_window_medians_ms": {
+        "serial_per_scale_element": 0.08846621960401535,
+        "wave_per_scale_element": 0.0029448915738612413
+      },
+      "artifact_hashes": {
+        "serial_per_scale_element": "f1e58171add066ea67624d1892f2204dfec1f094d0b788c08536c5c26a6c4d75",
+        "wave_per_scale_element": "22aba6c1c34ca8b8c2e851590a4dffd4755d18f71ef5a506b9f19a1a7d61d164"
+      }
+    }
+  ],
+  "timing_scope": "public walls include frontend/ABI/uploads/native/readback; native event windows include native multi-kernel submission, no Python enqueue loop"
+}

@@ -1,0 +1,18 @@
+--- src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp
++++ candidate/matmul_prepared.cpp
+@@ -290,8 +290,13 @@
+   const std::string softmax = "tessera_tile_softmax_" + type;
+   const bool norm = std::strncmp(entry, rms.c_str(), rms.size()) == 0 ||
+                     std::strncmp(entry, layer.c_str(), layer.size()) == 0;
+-  if ((!norm && softmax != entry) ||
+-      bool(std::strstr(entry, "_cooperative_128_")) != bool(cooperative) ||
++  const bool softmaxSerial = softmax == entry;
++  const bool softmaxCooperative = softmax + "_cooperative_128" == entry;
++  const bool expectedCooperative = norm
++      ? bool(std::strstr(entry, "_cooperative_128_"))
++      : softmaxCooperative;
++  if ((!norm && !softmaxSerial && !softmaxCooperative) ||
++      expectedCooperative != bool(cooperative) ||
+       owner.dims[0] > (1LL << 31) / owner.dims[2])
+     return bad("prepared tensor producer ABI or geometry mismatch");
+   CUcontext context = nullptr; unsigned long long identity = 0;

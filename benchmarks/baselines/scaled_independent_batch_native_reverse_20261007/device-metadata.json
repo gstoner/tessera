@@ -1,0 +1,11 @@
+{
+  "hip_runtime_version": 71526333,
+  "hip_driver_version": 71526333,
+  "python": "3.14.4",
+  "source_sha256": {
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py": "c145602c3e3b316ed208d07b6ed31dcfcada45a5cfb7d9970a4a8305b72a6618",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py": "9c7939bf8daff8ef04d493e76d6b26a10459b078b8a96341b58712fd3c951dc9"
+  },
+  "post_execution_runtime_hash_matches": true,
+  "post_execution_package_hash_matches": true
+}

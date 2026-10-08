@@ -1,0 +1,2 @@
+Host WSL: tests/unit/test_scaled_product_transpose_oracle.py
+12 passed in 0.67s

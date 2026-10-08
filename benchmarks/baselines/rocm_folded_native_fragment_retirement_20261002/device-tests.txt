@@ -1,0 +1,8 @@
+...................................................................      [100%]
+=============================== warnings summary ===============================
+tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_package_preserves_wide_scale_fallback[overflow_scale]
+  /home/angstorms/scratch/next-five-compiler-slices-rocm/tests/device/rocm/test_mxfp4_folded_native_package.py:95: RuntimeWarning: overflow encountered in cast
+    *scales.astype(np.float64)[:,None]).astype(np.float32).astype(ml_dtypes.bfloat16)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+67 passed, 1 warning in 40.65s

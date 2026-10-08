@@ -1,0 +1,86 @@
+....................FFF................................................. [ 80%]
+.................                                                        [100%]
+=================================== FAILURES ===================================
+_____ test_native_folded_derives_complete_panel_proof[257-128-False-True] ______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+m = 257, n = 128, whole_m = False, whole_n = True
+
+    @pytest.mark.parametrize("m,n,whole_m,whole_n",[
+        (256,128,True,True),(257,128,False,True),
+        (256,129,True,False),(257,129,False,False),
+    ])
+    def test_native_folded_derives_complete_panel_proof(target,m,n,whole_m,whole_n):
+        tool,_=target
+        graph=author_folded_scaled_matmul_graph(m,n,128)
+        result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+            "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201",
+            "--generate-wmma-gemm-kernel=via-tile=true"],
+            input=graph,text=True,capture_output=True)
+        assert result.returncode==0,result.stderr
+        stores=[line for line in result.stdout.splitlines() if "tile.store " in line]
+        assert len(stores)==8
+        # Masked stores carry five index operands/types; complete stores carry three.
+        expected_index_count=3 if whole_m and whole_n else 5
+>       assert all(line.partition(": !tile.tile")[2].count("index")==expected_index_count for line in stores)
+E       assert False
+E        +  where False = all(<generator object test_native_folded_derives_complete_panel_proof.<locals>.<genexpr> at 0x7006aa2d58c0>)
+
+tests/unit/test_rocm_folded_native_target.py:79: AssertionError
+_____ test_native_folded_derives_complete_panel_proof[256-129-True-False] ______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+m = 256, n = 129, whole_m = True, whole_n = False
+
+    @pytest.mark.parametrize("m,n,whole_m,whole_n",[
+        (256,128,True,True),(257,128,False,True),
+        (256,129,True,False),(257,129,False,False),
+    ])
+    def test_native_folded_derives_complete_panel_proof(target,m,n,whole_m,whole_n):
+        tool,_=target
+        graph=author_folded_scaled_matmul_graph(m,n,128)
+        result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+            "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201",
+            "--generate-wmma-gemm-kernel=via-tile=true"],
+            input=graph,text=True,capture_output=True)
+        assert result.returncode==0,result.stderr
+        stores=[line for line in result.stdout.splitlines() if "tile.store " in line]
+        assert len(stores)==8
+        # Masked stores carry five index operands/types; complete stores carry three.
+        expected_index_count=3 if whole_m and whole_n else 5
+>       assert all(line.partition(": !tile.tile")[2].count("index")==expected_index_count for line in stores)
+E       assert False
+E        +  where False = all(<generator object test_native_folded_derives_complete_panel_proof.<locals>.<genexpr> at 0x7006aa2d5700>)
+
+tests/unit/test_rocm_folded_native_target.py:79: AssertionError
+_____ test_native_folded_derives_complete_panel_proof[257-129-False-False] _____
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+m = 257, n = 129, whole_m = False, whole_n = False
+
+    @pytest.mark.parametrize("m,n,whole_m,whole_n",[
+        (256,128,True,True),(257,128,False,True),
+        (256,129,True,False),(257,129,False,False),
+    ])
+    def test_native_folded_derives_complete_panel_proof(target,m,n,whole_m,whole_n):
+        tool,_=target
+        graph=author_folded_scaled_matmul_graph(m,n,128)
+        result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+            "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201",
+            "--generate-wmma-gemm-kernel=via-tile=true"],
+            input=graph,text=True,capture_output=True)
+        assert result.returncode==0,result.stderr
+        stores=[line for line in result.stdout.splitlines() if "tile.store " in line]
+        assert len(stores)==8
+        # Masked stores carry five index operands/types; complete stores carry three.
+        expected_index_count=3 if whole_m and whole_n else 5
+>       assert all(line.partition(": !tile.tile")[2].count("index")==expected_index_count for line in stores)
+E       assert False
+E        +  where False = all(<generator object test_native_folded_derives_complete_panel_proof.<locals>.<genexpr> at 0x7006aa2d57e0>)
+
+tests/unit/test_rocm_folded_native_target.py:79: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_derives_complete_panel_proof[257-128-False-True]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_derives_complete_panel_proof[256-129-True-False]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_derives_complete_panel_proof[257-129-False-False]
+3 failed, 86 passed in 20.75s

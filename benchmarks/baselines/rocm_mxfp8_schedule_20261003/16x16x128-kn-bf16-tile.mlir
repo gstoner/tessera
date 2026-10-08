@@ -1,0 +1,31 @@
+module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {
+  func.func @mxfp8(%arg0: tensor<16x128xf8E4M3FN>, %arg1: tensor<128x16xf8E4M3FN>, %arg2: tensor<16x4xi8>, %arg3: tensor<4x16xi8>) -> tensor<16x16xbf16> {
+    %0 = bufferization.to_buffer %arg0 : tensor<16x128xf8E4M3FN> to memref<16x128xf8E4M3FN>
+    %intptr = memref.extract_aligned_pointer_as_index %0 : memref<16x128xf8E4M3FN> -> index
+    %1 = arith.index_cast %intptr : index to i64
+    %2 = llvm.inttoptr %1 : i64 to !llvm.ptr
+    %3 = bufferization.to_buffer %arg1 : tensor<128x16xf8E4M3FN> to memref<128x16xf8E4M3FN>
+    %intptr_0 = memref.extract_aligned_pointer_as_index %3 : memref<128x16xf8E4M3FN> -> index
+    %4 = arith.index_cast %intptr_0 : index to i64
+    %5 = llvm.inttoptr %4 : i64 to !llvm.ptr
+    %6 = bufferization.to_buffer %arg2 : tensor<16x4xi8> to memref<16x4xi8>
+    %intptr_1 = memref.extract_aligned_pointer_as_index %6 : memref<16x4xi8> -> index
+    %7 = arith.index_cast %intptr_1 : index to i64
+    %8 = llvm.inttoptr %7 : i64 to !llvm.ptr
+    %9 = bufferization.to_buffer %arg3 : tensor<4x16xi8> to memref<4x16xi8>
+    %intptr_2 = memref.extract_aligned_pointer_as_index %9 : memref<4x16xi8> -> index
+    %10 = arith.index_cast %intptr_2 : index to i64
+    %11 = llvm.inttoptr %10 : i64 to !llvm.ptr
+    %alloc = memref.alloc() : memref<16x16xbf16>
+    %intptr_3 = memref.extract_aligned_pointer_as_index %alloc : memref<16x16xbf16> -> index
+    %12 = arith.index_cast %intptr_3 : index to i64
+    %13 = llvm.inttoptr %12 : i64 to !llvm.ptr
+    %c16_i64 = arith.constant 16 : i64
+    %c16_i64_4 = arith.constant 16 : i64
+    %c128_i64 = arith.constant 128 : i64
+    tile.scaled_matmul_kernel %2, %5, %8, %11, %13, %c16_i64, %c16_i64_4, %c128_i64 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "bf16">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 2, scale_k = 32, scale_fmt = "e8m0">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 2 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_mxfp8_e4m3_e8m0_k32_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 128 : i64, tessera.problem_m = 16 : i64, tessera.problem_n = 16 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 1 : i64, tessera.schedule_hash = "beef8971f67b20d9b38fe0fbf6b66d1a9b86eae98d28a95f014175af4129a8ae", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+    %14 = bufferization.to_tensor %alloc : memref<16x16xbf16> to tensor<16x16xbf16>
+    return %14 : tensor<16x16xbf16>
+  }
+}
+

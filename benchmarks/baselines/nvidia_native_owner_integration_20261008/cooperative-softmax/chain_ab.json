@@ -1,0 +1,126 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "rows": [
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 2,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.4255931812592528,
+          1.4348396375267343,
+          1.4334204553795808,
+          1.4141893638721243,
+          1.4259502746757458
+        ],
+        "cooperative_128": [
+          0.4386093615638939,
+          0.6943679975599728,
+          0.42910827323794365,
+          0.41510081659494474,
+          0.4203146355311302
+        ]
+      },
+      "host_speedup": 3.323054724430927,
+      "consumer_image": "cfadd02cf15608736ded8dec62cfeafd8df6f0ce1f9b633ade7f7b6b968029e8",
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 3,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.449268089014698,
+          1.4279396379027853,
+          1.4617743647911332,
+          1.4380323594774713,
+          1.434418727347458
+        ],
+        "cooperative_128": [
+          0.43653372929177503,
+          0.43348745252429083,
+          0.44058936394073744,
+          0.4198145470581949,
+          0.4266147258352827
+        ]
+      },
+      "host_speedup": 3.3173563643042008,
+      "consumer_image": "cfadd02cf15608736ded8dec62cfeafd8df6f0ce1f9b633ade7f7b6b968029e8",
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 2,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.4242086379619485,
+          1.4301985502243042,
+          1.422268640122969,
+          1.4128766382451763,
+          1.4195948183028535
+        ],
+        "cooperative_128": [
+          0.41923363460227847,
+          0.42305281914939935,
+          0.4192554571835155,
+          0.42330718133598566,
+          0.42515826961872255
+        ]
+      },
+      "host_speedup": 3.3619174149048767,
+      "consumer_image": "9619a05fe970ca3240fa4e9d66c1e1d872a4558607afd473b862ec15dd99f095",
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 3,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.6141928182068197,
+          1.5386209124699235,
+          1.4928921803154729,
+          1.6404568185945125,
+          1.4335513644089752
+        ],
+        "cooperative_128": [
+          0.6017697318880395,
+          0.6100352726538073,
+          0.4597786358896304,
+          0.42103645285930147,
+          0.4297219989397986
+        ]
+      },
+      "host_speedup": 3.3464384648774077,
+      "consumer_image": "9619a05fe970ca3240fa4e9d66c1e1d872a4558607afd473b862ec15dd99f095",
+      "correctness": "before_and_after_timing"
+    }
+  ],
+  "runtime_sha256": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a",
+  "compiler_sha256": "b8fe61ff3e13322eb43b096a035e75ac2bdbd0bd3810eb810b8714317918029e",
+  "candidate_sources": {
+    "prepared_nvidia_lhs.py": "3b6c5c6388f8e510f07cee01c2056100dfddc96a128626bb16318a1477402e6c",
+    "nvidia_tensor_lhs.py": "17e1ba50d2867b076eeac8bb57dc65fc2ae7b69a5843db353917afd92a90a2de",
+    "matmul_prepared.cpp": "7b57cc8d8613742415fc4339570ace6ac689ed63fb8284aec8a01c42ecbcafbd"
+  },
+  "timing": "alternating 5 windows of 11 prepared whole-chain host calls; copies and completion included; no device-kernel claim",
+  "dynamic_multi_guard": "unchanged"
+}

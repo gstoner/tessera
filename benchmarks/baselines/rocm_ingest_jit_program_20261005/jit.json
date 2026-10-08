@@ -1,0 +1,4223 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "compiler_sha256": "7d064f19ce0478bc713f1eeb6887e5f586a9c4bef876a8046fdf93354f74f159",
+  "scope": "named static primal ordinary JIT program; general AD/dynamic/layout/model quality remain open",
+  "timing_scope": "cold includes compilation and checked full launch; warm uses image cache but fresh owned HIP resources; portable launch includes allocation/upload/readback/cleanup; graph windows include GPU dispatch",
+  "selector_promotion": false,
+  "rows": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "frontend_argument_order": [
+        "codes",
+        "scales",
+        "projection_globals",
+        "a",
+        "a_scale"
+      ],
+      "role_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "cold_jit_wall_ms": 3990.739872,
+      "warm_jit_wall_samples_ms": [
+        31.111172,
+        27.857155,
+        19.568382
+      ],
+      "warm_jit_wall_median_ms": 27.857155,
+      "serialization_wall_ms": 4.328729,
+      "serialized_artifact_bytes": 289433,
+      "artifact_restore_wall_samples_ms": [
+        1.351338,
+        1.281675,
+        1.434316
+      ],
+      "artifact_restore_wall_median_ms": 1.351338,
+      "portable_checked_launch_wall_samples_ms": [
+        23.459595,
+        15.423996,
+        14.980278
+      ],
+      "portable_checked_launch_wall_median_ms": 15.423996,
+      "device_graph_windows": {
+        "converter": [
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 5.239698886871338,
+            "per_iteration_ms": 0.1637405902147293
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 4.935378074645996,
+            "per_iteration_ms": 0.15423056483268738
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 4.59611701965332,
+            "per_iteration_ms": 0.14362865686416626
+          }
+        ],
+        "storage": [
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.06632000207901001,
+            "per_iteration_ms": 0.002072500064969063
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.068961001932621,
+            "per_iteration_ms": 0.0021550313103944063
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.0660799965262413,
+            "per_iteration_ms": 0.0020649998914450407
+          }
+        ],
+        "consumer": [
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.6530020236968994,
+            "per_iteration_ms": 0.020406313240528107
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.6519629955291748,
+            "per_iteration_ms": 0.020373843610286713
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.6522020101547241,
+            "per_iteration_ms": 0.02038131281733513
+          }
+        ],
+        "combined": [
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 5.550271034240723,
+            "per_iteration_ms": 0.17344596982002258
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 5.5406599044799805,
+            "per_iteration_ms": 0.1731456220149994
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 5.536019802093506,
+            "per_iteration_ms": 0.17300061881542206
+          }
+        ]
+      },
+      "device_graph_dispatch_median_ms": {
+        "converter": 0.15423056483268738,
+        "storage": 0.002072500064969063,
+        "consumer": 0.02038131281733513,
+        "combined": 0.1731456220149994
+      },
+      "numeric_correctness": "independent conversion/storage/folded float64 oracle before and after timing",
+      "max_abs_error": 0.0,
+      "component_image_digests": [
+        "0704ae2d8555a21af6d96fef55723992ffd9a8579f273de35171f64b32a20db9",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "ae3710c59e56f410f64ca675c0856f49a7691cc213712dda42dae3ee02f1999e"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "0704ae2d8555a21af6d96fef55723992ffd9a8579f273de35171f64b32a20db9",
+          "entry_symbol": "tessera_nvfp4_ingest_1b47a2931bdcdbc2",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 16
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "26fcca5fd276a091666fffbebf1d72a5552ed08c5fb040b338534971a4bcb9ea",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              16,
+              32
+            ],
+            "schedule_digest": "1b47a2931bdcdbc25b9d60be9c7aea9780131abb9c886224ba6ee62b93994636",
+            "schedule_ir_digest": "38e6db9c53ea0ae13ea54262e0bb1aa964c305c73cbf7f2c05e8e7989f81f922",
+            "shape_nk": [
+              32,
+              256
+            ],
+            "tile_ir_digest": "f17444efae51ff66833346fb97da117df37cc9b0a85b5dec302b6ef1683afa61",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "a22bac6ac6d84dc0c26400c67d36555f8597481473c717cc3e50e3b4b214cb8e",
+          "cache_fingerprint": "c6db1a0340cd502ff020dd455dd5d244db993237e5157189ccbb6b8a20822a31"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+          "entry_symbol": "tessera_mxfp4_storage_0f0512b925c7b9ab",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 9
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            }
+          ],
+          "geometry": {
+            "grid": [
+              16,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "71e21d90973ecc95b6e3cf6fae4f2f27393b139c75161a6c5197502114318e3c",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "0f0512b925c7b9abbd17682b732edc12a9b3c3d78fc64c1c96cb5c59c62ffa36",
+            "schedule_ir_digest": "80c70016903270a32f2c1c686d3a4035b641f855bb11b9d5e9867d4cf94f1abd",
+            "shape_nk": [
+              32,
+              256
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "cfc115e38b16a08dfbc1a28360ad0a3585329574038ef925401157f6f5ee6970",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "bc73b973cc5a89dfdb1a7de9451ecb4c95b0719c080c4f3b2fcb053276152a61",
+          "cache_fingerprint": "c0e00f3338d2ee5b15c742a897a96b96941d55da32cbcd1b0c82ac5e678f0d5d"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "ae3710c59e56f410f64ca675c0856f49a7691cc213712dda42dae3ee02f1999e",
+          "entry_symbol": "packed_folded_w4a8",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 9
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "b495ded1ff37d26140d4e2266a525c6b712ab1d4a5439d368828d1b86632cea1",
+            "hsaco_sha256": "7dbd8f7dd003db37976434aeb9debbae3d38cbfb8cc4f6614c2daa492fc6bb3c",
+            "image_k": 256,
+            "image_m": 128,
+            "image_n": 32,
+            "image_shape_policy": "static_mnk",
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "7e1a7b6cdfaefbcb949cbb92b66c5ff8db7659e057ca9903c65f255e1d403ce9",
+            "schedule_ir_sha256": "6fab16935b4a42beb020026d05e928cb3c26953e9742e21071490072c4d2bd6c",
+            "shape": [
+              32,
+              256
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "ec333a0e94ac43316a9100a53c8906a7b7c78620b3beae385edf2c5310c22535",
+            "tile_ir_sha256": "c468b120a33c36dfcfcfbb061297c425f50537cbe9342e07a9f4336694d5257a",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "a6ca1eef025f7f816756340938d6b1ecdee8c838b97cb8dd3bc70acf5d37ea0d",
+          "cache_fingerprint": "8fa58dab862de5c44cb20b907574e01d28b9394377b5fb0fdcd1ead8238b4d9f"
+        }
+      ],
+      "frontend_graph_sha256": "264f6fa7f9963ba88b119688925c361996612d584e56dbcfc3c50ac712b712af",
+      "input_sha256": {
+        "codes": "63074776e31ee7603a8334521f59d8bb2cb236c70389754db4f213c14f5c4637",
+        "scales": "a2da14f878e6934be7bd0d73fdfdf5a9e9cadf7067a38990f8ecc73c21f1626c",
+        "projection_globals": "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "a": "ef3d9a9dd89d4ec25ea87da522b0741ff8c9033bf857788584836cb3abe71992",
+        "a_scale": "0d67d267bfad085b668319652aa2e03778298baa04c7b10edfdbbb4b4d79f626"
+      },
+      "route": "Python frontend -> verified Graph -> native Schedule/Tile/Target/LLVM -> three HSACO images -> checked resident HIP program"
+    },
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "frontend_argument_order": [
+        "a_scale",
+        "a",
+        "codes",
+        "projection_globals",
+        "scales"
+      ],
+      "role_indices": [
+        2,
+        4,
+        3,
+        1,
+        0
+      ],
+      "cold_jit_wall_ms": 177.264146,
+      "warm_jit_wall_samples_ms": [
+        21.456874,
+        21.12384,
+        21.368607
+      ],
+      "warm_jit_wall_median_ms": 21.368607,
+      "serialization_wall_ms": 4.756605,
+      "serialized_artifact_bytes": 289451,
+      "artifact_restore_wall_samples_ms": [
+        1.250836,
+        1.140135,
+        1.053931
+      ],
+      "artifact_restore_wall_median_ms": 1.140135,
+      "portable_checked_launch_wall_samples_ms": [
+        17.065537,
+        16.937022,
+        16.97776
+      ],
+      "portable_checked_launch_wall_median_ms": 16.97776,
+      "device_graph_windows": {
+        "converter": [
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.745543956756592,
+            "per_iteration_ms": 0.2107982486486435
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.754185199737549,
+            "per_iteration_ms": 0.2110682874917984
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.761973857879639,
+            "per_iteration_ms": 0.2113116830587387
+          }
+        ],
+        "storage": [
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.09028100222349167,
+            "per_iteration_ms": 0.0028212813194841146
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08968000113964081,
+            "per_iteration_ms": 0.0028025000356137753
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08968000113964081,
+            "per_iteration_ms": 0.0028025000356137753
+          }
+        ],
+        "consumer": [
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.7708420157432556,
+            "per_iteration_ms": 0.024088812991976738
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.7603619694709778,
+            "per_iteration_ms": 0.023761311545968056
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.7542420029640198,
+            "per_iteration_ms": 0.023570062592625618
+          }
+        ],
+        "combined": [
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.977914810180664,
+            "per_iteration_ms": 0.21805983781814575
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.983585834503174,
+            "per_iteration_ms": 0.21823705732822418
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.9683051109313965,
+            "per_iteration_ms": 0.21775953471660614
+          }
+        ]
+      },
+      "device_graph_dispatch_median_ms": {
+        "converter": 0.2110682874917984,
+        "storage": 0.0028025000356137753,
+        "consumer": 0.023761311545968056,
+        "combined": 0.21805983781814575
+      },
+      "numeric_correctness": "independent conversion/storage/folded float64 oracle before and after timing",
+      "max_abs_error": 0.0,
+      "component_image_digests": [
+        "0704ae2d8555a21af6d96fef55723992ffd9a8579f273de35171f64b32a20db9",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "ae3710c59e56f410f64ca675c0856f49a7691cc213712dda42dae3ee02f1999e"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "0704ae2d8555a21af6d96fef55723992ffd9a8579f273de35171f64b32a20db9",
+          "entry_symbol": "tessera_nvfp4_ingest_1b47a2931bdcdbc2",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 16
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "26fcca5fd276a091666fffbebf1d72a5552ed08c5fb040b338534971a4bcb9ea",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              16,
+              32
+            ],
+            "schedule_digest": "1b47a2931bdcdbc25b9d60be9c7aea9780131abb9c886224ba6ee62b93994636",
+            "schedule_ir_digest": "38e6db9c53ea0ae13ea54262e0bb1aa964c305c73cbf7f2c05e8e7989f81f922",
+            "shape_nk": [
+              32,
+              256
+            ],
+            "tile_ir_digest": "f17444efae51ff66833346fb97da117df37cc9b0a85b5dec302b6ef1683afa61",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "a22bac6ac6d84dc0c26400c67d36555f8597481473c717cc3e50e3b4b214cb8e",
+          "cache_fingerprint": "c6db1a0340cd502ff020dd455dd5d244db993237e5157189ccbb6b8a20822a31"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+          "entry_symbol": "tessera_mxfp4_storage_0f0512b925c7b9ab",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 9
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            }
+          ],
+          "geometry": {
+            "grid": [
+              16,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "71e21d90973ecc95b6e3cf6fae4f2f27393b139c75161a6c5197502114318e3c",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "0f0512b925c7b9abbd17682b732edc12a9b3c3d78fc64c1c96cb5c59c62ffa36",
+            "schedule_ir_digest": "80c70016903270a32f2c1c686d3a4035b641f855bb11b9d5e9867d4cf94f1abd",
+            "shape_nk": [
+              32,
+              256
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "cfc115e38b16a08dfbc1a28360ad0a3585329574038ef925401157f6f5ee6970",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "bc73b973cc5a89dfdb1a7de9451ecb4c95b0719c080c4f3b2fcb053276152a61",
+          "cache_fingerprint": "c0e00f3338d2ee5b15c742a897a96b96941d55da32cbcd1b0c82ac5e678f0d5d"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "ae3710c59e56f410f64ca675c0856f49a7691cc213712dda42dae3ee02f1999e",
+          "entry_symbol": "packed_folded_w4a8",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 9
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "b495ded1ff37d26140d4e2266a525c6b712ab1d4a5439d368828d1b86632cea1",
+            "hsaco_sha256": "7dbd8f7dd003db37976434aeb9debbae3d38cbfb8cc4f6614c2daa492fc6bb3c",
+            "image_k": 256,
+            "image_m": 128,
+            "image_n": 32,
+            "image_shape_policy": "static_mnk",
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "7e1a7b6cdfaefbcb949cbb92b66c5ff8db7659e057ca9903c65f255e1d403ce9",
+            "schedule_ir_sha256": "6fab16935b4a42beb020026d05e928cb3c26953e9742e21071490072c4d2bd6c",
+            "shape": [
+              32,
+              256
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "ec333a0e94ac43316a9100a53c8906a7b7c78620b3beae385edf2c5310c22535",
+            "tile_ir_sha256": "c468b120a33c36dfcfcfbb061297c425f50537cbe9342e07a9f4336694d5257a",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "a6ca1eef025f7f816756340938d6b1ecdee8c838b97cb8dd3bc70acf5d37ea0d",
+          "cache_fingerprint": "8fa58dab862de5c44cb20b907574e01d28b9394377b5fb0fdcd1ead8238b4d9f"
+        }
+      ],
+      "frontend_graph_sha256": "910789a2ce0c4d102472916b7c3c3553f0c4334fe4878ef182b124fe176f359b",
+      "input_sha256": {
+        "codes": "63074776e31ee7603a8334521f59d8bb2cb236c70389754db4f213c14f5c4637",
+        "scales": "a2da14f878e6934be7bd0d73fdfdf5a9e9cadf7067a38990f8ecc73c21f1626c",
+        "projection_globals": "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "a": "ef3d9a9dd89d4ec25ea87da522b0741ff8c9033bf857788584836cb3abe71992",
+        "a_scale": "0d67d267bfad085b668319652aa2e03778298baa04c7b10edfdbbb4b4d79f626"
+      },
+      "route": "Python frontend -> verified Graph -> native Schedule/Tile/Target/LLVM -> three HSACO images -> checked resident HIP program"
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "frontend_argument_order": [
+        "codes",
+        "scales",
+        "projection_globals",
+        "a",
+        "a_scale"
+      ],
+      "role_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "cold_jit_wall_ms": 4389.853534,
+      "warm_jit_wall_samples_ms": [
+        23.36166,
+        22.656395,
+        22.963405
+      ],
+      "warm_jit_wall_median_ms": 22.963405,
+      "serialization_wall_ms": 4.91946,
+      "serialized_artifact_bytes": 290897,
+      "artifact_restore_wall_samples_ms": [
+        1.065183,
+        1.396279,
+        1.060483
+      ],
+      "artifact_restore_wall_median_ms": 1.065183,
+      "portable_checked_launch_wall_samples_ms": [
+        18.131527,
+        18.11753,
+        17.179556
+      ],
+      "portable_checked_launch_wall_median_ms": 18.11753,
+      "device_graph_windows": {
+        "converter": [
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.778746128082275,
+            "per_iteration_ms": 0.2118358165025711
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.771824836730957,
+            "per_iteration_ms": 0.2116195261478424
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.422425746917725,
+            "per_iteration_ms": 0.2007008045911789
+          }
+        ],
+        "storage": [
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08807899802923203,
+            "per_iteration_ms": 0.002752468688413501
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08788000047206879,
+            "per_iteration_ms": 0.0027462500147521496
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08523999899625778,
+            "per_iteration_ms": 0.0026637499686330557
+          }
+        ],
+        "consumer": [
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.8279179930686951,
+            "per_iteration_ms": 0.02587243728339672
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.8281980156898499,
+            "per_iteration_ms": 0.025881187990307808
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.8292379975318909,
+            "per_iteration_ms": 0.02591368742287159
+          }
+        ],
+        "combined": [
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.520795822143555,
+            "per_iteration_ms": 0.20377486944198608
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 7.193754196166992,
+            "per_iteration_ms": 0.2248048186302185
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 7.188525199890137,
+            "per_iteration_ms": 0.22464141249656677
+          }
+        ]
+      },
+      "device_graph_dispatch_median_ms": {
+        "converter": 0.2116195261478424,
+        "storage": 0.0027462500147521496,
+        "consumer": 0.025881187990307808,
+        "combined": 0.22464141249656677
+      },
+      "numeric_correctness": "independent conversion/storage/folded float64 oracle before and after timing",
+      "max_abs_error": 0.0,
+      "component_image_digests": [
+        "c7d113ffd82ab010d41fc6428d376ab47798cc99f6a33bbb20e5cafa08bc2d83",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "9e2f6c64ffcaa60d864db09e5a52df22d0815405f19cdcf4a2131e7f446f6558"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "c7d113ffd82ab010d41fc6428d376ab47798cc99f6a33bbb20e5cafa08bc2d83",
+          "entry_symbol": "tessera_nvfp4_ingest_4a8248f9bba42cd8",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              10,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "f47cd7ad028ccf10eaf145fc3b59527ee0c9d5f921ab57ea47d9c4f8c8b8ac76",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              40,
+              80
+            ],
+            "schedule_digest": "4a8248f9bba42cd815e9d770a34e0d764b31780448c64e870c94bacd82104b53",
+            "schedule_ir_digest": "008fb971e31a795b73a3d439f3ce0ff4d62c306d151603728aa6aaf32ee355b9",
+            "shape_nk": [
+              80,
+              1024
+            ],
+            "tile_ir_digest": "52fbc000962b97126130e83bb1d6012a6a9cdb93465eba43688513f2eb78db8c",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "7d542048b9bc45d272ca35d8e6f5388f56987f3b22be116fab0813508eed847d",
+          "cache_fingerprint": "384086cec68e509a51e106c851359e84ca8e13feda479522da4e038824febcc5"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+          "entry_symbol": "tessera_mxfp4_storage_cb657974f2d4aa37",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 33
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            }
+          ],
+          "geometry": {
+            "grid": [
+              160,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "6ce3386c42508feada83121e5046197094994e1c14a3a58fa952297266c518d8",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "cb657974f2d4aa378d85b1bb8328d8a7ce30fb817e17f690f75dde0ebd38be26",
+            "schedule_ir_digest": "e0f9be129c08655caff83b6a3b9ecf8971519957b83bb849fe4927e251c5d670",
+            "shape_nk": [
+              80,
+              1024
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "546039e8030bc22514370acc23b6808347b9192e6ff84efe00b82e74890d217d",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "58d8da731dd17c82f088e98f7879adb72bc6ff241def68ea3062f2aa78112d22",
+          "cache_fingerprint": "edf1281a7dcb94ff8f52ee880ce421824cce19166495f1e1e4a70915c83687d2"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "9e2f6c64ffcaa60d864db09e5a52df22d0815405f19cdcf4a2131e7f446f6558",
+          "entry_symbol": "packed_folded_w4a8",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 33
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            }
+          ],
+          "geometry": {
+            "grid": [
+              2,
+              2,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "d90432aa2e46972844afeca8c061b24a2cb25cb97fc6b74ae1435a99489bdedc",
+            "hsaco_sha256": "4faf2d30d00afc64e4ce3b9f200728af65c51453205ed7573ca0cc922c5f1f0f",
+            "image_k": 1024,
+            "image_m": 257,
+            "image_n": 80,
+            "image_shape_policy": "static_mnk",
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "458bd39990375687d76559290ed4223968aef78796f06296fe7a2772b7171b70",
+            "schedule_ir_sha256": "e49fb4a1e47f2521277bcff57c2c828ca333884793cdbf97897886fbcbf0bf78",
+            "shape": [
+              80,
+              1024
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "4ed99d06a8c0c34538b8afea47b515a540272a2ce1293ae9d9be2d6b8cb7a2c2",
+            "tile_ir_sha256": "8d83fc48d9ccef9b56ec683e629a04330169ce097384beb521d08a818c0b1a9d",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "7e07e0b94cd09c7c3f8fb49768861da426797676ca591b2c27e2f72304e063e8",
+          "cache_fingerprint": "54740b82eb68d2b6dbb3c6b661518373315f4eddf80db23b3df891b9bc836e96"
+        }
+      ],
+      "frontend_graph_sha256": "5902b6d0f696fd23f3fb21845404c13d9c48cc9520b79f1c9f3f1b29323d921b",
+      "input_sha256": {
+        "codes": "d01ecd2158554d4013ffe7dbd3e6e4992cd96ffbee88f3ed186223f8a3f84562",
+        "scales": "d3dd459627e320dac187fd3bfc72ea3d1979d5609da372e1374dcbfc89ad3ae6",
+        "projection_globals": "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "a": "e88a014eeda989ceca172624e78799105b8d92c423f6009f9b7ed03f408eeb57",
+        "a_scale": "27727d4d13469b22a346fe20daf1816e7581f449ea4bb5cf934e71a9eb15d940"
+      },
+      "route": "Python frontend -> verified Graph -> native Schedule/Tile/Target/LLVM -> three HSACO images -> checked resident HIP program"
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "frontend_argument_order": [
+        "a_scale",
+        "a",
+        "codes",
+        "projection_globals",
+        "scales"
+      ],
+      "role_indices": [
+        2,
+        4,
+        3,
+        1,
+        0
+      ],
+      "cold_jit_wall_ms": 177.763424,
+      "warm_jit_wall_samples_ms": [
+        22.456043,
+        21.313032,
+        21.221517
+      ],
+      "warm_jit_wall_median_ms": 21.313032,
+      "serialization_wall_ms": 4.208789,
+      "serialized_artifact_bytes": 290915,
+      "artifact_restore_wall_samples_ms": [
+        1.017481,
+        1.030256,
+        1.06911
+      ],
+      "artifact_restore_wall_median_ms": 1.030256,
+      "portable_checked_launch_wall_samples_ms": [
+        17.136914,
+        17.015092,
+        16.948345
+      ],
+      "portable_checked_launch_wall_median_ms": 17.015092,
+      "device_graph_windows": {
+        "converter": [
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.78127384185791,
+            "per_iteration_ms": 0.2119148075580597
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.777314186096191,
+            "per_iteration_ms": 0.21179106831550598
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.765354156494141,
+            "per_iteration_ms": 0.2114173173904419
+          }
+        ],
+        "storage": [
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.10283999890089035,
+            "per_iteration_ms": 0.0032137499656528234
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.09363999962806702,
+            "per_iteration_ms": 0.0029262499883770943
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.09492000192403793,
+            "per_iteration_ms": 0.0029662500601261854
+          }
+        ],
+        "consumer": [
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.8296390175819397,
+            "per_iteration_ms": 0.025926219299435616
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.8316400051116943,
+            "per_iteration_ms": 0.025988750159740448
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.8353589773178101,
+            "per_iteration_ms": 0.026104968041181564
+          }
+        ],
+        "combined": [
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.529772758483887,
+            "per_iteration_ms": 0.20405539870262146
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 7.130144119262695,
+            "per_iteration_ms": 0.22281700372695923
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 7.171274185180664,
+            "per_iteration_ms": 0.22410231828689575
+          }
+        ]
+      },
+      "device_graph_dispatch_median_ms": {
+        "converter": 0.21179106831550598,
+        "storage": 0.0029662500601261854,
+        "consumer": 0.025988750159740448,
+        "combined": 0.22281700372695923
+      },
+      "numeric_correctness": "independent conversion/storage/folded float64 oracle before and after timing",
+      "max_abs_error": 0.0,
+      "component_image_digests": [
+        "c7d113ffd82ab010d41fc6428d376ab47798cc99f6a33bbb20e5cafa08bc2d83",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "9e2f6c64ffcaa60d864db09e5a52df22d0815405f19cdcf4a2131e7f446f6558"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "c7d113ffd82ab010d41fc6428d376ab47798cc99f6a33bbb20e5cafa08bc2d83",
+          "entry_symbol": "tessera_nvfp4_ingest_4a8248f9bba42cd8",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              10,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "f47cd7ad028ccf10eaf145fc3b59527ee0c9d5f921ab57ea47d9c4f8c8b8ac76",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              40,
+              80
+            ],
+            "schedule_digest": "4a8248f9bba42cd815e9d770a34e0d764b31780448c64e870c94bacd82104b53",
+            "schedule_ir_digest": "008fb971e31a795b73a3d439f3ce0ff4d62c306d151603728aa6aaf32ee355b9",
+            "shape_nk": [
+              80,
+              1024
+            ],
+            "tile_ir_digest": "52fbc000962b97126130e83bb1d6012a6a9cdb93465eba43688513f2eb78db8c",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "7d542048b9bc45d272ca35d8e6f5388f56987f3b22be116fab0813508eed847d",
+          "cache_fingerprint": "384086cec68e509a51e106c851359e84ca8e13feda479522da4e038824febcc5"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+          "entry_symbol": "tessera_mxfp4_storage_cb657974f2d4aa37",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 33
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            }
+          ],
+          "geometry": {
+            "grid": [
+              160,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "6ce3386c42508feada83121e5046197094994e1c14a3a58fa952297266c518d8",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "cb657974f2d4aa378d85b1bb8328d8a7ce30fb817e17f690f75dde0ebd38be26",
+            "schedule_ir_digest": "e0f9be129c08655caff83b6a3b9ecf8971519957b83bb849fe4927e251c5d670",
+            "shape_nk": [
+              80,
+              1024
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "546039e8030bc22514370acc23b6808347b9192e6ff84efe00b82e74890d217d",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "58d8da731dd17c82f088e98f7879adb72bc6ff241def68ea3062f2aa78112d22",
+          "cache_fingerprint": "edf1281a7dcb94ff8f52ee880ce421824cce19166495f1e1e4a70915c83687d2"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "9e2f6c64ffcaa60d864db09e5a52df22d0815405f19cdcf4a2131e7f446f6558",
+          "entry_symbol": "packed_folded_w4a8",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 33
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            }
+          ],
+          "geometry": {
+            "grid": [
+              2,
+              2,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "d90432aa2e46972844afeca8c061b24a2cb25cb97fc6b74ae1435a99489bdedc",
+            "hsaco_sha256": "4faf2d30d00afc64e4ce3b9f200728af65c51453205ed7573ca0cc922c5f1f0f",
+            "image_k": 1024,
+            "image_m": 257,
+            "image_n": 80,
+            "image_shape_policy": "static_mnk",
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "458bd39990375687d76559290ed4223968aef78796f06296fe7a2772b7171b70",
+            "schedule_ir_sha256": "e49fb4a1e47f2521277bcff57c2c828ca333884793cdbf97897886fbcbf0bf78",
+            "shape": [
+              80,
+              1024
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "4ed99d06a8c0c34538b8afea47b515a540272a2ce1293ae9d9be2d6b8cb7a2c2",
+            "tile_ir_sha256": "8d83fc48d9ccef9b56ec683e629a04330169ce097384beb521d08a818c0b1a9d",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "7e07e0b94cd09c7c3f8fb49768861da426797676ca591b2c27e2f72304e063e8",
+          "cache_fingerprint": "54740b82eb68d2b6dbb3c6b661518373315f4eddf80db23b3df891b9bc836e96"
+        }
+      ],
+      "frontend_graph_sha256": "668c4799fe03687e757eb817a2adcc749ae93b2abfe18d7dbefdf133bd75a6fc",
+      "input_sha256": {
+        "codes": "d01ecd2158554d4013ffe7dbd3e6e4992cd96ffbee88f3ed186223f8a3f84562",
+        "scales": "d3dd459627e320dac187fd3bfc72ea3d1979d5609da372e1374dcbfc89ad3ae6",
+        "projection_globals": "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "a": "e88a014eeda989ceca172624e78799105b8d92c423f6009f9b7ed03f408eeb57",
+        "a_scale": "27727d4d13469b22a346fe20daf1816e7581f449ea4bb5cf934e71a9eb15d940"
+      },
+      "route": "Python frontend -> verified Graph -> native Schedule/Tile/Target/LLVM -> three HSACO images -> checked resident HIP program"
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "frontend_argument_order": [
+        "codes",
+        "scales",
+        "projection_globals",
+        "a",
+        "a_scale"
+      ],
+      "role_indices": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "cold_jit_wall_ms": 3710.606618,
+      "warm_jit_wall_samples_ms": [
+        21.747796,
+        21.400929,
+        21.404977
+      ],
+      "warm_jit_wall_median_ms": 21.404977,
+      "serialization_wall_ms": 4.263384,
+      "serialized_artifact_bytes": 281821,
+      "artifact_restore_wall_samples_ms": [
+        1.152463,
+        1.35523,
+        1.154867
+      ],
+      "artifact_restore_wall_median_ms": 1.154867,
+      "portable_checked_launch_wall_samples_ms": [
+        17.946755,
+        16.572703,
+        17.355567
+      ],
+      "portable_checked_launch_wall_median_ms": 17.355567,
+      "device_graph_windows": {
+        "converter": [
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.152618885040283,
+            "per_iteration_ms": 0.19226934015750885
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.153179168701172,
+            "per_iteration_ms": 0.19228684902191162
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.1579389572143555,
+            "per_iteration_ms": 0.1924355924129486
+          }
+        ],
+        "storage": [
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.09027999639511108,
+            "per_iteration_ms": 0.0028212498873472214
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08979900181293488,
+            "per_iteration_ms": 0.002806218806654215
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08884000033140182,
+            "per_iteration_ms": 0.002776250010356307
+          }
+        ],
+        "consumer": [
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.507798969745636,
+            "per_iteration_ms": 0.015868717804551125
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.5119590163230896,
+            "per_iteration_ms": 0.01599871926009655
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.5051590204238892,
+            "per_iteration_ms": 0.015786219388246536
+          }
+        ],
+        "combined": [
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.273098945617676,
+            "per_iteration_ms": 0.19603434205055237
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.283167839050293,
+            "per_iteration_ms": 0.19634899497032166
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.287847995758057,
+            "per_iteration_ms": 0.19649524986743927
+          }
+        ]
+      },
+      "device_graph_dispatch_median_ms": {
+        "converter": 0.19228684902191162,
+        "storage": 0.002806218806654215,
+        "consumer": 0.015868717804551125,
+        "combined": 0.19634899497032166
+      },
+      "numeric_correctness": "independent conversion/storage/folded float64 oracle before and after timing",
+      "max_abs_error": 0.0,
+      "component_image_digests": [
+        "3e37ffc143bce1f9c412a13320a33897bd324ffc0e52bf2bf30b7f4f530bbd2c",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "e55edb19ea6748e13cd868cec31aedb66bba47fcf8b65fb0406a3a7a21d5b82c"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "3e37ffc143bce1f9c412a13320a33897bd324ffc0e52bf2bf30b7f4f530bbd2c",
+          "entry_symbol": "tessera_nvfp4_ingest_e6509d25a93e2ca4",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 4
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "6bb5d417e6ae12062d4bb8cd7e37d941abfc3266a8443e3606a7b436eeb579e6",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              32,
+              64
+            ],
+            "schedule_digest": "e6509d25a93e2ca4855f8f3e720a1f9f5a180af0f27f852d05ada0def8d889e1",
+            "schedule_ir_digest": "de25f8071310e9f32003ecd9d6a29153a652bc18be3c40377ff30132a7a764e4",
+            "shape_nk": [
+              64,
+              64
+            ],
+            "tile_ir_digest": "c5b457485a4435851bee3b68086dd05fe5861bbdf74235843a90fb50d8f2a7a9",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "f0a0fc22e911bc729c01433a86221d17d7e11557d6eb46d2c1953d1c91123b40",
+          "cache_fingerprint": "08020a449b29136f9f6264e18cbc58e421124ec19541cef6bf50a776325d982f"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+          "entry_symbol": "tessera_mxfp4_storage_c2db7d4166637aa9",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 3
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            }
+          ],
+          "geometry": {
+            "grid": [
+              8,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "bc91d7ddb5986eb875d962fd2f6e614833abe126dfadcd160e56186ae7c49803",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "c2db7d4166637aa9d32cc913f02dc18588b24cc2b0f28a48f941e5d1ba4b56c1",
+            "schedule_ir_digest": "06a8c8ea116cf4ff8ef5f7797f6d3dbe4d2279bd5c8f3ce5ef91d016f13e2275",
+            "shape_nk": [
+              64,
+              64
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "6f8bb781faceabfd6d5031619585d5da0a91f234838e32656b1eda42c4756535",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "775e34b1d83d02b7d47fa033269b8e6aac6a87443bb5867c538e8962143a6a3e",
+          "cache_fingerprint": "90ff01bfdea65f317cedec71fb2aa8a4d085aa71c438f37d3d4cb8c60e90136f"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "e55edb19ea6748e13cd868cec31aedb66bba47fcf8b65fb0406a3a7a21d5b82c",
+          "entry_symbol": "packed_folded_w4a8",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 3
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "f21593f1bb25dc4de0d99c38a39efe1c8726f46a0ce265dfdd642e369fd46c9b",
+            "hsaco_sha256": "938922fa5167206914b0966510039a3bf97e18d9fb90e234c238f12c68b34e1e",
+            "image_k": 64,
+            "image_m": 256,
+            "image_n": 64,
+            "image_shape_policy": "static_mnk",
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "b85e71c9533373eb8009ec2a48be41a4c3ef408c49375256476114ea7f905710",
+            "schedule_ir_sha256": "20084111deafc5e66cc9ed9628f3933274a2a1813a88ccb514679c87fe84419c",
+            "shape": [
+              64,
+              64
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "4ddf070c14d3da49e9fa32737bb2783ecda358a3c42232c60136707a61422d1e",
+            "tile_ir_sha256": "287a3631876178e86bb2891745114afd0f1bda15a64ba23dd42278edea4fc5f9",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "09771cd23aa5b8a2277fc67c3c1a6e18ea9f550355b8a1b95d533838825ed657",
+          "cache_fingerprint": "23c800b7e70cc91a8e468d8140d93471e99f281e288ad8891dbc0291b40bd9fa"
+        }
+      ],
+      "frontend_graph_sha256": "fbe34411597a88fb24009cda9ff78ef761323026906f26ce9026768b313ce3d4",
+      "input_sha256": {
+        "codes": "5c14193fe98732a22c6450bc49cdc2743ce9391ce45f78aba1fdbbb5dc2a036e",
+        "scales": "caa59ff92324bfa52f6e759af00044c1a6444c617d9976c3790485edbe4c7d71",
+        "projection_globals": "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "a": "f8abfbebd33cf24ee330d13983c9b42b0fca4cada7e9b3ed13a5ef0a46305cb1",
+        "a_scale": "41e3a8a8e18ecb51ead33ffb26455f99718c22e6fcfecce77d16437f67933f4a"
+      },
+      "route": "Python frontend -> verified Graph -> native Schedule/Tile/Target/LLVM -> three HSACO images -> checked resident HIP program"
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "frontend_argument_order": [
+        "a_scale",
+        "a",
+        "codes",
+        "projection_globals",
+        "scales"
+      ],
+      "role_indices": [
+        2,
+        4,
+        3,
+        1,
+        0
+      ],
+      "cold_jit_wall_ms": 177.656106,
+      "warm_jit_wall_samples_ms": [
+        21.690558,
+        20.834429,
+        20.856887
+      ],
+      "warm_jit_wall_median_ms": 20.856887,
+      "serialization_wall_ms": 4.68915,
+      "serialized_artifact_bytes": 281839,
+      "artifact_restore_wall_samples_ms": [
+        1.076423,
+        1.034148,
+        1.160218
+      ],
+      "artifact_restore_wall_median_ms": 1.076423,
+      "portable_checked_launch_wall_samples_ms": [
+        16.707836,
+        16.994392,
+        17.546682
+      ],
+      "portable_checked_launch_wall_median_ms": 16.994392,
+      "device_graph_windows": {
+        "converter": [
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.15225887298584,
+            "per_iteration_ms": 0.1922580897808075
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.154058933258057,
+            "per_iteration_ms": 0.19231434166431427
+          },
+          {
+            "stage": "converter",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 6.146139144897461,
+            "per_iteration_ms": 0.19206684827804565
+          }
+        ],
+        "storage": [
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08972100168466568,
+            "per_iteration_ms": 0.0028037813026458025
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08919999748468399,
+            "per_iteration_ms": 0.0027874999213963747
+          },
+          {
+            "stage": "storage",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.08976099640130997,
+            "per_iteration_ms": 0.0028050311375409365
+          }
+        ],
+        "consumer": [
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.5088009834289551,
+            "per_iteration_ms": 0.015900030732154846
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.5076019763946533,
+            "per_iteration_ms": 0.015862561762332916
+          },
+          {
+            "stage": "consumer",
+            "repeats": 32,
+            "graph_nodes": 32,
+            "host_graph_submissions": 1,
+            "window_ms": 0.5104820132255554,
+            "per_iteration_ms": 0.015952562913298607
+          }
+        ],
+        "combined": [
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.284249782562256,
+            "per_iteration_ms": 0.1963828057050705
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.271139144897461,
+            "per_iteration_ms": 0.19597309827804565
+          },
+          {
+            "stage": "combined",
+            "repeats": 32,
+            "graph_nodes": 96,
+            "host_graph_submissions": 1,
+            "window_ms": 6.283868789672852,
+            "per_iteration_ms": 0.1963708996772766
+          }
+        ]
+      },
+      "device_graph_dispatch_median_ms": {
+        "converter": 0.1922580897808075,
+        "storage": 0.0028037813026458025,
+        "consumer": 0.015900030732154846,
+        "combined": 0.1963708996772766
+      },
+      "numeric_correctness": "independent conversion/storage/folded float64 oracle before and after timing",
+      "max_abs_error": 0.0,
+      "component_image_digests": [
+        "3e37ffc143bce1f9c412a13320a33897bd324ffc0e52bf2bf30b7f4f530bbd2c",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "e55edb19ea6748e13cd868cec31aedb66bba47fcf8b65fb0406a3a7a21d5b82c"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "3e37ffc143bce1f9c412a13320a33897bd324ffc0e52bf2bf30b7f4f530bbd2c",
+          "entry_symbol": "tessera_nvfp4_ingest_e6509d25a93e2ca4",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 4
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "6bb5d417e6ae12062d4bb8cd7e37d941abfc3266a8443e3606a7b436eeb579e6",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              32,
+              64
+            ],
+            "schedule_digest": "e6509d25a93e2ca4855f8f3e720a1f9f5a180af0f27f852d05ada0def8d889e1",
+            "schedule_ir_digest": "de25f8071310e9f32003ecd9d6a29153a652bc18be3c40377ff30132a7a764e4",
+            "shape_nk": [
+              64,
+              64
+            ],
+            "tile_ir_digest": "c5b457485a4435851bee3b68086dd05fe5861bbdf74235843a90fb50d8f2a7a9",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "f0a0fc22e911bc729c01433a86221d17d7e11557d6eb46d2c1953d1c91123b40",
+          "cache_fingerprint": "08020a449b29136f9f6264e18cbc58e421124ec19541cef6bf50a776325d982f"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+          "entry_symbol": "tessera_mxfp4_storage_c2db7d4166637aa9",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 3
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            }
+          ],
+          "geometry": {
+            "grid": [
+              8,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "bc91d7ddb5986eb875d962fd2f6e614833abe126dfadcd160e56186ae7c49803",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "c2db7d4166637aa9d32cc913f02dc18588b24cc2b0f28a48f941e5d1ba4b56c1",
+            "schedule_ir_digest": "06a8c8ea116cf4ff8ef5f7797f6d3dbe4d2279bd5c8f3ce5ef91d016f13e2275",
+            "shape_nk": [
+              64,
+              64
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "6f8bb781faceabfd6d5031619585d5da0a91f234838e32656b1eda42c4756535",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "775e34b1d83d02b7d47fa033269b8e6aac6a87443bb5867c538e8962143a6a3e",
+          "cache_fingerprint": "90ff01bfdea65f317cedec71fb2aa8a4d085aa71c438f37d3d4cb8c60e90136f"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "e55edb19ea6748e13cd868cec31aedb66bba47fcf8b65fb0406a3a7a21d5b82c",
+          "entry_symbol": "packed_folded_w4a8",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 3
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "f21593f1bb25dc4de0d99c38a39efe1c8726f46a0ce265dfdd642e369fd46c9b",
+            "hsaco_sha256": "938922fa5167206914b0966510039a3bf97e18d9fb90e234c238f12c68b34e1e",
+            "image_k": 64,
+            "image_m": 256,
+            "image_n": 64,
+            "image_shape_policy": "static_mnk",
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "b85e71c9533373eb8009ec2a48be41a4c3ef408c49375256476114ea7f905710",
+            "schedule_ir_sha256": "20084111deafc5e66cc9ed9628f3933274a2a1813a88ccb514679c87fe84419c",
+            "shape": [
+              64,
+              64
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "4ddf070c14d3da49e9fa32737bb2783ecda358a3c42232c60136707a61422d1e",
+            "tile_ir_sha256": "287a3631876178e86bb2891745114afd0f1bda15a64ba23dd42278edea4fc5f9",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "09771cd23aa5b8a2277fc67c3c1a6e18ea9f550355b8a1b95d533838825ed657",
+          "cache_fingerprint": "23c800b7e70cc91a8e468d8140d93471e99f281e288ad8891dbc0291b40bd9fa"
+        }
+      ],
+      "frontend_graph_sha256": "3737dc3130eb204b43df778490535425a664dde756f25f3f22515e0bd42f2b01",
+      "input_sha256": {
+        "codes": "5c14193fe98732a22c6450bc49cdc2743ce9391ce45f78aba1fdbbb5dc2a036e",
+        "scales": "caa59ff92324bfa52f6e759af00044c1a6444c617d9976c3790485edbe4c7d71",
+        "projection_globals": "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "a": "f8abfbebd33cf24ee330d13983c9b42b0fca4cada7e9b3ed13a5ef0a46305cb1",
+        "a_scale": "41e3a8a8e18ecb51ead33ffb26455f99718c22e6fcfecce77d16437f67933f4a"
+      },
+      "route": "Python frontend -> verified Graph -> native Schedule/Tile/Target/LLVM -> three HSACO images -> checked resident HIP program"
+    }
+  ],
+  "source_sha256": {
+    "python/tessera/compiler/rocm_nvfp4_program.py": "e1cf998730fc804fafb901322f4ce0f439e110993d33b482f473d2a43ae3da01",
+    "python/tessera/compiler/rocm_nvfp4_resident.py": "28c2339863255a792cd6817518ad8c1eb6010b40e3eb7aa020a71483b8632939",
+    "python/tessera/compiler/jit.py": "6a79cf4b38520de8c32654f58d082a89620a97d2b4856390b48c1c45c6ef8961",
+    "python/tessera/compiler/graph_ir.py": "74479ea3cacc5230c2074f9d67a86a18a934d7f5acbbd3151e678509e6ed4d75",
+    "python/tessera/compiler/op_catalog.py": "7574608f8316a75587e948c4a5637772566c9948d8138859ff2ce8648ca6770f",
+    "python/tessera/compiler/trace.py": "6b7f7c826ba32ced8c09f9556bfaef6f7b5dd61b94148c8efa7c2628b6e48c32",
+    "python/tessera/runtime.py": "8e10243d15c110db083e7d1da8e102c1b5865b3a5a378b1c7fc846fbadb0d4d9",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "7e6ca24e9cd4ab19b9eb7a4da3a748a6820c300147ed570a901af7ff8f34af09",
+    "benchmarks/rocm/benchmark_jit_nvfp4_program.py": "53e29c6f0cb7a9488a436ab5bbc55691cb52b25600a2d457cf7160815df230a8",
+    "tests/unit/test_rocm_nvfp4_resident.py": "751c8e8a6a03e9f47d6c85e9c7797d38194616953f6476270523ad827b5ef1ac"
+  }
+}

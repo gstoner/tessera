@@ -1,0 +1,2 @@
+....s.s                                                                  [100%]
+5 passed, 2 skipped in 0.85s

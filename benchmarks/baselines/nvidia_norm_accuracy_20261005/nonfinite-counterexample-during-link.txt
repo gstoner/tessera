@@ -1,0 +1,486 @@
+FFFFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_____ test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp16] ______
+
+dtype = 'fp16', schedule = 'serial'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+>       _,native=package("rmsnorm",source,schedule)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/nvidia/test_norm_accuracy.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/device/nvidia/test_cooperative_norm.py:34: in package
+    artifact=scheduled_kernel.lower_scheduled_kernel(graph(kind,source),target="nvidia_sm120",schedule=strategy)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_kernel.py:241: in lower_scheduled_kernel
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_matmul.py:990: in run_tessera_opt
+    result = subprocess.run(
+/usr/lib/python3.14/subprocess.py:555: in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/subprocess.py:1039: in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+/usr/lib/python3.14/subprocess.py:1875: in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: None args: ['/home/angstorms/scratch/next-five-compiler-...>
+args = ['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt', '-', '--tessera-graph-to-schedule']
+executable = '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+env = None, restore_signals = True, close_fds = True, p2cread = 12
+p2cwrite = 13, c2pread = 14, c2pwrite = 15, errread = 16, errwrite = 17
+
+    def _posix_spawn(self, args, executable, env, restore_signals, close_fds,
+                     p2cread, p2cwrite,
+                     c2pread, c2pwrite,
+                     errread, errwrite):
+        """Execute program using os.posix_spawn()."""
+        kwargs = {}
+        if restore_signals:
+            # See _Py_RestoreSignals() in Python/pylifecycle.c
+            sigset = []
+            for signame in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                signum = getattr(signal, signame, None)
+                if signum is not None:
+                    sigset.append(signum)
+            kwargs['setsigdef'] = sigset
+    
+        file_actions = []
+        for fd in (p2cwrite, c2pread, errread):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_CLOSE, fd))
+        for fd, fd2 in (
+            (p2cread, 0),
+            (c2pwrite, 1),
+            (errwrite, 2),
+        ):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_DUP2, fd, fd2))
+    
+        if close_fds:
+            file_actions.append((os.POSIX_SPAWN_CLOSEFROM, 3))
+    
+        if file_actions:
+            kwargs['file_actions'] = file_actions
+    
+>       self.pid = os.posix_spawn(executable, args, env, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+
+/usr/lib/python3.14/subprocess.py:1819: PermissionError
+_____ test_norm_compensation_preserves_nonfinite_rms_outputs[serial-bf16] ______
+
+dtype = 'bf16', schedule = 'serial'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+>       _,native=package("rmsnorm",source,schedule)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/nvidia/test_norm_accuracy.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/device/nvidia/test_cooperative_norm.py:34: in package
+    artifact=scheduled_kernel.lower_scheduled_kernel(graph(kind,source),target="nvidia_sm120",schedule=strategy)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_kernel.py:241: in lower_scheduled_kernel
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_matmul.py:990: in run_tessera_opt
+    result = subprocess.run(
+/usr/lib/python3.14/subprocess.py:555: in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/subprocess.py:1039: in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+/usr/lib/python3.14/subprocess.py:1875: in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: None args: ['/home/angstorms/scratch/next-five-compiler-...>
+args = ['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt', '-', '--tessera-graph-to-schedule']
+executable = '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+env = None, restore_signals = True, close_fds = True, p2cread = 12
+p2cwrite = 13, c2pread = 14, c2pwrite = 15, errread = 16, errwrite = 17
+
+    def _posix_spawn(self, args, executable, env, restore_signals, close_fds,
+                     p2cread, p2cwrite,
+                     c2pread, c2pwrite,
+                     errread, errwrite):
+        """Execute program using os.posix_spawn()."""
+        kwargs = {}
+        if restore_signals:
+            # See _Py_RestoreSignals() in Python/pylifecycle.c
+            sigset = []
+            for signame in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                signum = getattr(signal, signame, None)
+                if signum is not None:
+                    sigset.append(signum)
+            kwargs['setsigdef'] = sigset
+    
+        file_actions = []
+        for fd in (p2cwrite, c2pread, errread):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_CLOSE, fd))
+        for fd, fd2 in (
+            (p2cread, 0),
+            (c2pwrite, 1),
+            (errwrite, 2),
+        ):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_DUP2, fd, fd2))
+    
+        if close_fds:
+            file_actions.append((os.POSIX_SPAWN_CLOSEFROM, 3))
+    
+        if file_actions:
+            kwargs['file_actions'] = file_actions
+    
+>       self.pid = os.posix_spawn(executable, args, env, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+
+/usr/lib/python3.14/subprocess.py:1819: PermissionError
+_____ test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp32] ______
+
+dtype = 'fp32', schedule = 'serial'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+>       _,native=package("rmsnorm",source,schedule)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/nvidia/test_norm_accuracy.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/device/nvidia/test_cooperative_norm.py:34: in package
+    artifact=scheduled_kernel.lower_scheduled_kernel(graph(kind,source),target="nvidia_sm120",schedule=strategy)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_kernel.py:241: in lower_scheduled_kernel
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_matmul.py:990: in run_tessera_opt
+    result = subprocess.run(
+/usr/lib/python3.14/subprocess.py:555: in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/subprocess.py:1039: in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+/usr/lib/python3.14/subprocess.py:1875: in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: None args: ['/home/angstorms/scratch/next-five-compiler-...>
+args = ['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt', '-', '--tessera-graph-to-schedule']
+executable = '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+env = None, restore_signals = True, close_fds = True, p2cread = 12
+p2cwrite = 13, c2pread = 14, c2pwrite = 15, errread = 16, errwrite = 17
+
+    def _posix_spawn(self, args, executable, env, restore_signals, close_fds,
+                     p2cread, p2cwrite,
+                     c2pread, c2pwrite,
+                     errread, errwrite):
+        """Execute program using os.posix_spawn()."""
+        kwargs = {}
+        if restore_signals:
+            # See _Py_RestoreSignals() in Python/pylifecycle.c
+            sigset = []
+            for signame in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                signum = getattr(signal, signame, None)
+                if signum is not None:
+                    sigset.append(signum)
+            kwargs['setsigdef'] = sigset
+    
+        file_actions = []
+        for fd in (p2cwrite, c2pread, errread):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_CLOSE, fd))
+        for fd, fd2 in (
+            (p2cread, 0),
+            (c2pwrite, 1),
+            (errwrite, 2),
+        ):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_DUP2, fd, fd2))
+    
+        if close_fds:
+            file_actions.append((os.POSIX_SPAWN_CLOSEFROM, 3))
+    
+        if file_actions:
+            kwargs['file_actions'] = file_actions
+    
+>       self.pid = os.posix_spawn(executable, args, env, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+
+/usr/lib/python3.14/subprocess.py:1819: PermissionError
+_ test_norm_compensation_preserves_nonfinite_rms_outputs[cooperative_128-fp16] _
+
+dtype = 'fp16', schedule = 'cooperative_128'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+>       _,native=package("rmsnorm",source,schedule)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/nvidia/test_norm_accuracy.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/device/nvidia/test_cooperative_norm.py:34: in package
+    artifact=scheduled_kernel.lower_scheduled_kernel(graph(kind,source),target="nvidia_sm120",schedule=strategy)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_kernel.py:241: in lower_scheduled_kernel
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_matmul.py:990: in run_tessera_opt
+    result = subprocess.run(
+/usr/lib/python3.14/subprocess.py:555: in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/subprocess.py:1039: in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+/usr/lib/python3.14/subprocess.py:1875: in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: None args: ['/home/angstorms/scratch/next-five-compiler-...>
+args = ['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt', '-', '--tessera-graph-to-schedule']
+executable = '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+env = None, restore_signals = True, close_fds = True, p2cread = 12
+p2cwrite = 13, c2pread = 14, c2pwrite = 15, errread = 16, errwrite = 17
+
+    def _posix_spawn(self, args, executable, env, restore_signals, close_fds,
+                     p2cread, p2cwrite,
+                     c2pread, c2pwrite,
+                     errread, errwrite):
+        """Execute program using os.posix_spawn()."""
+        kwargs = {}
+        if restore_signals:
+            # See _Py_RestoreSignals() in Python/pylifecycle.c
+            sigset = []
+            for signame in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                signum = getattr(signal, signame, None)
+                if signum is not None:
+                    sigset.append(signum)
+            kwargs['setsigdef'] = sigset
+    
+        file_actions = []
+        for fd in (p2cwrite, c2pread, errread):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_CLOSE, fd))
+        for fd, fd2 in (
+            (p2cread, 0),
+            (c2pwrite, 1),
+            (errwrite, 2),
+        ):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_DUP2, fd, fd2))
+    
+        if close_fds:
+            file_actions.append((os.POSIX_SPAWN_CLOSEFROM, 3))
+    
+        if file_actions:
+            kwargs['file_actions'] = file_actions
+    
+>       self.pid = os.posix_spawn(executable, args, env, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+
+/usr/lib/python3.14/subprocess.py:1819: PermissionError
+_ test_norm_compensation_preserves_nonfinite_rms_outputs[cooperative_128-bf16] _
+
+dtype = 'bf16', schedule = 'cooperative_128'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+>       _,native=package("rmsnorm",source,schedule)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/nvidia/test_norm_accuracy.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/device/nvidia/test_cooperative_norm.py:34: in package
+    artifact=scheduled_kernel.lower_scheduled_kernel(graph(kind,source),target="nvidia_sm120",schedule=strategy)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_kernel.py:241: in lower_scheduled_kernel
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_matmul.py:990: in run_tessera_opt
+    result = subprocess.run(
+/usr/lib/python3.14/subprocess.py:555: in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/subprocess.py:1039: in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+/usr/lib/python3.14/subprocess.py:1875: in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: None args: ['/home/angstorms/scratch/next-five-compiler-...>
+args = ['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt', '-', '--tessera-graph-to-schedule']
+executable = '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+env = None, restore_signals = True, close_fds = True, p2cread = 12
+p2cwrite = 13, c2pread = 14, c2pwrite = 15, errread = 16, errwrite = 17
+
+    def _posix_spawn(self, args, executable, env, restore_signals, close_fds,
+                     p2cread, p2cwrite,
+                     c2pread, c2pwrite,
+                     errread, errwrite):
+        """Execute program using os.posix_spawn()."""
+        kwargs = {}
+        if restore_signals:
+            # See _Py_RestoreSignals() in Python/pylifecycle.c
+            sigset = []
+            for signame in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                signum = getattr(signal, signame, None)
+                if signum is not None:
+                    sigset.append(signum)
+            kwargs['setsigdef'] = sigset
+    
+        file_actions = []
+        for fd in (p2cwrite, c2pread, errread):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_CLOSE, fd))
+        for fd, fd2 in (
+            (p2cread, 0),
+            (c2pwrite, 1),
+            (errwrite, 2),
+        ):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_DUP2, fd, fd2))
+    
+        if close_fds:
+            file_actions.append((os.POSIX_SPAWN_CLOSEFROM, 3))
+    
+        if file_actions:
+            kwargs['file_actions'] = file_actions
+    
+>       self.pid = os.posix_spawn(executable, args, env, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+
+/usr/lib/python3.14/subprocess.py:1819: PermissionError
+_ test_norm_compensation_preserves_nonfinite_rms_outputs[cooperative_128-fp32] _
+
+dtype = 'fp32', schedule = 'cooperative_128'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+>       _,native=package("rmsnorm",source,schedule)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/device/nvidia/test_norm_accuracy.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/device/nvidia/test_cooperative_norm.py:34: in package
+    artifact=scheduled_kernel.lower_scheduled_kernel(graph(kind,source),target="nvidia_sm120",schedule=strategy)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_kernel.py:241: in lower_scheduled_kernel
+    schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_matmul.py:990: in run_tessera_opt
+    result = subprocess.run(
+/usr/lib/python3.14/subprocess.py:555: in run
+    with Popen(*popenargs, **kwargs) as process:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/subprocess.py:1039: in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+/usr/lib/python3.14/subprocess.py:1875: in _execute_child
+    self._posix_spawn(args, executable, env, restore_signals, close_fds,
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <Popen: returncode: None args: ['/home/angstorms/scratch/next-five-compiler-...>
+args = ['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt', '-', '--tessera-graph-to-schedule']
+executable = '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+env = None, restore_signals = True, close_fds = True, p2cread = 12
+p2cwrite = 13, c2pread = 14, c2pwrite = 15, errread = 16, errwrite = 17
+
+    def _posix_spawn(self, args, executable, env, restore_signals, close_fds,
+                     p2cread, p2cwrite,
+                     c2pread, c2pwrite,
+                     errread, errwrite):
+        """Execute program using os.posix_spawn()."""
+        kwargs = {}
+        if restore_signals:
+            # See _Py_RestoreSignals() in Python/pylifecycle.c
+            sigset = []
+            for signame in ('SIGPIPE', 'SIGXFZ', 'SIGXFSZ'):
+                signum = getattr(signal, signame, None)
+                if signum is not None:
+                    sigset.append(signum)
+            kwargs['setsigdef'] = sigset
+    
+        file_actions = []
+        for fd in (p2cwrite, c2pread, errread):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_CLOSE, fd))
+        for fd, fd2 in (
+            (p2cread, 0),
+            (c2pwrite, 1),
+            (errwrite, 2),
+        ):
+            if fd != -1:
+                file_actions.append((os.POSIX_SPAWN_DUP2, fd, fd2))
+    
+        if close_fds:
+            file_actions.append((os.POSIX_SPAWN_CLOSEFROM, 3))
+    
+        if file_actions:
+            kwargs['file_actions'] = file_actions
+    
+>       self.pid = os.posix_spawn(executable, args, env, **kwargs)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       PermissionError: [Errno 13] Permission denied: '/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt'
+
+/usr/lib/python3.14/subprocess.py:1819: PermissionError
+=============================== warnings summary ===============================
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp16]
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-bf16]
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp32]
+  /home/angstorms/scratch/next-five-compiler-slices/python/tessera/apple_gpu_ops_interception.py:83: RuntimeWarning: invalid value encountered in divide
+    out = x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp16]
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-bf16]
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp32]
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[cooperative_128-fp16]
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[cooperative_128-bf16]
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[cooperative_128-fp32]
+6 failed, 4 deselected, 3 warnings in 2.77s

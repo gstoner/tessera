@@ -1,0 +1,24 @@
+............ssssssssss.................................................. [ 32%]
+.................................F...................................... [ 65%]
+........................................................................ [ 98%]
+...                                                                      [100%]
+=================================== FAILURES ===================================
+___________________ test_swallowed_kwarg_findings_are_pinned ___________________
+
+    def test_swallowed_kwarg_findings_are_pinned():
+        found = _swallowed_kwarg_mismatches()
+        new = found - _KNOWN_SWALLOWED_KWARGS
+        fixed = _KNOWN_SWALLOWED_KWARGS - found
+        assert not new, (
+            "NEW swallowed-kwarg mismatch (the jvp_clamp bug class — a canonical "
+            f"caller's kwargs silently vanish into `**_`): {sorted(new)}")
+>       assert not fixed, (
+            "swallowed-kwarg finding fixed — remove it from _KNOWN_SWALLOWED_KWARGS "
+            f"to record the triage outcome: {sorted(fixed)}")
+E       AssertionError: swallowed-kwarg finding fixed — remove it from _KNOWN_SWALLOWED_KWARGS to record the triage outcome: [('moe_dispatch', 'jvp', 'transport')]
+E       assert not {('moe_dispatch', 'jvp', 'transport')}
+
+tests/unit/test_autodiff_laws.py:430: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_autodiff_laws.py::test_swallowed_kwarg_findings_are_pinned
+1 failed, 208 passed, 10 skipped in 15.61s

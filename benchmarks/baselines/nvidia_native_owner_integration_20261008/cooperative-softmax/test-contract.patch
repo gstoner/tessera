@@ -1,0 +1,36 @@
+--- tests/unit/test_nvidia_scheduled_kernel.py
++++ candidate/test_nvidia_scheduled_kernel_contract.py
+@@ -251,10 +251,20 @@
+ 
+ 
+ @pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
+-def test_reduction_option_rejects_unsupported_softmax_schedule():
++def test_softmax_explicit_policy_preserves_rejection_boundaries():
+     module = _module(family="softmax", target="nvidia_sm120")
+-    with pytest.raises(ValueError,match="normalization or reduction"):
+-        scheduled_kernel.lower_scheduled_kernel(module,target="nvidia_sm120",schedule="cooperative_128")
++    serial = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule="serial")
++    cooperative = scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule="cooperative_128")
++    assert serial.schedule == "serial"
++    assert cooperative.schedule == "cooperative_128"
++    assert serial.schedule_digest != cooperative.schedule_digest
++    with pytest.raises(ValueError):
++        scheduled_kernel.lower_scheduled_kernel(module, target="nvidia_sm120", schedule="cooperative_64")
++    for target in ("x86", "apple_gpu", "rocm_gfx1151", "rocm_gfx1201"):
++        with pytest.raises(ValueError):
++            scheduled_kernel.lower_scheduled_kernel(
++                _module(family="softmax", target=target), target=target,
++                schedule="cooperative_128")
+ 
+ 
+ @pytest.mark.skipif(find_tessera_opt() is None, reason="requires native scheduling compiler")
+@@ -263,7 +273,8 @@
+     artifact = scheduled_kernel.lower_scheduled_kernel(
+         _module(family="softmax", target="nvidia_sm120"), target="nvidia_sm120"
+     )
+-    with pytest.raises(ValueError, match="fixed policy"):
++    expected = "policy disagrees on schedule" if "schedule" in fields else "fixed policy"
++    with pytest.raises(ValueError, match=expected):
+         nvidia_native.package_scheduled_kernel(replace(artifact, **fields), pipeline_name="pipeline")
+ 
+ 

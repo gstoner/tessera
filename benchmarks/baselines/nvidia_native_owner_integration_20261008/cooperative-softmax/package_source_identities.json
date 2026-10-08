@@ -1,0 +1,16 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "compiler_sha256": "b8fe61ff3e13322eb43b096a035e75ac2bdbd0bd3810eb810b8714317918029e",
+  "runtime_sha256": "2b99f69437817d0f14edb71dbb62746baea93b52a60aecb7650ebc0534b8f827",
+  "source_sha256": {
+    "scheduled_kernel.py": "94c9177d8f2a0481580db78a8194630a2fbc1fa9c0d208a3d8acb90c5535708a",
+    "nvidia_native.py": "1eb682bc64e659271bcb2ebfd50329fddf7d986e5e939742c039a6989dde221c",
+    "runtime.py": "b8a443edd08d3452e25f39d0a3f767d13f385afc8c1629901d70ff56b91db5b0",
+    "tessera_nvidia_ptx_launch.cpp": "b8f9314793ecddf152de492eec4849414c6b16fbf080fe03033281152849a47d",
+    "PMPasses.cpp": "7c5188717217fd7aa247cbdb9e72f60667492a97ddbaac55289619c1c674394d",
+    "TileOps.cpp": "e18f9fbf548817d04b2b955aa5bea6cfde46d1d31ab477b51daa1b4ecda79b40",
+    "NVIDIALowering.cpp": "4afde7ceb8e1f698e5d1fe8856689a42db627d13066075d1bd5f599425ff56b2"
+  },
+  "timing": "not_run",
+  "integration": "isolated_candidate"
+}

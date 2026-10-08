@@ -1,0 +1,15 @@
+{
+  "exit_code": 1,
+  "passed": 22016,
+  "failed": 2,
+  "skipped": 7529,
+  "deselected": 874,
+  "warnings": 11,
+  "elapsed_seconds": 1285.11,
+  "log_sha256": "16d459227e0eb22bcdcf90db675100ca147a916219866799423e1b99638ebca7",
+  "failures": [
+    "tests/unit/test_batching_rule_closure.py::test_batching_axis_has_zero_open",
+    "tests/unit/test_batching_rule_closure.py::test_transpose_axis_has_zero_open"
+  ],
+  "scope": "Frozen aggregate source before resident-owner candidate integration; candidate is not covered."
+}

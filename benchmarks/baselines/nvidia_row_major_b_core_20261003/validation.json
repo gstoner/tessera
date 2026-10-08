@@ -1,0 +1,26 @@
+{
+  "audit_tests": 11,
+  "checks": {
+    "compiler_plan": "passed",
+    "diff_check": "passed",
+    "generated_docs": 32,
+    "ruff": "passed"
+  },
+  "compiler_and_producer_tests": 367,
+  "compiler_sha256": "eaf9c3f58f62d81e7c54f499ae1babc5ca727ffebeb979243a6c60df5b410c06",
+  "exact_device_existing_route_tests": 86,
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "graphify": "not available in WSL",
+  "numerical_cases": 16,
+  "nvidia_tool_sha256": "4816ba0a6700497a3176315306344e8f3ffba841bed871232f35e812b488f111",
+  "production_package_support": false,
+  "schema": "tessera.nvidia.row_major_b_core_validation.v1",
+  "scope": "native typed B physical gather; Schedule/profile/checked RHS edge integration remains open",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_row_major_b_core.py": "fcebb9ff1bb8a5054e3e71f389de5abe3e6bec9dc8fd19300ad4ea645da9226e",
+    "python/tessera/compiler/pass_metadata.py": "9d600a2c3469b0e9ded0d768647b982fa04b97780df7e69e7734e88ef2cb4812",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "9eabdf9d4dfc94ac7290e06405bb6822167d93a3782ed710562fbd353364ec65",
+    "tests/unit/test_sm120_row_major_b_fragment.py": "9f8774192c096d966c67003256060fb60ac5b56d64574533fdad7db98bff4a1b"
+  },
+  "timestamp_utc": "2026-10-03T11:15:03.900323+00:00"
+}

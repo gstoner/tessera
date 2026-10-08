@@ -1,0 +1,7 @@
+-- Testing: 1 tests, 1 workers --
+PASS: Tessera-IR v0.3.1 :: phase2/tiling.mlir (1 of 1)
+
+Testing Time: 0.14s
+
+Total Discovered Tests: 1
+  Passed: 1 (100.00%)

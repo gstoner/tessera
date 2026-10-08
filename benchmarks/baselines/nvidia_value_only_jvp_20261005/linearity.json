@@ -1,0 +1,254 @@
+{
+  "rows": [
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": false,
+      "primal_v": "finite",
+      "max_abs_error": 1.5666545560844014e-08,
+      "linearity": "passed",
+      "image_sha256": "96e90164dadfe555d8dd010808e44d723110ff428df21eaae31e77d37180c2d3",
+      "binding_digest": "0db51ad22044332a7f737609c61d23a45fce586b564cadef584ac747f33e9583"
+    },
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": false,
+      "primal_v": "inf",
+      "max_abs_error": 1.5666545560844014e-08,
+      "linearity": "passed",
+      "image_sha256": "96e90164dadfe555d8dd010808e44d723110ff428df21eaae31e77d37180c2d3",
+      "binding_digest": "0db51ad22044332a7f737609c61d23a45fce586b564cadef584ac747f33e9583"
+    },
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": false,
+      "primal_v": "nan",
+      "max_abs_error": 1.5666545560844014e-08,
+      "linearity": "passed",
+      "image_sha256": "96e90164dadfe555d8dd010808e44d723110ff428df21eaae31e77d37180c2d3",
+      "binding_digest": "0db51ad22044332a7f737609c61d23a45fce586b564cadef584ac747f33e9583"
+    },
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": true,
+      "primal_v": "finite",
+      "max_abs_error": 1.932943072269211e-08,
+      "linearity": "passed",
+      "image_sha256": "54cb26278970d5d3d4b4a59bc14c3ba074df1aea2c4107bcda65bdf283d5f9e6",
+      "binding_digest": "69a162cb055b3832e9d3b3faa35c1bbcf464b8b895afe79bc6c8d47ee5bc554e"
+    },
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": true,
+      "primal_v": "inf",
+      "max_abs_error": 1.932943072269211e-08,
+      "linearity": "passed",
+      "image_sha256": "54cb26278970d5d3d4b4a59bc14c3ba074df1aea2c4107bcda65bdf283d5f9e6",
+      "binding_digest": "69a162cb055b3832e9d3b3faa35c1bbcf464b8b895afe79bc6c8d47ee5bc554e"
+    },
+    {
+      "sq": 3,
+      "sk": 5,
+      "causal": true,
+      "primal_v": "nan",
+      "max_abs_error": 1.932943072269211e-08,
+      "linearity": "passed",
+      "image_sha256": "54cb26278970d5d3d4b4a59bc14c3ba074df1aea2c4107bcda65bdf283d5f9e6",
+      "binding_digest": "69a162cb055b3832e9d3b3faa35c1bbcf464b8b895afe79bc6c8d47ee5bc554e"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": false,
+      "primal_v": "finite",
+      "max_abs_error": 3.1046599652251317e-08,
+      "linearity": "passed",
+      "image_sha256": "6d8abc8666661f2520ab4ac0ce611626dc0d5012ef486d8040cfee332afa8705",
+      "binding_digest": "9eeba55b1442299c02ba6d92dcab02e554426ab605349ad2905cb0f637369bfc"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": false,
+      "primal_v": "inf",
+      "max_abs_error": 3.1046599652251317e-08,
+      "linearity": "passed",
+      "image_sha256": "6d8abc8666661f2520ab4ac0ce611626dc0d5012ef486d8040cfee332afa8705",
+      "binding_digest": "9eeba55b1442299c02ba6d92dcab02e554426ab605349ad2905cb0f637369bfc"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": false,
+      "primal_v": "nan",
+      "max_abs_error": 3.1046599652251317e-08,
+      "linearity": "passed",
+      "image_sha256": "6d8abc8666661f2520ab4ac0ce611626dc0d5012ef486d8040cfee332afa8705",
+      "binding_digest": "9eeba55b1442299c02ba6d92dcab02e554426ab605349ad2905cb0f637369bfc"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": true,
+      "primal_v": "finite",
+      "max_abs_error": 1.3177337915282195e-08,
+      "linearity": "passed",
+      "image_sha256": "06d6e4ba8762d2c4e0c6146b70f871e2b65e47c5d8315045ffee3f3c5e74ba9c",
+      "binding_digest": "7bcf6dc54c44e4bfd0bff1a610b0dfc9c40e9fd6cdf7c69ee5202ba6237b4be4"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": true,
+      "primal_v": "inf",
+      "max_abs_error": 1.3177337915282195e-08,
+      "linearity": "passed",
+      "image_sha256": "06d6e4ba8762d2c4e0c6146b70f871e2b65e47c5d8315045ffee3f3c5e74ba9c",
+      "binding_digest": "7bcf6dc54c44e4bfd0bff1a610b0dfc9c40e9fd6cdf7c69ee5202ba6237b4be4"
+    },
+    {
+      "sq": 5,
+      "sk": 3,
+      "causal": true,
+      "primal_v": "nan",
+      "max_abs_error": 1.3177337915282195e-08,
+      "linearity": "passed",
+      "image_sha256": "06d6e4ba8762d2c4e0c6146b70f871e2b65e47c5d8315045ffee3f3c5e74ba9c",
+      "binding_digest": "7bcf6dc54c44e4bfd0bff1a610b0dfc9c40e9fd6cdf7c69ee5202ba6237b4be4"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": false,
+      "primal_v": "finite",
+      "max_abs_error": 2.1597023433517215e-08,
+      "linearity": "passed",
+      "image_sha256": "13ee3499615403b55d5bb0b35453d87aa0d4628e276458778e392fb225d3a107",
+      "binding_digest": "745c8f8340920008c8aa0075dd69e11490a0b10d457968fd66b52e729bfe92b7"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": false,
+      "primal_v": "inf",
+      "max_abs_error": 2.1597023433517215e-08,
+      "linearity": "passed",
+      "image_sha256": "13ee3499615403b55d5bb0b35453d87aa0d4628e276458778e392fb225d3a107",
+      "binding_digest": "745c8f8340920008c8aa0075dd69e11490a0b10d457968fd66b52e729bfe92b7"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": false,
+      "primal_v": "nan",
+      "max_abs_error": 2.1597023433517215e-08,
+      "linearity": "passed",
+      "image_sha256": "13ee3499615403b55d5bb0b35453d87aa0d4628e276458778e392fb225d3a107",
+      "binding_digest": "745c8f8340920008c8aa0075dd69e11490a0b10d457968fd66b52e729bfe92b7"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": true,
+      "primal_v": "finite",
+      "max_abs_error": 1.1542088312888055e-08,
+      "linearity": "passed",
+      "image_sha256": "8847f8a293f0c63e9f8ce4093a5fcd2ef3ef4598449d5c921f96b764b2ba5f1a",
+      "binding_digest": "f0171806ee401ca5f13bc09255afab84549d2cfc0f7a93a5a4a64cc56b9b11fc"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": true,
+      "primal_v": "inf",
+      "max_abs_error": 1.1542088312888055e-08,
+      "linearity": "passed",
+      "image_sha256": "8847f8a293f0c63e9f8ce4093a5fcd2ef3ef4598449d5c921f96b764b2ba5f1a",
+      "binding_digest": "f0171806ee401ca5f13bc09255afab84549d2cfc0f7a93a5a4a64cc56b9b11fc"
+    },
+    {
+      "sq": 4,
+      "sk": 4,
+      "causal": true,
+      "primal_v": "nan",
+      "max_abs_error": 1.1542088312888055e-08,
+      "linearity": "passed",
+      "image_sha256": "8847f8a293f0c63e9f8ce4093a5fcd2ef3ef4598449d5c921f96b764b2ba5f1a",
+      "binding_digest": "f0171806ee401ca5f13bc09255afab84549d2cfc0f7a93a5a4a64cc56b9b11fc"
+    },
+    {
+      "sq": 3,
+      "sk": 129,
+      "causal": false,
+      "primal_v": "finite",
+      "max_abs_error": 1.3738347015568309e-08,
+      "linearity": "passed",
+      "image_sha256": "1796c79e923853a051b6be9b8ac170cdfc384a4f1040847380c29fdd9f5fb0ac",
+      "binding_digest": "4805c276667f89cd07985abd579707b4860cb661f0537947b54660090a0baaf6"
+    },
+    {
+      "sq": 3,
+      "sk": 129,
+      "causal": false,
+      "primal_v": "inf",
+      "max_abs_error": 1.3738347015568309e-08,
+      "linearity": "passed",
+      "image_sha256": "1796c79e923853a051b6be9b8ac170cdfc384a4f1040847380c29fdd9f5fb0ac",
+      "binding_digest": "4805c276667f89cd07985abd579707b4860cb661f0537947b54660090a0baaf6"
+    },
+    {
+      "sq": 3,
+      "sk": 129,
+      "causal": false,
+      "primal_v": "nan",
+      "max_abs_error": 1.3738347015568309e-08,
+      "linearity": "passed",
+      "image_sha256": "1796c79e923853a051b6be9b8ac170cdfc384a4f1040847380c29fdd9f5fb0ac",
+      "binding_digest": "4805c276667f89cd07985abd579707b4860cb661f0537947b54660090a0baaf6"
+    },
+    {
+      "sq": 3,
+      "sk": 129,
+      "causal": true,
+      "primal_v": "finite",
+      "max_abs_error": 1.3738347015568309e-08,
+      "linearity": "passed",
+      "image_sha256": "d82b7208b9e2b5accd910c26864a13caa90644007ede79ead98a031e3ae3704d",
+      "binding_digest": "89d1bce46ecbc618a3349b40e52299e1249b29d06413201465c4a8ae68037944"
+    },
+    {
+      "sq": 3,
+      "sk": 129,
+      "causal": true,
+      "primal_v": "inf",
+      "max_abs_error": 1.3738347015568309e-08,
+      "linearity": "passed",
+      "image_sha256": "d82b7208b9e2b5accd910c26864a13caa90644007ede79ead98a031e3ae3704d",
+      "binding_digest": "89d1bce46ecbc618a3349b40e52299e1249b29d06413201465c4a8ae68037944"
+    },
+    {
+      "sq": 3,
+      "sk": 129,
+      "causal": true,
+      "primal_v": "nan",
+      "max_abs_error": 1.3738347015568309e-08,
+      "linearity": "passed",
+      "image_sha256": "d82b7208b9e2b5accd910c26864a13caa90644007ede79ead98a031e3ae3704d",
+      "binding_digest": "89d1bce46ecbc618a3349b40e52299e1249b29d06413201465c4a8ae68037944"
+    }
+  ],
+  "backend": "nvidia_sm120",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "oracle": "float64 fixed-QK softmax probabilities times dV; primal V is not a dependency",
+  "compiler_sha256": "eb2bb82b6bc12915967074ecbd843732450ae1c7be33d9070b4d340d429dde5e",
+  "source_hashes": {
+    "src/transforms/lib/AutodiffForwardPass.cpp": "2fd2f0dfd8ed37752906e849c2887cc8c833e3ebccb3c1c2a7bd025aff69aa4e",
+    "src/compiler/programming_model/lib/NativeAttentionJvp.h": "d452424d5f420ee5a95c0470e900c79db6457d7e92d22d02e1a1bf81008c1076",
+    "python/tessera/compiler/native_attention_program.py": "9c499bce0a6bc79edc08ad528a5afb22ce0af53bbfd77294bb41722da4054f7a"
+  },
+  "recorder_sha256": "a5ef2d926f8c3eefdc6a938a1fdce4f2c13fd577c958f8e506f41180d82bf19c"
+}

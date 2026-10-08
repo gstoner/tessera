@@ -1,0 +1,106 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_direct_native_nvfp4_preserves_exact_named_policy[numeric_policy-extra0] _
+
+field = 'numeric_policy', extra = {'storage': 'bf16'}
+
+    @pytest.mark.parametrize("field,extra", [
+        ("numeric_policy", {"storage": "bf16"}),
+        ("numeric_policy", {"rounding": "toward_zero"}),
+        ("scale_layout", {"axis": "N"}),
+    ])
+    def test_direct_native_nvfp4_preserves_exact_named_policy(field, extra):
+        import subprocess
+    
+        compiler = scheduled_matmul.find_tessera_opt()
+        if compiler is None:
+            pytest.skip("requires matching native compiler")
+        module = batch_module()
+        contract = scheduled_matmul._graph_contract(module, "nvidia_sm120")
+        module.module_attrs["tessera.target"] = f"\"{contract[0]}\""
+        module.module_attrs["tessera.arch"] = f"\"{contract[1]}\""
+        canonical = module.to_mlir(verify=False, canonical=True, target="nvidia_sm120")
+        control = subprocess.run([str(compiler), "--tessera-graph-to-schedule"], input=canonical,
+                                 capture_output=True, text=True)
+        assert control.returncode == 0, control.stderr
+        module.functions[0].body[0].kwargs[field].update(extra)
+        authored = module.to_mlir(verify=False, canonical=True, target="nvidia_sm120")
+        process = subprocess.run([str(compiler), "--tessera-graph-to-schedule"],
+                                 input=authored, capture_output=True, text=True)
+>       assert process.returncode != 0, "native import silently dropped requested policy"
+E       AssertionError: native import silently dropped requested policy
+E       assert 0 != 0
+E        +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...4, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x7x5xf32>\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_nvfp4_shared_rhs_batch.py:212: AssertionError
+_ test_direct_native_nvfp4_preserves_exact_named_policy[numeric_policy-extra1] _
+
+field = 'numeric_policy', extra = {'rounding': 'toward_zero'}
+
+    @pytest.mark.parametrize("field,extra", [
+        ("numeric_policy", {"storage": "bf16"}),
+        ("numeric_policy", {"rounding": "toward_zero"}),
+        ("scale_layout", {"axis": "N"}),
+    ])
+    def test_direct_native_nvfp4_preserves_exact_named_policy(field, extra):
+        import subprocess
+    
+        compiler = scheduled_matmul.find_tessera_opt()
+        if compiler is None:
+            pytest.skip("requires matching native compiler")
+        module = batch_module()
+        contract = scheduled_matmul._graph_contract(module, "nvidia_sm120")
+        module.module_attrs["tessera.target"] = f"\"{contract[0]}\""
+        module.module_attrs["tessera.arch"] = f"\"{contract[1]}\""
+        canonical = module.to_mlir(verify=False, canonical=True, target="nvidia_sm120")
+        control = subprocess.run([str(compiler), "--tessera-graph-to-schedule"], input=canonical,
+                                 capture_output=True, text=True)
+        assert control.returncode == 0, control.stderr
+        module.functions[0].body[0].kwargs[field].update(extra)
+        authored = module.to_mlir(verify=False, canonical=True, target="nvidia_sm120")
+        process = subprocess.run([str(compiler), "--tessera-graph-to-schedule"],
+                                 input=authored, capture_output=True, text=True)
+>       assert process.returncode != 0, "native import silently dropped requested policy"
+E       AssertionError: native import silently dropped requested policy
+E       assert 0 != 0
+E        +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...4, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x7x5xf32>\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_nvfp4_shared_rhs_batch.py:212: AssertionError
+__ test_direct_native_nvfp4_preserves_exact_named_policy[scale_layout-extra2] __
+
+field = 'scale_layout', extra = {'axis': 'N'}
+
+    @pytest.mark.parametrize("field,extra", [
+        ("numeric_policy", {"storage": "bf16"}),
+        ("numeric_policy", {"rounding": "toward_zero"}),
+        ("scale_layout", {"axis": "N"}),
+    ])
+    def test_direct_native_nvfp4_preserves_exact_named_policy(field, extra):
+        import subprocess
+    
+        compiler = scheduled_matmul.find_tessera_opt()
+        if compiler is None:
+            pytest.skip("requires matching native compiler")
+        module = batch_module()
+        contract = scheduled_matmul._graph_contract(module, "nvidia_sm120")
+        module.module_attrs["tessera.target"] = f"\"{contract[0]}\""
+        module.module_attrs["tessera.arch"] = f"\"{contract[1]}\""
+        canonical = module.to_mlir(verify=False, canonical=True, target="nvidia_sm120")
+        control = subprocess.run([str(compiler), "--tessera-graph-to-schedule"], input=canonical,
+                                 capture_output=True, text=True)
+        assert control.returncode == 0, control.stderr
+        module.functions[0].body[0].kwargs[field].update(extra)
+        authored = module.to_mlir(verify=False, canonical=True, target="nvidia_sm120")
+        process = subprocess.run([str(compiler), "--tessera-graph-to-schedule"],
+                                 input=authored, capture_output=True, text=True)
+>       assert process.returncode != 0, "native import silently dropped requested policy"
+E       AssertionError: native import silently dropped requested policy
+E       assert 0 != 0
+E        +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...4, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x7x5xf32>\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_nvfp4_shared_rhs_batch.py:212: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_nvfp4_shared_rhs_batch.py::test_direct_native_nvfp4_preserves_exact_named_policy[numeric_policy-extra0]
+FAILED tests/unit/test_nvfp4_shared_rhs_batch.py::test_direct_native_nvfp4_preserves_exact_named_policy[numeric_policy-extra1]
+FAILED tests/unit/test_nvfp4_shared_rhs_batch.py::test_direct_native_nvfp4_preserves_exact_named_policy[scale_layout-extra2]
+3 failed, 28 deselected in 0.37s

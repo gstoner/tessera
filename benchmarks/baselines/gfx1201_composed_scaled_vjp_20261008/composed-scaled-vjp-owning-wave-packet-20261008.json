@@ -1,0 +1,188 @@
+{
+  "schema": "tessera.gfx1201.composed_scaled_vjp.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "hip_device": 0,
+  "hip_uuid_hex": "32386439653765666266326566373136",
+  "compiler_sha256": "6075bf1450770b22635f9a22959638e4845287030d716d37c513cd7a8db51eb0",
+  "runtime_path": "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "sources": {
+    "benchmarks/rocm/benchmark_composed_scaled_vjp.py": "0df1e1d7422abd06a36dd602f9253d5bd3f0c6a490090726c88d70bcba359758",
+    "tests/device/rocm/test_composed_scaled_vjp.py": "3a96cfe11a91937c92b897b1139a0d228de4b9680f206a5ec17ba8cad23a16cd",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "921368e6f50c6cd28e3cb1c71cdb06e321d1a77be047a39fc4219fb4106b762a",
+    "src/compiler/programming_model/lib/NativeScaleTranspose.h": "ffa9e99bbfb21bf63cb8076137b32631cff18d165b8458d0856dfa319c5a804b",
+    "python/tessera/compiler/native_scaled_program.py": "f9187ccaa6f4bf947ad748c1b9290662c72c2c87c516b912066bdfb00df8fc65",
+    "python/tessera/compiler/jit.py": "d35021a43df5c8bf18d49d157c2399fd83a24fe6a2725fb25336224df5c58df4",
+    "python/tessera/compiler/native_vjp_plugins.py": "f0a48908c0321937236914289a37efda49ba80973d07ce4129a03e42b6f92e1c",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "ca02843adcdbe9bb7b9c8d0c73121cc52796b5eff9b28aba1dbce784c3d42d98",
+    "tests/unit/test_composed_scaled_vjp.py": "c70a713521fa090a63ad30a5c721221a1349904cedab4cd4a7a0b13a2329835f"
+  },
+  "rows": [
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "shared_scale": false,
+      "scale_adjoint_schedule": "wave_per_scale_element",
+      "gradient_roles": [
+        "sb1",
+        "sa0",
+        "sb0",
+        "sa1"
+      ],
+      "members": 4,
+      "native_program_event_samples_ms": [
+        0.27689453959465027,
+        0.25906887650489807,
+        0.2594664990901947,
+        0.2643428444862366,
+        0.2668004333972931
+      ],
+      "native_program_event_median_ms": 0.2643428444862366,
+      "public_host_samples_ms": [
+        2.442759271203117,
+        2.4648222606629133,
+        2.502413085577163,
+        2.573168095709248,
+        2.504173708571629
+      ],
+      "public_host_median_ms": 2.502413085577163,
+      "max_abs_error": 2.9795186895498205e-07,
+      "artifact_hash": "afce1b71dc8fb0fa8296923bc906005860a2c56720387421198d0c69d7360c0d",
+      "image_sha256": [
+        "0e2183ee09c19a4d8f67189d8a9b43f471fa6792e061298dd9bbbe129fb82d44",
+        "d5c5268e4bfc0e8ffeb6fe70d6688e3d967d7578617ba8eecc376ef078542ddc",
+        "0e2183ee09c19a4d8f67189d8a9b43f471fa6792e061298dd9bbbe129fb82d44",
+        "d5c5268e4bfc0e8ffeb6fe70d6688e3d967d7578617ba8eecc376ef078542ddc"
+      ],
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "shared_scale": true,
+      "scale_adjoint_schedule": "wave_per_scale_element",
+      "gradient_roles": [
+        "sb1",
+        "sa",
+        "sb0"
+      ],
+      "members": 5,
+      "native_program_event_samples_ms": [
+        0.4211794137954712,
+        0.2714694142341614,
+        0.27130118012428284,
+        0.27132943272590637,
+        0.2720499336719513
+      ],
+      "native_program_event_median_ms": 0.2714694142341614,
+      "public_host_samples_ms": [
+        2.444822087206624,
+        2.362945455719124,
+        2.280451463196765,
+        2.2163920062170788,
+        2.2502611814574762
+      ],
+      "public_host_median_ms": 2.280451463196765,
+      "max_abs_error": 2.9795186895498205e-07,
+      "artifact_hash": "e656c29f06f0012c0248cc2c9a01dc821c46a39d0d699d0c744c40a4866e7f4b",
+      "image_sha256": [
+        "0e2183ee09c19a4d8f67189d8a9b43f471fa6792e061298dd9bbbe129fb82d44",
+        "d5c5268e4bfc0e8ffeb6fe70d6688e3d967d7578617ba8eecc376ef078542ddc",
+        "0e2183ee09c19a4d8f67189d8a9b43f471fa6792e061298dd9bbbe129fb82d44",
+        "d5c5268e4bfc0e8ffeb6fe70d6688e3d967d7578617ba8eecc376ef078542ddc",
+        "ce03a6b78228b093e9c6d98fef1805162bf48bd8b7448b47fa37172e4a2ac4ef"
+      ],
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "shape_mnk": [
+        3,
+        5,
+        37
+      ],
+      "shared_scale": false,
+      "scale_adjoint_schedule": "wave_per_scale_element",
+      "gradient_roles": [
+        "sb1",
+        "sa0",
+        "sb0",
+        "sa1"
+      ],
+      "members": 4,
+      "native_program_event_samples_ms": [
+        0.04330118000507355,
+        0.043077778071165085,
+        0.043079882860183716,
+        0.04322759062051773,
+        0.043124690651893616
+      ],
+      "native_program_event_median_ms": 0.043124690651893616,
+      "public_host_samples_ms": [
+        2.4563123641366307,
+        2.322076650505716,
+        2.117224545641379,
+        2.189360453154553,
+        2.3395330010151323
+      ],
+      "public_host_median_ms": 2.322076650505716,
+      "max_abs_error": 8.844203827629293e-09,
+      "artifact_hash": "d2bb1070b2e5f5a9191141eb30866bb556e9861adedb251a073a280ad466e5ba",
+      "image_sha256": [
+        "3f25c646d655008335e57d9b118b4d0687ed5bb36dcaac36c97b1d29e9517574",
+        "5307e12ab49ea7d4e4d566e45ad4732914593261e7f9bfde5bcb6c00d6492432",
+        "3f25c646d655008335e57d9b118b4d0687ed5bb36dcaac36c97b1d29e9517574",
+        "5307e12ab49ea7d4e4d566e45ad4732914593261e7f9bfde5bcb6c00d6492432"
+      ],
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "shape_mnk": [
+        3,
+        5,
+        37
+      ],
+      "shared_scale": true,
+      "scale_adjoint_schedule": "wave_per_scale_element",
+      "gradient_roles": [
+        "sb1",
+        "sa",
+        "sb0"
+      ],
+      "members": 5,
+      "native_program_event_samples_ms": [
+        0.10215725004673004,
+        0.10208985209465027,
+        0.096155546605587,
+        0.040973879396915436,
+        0.040574077516794205
+      ],
+      "native_program_event_median_ms": 0.096155546605587,
+      "public_host_samples_ms": [
+        2.261507727036422,
+        2.1860222543843766,
+        2.1298827434127983,
+        2.012003826993433,
+        1.9984061787412926
+      ],
+      "public_host_median_ms": 2.1298827434127983,
+      "max_abs_error": 1.167721591643911e-08,
+      "artifact_hash": "003dc85cdfc739f9ee6fa206cd553ed9561bcb2786c065bc70b21565ca5966a9",
+      "image_sha256": [
+        "3f25c646d655008335e57d9b118b4d0687ed5bb36dcaac36c97b1d29e9517574",
+        "5307e12ab49ea7d4e4d566e45ad4732914593261e7f9bfde5bcb6c00d6492432",
+        "3f25c646d655008335e57d9b118b4d0687ed5bb36dcaac36c97b1d29e9517574",
+        "5307e12ab49ea7d4e4d566e45ad4732914593261e7f9bfde5bcb6c00d6492432",
+        "221bcf6855b3583177c24d935c0df82a2ebdf150ba9fc78a6492885239d120ce"
+      ],
+      "correctness": "before_and_after_timing"
+    }
+  ],
+  "timing": "native HIP program event windows over four reductions and any shared-gradient sum; separate warm public host calls including copies/completion; no speedup claim"
+}

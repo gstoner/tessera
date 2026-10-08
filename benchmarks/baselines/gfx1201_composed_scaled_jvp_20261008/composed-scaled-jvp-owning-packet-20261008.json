@@ -1,0 +1,97 @@
+{
+  "schema": "tessera.gfx1201.composed_scaled_jvp.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "hip_device": 0,
+  "hip_uuid_hex": "32386439653765666266326566373136",
+  "compiler_sha256": "65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2",
+  "runtime_path": "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "sources": {
+    "python/tessera/compiler/jit.py": "150059d9ab5f30bf463b87645702c6d010b14a3648d0bf0b6ecf7a3048092bb0",
+    "python/tessera/compiler/native_jvp_plugins.py": "da0f9433a423f676a3b4c08936e27cc0bb483cb20d7b3132aab0f698e4c1aaac",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "ca02843adcdbe9bb7b9c8d0c73121cc52796b5eff9b28aba1dbce784c3d42d98",
+    "tests/unit/test_composed_scaled_jvp.py": "599635a2044aae4f5cd6b79fc71e2d70f3d1e0c958b5a40f4de09bd51ca06d1b"
+  },
+  "rows": [
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "members": 10,
+      "native_program_event_samples_ms": [
+        0.06214310973882675,
+        0.061832498759031296,
+        0.05712724104523659,
+        0.0550057590007782,
+        0.055439457297325134
+      ],
+      "native_program_event_median_ms": 0.05712724104523659,
+      "public_host_samples_ms": [
+        2.7918118179183113,
+        2.75993891145018,
+        2.7014344549653204,
+        2.6831595565785062,
+        2.748518907041712
+      ],
+      "public_host_median_ms": 2.748518907041712,
+      "max_abs_error": 3.36427898872671e-07,
+      "artifact_hash": "9bade22b354441237da348854c74eef075607a044fb7200a2ca3ac2fc06a8288",
+      "image_sha256": [
+        "6aa2008b25e172926b4c866aa1b4180dfba5da9f544443672f7f1640afdbc567",
+        "c8386e1b7c35207342cdde6a339cd53eeda995ae8eef2ecf5e2cce5303641da8",
+        "5ba09a3c018cbf64285b602f739f93d390417ff148d38e16c1ac77aeea1c6d2a",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2",
+        "f9a44c66bb77e8a131265477cd98efbe4d022eac066dd34d02826167f62cb12c",
+        "8a319bae98ae5ca5ffc4ef619a9197eeec5b62ffe2a87c9f193a3db98fc26b28",
+        "636d21278e34199cf97dea6d55c90ef1b0ea61574a782ad0ea8dbe657f50ab98",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2"
+      ],
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "shape_mnk": [
+        3,
+        5,
+        37
+      ],
+      "members": 10,
+      "native_program_event_samples_ms": [
+        0.08828786760568619,
+        0.08752265572547913,
+        0.08798966556787491,
+        0.08386200666427612,
+        0.079192154109478
+      ],
+      "native_program_event_median_ms": 0.08752265572547913,
+      "public_host_samples_ms": [
+        3.1768732746555046,
+        3.132264002818953,
+        2.950262997976758,
+        2.9781288255683402,
+        2.97525518743152
+      ],
+      "public_host_median_ms": 2.9781288255683402,
+      "max_abs_error": 4.526413655003836e-08,
+      "artifact_hash": "2a9152c43243db69ac7ba4631d509d262eb54a7804d370cd6548fca2a84b0045",
+      "image_sha256": [
+        "74f6e257fb4ff242c35dae1caa6678c93ea791dc26fe0d1d07ca0cabc3c502d4",
+        "c5acbf6aca24415d12dfad68a95dd728e2cb058052f455e5dfb085e25d725b7f",
+        "0187401d5bad495c99aaf7346cad47e57dc0b08f4fa77cb4426548533c370033",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "ac5c5cb055a3a4f542b8bf534e0176af436fc0720eb0c611f07ae58d744555ed",
+        "2978634a052b0ec7f0776e6f8eb8bfcea1a6ec5f88cfe55f5260f8ce25936150",
+        "5f4fe4e51cdbdcb551817e7ccb86d3ee10b2284a7ea60e787ef472b0e1e3b4b2",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827"
+      ],
+      "correctness": "before_and_after_timing"
+    }
+  ],
+  "timing": "native HIP program event windows over ten members; separate warm public host calls including copies/completion; no speedup claim"
+}

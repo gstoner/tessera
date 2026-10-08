@@ -1,0 +1,2 @@
+<frozen runpy>:128: RuntimeWarning: 'tessera.compiler.audit' found in sys.modules after import of package 'tessera.compiler', but prior to execution of 'tessera.compiler.audit'; this may result in unpredictable behaviour
+audit: wrote /home/angstorms/scratch/next-five-compiler-slices/docs/audit/generated/runtime_abi.csv + /home/angstorms/scratch/next-five-compiler-slices/docs/audit/generated/runtime_abi.md

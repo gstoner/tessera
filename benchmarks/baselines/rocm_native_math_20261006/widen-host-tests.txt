@@ -1,0 +1,42 @@
+.............................FF                                          [100%]
+=================================== FAILURES ===================================
+__________ test_tracer_binds_positional_cast_dtype_as_attribute[f16] ___________
+
+storage = 'f16'
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    def test_tracer_binds_positional_cast_dtype_as_attribute(storage):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+        dtype=np.float16 if storage=="f16" else pytest.importorskip("ml_dtypes").bfloat16
+        def call(a):return ts.ops.sqrt(ts.ops.cast(a,"fp32"))
+        graph=trace(call,np.ones((3,17),dtype))
+        # TraceResult owns the frontend graph; positional dtype is not a tensor edge.
+>       module=graph.module
+               ^^^^^^^^^^^^
+E       AttributeError: 'TracedFunction' object has no attribute 'module'
+
+tests/unit/test_rocm_math_widening.py:68: AttributeError
+__________ test_tracer_binds_positional_cast_dtype_as_attribute[bf16] __________
+
+storage = 'bf16'
+
+    @pytest.mark.parametrize("storage",["f16","bf16"])
+    def test_tracer_binds_positional_cast_dtype_as_attribute(storage):
+        import numpy as np
+        import tessera as ts
+        from tessera.compiler.trace import trace
+        dtype=np.float16 if storage=="f16" else pytest.importorskip("ml_dtypes").bfloat16
+        def call(a):return ts.ops.sqrt(ts.ops.cast(a,"fp32"))
+        graph=trace(call,np.ones((3,17),dtype))
+        # TraceResult owns the frontend graph; positional dtype is not a tensor edge.
+>       module=graph.module
+               ^^^^^^^^^^^^
+E       AttributeError: 'TracedFunction' object has no attribute 'module'
+
+tests/unit/test_rocm_math_widening.py:68: AttributeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_math_widening.py::test_tracer_binds_positional_cast_dtype_as_attribute[f16]
+FAILED tests/unit/test_rocm_math_widening.py::test_tracer_binds_positional_cast_dtype_as_attribute[bf16]
+2 failed, 29 passed in 1.13s

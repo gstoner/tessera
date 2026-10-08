@@ -1,0 +1,9 @@
+{
+  "src/compiler/programming_model/lib/PMPasses.cpp": "0c921b7c23e37f2eba456c49fb510955d31055182bfb50db0c3b3ae31a3ab210",
+  "src/compiler/ir/TangentInterface.cpp": "6ad33ad9b9f27202e5f1495165f959bce99f8c3e1a6fd68f974d9b6be239ec9a",
+  "src/compiler/ir/TesseraOps.td": "b909a35f5b7f2b1d13f85b1333f8788650ff286629c69d36afd1984e0167a34f",
+  "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir": "412c2f98e843354ccd18435139ae7f645a9d911828313fd16b1a7d51aa589573",
+  "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir": "72aaa8fb7eb0ab27194d2b411e82bf0eff5679ea3c8ef43b3830430c6490855f",
+  "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_schedule.mlir": "b1b5d9ac4985374ba71c2aaefcd156e0f57ff79a47bf66de84d198232e7c2e79",
+  "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_encoded_invalid.mlir": "c1c280e31289dcd79f11d0f0aabe8c7207601c1b5a74c6741a9fa733865d8506"
+}

@@ -1,0 +1,16 @@
+{
+  "source_sha256": {
+    "src/compiler/ir/LinearTransposeInterface.cpp": "304aa44f1fe4b2f4cb315bb58b65c6a79c8a44cb7ee7cb0996e9c152f43c32f2",
+    "src/compiler/ir/TesseraOps.td": "3fbfcbb843ead2ba9ad60967228295613c89d5ce9e715eebad6f807dace1dfdc",
+    "src/compiler/ir/CMakeLists.txt": "9cd2c4d10d76252144ecd6584d59689e43221a0d74d1b1602a7a5c9ca0c09fcc",
+    "src/transforms/lib/AutodiffPass.cpp": "78ae63ed6b5f4cecd1e328bfeb7244a32b983ea405a385ef763d7da95338dd1e",
+    "tests/support/scaled_product_transpose_oracle.py": "953413a0bd317370dfd044dc1ef0120ae2ef34aa61688015510d37fa2ccdc7a8",
+    "tests/device/rocm/test_scaled_product_transpose_duality.py": "3d639912ad5c9391f896a467dba59624370d5637a5e0ab7fb3381ab2c0607ec8",
+    "tests/unit/test_scaled_product_transpose_oracle.py": "b904019d532f758efe38cc598a180e45213274bb94e51787623ad52101912de2",
+    "tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir": "294aad9267284aaa6e8e9cd81ffd3a990368a6592816f1316cb7d3afe2a79d0d",
+    ".build-sm120-w1-1/tools/tessera-opt/tessera-opt": "970cf5079f256c22ed85a1764e186959f1f28853e6f97fb7be1089bf4fc6c2ab"
+  },
+  "native_reverse_execution": "not_yet_packaged",
+  "device_evidence": "gfx1201 native JVP duality, not VJP",
+  "compiler": "LLVM/MLIR 23.1.1"
+}

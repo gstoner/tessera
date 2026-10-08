@@ -1,0 +1,105 @@
+FFF...                                                                   [100%]
+=================================== FAILURES ===================================
+_____ test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp16] ______
+
+dtype = 'fp16', schedule = 'serial'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+        _,native=package("rmsnorm",source,schedule)
+        actual=launch(native,source).astype(np.float32)
+        expected=np.zeros(source.shape,np.float32)
+        expected[0,0]=np.nan
+        expected[1,:]=np.nan
+>       np.testing.assert_array_equal(actual,expected)
+E       AssertionError: 
+E       Arrays are not equal
+E       
+E       nan location mismatch:
+E        ACTUAL: array([[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
+E               nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
+E               nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,...
+E        DESIRED: array([[nan,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+E                0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+E                0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,...
+
+tests/device/nvidia/test_norm_accuracy.py:40: AssertionError
+_____ test_norm_compensation_preserves_nonfinite_rms_outputs[serial-bf16] ______
+
+dtype = 'bf16', schedule = 'serial'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+        _,native=package("rmsnorm",source,schedule)
+        actual=launch(native,source).astype(np.float32)
+        expected=np.zeros(source.shape,np.float32)
+        expected[0,0]=np.nan
+        expected[1,:]=np.nan
+>       np.testing.assert_array_equal(actual,expected)
+E       AssertionError: 
+E       Arrays are not equal
+E       
+E       nan location mismatch:
+E        ACTUAL: array([[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
+E               nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
+E               nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,...
+E        DESIRED: array([[nan,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+E                0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+E                0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,...
+
+tests/device/nvidia/test_norm_accuracy.py:40: AssertionError
+_____ test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp32] ______
+
+dtype = 'fp32', schedule = 'serial'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16","fp32"])
+    @pytest.mark.parametrize("schedule",["serial","cooperative_128"])
+    def test_norm_compensation_preserves_nonfinite_rms_outputs(dtype,schedule):
+        from tests.device.nvidia.test_cooperative_norm import package,launch
+        storage=np.float32 if dtype=="fp32" else _storage(dtype)
+        source=np.full((2,257),.5,storage)
+        source[0,0]=np.inf
+        source[1,0]=np.nan
+        _,native=package("rmsnorm",source,schedule)
+        actual=launch(native,source).astype(np.float32)
+        expected=np.zeros(source.shape,np.float32)
+        expected[0,0]=np.nan
+        expected[1,:]=np.nan
+>       np.testing.assert_array_equal(actual,expected)
+E       AssertionError: 
+E       Arrays are not equal
+E       
+E       nan location mismatch:
+E        ACTUAL: array([[nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
+E               nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,
+E               nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan, nan,...
+E        DESIRED: array([[nan,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+E                0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,
+E                0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,  0.,...
+
+tests/device/nvidia/test_norm_accuracy.py:40: AssertionError
+=============================== warnings summary ===============================
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp16]
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-bf16]
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp32]
+  /home/angstorms/scratch/next-five-compiler-slices/python/tessera/apple_gpu_ops_interception.py:83: RuntimeWarning: invalid value encountered in divide
+    out = x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp16]
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-bf16]
+FAILED tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp32]
+3 failed, 3 passed, 4 deselected, 3 warnings in 4.35s

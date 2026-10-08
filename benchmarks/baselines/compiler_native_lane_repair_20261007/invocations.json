@@ -1,0 +1,50 @@
+{
+  "host": "Super-Bear WSL",
+  "checkout": "/home/angstorms/scratch/next-five-compiler-slices",
+  "environment": ".build-sm120-w1-1/validation-env.sh",
+  "registry_command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-rs",
+    "tests/unit/test_diagnostic_code_registry.py",
+    "tests/unit/test_pass_metadata.py",
+    "tests/unit/test_lit_fleet_union.py",
+    "tests/unit/test_kernel_inventory_and_lit_fixtures.py",
+    "tests/unit/test_lit_fixture_keywords.py"
+  ],
+  "device_command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-rs",
+    "tests/device/nvidia/test_nvfp4_transpose_jit.py",
+    "tests/device/nvidia/test_jit_multiresult_attention_vjp.py",
+    "tests/device/nvidia/test_public_attention_forward.py"
+  ],
+  "lit_runner": "/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/utils/lit/lit.py",
+  "registry_and_device_source_sha256": {
+    "tests/unit/test_diagnostic_code_registry.py": "3fab53eadf4021edb7e6bd8edf5780a06274fef8fb0feff4c1f0216131d53881",
+    "tests/unit/test_pass_metadata.py": "577eaab760456617afb7d7b0bc4ef7f24b505765efa522f75ae6a60c84b2e15c",
+    "tests/unit/test_lit_fleet_union.py": "d51957c7704d73f671003a2c5f61cda0f1a9c72f2f92c4e03fde99b681dec2a4",
+    "tests/unit/test_kernel_inventory_and_lit_fixtures.py": "25c1a4a6bf5e776e8a92413fc0e88a39a22fcc9a92b96d411ef61daa9ee5330c",
+    "tests/unit/test_lit_fixture_keywords.py": "6b75cc4e513955b67afc068f405b12045f8964ac028b61bd85aecbeb4780a6cf",
+    "tests/device/nvidia/test_nvfp4_transpose_jit.py": "5a983907c686c21e73d38aed094d614f13e788efd9a71b6caf4c5b4a6baa3ac1",
+    "tests/device/nvidia/test_jit_multiresult_attention_vjp.py": "bced77b93fbaf3a50df141da3493800427d8ac555dd15de83c9cf3eadcb5ec36",
+    "tests/device/nvidia/test_public_attention_forward.py": "33c5855df7e13a0a1d90a7977aeae7e24c778497a6b4e347e15d99b1eecf2fb3",
+    "tests/device/nvidia/test_dynamic_row_lhs.py": "13b73d94d6bd19bbbf71544ceb023f17d2cf6854966eedd1f124ef47c61fe511"
+  },
+  "environment_sha256": "2e67fb48c7b3bf13189c12541fbb9b0b06dc8906fff102fa417f6b495f78521f",
+  "dynamic_row_command": [
+    "python",
+    "-m",
+    "pytest",
+    "-q",
+    "-rs",
+    "tests/device/nvidia/test_dynamic_row_lhs.py",
+    "-k",
+    "test_dynamic_row_rhs_public_and_portable"
+  ]
+}

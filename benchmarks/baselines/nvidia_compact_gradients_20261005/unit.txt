@@ -1,0 +1,626 @@
+FFFFFFFFFFFFFFF......................................................... [ 16%]
+........................................................................ [ 33%]
+........................................................................ [ 50%]
+........................................................................ [ 67%]
+........................................................................ [ 84%]
+...................................................................      [100%]
+=================================== FAILURES ===================================
+_ test_native_compact_projection_keeps_logical_but_narrows_physical_results[2-activity0] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c040079350>
+indices = '2', activity = (0, 0, 1)
+
+    @pytest.mark.parametrize("indices,activity", [("2",(0,0,1)),("1, 0",(1,1,0)),("2, 0",(1,0,1)),("0, 1, 2",(1,1,1))])
+    def test_native_compact_projection_keeps_logical_but_narrows_physical_results(monkeypatch,indices,activity):
+>       a=artifact(indices)
+          ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+_ test_native_compact_projection_keeps_logical_but_narrows_physical_results[1, 0-activity1] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c040079ba0>
+indices = '1, 0', activity = (1, 1, 0)
+
+    @pytest.mark.parametrize("indices,activity", [("2",(0,0,1)),("1, 0",(1,1,0)),("2, 0",(1,0,1)),("0, 1, 2",(1,1,1))])
+    def test_native_compact_projection_keeps_logical_but_narrows_physical_results(monkeypatch,indices,activity):
+>       a=artifact(indices)
+          ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(1, 1, 0), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+_ test_native_compact_projection_keeps_logical_but_narrows_physical_results[2, 0-activity2] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c04006e690>
+indices = '2, 0', activity = (1, 0, 1)
+
+    @pytest.mark.parametrize("indices,activity", [("2",(0,0,1)),("1, 0",(1,1,0)),("2, 0",(1,0,1)),("0, 1, 2",(1,1,1))])
+    def test_native_compact_projection_keeps_logical_but_narrows_physical_results(monkeypatch,indices,activity):
+>       a=artifact(indices)
+          ^^^^^^^^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:20: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(1, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+_ test_native_compact_projection_keeps_logical_but_narrows_physical_results[0, 1, 2-activity3] _
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c04020bce0>
+indices = '0, 1, 2', activity = (1, 1, 1)
+
+    @pytest.mark.parametrize("indices,activity", [("2",(0,0,1)),("1, 0",(1,1,0)),("2, 0",(1,0,1)),("0, 1, 2",(1,1,1))])
+    def test_native_compact_projection_keeps_logical_but_narrows_physical_results(monkeypatch,indices,activity):
+        a=artifact(indices)
+        assert a.gradient_activity == activity
+        assert a.compact_gradients
+        assert '"dq", "dk", "dv"' in a.schedule_ir
+        assert 'inactive_gradient = "absent_v1"' in a.tile_ir
+        line=next(x for x in a.tile_ir.splitlines() if "llvm.func @" in x)
+        assert line.count("!llvm.ptr") == 6 + sum(activity)
+        assert 'gradient_output = "compact_v1"' in a.tile_ir
+        monkeypatch.setattr(native,"_compile_tile_ir",lambda text,entry:(text,"// PTX",{},"compiler","toolchain",(),"cold"))
+>       package=native.package_scheduled_checkpoint(a,pipeline_name="test")
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:29: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/nvidia_native.py:4264: in package_scheduled_checkpoint
+    return package(scheduled, pipeline_name=pipeline_name)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/nvidia_native.py:4181: in _package_attention_backward_lse
+    image = NativeImageArtifact(
+<string>:16: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = NativeImageArtifact(target='nvidia_sm120', architecture='sm_120a', pipeline_name='test', compiler_fingerprint='compile...ecord(provenance='ptxas --arch=sm_120a -v', metrics={}), device_libraries=(), schema_version='tessera.native_image.v1')
+
+    def __post_init__(self) -> None:
+        if self.schema_version != NATIVE_IMAGE_SCHEMA_VERSION:
+            raise _error(
+                "E_NATIVE_IMAGE_SCHEMA",
+                f"unsupported native-image schema {self.schema_version!r}",
+            )
+        try:
+            target = normalize_target(self.target)
+        except (TypeError, ValueError) as exc:
+            raise _error("E_NATIVE_IMAGE_SCHEMA", f"invalid target {self.target!r}") from exc
+        object.__setattr__(self, "target", target)
+        if not isinstance(self.architecture, str) or not self.architecture.strip():
+            raise _error("E_NATIVE_IMAGE_SCHEMA", "exact architecture must be non-empty")
+        producer_targets = NON_MLIR_IMAGE_PRODUCERS.get(self.pipeline_name)
+        if producer_targets is not None:
+            declared_targets: tuple[str, ...] = producer_targets
+        else:
+            pipeline = pipeline_lookup(self.pipeline_name)
+            if pipeline is None:
+>               raise _error(
+                    "E_NATIVE_IMAGE_SCHEMA",
+                    f"pipeline {self.pipeline_name!r} is not registered",
+                )
+E               tessera.compiler.native_artifact.ArtifactContractError: E_NATIVE_IMAGE_SCHEMA: pipeline 'test' is not registered
+
+python/tessera/compiler/native_artifact.py:296: ArtifactContractError
+_____ test_compact_descriptor_cannot_relabel_the_physical_image[activity] ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c04020b570>
+change = 'activity'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+__ test_compact_descriptor_cannot_relabel_the_physical_image[physical_roles] ___
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c03ff41750>
+change = 'physical_roles'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+______ test_compact_descriptor_cannot_relabel_the_physical_image[symbol] _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c03ff41050>
+change = 'symbol'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+______ test_compact_descriptor_cannot_relabel_the_physical_image[output] _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c04006b200>
+change = 'output'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+_______ test_compact_descriptor_cannot_relabel_the_physical_image[shape] _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c0400685f0>
+change = 'shape'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+______ test_compact_descriptor_cannot_relabel_the_physical_image[ordinal] ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c040022270>
+change = 'ordinal'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+______ test_compact_descriptor_cannot_relabel_the_physical_image[scalar] _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c040022190>
+change = 'scalar'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+_______ test_compact_descriptor_cannot_relabel_the_physical_image[guard] _______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c0406987a0>
+change = 'guard'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+_____ test_compact_descriptor_cannot_relabel_the_physical_image[direction] _____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x72c03ffd5e50>
+change = 'direction'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:43: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+____ test_native_compact_policy_is_checked_before_scheduling["complete_v1"] ____
+
+invalid = '"complete_v1"'
+
+    @pytest.mark.parametrize("invalid", ['"complete_v1"', '1 : i64'])
+    def test_native_compact_policy_is_checked_before_scheduling(invalid):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+_______ test_native_compact_policy_is_checked_before_scheduling[1 : i64] _______
+
+invalid = '1 : i64'
+
+    @pytest.mark.parametrize("invalid", ['"complete_v1"', '1 : i64'])
+    def test_native_compact_policy_is_checked_before_scheduling(invalid):
+>       a=artifact()
+          ^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/unit/test_compact_attention_gradients.py:16: in artifact
+    return lower_generated_checkpoint(text,backward=True,prune_inactive=True,compact_gradients=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/scheduled_checkpoint.py:246: in lower_generated_checkpoint
+    artifact.validate()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = ScheduledCheckpointArtifact(graph_ir='module attributes {tessera.arch = "sm_120", tessera.attention_ad_pair = "module ...radient=False, frontend_argument_indices=(0, 1, 2), bias_shape=(), gradient_activity=(0, 0, 1), compact_gradients=True)
+
+    def validate(self) -> None:
+        if type(self.compact_gradients) is not bool or (self.compact_gradients and not self.gradient_activity):
+            raise ValueError("compact checkpoint outputs require gradient activity")
+        if self.gradient_activity and (
+                not self.backward or not isinstance(self.gradient_activity, tuple) or
+                len(self.gradient_activity) != 3 + int(self.bias_gradient) or
+                any(type(x) is not int or x not in (0, 1) for x in self.gradient_activity) or
+                not any(self.gradient_activity)):
+            raise ValueError("checkpoint gradient activity requires nonempty binary backward result roles")
+        if type(self.bias_gradient) is not bool or (self.bias_gradient and (not self.backward or not self.bias)):
+            raise ValueError("bias gradient requires a biased backward checkpoint")
+        if type(self.backward) is not bool or type(self.causal) is not bool or type(self.bias) is not bool:
+            raise ValueError("checkpoint role and causal must be boolean")
+        if len(self.names) != (9 if self.backward else 5) + int(self.bias) + int(self.bias_gradient):
+>           raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+E           ValueError: checkpoint metadata binding count disagrees with gradient contract
+
+python/tessera/compiler/scheduled_checkpoint.py:47: ValueError
+=========================== short test summary info ============================
+FAILED tests/unit/test_compact_attention_gradients.py::test_native_compact_projection_keeps_logical_but_narrows_physical_results[2-activity0]
+FAILED tests/unit/test_compact_attention_gradients.py::test_native_compact_projection_keeps_logical_but_narrows_physical_results[1, 0-activity1]
+FAILED tests/unit/test_compact_attention_gradients.py::test_native_compact_projection_keeps_logical_but_narrows_physical_results[2, 0-activity2]
+FAILED tests/unit/test_compact_attention_gradients.py::test_native_compact_projection_keeps_logical_but_narrows_physical_results[0, 1, 2-activity3]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[activity]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[physical_roles]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[symbol]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[output]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[shape]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[ordinal]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[scalar]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[guard]
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[direction]
+FAILED tests/unit/test_compact_attention_gradients.py::test_native_compact_policy_is_checked_before_scheduling["complete_v1"]
+FAILED tests/unit/test_compact_attention_gradients.py::test_native_compact_policy_is_checked_before_scheduling[1 : i64]
+15 failed, 412 passed in 6.42s

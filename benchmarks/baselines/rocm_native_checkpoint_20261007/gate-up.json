@@ -1,0 +1,344 @@
+{
+  "compiler_package_ms": 133.22413503192365,
+  "compiler_sha256": "a760556c6b8bdc800d05fabb77a7d5bd4e3fba6309c9f625be82b052d557cf89",
+  "device": {
+    "architecture": "gfx1201",
+    "host": "tajasarus",
+    "target": "rocm_gfx1201"
+  },
+  "direct_bf16_mxfp4_maximum_output_abs_error": 0.0,
+  "direct_bf16_mxfp4_output_correctness": "passed_on_same_native_package",
+  "host_reference_ingest_ms": 14855.040499009192,
+  "ingest_numeric_policy": {
+    "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+    "destination_format": "mxfp4_e2m1_e8m0_k32",
+    "destination_scale_order": "k_group_n",
+    "execution_mode": "explicit_scale_requantization",
+    "lossy_steps": [
+      "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+    ],
+    "projection_metadata": [
+      {
+        "lossy_steps": [
+          "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+        ],
+        "projection": "gate_proj",
+        "relative_rms_error": 0.11309112549817533,
+        "source_global_scale": 0.00021943592582829297,
+        "sqnr_db": 18.93142947503461
+      },
+      {
+        "lossy_steps": [
+          "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+        ],
+        "projection": "up_proj",
+        "relative_rms_error": 0.11262806457643618,
+        "source_global_scale": 0.00021943592582829297,
+        "sqnr_db": 18.967067576545585
+      }
+    ],
+    "source_format": "nvfp4_e2m1_e4m3_k16",
+    "source_scale_application": "projection_global_times_e4m3"
+  },
+  "limitations": [
+    "One layer-0 projection group only; this does not establish whole-model quality or all ModelOpt packing variants.",
+    "Native Graph ingest outputs are copied back for the separately packaged consumer; this recorder does not prove a fused resident ingest-to-consumer edge.",
+    "BF16 baseline is the pinned Qwen3-8B source revision named by the NVIDIA checkpoint model lineage.",
+    "Activation input is deterministic synthetic FP8; only the weight input is real checkpoint data.",
+    "No selector promotion follows from this packet."
+  ],
+  "maximum_output_abs_error": 0.0,
+  "native_ingest": {
+    "abi": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+    "checked_host_execution_ms": 838.6332320515066,
+    "compiler_package_ms": 2945.0107428710908,
+    "correctness": "codes/scales bitwise and independent f64 block statistics before and after timing",
+    "entry": "tessera_nvfp4_ingest_2b9a82ea462a9e4c",
+    "event_launches_per_sample": 10,
+    "graph_ir_sha256": "095639cbe64e64109ea7b3954979dd1c5a020fe1a197d17115bb4c91772c1f49",
+    "image_sha256": "d8a960ebf8ea6cda84f98d50f8a2c9e0f42d25dfc8f91a7333e1007eae3af23d",
+    "resident_event_ms_median": 19.214506530761717,
+    "resident_event_ms_samples": [
+      19.249038696289062,
+      19.214506530761717,
+      19.161418151855468
+    ],
+    "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+    "schedule_ir_sha256": "6a3910be6b984ddf1c88e6f727a60724d98c839378f6c06c9cb7b935cb0236ad",
+    "target_ir_sha256": "a3f1a364813ca477961f808cfb23bc3ae44b66f4edb30148c0d3cee872379095",
+    "tile_ir_sha256": "4754912824a3ebf921a7ed50f276e98b9fe120b10246852023fd25666736b706",
+    "timing_domains": "Host includes launch/module/copies and independent correctness checking; HIP event covers ten resident native launches including dispatch/enqueue gaps."
+  },
+  "output_correctness": "passed_before_timing_and_after_every_end_to_end_launch",
+  "package": {
+    "abi": "tessera.rocm.mxfp4_w4a8.a_b_sa_sb_o_m_n_k.e4m3_e2m1_e8m0_bf16.wmma_exact.v1",
+    "entry": "tessera_mxfp4_w4a8_wmma",
+    "grid": [
+      1536,
+      1,
+      1
+    ],
+    "image_sha256": "59145427242d42ab7770cba549ff9ad7496de27dbb5bb239849e7df174de9d9a",
+    "schedule_ir_sha256": "4727b707a94b88a55d8193dac52914f4ceffed31a00a0cfb814e5dc5daeff10d",
+    "target_ir_sha256": "13131c45e83404d02e0863b07f7e0a529e404414095b92e7405fad880354bb7b",
+    "tile_ir_sha256": "85cab07a8635fa90e53d586f5b4a6d8f07e5b93d923cb327b39cd1e38e8d85d9",
+    "workgroup": [
+      256,
+      1,
+      1
+    ]
+  },
+  "projection_group": "gate_up",
+  "quality": {
+    "direct_mxfp4_method": "same bounded joint E2M1/E8M0 candidate search, seeded by floor(log2(max(abs(K32))/6)); row-batched by 64",
+    "mxfp4_direct_from_bf16_bounded_seed_vs_bf16": {
+      "max_abs_error": 0.08984375,
+      "relative_rms_error": 0.11296899590772046,
+      "sqnr_db": 18.940814626567246
+    },
+    "mxfp4_ingested_vs_bf16": {
+      "max_abs_error": 0.08984375,
+      "relative_rms_error": 0.14974884452039675,
+      "sqnr_db": 16.49273039985505
+    },
+    "mxfp4_ingested_vs_direct_bf16_mxfp4": {
+      "max_abs_error": 0.125,
+      "relative_rms_error": 0.17292574489988186,
+      "sqnr_db": 15.242806897318548
+    },
+    "mxfp4_ingested_vs_nvfp4_source": {
+      "max_abs_error": 0.08984376862645149,
+      "relative_rms_error": 0.1128734656885861,
+      "sqnr_db": 18.94816280178748
+    },
+    "nvfp4_dequantized_vs_bf16": {
+      "max_abs_error": 0.050688236951828,
+      "relative_rms_error": 0.09496631622558765,
+      "sqnr_db": 20.448608161883314
+    },
+    "per_projection": [
+      {
+        "direct_mxfp4_vs_bf16": {
+          "max_abs_error": 0.08984375,
+          "relative_rms_error": 0.1130630011977484,
+          "sqnr_db": 18.933589812097516
+        },
+        "ingested_vs_bf16": {
+          "max_abs_error": 0.08984375,
+          "relative_rms_error": 0.14979869363339054,
+          "sqnr_db": 16.489839480432472
+        },
+        "ingested_vs_nvfp4": {
+          "max_abs_error": 0.08984376862645149,
+          "relative_rms_error": 0.11309112549817536,
+          "sqnr_db": 18.931429475034605
+        },
+        "name": "gate_proj",
+        "nvfp4_vs_bf16": {
+          "max_abs_error": 0.050688236951828,
+          "relative_rms_error": 0.09493229496937759,
+          "sqnr_db": 20.45172040033615
+        },
+        "source_global_scale": 0.00021943592582829297
+      },
+      {
+        "direct_mxfp4_vs_bf16": {
+          "max_abs_error": 0.060546875,
+          "relative_rms_error": 0.11286311652678034,
+          "sqnr_db": 18.948959231648093
+        },
+        "ingested_vs_bf16": {
+          "max_abs_error": 0.0634765625,
+          "relative_rms_error": 0.14969272861578278,
+          "sqnr_db": 16.49598590345809
+        },
+        "ingested_vs_nvfp4": {
+          "max_abs_error": 0.05901226680725813,
+          "relative_rms_error": 0.11262806457643613,
+          "sqnr_db": 18.96706757654559
+        },
+        "name": "up_proj",
+        "nvfp4_vs_bf16": {
+          "max_abs_error": 0.03399367071688175,
+          "relative_rms_error": 0.09500458635426218,
+          "sqnr_db": 20.445108572061045
+        },
+        "source_global_scale": 0.00021943592582829297
+      }
+    ]
+  },
+  "revision": "source_snapshot",
+  "schema": "tessera.rocm.nvfp4_checkpoint_ingest.v2",
+  "shape_mnk": [
+    16,
+    24576,
+    4096
+  ],
+  "source": {
+    "merge_order": [
+      "gate_proj",
+      "up_proj"
+    ],
+    "projections": [
+      {
+        "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+        "bf16_repo": "Qwen/Qwen3-8B",
+        "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+        "bf16_shard": "model-00001-of-00005.safetensors",
+        "bf16_storage": {
+          "data_offsets": [
+            1345331200,
+            1445994496
+          ],
+          "dtype": "BF16",
+          "shape": [
+            12288,
+            4096
+          ]
+        },
+        "bf16_tensor_sha256": "1f9e6bddfbbfff53f82b684776dd1b36643277b72d40f70abcd287e02ab7ea9e",
+        "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved.",
+        "downloaded_tensor_bytes": 128974852,
+        "nvfp4_global_scale": 0.00021943592582829297,
+        "nvfp4_global_scale_sha256": "747dd02d217db1cb705236847e1592fd76c9b7a918b90bce196f0432c86bc736",
+        "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+        "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+        "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+        "nvfp4_scale_sha256": "e97fc0a1c076a1edfa409026b08ab731c69f811e68f1a2dfaa325fdd344d8353",
+        "nvfp4_shard": "model-00001-of-00002.safetensors",
+        "nvfp4_storage": {
+          "global_scale": {
+            "data_offsets": [
+              12,
+              16
+            ],
+            "dtype": "F32",
+            "shape": []
+          },
+          "scale": {
+            "data_offsets": [
+              1248382640,
+              1251528368
+            ],
+            "dtype": "F8_E4M3",
+            "shape": [
+              12288,
+              256
+            ]
+          },
+          "weight": {
+            "data_offsets": [
+              1686163120,
+              1711328944
+            ],
+            "dtype": "U8",
+            "shape": [
+              12288,
+              2048
+            ]
+          }
+        },
+        "nvfp4_tensor_sha256": "aff199166d0bd99966c2d89811736da829fca680ae3ec89df4f575992d2a6d05",
+        "tensor": "model.layers.0.mlp.gate_proj.weight"
+      },
+      {
+        "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+        "bf16_repo": "Qwen/Qwen3-8B",
+        "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+        "bf16_shard": "model-00001-of-00005.safetensors",
+        "bf16_storage": {
+          "data_offsets": [
+            1445994496,
+            1546657792
+          ],
+          "dtype": "BF16",
+          "shape": [
+            12288,
+            4096
+          ]
+        },
+        "bf16_tensor_sha256": "ac3f743828a20694255953a4290079eda84f38e48e608a24731fb0510780db35",
+        "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved.",
+        "downloaded_tensor_bytes": 128974852,
+        "nvfp4_global_scale": 0.00021943592582829297,
+        "nvfp4_global_scale_sha256": "747dd02d217db1cb705236847e1592fd76c9b7a918b90bce196f0432c86bc736",
+        "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+        "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+        "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+        "nvfp4_scale_sha256": "e6a1a5eb6c7dd13ad0a59250777ff052e15fb6c184deafd123eb0e174b296d61",
+        "nvfp4_shard": "model-00001-of-00002.safetensors",
+        "nvfp4_storage": {
+          "global_scale": {
+            "data_offsets": [
+              20,
+              24
+            ],
+            "dtype": "F32",
+            "shape": []
+          },
+          "scale": {
+            "data_offsets": [
+              1251528368,
+              1254674096
+            ],
+            "dtype": "F8_E4M3",
+            "shape": [
+              12288,
+              256
+            ]
+          },
+          "weight": {
+            "data_offsets": [
+              1711328944,
+              1736494768
+            ],
+            "dtype": "U8",
+            "shape": [
+              12288,
+              2048
+            ]
+          }
+        },
+        "nvfp4_tensor_sha256": "a0fca785098afc1eb226da153c9064ec99a31ab0621de503410185a409819e2d",
+        "tensor": "model.layers.0.mlp.up_proj.weight"
+      }
+    ],
+    "row_offsets": [
+      0,
+      12288,
+      24576
+    ]
+  },
+  "source_code_sha256": {
+    "checkpoint_benchmark": "2fc025b940a6b83dba74d7920ccc557ab311fac75a0670894837a55ec39068a6",
+    "ingest": "83d297abb8824256113eca8a8a65018f9e97903e91c0d9155a2e3cc56a6b2559",
+    "native_ingest": "6240fb3d4df8389973966836dd1fb452bb68ae2b54a2ce096cc86f6dc36b280f",
+    "schedule_benchmark": "07e5b9f587819724df8359557c8acca2abc28ee7735a0b1894ab7d3fb5188c3d"
+  },
+  "source_dirty": true,
+  "source_range_fetch_ms": 14506.017758045346,
+  "sync_key": "ROCM-NVFP4-INGEST-1-QWEN3-GATE-UP-2026-10-03",
+  "timing": {
+    "domains": "HIP event covers resident native consumer launch; E2E includes runtime.launch module load, allocations, copies, validation, and dispatch. Checkpoint range download, host reference conversion and native ingest are separate.",
+    "end_to_end_cv_pct": 0.8851387506800722,
+    "end_to_end_ms_median": 9.812979027628899,
+    "end_to_end_ms_samples": [
+      9.812979027628899,
+      9.863441111519933,
+      9.835270931944251,
+      9.687696117907763,
+      9.650068124756217,
+      9.730421006679535,
+      9.896421805024147
+    ],
+    "end_to_end_warmup_count": 5,
+    "kernel_event_ms_median": 0.1802191972732544,
+    "kernel_event_ms_samples": [
+      0.18429110050201417,
+      0.1802191972732544,
+      0.1779871940612793
+    ],
+    "kernel_event_repeats_per_sample": 10
+  },
+  "work_item": "ROCM-NVFP4-INGEST-1"
+}

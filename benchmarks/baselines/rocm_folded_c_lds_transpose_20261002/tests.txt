@@ -1,0 +1,2089 @@
+.................FFFFFF......F..............F.....FFFFFFFFFFFFFFFFFFFFFF [ 80%]
+FFFFFFFFFFFFFFFFF                                                        [100%]
+=================================== FAILURES ===================================
+______ test_native_folded_accepts_matching_explicit_options[wgp--cumode] _______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+mode = 'wgp', feature = '-cumode'
+
+    @pytest.mark.parametrize("mode,feature",[("wgp","-cumode"),("cu","+cumode")])
+    def test_native_folded_accepts_matching_explicit_options(target,mode,feature):
+        tool,text=target
+        assert 'workgroup_mode = "wgp"' in text
+        text=text.replace('workgroup_mode = "wgp"', f'workgroup_mode = "{mode}"')
+        result=subprocess.run([str(tool),"--generate-wmma-gemm-kernel=via-tile=true blockscale-stage-k=64 blockscale-prefetch=1 blockscale-lds-pad-bytes=16"],
+            input=text,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr
+E       AssertionError: <stdin>:26:5: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 256 : i64, macro_k = 128 : i64, n = 80 : i64, name = "folded_w4a8", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tessera.schedule_hash = "6b5d3bea06061306651bfd07435afbbab3886beb4e4bf78cbe883534847ef5eb", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, workgroup_mode = "wgp"}
+E             ^
+E         <stdin>:26:5: note: see current operation: %141 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:59: AssertionError
+_______ test_native_folded_accepts_matching_explicit_options[cu-+cumode] _______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+mode = 'cu', feature = '+cumode'
+
+    @pytest.mark.parametrize("mode,feature",[("wgp","-cumode"),("cu","+cumode")])
+    def test_native_folded_accepts_matching_explicit_options(target,mode,feature):
+        tool,text=target
+        assert 'workgroup_mode = "wgp"' in text
+        text=text.replace('workgroup_mode = "wgp"', f'workgroup_mode = "{mode}"')
+        result=subprocess.run([str(tool),"--generate-wmma-gemm-kernel=via-tile=true blockscale-stage-k=64 blockscale-prefetch=1 blockscale-lds-pad-bytes=16"],
+            input=text,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr
+E       AssertionError: <stdin>:26:5: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 256 : i64, macro_k = 128 : i64, n = 80 : i64, name = "folded_w4a8", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tessera.schedule_hash = "6b5d3bea06061306651bfd07435afbbab3886beb4e4bf78cbe883534847ef5eb", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, workgroup_mode = "cu"}
+E             ^
+E         <stdin>:26:5: note: see current operation: %141 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:59: AssertionError
+______ test_native_folded_derives_complete_panel_proof[256-128-True-True] ______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+m = 256, n = 128, whole_m = True, whole_n = True
+
+    @pytest.mark.parametrize("m,n,whole_m,whole_n",[
+        (256,128,True,True),(257,128,False,True),
+        (256,129,True,False),(257,129,False,False),
+    ])
+    def test_native_folded_derives_complete_panel_proof(target,m,n,whole_m,whole_n):
+        tool,_=target
+        graph=author_folded_scaled_matmul_graph(m,n,128)
+        result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+            "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201",
+            "--generate-wmma-gemm-kernel=via-tile=true"],
+            input=graph,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr
+E       AssertionError: <stdin>:6:10: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             %0 = tessera.scaled_matmul %a, %b scales(%sa, %ref) {
+E                  ^
+E         <stdin>:6:10: note: see current operation: %138 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:74: AssertionError
+_____ test_native_folded_derives_complete_panel_proof[257-128-False-True] ______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+m = 257, n = 128, whole_m = False, whole_n = True
+
+    @pytest.mark.parametrize("m,n,whole_m,whole_n",[
+        (256,128,True,True),(257,128,False,True),
+        (256,129,True,False),(257,129,False,False),
+    ])
+    def test_native_folded_derives_complete_panel_proof(target,m,n,whole_m,whole_n):
+        tool,_=target
+        graph=author_folded_scaled_matmul_graph(m,n,128)
+        result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+            "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201",
+            "--generate-wmma-gemm-kernel=via-tile=true"],
+            input=graph,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr
+E       AssertionError: <stdin>:6:10: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             %0 = tessera.scaled_matmul %a, %b scales(%sa, %ref) {
+E                  ^
+E         <stdin>:6:10: note: see current operation: %150 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:74: AssertionError
+_____ test_native_folded_derives_complete_panel_proof[256-129-True-False] ______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+m = 256, n = 129, whole_m = True, whole_n = False
+
+    @pytest.mark.parametrize("m,n,whole_m,whole_n",[
+        (256,128,True,True),(257,128,False,True),
+        (256,129,True,False),(257,129,False,False),
+    ])
+    def test_native_folded_derives_complete_panel_proof(target,m,n,whole_m,whole_n):
+        tool,_=target
+        graph=author_folded_scaled_matmul_graph(m,n,128)
+        result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+            "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201",
+            "--generate-wmma-gemm-kernel=via-tile=true"],
+            input=graph,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr
+E       AssertionError: <stdin>:6:10: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             %0 = tessera.scaled_matmul %a, %b scales(%sa, %ref) {
+E                  ^
+E         <stdin>:6:10: note: see current operation: %141 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:74: AssertionError
+_____ test_native_folded_derives_complete_panel_proof[257-129-False-False] _____
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+m = 257, n = 129, whole_m = False, whole_n = False
+
+    @pytest.mark.parametrize("m,n,whole_m,whole_n",[
+        (256,128,True,True),(257,128,False,True),
+        (256,129,True,False),(257,129,False,False),
+    ])
+    def test_native_folded_derives_complete_panel_proof(target,m,n,whole_m,whole_n):
+        tool,_=target
+        graph=author_folded_scaled_matmul_graph(m,n,128)
+        result=subprocess.run([str(tool),"--tessera-graph-to-schedule",
+            "--tessera-schedule-to-tile","--lower-tile-to-rocm=arch=gfx1201",
+            "--generate-wmma-gemm-kernel=via-tile=true"],
+            input=graph,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr
+E       AssertionError: <stdin>:6:10: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             %0 = tessera.scaled_matmul %a, %b scales(%sa, %ref) {
+E                  ^
+E         <stdin>:6:10: note: see current operation: %153 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:74: AssertionError
+_____ test_folded_identity_removes_launch_shape_and_keeps_kernel_contract ______
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+
+    def test_folded_identity_removes_launch_shape_and_keeps_kernel_contract(target):
+        tool,text=target
+        result=subprocess.run([str(tool),"--tessera-rocm-project-kernel-identity=family=folded_matmul"],
+            input=text,text=True,capture_output=True)
+        assert result.returncode==0,result.stderr
+        for fragment in ('runtime_mn','m = 0 : i64','n = 0 : i64','k = 128 : i64',
+                         'whole_m = true','whole_n = false','scale_k = 128 : i64',
+                         'macro_k = 128 : i64','name = "tessera_rocm_folded_matmul_'):
+            assert fragment in result.stdout,result.stdout
+        assert "tessera.schedule_hash" not in result.stdout
+        assert "func.func" not in result.stdout
+        generated=subprocess.run([str(tool),"--generate-wmma-gemm-kernel=via-tile=true"],
+            input=result.stdout,text=True,capture_output=True)
+>       assert generated.returncode==0,generated.stderr
+E       AssertionError: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E           tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 128 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_63376d65a3fcc6c3", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = false, workgroup_mode = "wgp"}
+E           ^
+E         <stdin>:2:3: note: see current operation: %147 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:110: AssertionError
+________ test_folded_runtime_k_projects_full_k_scope_and_positive_loop _________
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+
+    def test_folded_runtime_k_projects_full_k_scope_and_positive_loop(target):
+        tool,text=_project_runtime_k(target)
+        for fragment in ("runtime_k", "runtime_mn", "k = 0 : i64",
+                         "scale_k = 0 : i64", "macro_k = 0 : i64",
+                         "stage_k = 64 : i64", "row_reference_after_full_k"):
+            assert fragment in text,text
+        result=subprocess.run([str(tool),"--generate-wmma-gemm-kernel=via-tile=true"],
+            input=text,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr
+E       AssertionError: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E           tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_d82e0167a16f4d0d", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = false, workgroup_mode = "wgp"}
+E           ^
+E         <stdin>:2:3: note: see current operation: %150 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:171: AssertionError
+_______________ test_folded_scale_likelihood_reaches_native_llvm _______________
+
+target = (PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-op...ation.to_tensor %alloc : memref<256x80xbf16> to tensor<256x80xbf16>\n    return %14 : tensor<256x80xbf16>\n  }\n}\n\n')
+
+    def test_folded_scale_likelihood_reaches_native_llvm(target):
+        from tessera.compiler.rocm_pipeline import (
+            ROCMExecutablePipeline,ROCMInputLevel,ROCMOutputLevel)
+        tool,text=target
+        pipeline=ROCMExecutablePipeline(family="matmul",arch="gfx1201",
+            input_level=ROCMInputLevel.DIRECTIVE).pass_pipeline(output=ROCMOutputLevel.BINARY)
+        result=subprocess.run([str(tool),"--pass-pipeline="+pipeline,
+            "--mlir-print-ir-before=gpu-module-to-binary","--mlir-disable-threading"],
+            input=text,text=True,capture_output=True)
+>       assert result.returncode==0,result.stderr[-3000:]
+E       AssertionError: <stdin>:26:5: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 256 : i64, macro_k = 128 : i64, n = 80 : i64, name = "folded_w4a8", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tessera.schedule_hash = "6b5d3bea06061306651bfd07435afbbab3886beb4e4bf78cbe883534847ef5eb", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, workgroup_mode = "wgp"}
+E             ^
+E         <stdin>:26:5: note: see current operation: %141 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-op...: (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>\n').returncode
+
+tests/unit/test_rocm_folded_native_target.py:200: AssertionError
+____ test_native_folded_graph_matches_oracle_and_hip_control[False-shape0] _____
+
+shape = (65, 48, 64), runtime_k = False
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 64 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_b4c6a5faa6d5e0aa", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_graph_matches_oracle_and_hip_control[False-shape1] _____
+
+shape = (127, 80, 128), runtime_k = False
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 128 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_97d9af045d95d0c6", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_graph_matches_oracle_and_hip_control[False-shape2] _____
+
+shape = (256, 128, 192), runtime_k = False
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf..., tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = true, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 192 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 192 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_d7f59599176c30f5", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 192 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = true, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %144 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_graph_matches_oracle_and_hip_control[False-shape3] _____
+
+shape = (257, 80, 256), runtime_k = False
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 256 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 256 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_51c82b87f23362cb", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 256 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_graph_matches_oracle_and_hip_control[False-shape4] _____
+
+shape = (513, 129, 128), runtime_k = False
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 128 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_ca58d45b3998eb23", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_graph_matches_oracle_and_hip_control[False-shape5] _____
+
+shape = (127, 64, 128), runtime_k = False
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = true, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 128 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_4804b4dd411eac92", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = true, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %156 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_graph_matches_oracle_and_hip_control[False-shape6] _____
+
+shape = (256, 129, 128), runtime_k = False
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 128 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 128 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_63376d65a3fcc6c3", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 128 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %147 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_graph_matches_oracle_and_hip_control[True-shape0] _____
+
+shape = (65, 48, 64), runtime_k = True
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_graph_matches_oracle_and_hip_control[True-shape1] _____
+
+shape = (127, 80, 128), runtime_k = True
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_graph_matches_oracle_and_hip_control[True-shape2] _____
+
+shape = (256, 128, 192), runtime_k = True
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf..., tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = true, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_708d500594ff51c6", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = true, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %147 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_graph_matches_oracle_and_hip_control[True-shape3] _____
+
+shape = (257, 80, 256), runtime_k = True
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_015d26d770fcf892", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_graph_matches_oracle_and_hip_control[True-shape4] _____
+
+shape = (513, 129, 128), runtime_k = True
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_015d26d770fcf892", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "cu"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_graph_matches_oracle_and_hip_control[True-shape5] _____
+
+shape = (127, 64, 128), runtime_k = True
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = true, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_130d3100d2bc4ad0", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = true, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_graph_matches_oracle_and_hip_control[True-shape6] _____
+
+shape = (256, 129, 128), runtime_k = True
+
+    @pytest.mark.parametrize("shape",[(65,48,64),(127,80,128),(256,128,192),(257,80,256),(513,129,128),(127,64,128),(256,129,128)])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_graph_matches_oracle_and_hip_control(shape,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=shape;a,scales,folded=_inputs(m,n,k)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf... tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_d82e0167a16f4d0d", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "cta", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = true, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %150 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+______ test_native_folded_refuses_wrong_argument_layout_before_hip[None] _______
+
+layout = None
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276e9a349f0>
+
+    @pytest.mark.parametrize("layout",[None,"raw_pointer","unknown"])
+    def test_native_folded_refuses_wrong_argument_layout_before_hip(layout,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+___ test_native_folded_refuses_wrong_argument_layout_before_hip[raw_pointer] ___
+
+layout = 'raw_pointer'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa65b690>
+
+    @pytest.mark.parametrize("layout",[None,"raw_pointer","unknown"])
+    def test_native_folded_refuses_wrong_argument_layout_before_hip(layout,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_____ test_native_folded_refuses_wrong_argument_layout_before_hip[unknown] _____
+
+layout = 'unknown'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276e9a356a0>
+
+    @pytest.mark.parametrize("layout",[None,"raw_pointer","unknown"])
+    def test_native_folded_refuses_wrong_argument_layout_before_hip(layout,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:68: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_package_preserves_wide_scale_fallback[False-overflow_scale] _
+
+case = 'overflow_scale', runtime_k = False
+
+    @pytest.mark.parametrize("case",["overflow_scale","underflow_scale","zero_partial"])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=65,48,64
+        value=2.0**-9 if case=="overflow_scale" else 448.0 if case=="underflow_scale" else 0.0
+        a=np.full((m,k),value,ml_dtypes.float8_e4m3fn).view(np.uint8)
+        scales=np.full(m,2.0**-25 if case=="underflow_scale" else 2.0**20,np.float32)
+        references=np.full((k//32,n),1 if case=="underflow_scale" else 240,np.uint8)
+        codes=np.full((n,k),7 if case=="underflow_scale" else 2,np.uint8)
+        if case=="overflow_scale":
+            # Row reference stays 240, but only the delta-nine block contributes:
+            # tiny partial * overflowing combined scale has a finite wide result.
+            codes[:,:32]=0
+            references[1,:]=231
+        packed=mx.pack_e2m1_codes(codes)
+        folded=prepare_folded_weights(packed,references,allow_approximate=True)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 64 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_b4c6a5faa6d5e0aa", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_package_preserves_wide_scale_fallback[False-underflow_scale] _
+
+case = 'underflow_scale', runtime_k = False
+
+    @pytest.mark.parametrize("case",["overflow_scale","underflow_scale","zero_partial"])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=65,48,64
+        value=2.0**-9 if case=="overflow_scale" else 448.0 if case=="underflow_scale" else 0.0
+        a=np.full((m,k),value,ml_dtypes.float8_e4m3fn).view(np.uint8)
+        scales=np.full(m,2.0**-25 if case=="underflow_scale" else 2.0**20,np.float32)
+        references=np.full((k//32,n),1 if case=="underflow_scale" else 240,np.uint8)
+        codes=np.full((n,k),7 if case=="underflow_scale" else 2,np.uint8)
+        if case=="overflow_scale":
+            # Row reference stays 240, but only the delta-nine block contributes:
+            # tiny partial * overflowing combined scale has a finite wide result.
+            codes[:,:32]=0
+            references[1,:]=231
+        packed=mx.pack_e2m1_codes(codes)
+        folded=prepare_folded_weights(packed,references,allow_approximate=True)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 64 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_b4c6a5faa6d5e0aa", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_package_preserves_wide_scale_fallback[False-zero_partial] _
+
+case = 'zero_partial', runtime_k = False
+
+    @pytest.mark.parametrize("case",["overflow_scale","underflow_scale","zero_partial"])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=65,48,64
+        value=2.0**-9 if case=="overflow_scale" else 448.0 if case=="underflow_scale" else 0.0
+        a=np.full((m,k),value,ml_dtypes.float8_e4m3fn).view(np.uint8)
+        scales=np.full(m,2.0**-25 if case=="underflow_scale" else 2.0**20,np.float32)
+        references=np.full((k//32,n),1 if case=="underflow_scale" else 240,np.uint8)
+        codes=np.full((n,k),7 if case=="underflow_scale" else 2,np.uint8)
+        if case=="overflow_scale":
+            # Row reference stays 240, but only the delta-nine block contributes:
+            # tiny partial * overflowing combined scale has a finite wide result.
+            codes[:,:32]=0
+            references[1,:]=231
+        packed=mx.pack_e2m1_codes(codes)
+        folded=prepare_folded_weights(packed,references,allow_approximate=True)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 64 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_b4c6a5faa6d5e0aa", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_package_preserves_wide_scale_fallback[True-overflow_scale] _
+
+case = 'overflow_scale', runtime_k = True
+
+    @pytest.mark.parametrize("case",["overflow_scale","underflow_scale","zero_partial"])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=65,48,64
+        value=2.0**-9 if case=="overflow_scale" else 448.0 if case=="underflow_scale" else 0.0
+        a=np.full((m,k),value,ml_dtypes.float8_e4m3fn).view(np.uint8)
+        scales=np.full(m,2.0**-25 if case=="underflow_scale" else 2.0**20,np.float32)
+        references=np.full((k//32,n),1 if case=="underflow_scale" else 240,np.uint8)
+        codes=np.full((n,k),7 if case=="underflow_scale" else 2,np.uint8)
+        if case=="overflow_scale":
+            # Row reference stays 240, but only the delta-nine block contributes:
+            # tiny partial * overflowing combined scale has a finite wide result.
+            codes[:,:32]=0
+            references[1,:]=231
+        packed=mx.pack_e2m1_codes(codes)
+        folded=prepare_folded_weights(packed,references,allow_approximate=True)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_package_preserves_wide_scale_fallback[True-underflow_scale] _
+
+case = 'underflow_scale', runtime_k = True
+
+    @pytest.mark.parametrize("case",["overflow_scale","underflow_scale","zero_partial"])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=65,48,64
+        value=2.0**-9 if case=="overflow_scale" else 448.0 if case=="underflow_scale" else 0.0
+        a=np.full((m,k),value,ml_dtypes.float8_e4m3fn).view(np.uint8)
+        scales=np.full(m,2.0**-25 if case=="underflow_scale" else 2.0**20,np.float32)
+        references=np.full((k//32,n),1 if case=="underflow_scale" else 240,np.uint8)
+        codes=np.full((n,k),7 if case=="underflow_scale" else 2,np.uint8)
+        if case=="overflow_scale":
+            # Row reference stays 240, but only the delta-nine block contributes:
+            # tiny partial * overflowing combined scale has a finite wide result.
+            codes[:,:32]=0
+            references[1,:]=231
+        packed=mx.pack_e2m1_codes(codes)
+        folded=prepare_folded_weights(packed,references,allow_approximate=True)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_package_preserves_wide_scale_fallback[True-zero_partial] __
+
+case = 'zero_partial', runtime_k = True
+
+    @pytest.mark.parametrize("case",["overflow_scale","underflow_scale","zero_partial"])
+    @pytest.mark.parametrize("runtime_k",[False,True])
+    def test_native_folded_package_preserves_wide_scale_fallback(case,runtime_k):
+        assert rt._rocm_live_arch()=="gfx1201"
+        m,n,k=65,48,64
+        value=2.0**-9 if case=="overflow_scale" else 448.0 if case=="underflow_scale" else 0.0
+        a=np.full((m,k),value,ml_dtypes.float8_e4m3fn).view(np.uint8)
+        scales=np.full(m,2.0**-25 if case=="underflow_scale" else 2.0**20,np.float32)
+        references=np.full((k//32,n),1 if case=="underflow_scale" else 240,np.uint8)
+        codes=np.full((n,k),7 if case=="underflow_scale" else 2,np.uint8)
+        if case=="overflow_scale":
+            # Row reference stays 240, but only the delta-nine block contributes:
+            # tiny partial * overflowing combined scale has a finite wide result.
+            codes[:,:32]=0
+            references[1,:]=231
+        packed=mx.pack_e2m1_codes(codes)
+        folded=prepare_folded_weights(packed,references,allow_approximate=True)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=runtime_k).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:98: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_________ test_native_folded_reuses_image_across_checked_launch_shapes _________
+
+    def test_native_folded_reuses_image_across_checked_launch_shapes():
+        assert rt._rocm_live_arch()=="gfx1201"
+        packages=[]
+        for m,n in [(65,48),(127,80),(191,112)]:
+            a,scales,folded=_inputs(m,n,64)
+>           package=compile_folded_scaled_matmul(a,scales,folded,
+                tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_k=False).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:121: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 64 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_b4c6a5faa6d5e0aa", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_mn, scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %159 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_refuses_invalid_image_shape_before_hip[image_whole_m-True] _
+
+key = 'image_whole_m', value = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa200d70>
+
+    @pytest.mark.parametrize("key,value",[
+        ("image_whole_m",True),("image_whole_n",True),("image_whole_m","false"),
+        ("image_k",128),("image_m",65),("image_shape_policy","unknown"),
+    ])
+    def test_native_folded_refuses_invalid_image_shape_before_hip(key,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_refuses_invalid_image_shape_before_hip[image_whole_n-True] _
+
+key = 'image_whole_n', value = True
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa497ee0>
+
+    @pytest.mark.parametrize("key,value",[
+        ("image_whole_m",True),("image_whole_n",True),("image_whole_m","false"),
+        ("image_k",128),("image_m",65),("image_shape_policy","unknown"),
+    ])
+    def test_native_folded_refuses_invalid_image_shape_before_hip(key,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_refuses_invalid_image_shape_before_hip[image_whole_m-false] _
+
+key = 'image_whole_m', value = 'false'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa494d70>
+
+    @pytest.mark.parametrize("key,value",[
+        ("image_whole_m",True),("image_whole_n",True),("image_whole_m","false"),
+        ("image_k",128),("image_m",65),("image_shape_policy","unknown"),
+    ])
+    def test_native_folded_refuses_invalid_image_shape_before_hip(key,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_refuses_invalid_image_shape_before_hip[image_k-128] ____
+
+key = 'image_k', value = 128
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa201400>
+
+    @pytest.mark.parametrize("key,value",[
+        ("image_whole_m",True),("image_whole_n",True),("image_whole_m","false"),
+        ("image_k",128),("image_m",65),("image_shape_policy","unknown"),
+    ])
+    def test_native_folded_refuses_invalid_image_shape_before_hip(key,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_refuses_invalid_image_shape_before_hip[image_m-65] _____
+
+key = 'image_m', value = 65
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa65b5b0>
+
+    @pytest.mark.parametrize("key,value",[
+        ("image_whole_m",True),("image_whole_n",True),("image_whole_m","false"),
+        ("image_k",128),("image_m",65),("image_shape_policy","unknown"),
+    ])
+    def test_native_folded_refuses_invalid_image_shape_before_hip(key,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_refuses_invalid_image_shape_before_hip[image_shape_policy-unknown] _
+
+key = 'image_shape_policy', value = 'unknown'
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276e9a35710>
+
+    @pytest.mark.parametrize("key,value",[
+        ("image_whole_m",True),("image_whole_n",True),("image_whole_m","false"),
+        ("image_k",128),("image_m",65),("image_shape_policy","unknown"),
+    ])
+    def test_native_folded_refuses_invalid_image_shape_before_hip(key,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:157: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+__ test_native_folded_refuses_wrong_runtime_geometry_before_hip[grid-value0] ___
+
+field = 'grid', value = (2, 1, 1)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa27d240>
+
+    @pytest.mark.parametrize("field,value",[("grid",(2,1,1)),("workgroup",(128,1,1))])
+    def test_native_folded_refuses_wrong_runtime_geometry_before_hip(field,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:171: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+_ test_native_folded_refuses_wrong_runtime_geometry_before_hip[workgroup-value1] _
+
+field = 'workgroup', value = (128, 1, 1)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa27e3c0>
+
+    @pytest.mark.parametrize("field,value",[("grid",(2,1,1)),("workgroup",(128,1,1))])
+    def test_native_folded_refuses_wrong_runtime_geometry_before_hip(field,value,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:171: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+___________ test_native_static_folded_refuses_wrong_shape_before_hip ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa27d320>
+
+    def test_native_static_folded_refuses_wrong_shape_before_hip(monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),allow_approximate=True,runtime_mn=False,runtime_k=False).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:184: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  func.func @folded_w4a8(%arg0: tensor<65x64...erization.to_tensor %alloc : memref<65x48xbf16> to tensor<65x48xbf16>\n    return %14 : tensor<65x48xbf16>\n  }\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:26:5: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E               tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 65 : i64, macro_k = 64 : i64, n = 48 : i64, name = "folded_w4a8", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", scale_format = "e8m0_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tessera.schedule_hash = "a3f0595d5182bfb97612158ce260faeaf2184d63275e39ab3b45f630f7883d0e", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, workgroup_mode = "wgp"}
+E               ^
+E           <stdin>:26:5: note: see current operation: %153 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+________ test_native_folded_runtime_k_reuses_image_across_shapes_and_k _________
+
+    def test_native_folded_runtime_k_reuses_image_across_shapes_and_k():
+        assert rt._rocm_live_arch()=="gfx1201"
+        packages=[]
+        for shape in [(65,48,64),(127,80,128),(191,112,192),(65,48,256)]:
+            m,n,k=shape
+            a,scales,folded=_inputs(m,n,k)
+>           native=compile_folded_scaled_matmul(a,scales,folded,
+                tessera_opt=Path(os.environ["TESSERA_OPT"]),
+                allow_approximate=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:199: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+______ test_native_folded_runtime_k_refuses_invalid_extent_before_hip[0] _______
+
+k = 0, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa23ea50>
+
+    @pytest.mark.parametrize("k",[0,32,96])
+    def test_native_folded_runtime_k_refuses_invalid_extent_before_hip(k,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),
+            allow_approximate=True,runtime_k=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+______ test_native_folded_runtime_k_refuses_invalid_extent_before_hip[32] ______
+
+k = 32, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa23ff50>
+
+    @pytest.mark.parametrize("k",[0,32,96])
+    def test_native_folded_runtime_k_refuses_invalid_extent_before_hip(k,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),
+            allow_approximate=True,runtime_k=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+______ test_native_folded_runtime_k_refuses_invalid_extent_before_hip[96] ______
+
+k = 96, monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa23f5b0>
+
+    @pytest.mark.parametrize("k",[0,32,96])
+    def test_native_folded_runtime_k_refuses_invalid_extent_before_hip(k,monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),
+            allow_approximate=True,runtime_k=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:220: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+____ test_native_folded_runtime_k_refuses_insufficient_capacity_before_hip _____
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7276fa23e890>
+
+    def test_native_folded_runtime_k_refuses_insufficient_capacity_before_hip(monkeypatch):
+        a,scales,folded=_inputs(65,48,64)
+>       package=compile_folded_scaled_matmul(a,scales,folded,
+            tessera_opt=Path(os.environ["TESSERA_OPT"]),
+            allow_approximate=True,runtime_k=True).package
+
+tests/device/rocm/test_mxfp4_folded_native_package.py:234: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/rocm_mxfp4_folded_frontend.py:141: in compile_folded_scaled_matmul
+    package = package_folded_scaled_wmma_target_ir(
+python/tessera/compiler/rocm_mxfp4_folded_carrier.py:134: in package_folded_scaled_wmma_target_ir
+    _compile_native_tile_ir(image_target,
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  tessera_rocm.scaled_wmma_gemm {abi = "a_bf...tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:2:3: error: 'memref.view' op operand #0 must be 1D memref of 8-bit signless integer values, but got 'memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>'
+E             tessera_rocm.scaled_wmma_gemm {abi = "a_bfold_sa_rowref_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, epilogue_schedule = "complete_tile_vector_scales", instruction_k = 16 : i64, k = 0 : i64, k_step_schedule = "isolated_k_stage", m = 0 : i64, macro_k = 0 : i64, n = 0 : i64, name = "tessera_rocm_folded_matmul_a629485a5b78541c", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_folded_prefill_v1", raster_group_m = 4 : i64, row_guard = "wave", runtime_k, runtime_mn, scale_format = "e8m0_row_reference", scale_k = 0 : i64, stage_k = 64 : i64, staging_prefetch = "register_next_slab", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64, whole_m = false, whole_n = false, workgroup_mode = "wgp"}
+E             ^
+E           <stdin>:2:3: note: see current operation: %162 = "memref.view"(%arg8, %0) : (memref<20480xf8E4M3FN, #gpu.address_space<workgroup>>, index) -> memref<5120xf32, #gpu.address_space<workgroup>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_accepts_matching_explicit_options[wgp--cumode]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_accepts_matching_explicit_options[cu-+cumode]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_derives_complete_panel_proof[256-128-True-True]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_derives_complete_panel_proof[257-128-False-True]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_derives_complete_panel_proof[256-129-True-False]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_native_folded_derives_complete_panel_proof[257-129-False-False]
+FAILED tests/unit/test_rocm_folded_native_target.py::test_folded_identity_removes_launch_shape_and_keeps_kernel_contract
+FAILED tests/unit/test_rocm_folded_native_target.py::test_folded_runtime_k_projects_full_k_scope_and_positive_loop
+FAILED tests/unit/test_rocm_folded_native_target.py::test_folded_scale_likelihood_reaches_native_llvm
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[False-shape0]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[False-shape1]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[False-shape2]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[False-shape3]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[False-shape4]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[False-shape5]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[False-shape6]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[True-shape0]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[True-shape1]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[True-shape2]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[True-shape3]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[True-shape4]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[True-shape5]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_graph_matches_oracle_and_hip_control[True-shape6]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_wrong_argument_layout_before_hip[None]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_wrong_argument_layout_before_hip[raw_pointer]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_wrong_argument_layout_before_hip[unknown]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_package_preserves_wide_scale_fallback[False-overflow_scale]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_package_preserves_wide_scale_fallback[False-underflow_scale]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_package_preserves_wide_scale_fallback[False-zero_partial]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_package_preserves_wide_scale_fallback[True-overflow_scale]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_package_preserves_wide_scale_fallback[True-underflow_scale]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_package_preserves_wide_scale_fallback[True-zero_partial]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_reuses_image_across_checked_launch_shapes
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_invalid_image_shape_before_hip[image_whole_m-True]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_invalid_image_shape_before_hip[image_whole_n-True]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_invalid_image_shape_before_hip[image_whole_m-false]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_invalid_image_shape_before_hip[image_k-128]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_invalid_image_shape_before_hip[image_m-65]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_invalid_image_shape_before_hip[image_shape_policy-unknown]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_wrong_runtime_geometry_before_hip[grid-value0]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_refuses_wrong_runtime_geometry_before_hip[workgroup-value1]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_static_folded_refuses_wrong_shape_before_hip
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_runtime_k_reuses_image_across_shapes_and_k
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_runtime_k_refuses_invalid_extent_before_hip[0]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_runtime_k_refuses_invalid_extent_before_hip[32]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_runtime_k_refuses_invalid_extent_before_hip[96]
+FAILED tests/device/rocm/test_mxfp4_folded_native_package.py::test_native_folded_runtime_k_refuses_insufficient_capacity_before_hip
+47 failed, 42 passed in 5.33s

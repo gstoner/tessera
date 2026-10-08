@@ -1,0 +1,89 @@
+{
+  "architecture": "sm_120a",
+  "correctness": {
+    "consumer_execution_kind": "native_gpu",
+    "consumer_max_abs_error": 1.4901161193847656e-08,
+    "producer_execution_kind": "native_gpu",
+    "producer_max_abs_error": 0.0,
+    "same_intermediate_allocation": true
+  },
+  "device": "NVIDIA GeForce RTX 5070, 12.0",
+  "edge": {
+    "consumer": "tessera.matmul",
+    "dynamic_k_bound": 16,
+    "producer": "tessera.softmax",
+    "same_resident_intermediate": true,
+    "same_stream": true,
+    "shape_mkn": [
+      16,
+      8,
+      7
+    ],
+    "storage": "fp16"
+  },
+  "host": {
+    "node": "The-Super-Bear",
+    "platform": "Linux-6.18.33.2-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+    "wsl": true
+  },
+  "owner": "W1.1",
+  "packages": {
+    "consumer_abi": "tessera.nvidia.matmul.a_b_d_m_n_k_lda_ldb_ldd.f16.v1",
+    "consumer_image": "3e09b3167f06574ac4fd587e50c54def7bf9f72957218a361a50922e6bda853d",
+    "consumer_schedule": "147018fe5bf78bf61d6f5cc93fa918dd7bdfc0ba3ba337d5fa38399f32962699",
+    "consumer_tile": "9bc20be0a60f156b4fdf02c9c08567c0a58042da63a3f450ca42229e42f2875d",
+    "producer_abi": "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+    "producer_image": "00d5e7dc52e021f8b7275356718a5a611bfcaeaf3fdcd4d2d26080fd6a56d471",
+    "producer_schedule": "cc05dbcc187c0a407e221b922af165db7f6129648625ed68f4e6f8787df4e3c4"
+  },
+  "promotion": "none; one named fp16 SM120 producer envelope",
+  "schema": "tessera.nvidia.scheduled-tensor-matmul-edge.v1",
+  "source_revision": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "target": "nvidia_sm120",
+  "timing": {
+    "consumer_cv": 0.8394682013866416,
+    "consumer_median_ms": 0.009990186430513859,
+    "consumer_ms": [
+      0.009583893232047558,
+      0.009832426905632019,
+      0.009875199757516384,
+      0.00981077365577221,
+      0.0544644296169281,
+      0.011238613165915012,
+      0.009215359576046467,
+      0.009568213485181332,
+      0.011106346733868122,
+      0.011344533413648605,
+      0.011064212769269943,
+      0.009990186430513859,
+      0.010431786067783833,
+      0.010144960135221481,
+      0.009873813018202782
+    ],
+    "domain": "resident CUDA events; producer and consumer independently timed",
+    "producer_cv": 0.24472421980012007,
+    "producer_median_ms": 0.0071402667090296745,
+    "producer_ms": [
+      0.009873067028820515,
+      0.007772800046950579,
+      0.0072181336581707,
+      0.006898986641317606,
+      0.006910613272339106,
+      0.0071402667090296745,
+      0.011434665881097317,
+      0.012186774052679539,
+      0.012145813554525375,
+      0.011234773322939873,
+      0.006907626986503601,
+      0.007056000176817179,
+      0.0069424002431333065,
+      0.006967679597437382,
+      0.0071311998181045055
+    ],
+    "reps": 300,
+    "resident_execute_ms_including_upload_launch_sync": 672.3993889754638,
+    "samples": 15,
+    "warmup": 30
+  },
+  "worktree_dirty": true
+}

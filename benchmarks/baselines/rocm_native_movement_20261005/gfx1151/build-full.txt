@@ -1,0 +1,386 @@
+[1/65] Building TPPDialect.h.inc...
+[2/65] Building TPPDialect.cpp.inc...
+[3/65] Building TPPTypes.cpp.inc...
+[4/65] Building TPPTypes.h.inc...
+[5/65] Building TPPAttrs.cpp.inc...
+[6/65] Building TPPAttrs.h.inc...
+[7/65] Building TPPOps.cpp.inc...
+[8/65] Building TPPOps.h.inc...
+[9/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/SolversPasses.cpp.o
+[10/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/SparsePrecond.cpp.o
+[11/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/SparseSolverSpecialize.cpp.o
+[12/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/SparseInspector.cpp.o
+[13/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/RNGLegalize.cpp.o
+[14/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/RNGStreamAssign.cpp.o
+[15/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/RNGQMCPlan.cpp.o
+[16/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/TrigInit.cpp.o
+[17/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/ParamBatchPlan.cpp.o
+[18/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/ContinuationGuard.cpp.o
+[19/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/PeriodicHalo.cpp.o
+[20/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/NewtonAutodiff.cpp.o
+[21/65] Building CXX object src/solvers/scaling_resilience/CMakeFiles/DialectSR.dir/lib/sr/dialect/SRDialect.cpp.o
+[22/65] Building CXX object src/solvers/scaling_resilience/CMakeFiles/DialectSR.dir/lib/sr/dialect/SROps.cpp.o
+/home/gstoner/scratch/rocm-native-movement-20261005/src/solvers/scaling_resilience/lib/sr/dialect/SROps.cpp:28:22: warning: ‘llvm::LogicalResult mlir::tessera::sr::verifyResilienceRegion(mlir::Operation*)’ defined but not used [-Wunused-function]
+   28 | static LogicalResult verifyResilienceRegion(Operation *op) {
+      |                      ^~~~~~~~~~~~~~~~~~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/solvers/scaling_resilience/lib/sr/dialect/SROps.cpp:14:22: warning: ‘llvm::LogicalResult mlir::tessera::sr::verifyCheckpointRegion(mlir::Operation*)’ defined but not used [-Wunused-function]
+   14 | static LogicalResult verifyCheckpointRegion(Operation *op) {
+      |                      ^~~~~~~~~~~~~~~~~~~~~~
+[23/65] Building CXX object src/solvers/core/passes/CMakeFiles/tessera_solvers_passes.dir/ImplicitLower.cpp.o
+[24/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/LegalizeSpaceTime.cpp.o
+[25/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/HaloInfer.cpp.o
+[26/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/FuseStencilTime.cpp.o
+[27/65] Building CXX object src/solvers/tpp/lib/Dialect/TPP/CMakeFiles/obj.TesseraTPPDialect.dir/TPPDialect.cpp.o
+In file included from /usr/lib/llvm-23/include/mlir/IR/AffineExpr.h:20,
+                 from /usr/lib/llvm-23/include/mlir/IR/AffineMap.h:17,
+                 from /usr/lib/llvm-23/include/mlir/IR/BuiltinAttributeInterfaces.h:12,
+                 from /usr/lib/llvm-23/include/mlir/IR/BuiltinTypes.h:12,
+                 from /usr/lib/llvm-23/include/mlir/IR/OpImplementation.h:16,
+                 from /usr/lib/llvm-23/include/mlir/IR/DialectImplementation.h:17,
+                 from /home/gstoner/scratch/rocm-native-movement-20261005/src/solvers/tpp/lib/Dialect/TPP/TPPDialect.cpp:2:
+In function ‘llvm::hash_code llvm::hashing::detail::combine_bytes(const char*, size_t)’,
+    inlined from ‘llvm::hash_code llvm::hash_combine(const Ts& ...) [with Ts = {}]’ at /usr/lib/llvm-23/include/llvm/ADT/Hashing.h:312:40,
+    inlined from ‘static llvm::hash_code tessera::tpp::HaloExchangeOp::computePropertiesHash(const Properties&)’ at /home/gstoner/scratch/rocm-native-movement-20261005/.build/src/solvers/tpp/include/tpp/Dialect/TPP/TPPOps.cpp.inc:1013:28:
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/lib/llvm-23/include/llvm/ADT/Hashing.h:51:
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h: In static member function ‘static llvm::hash_code tessera::tpp::HaloExchangeOp::computePropertiesHash(const Properties&)’:
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::tpp::TimeStepOp::computePropertiesHash(const Properties&)’:
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+[28/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/AsyncPrefetch.cpp.o
+[29/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/DistributeHalo.cpp.o
+[30/65] Building TesseraLinalgSolverAttrs.cpp.inc...
+[31/65] Building TesseraLinalgSolverAttrs.h.inc...
+[32/65] Building TesseraLinalgSolverDialect.cpp.inc...
+[33/65] Building TesseraLinalgSolverDialect.h.inc...
+[34/65] Building TesseraLinalgSolverOps.cpp.inc...
+[35/65] Building TesseraLinalgSolverOps.h.inc...
+[36/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/VectorizeTPP.cpp.o
+[37/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/PassPipeline.cpp.o
+[38/65] Building CXX object src/solvers/tpp/lib/Passes/CMakeFiles/TesseraTPPPasses.dir/LowerTPPToTargetIR.cpp.o
+[39/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/HaloInferPass.cpp.o
+[40/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/StencilLowerPass.cpp.o
+[41/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/BoundaryConditionLowerPass.cpp.o
+[42/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/HaloTransportLowerPass.cpp.o
+[43/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/HaloMeshIntegrationPass.cpp.o
+[44/65] Linking CXX static library src/solvers/core/passes/libtessera_solvers_passes.a
+[45/65] Linking CXX static library src/solvers/scaling_resilience/libDialectSR.a
+[46/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/PipelineOverlapPass.cpp.o
+[47/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp.o
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp: In function ‘mlir::Value tessera::neighbors::{anonymous}::idxConst(mlir::OpBuilder&, mlir::Location, int64_t)’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:56:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIndexOp; Args = {long int&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   56 |   return b.create<arith::ConstantIndexOp>(loc, v);
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+In file included from /usr/lib/llvm-23/include/mlir/IR/PatternMatch.h:12,
+                 from /usr/lib/llvm-23/include/mlir/Interfaces/ControlFlowInterfaces.h:19,
+                 from /usr/lib/llvm-23/include/mlir/Dialect/Arith/IR/Arith.h:17,
+                 from /home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:27:
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp: In function ‘mlir::Value tessera::neighbors::{anonymous}::f32Const(mlir::OpBuilder&, mlir::Location, mlir::FloatType, double)’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:60:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::FloatType&, mlir::FloatAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   60 |   return b.create<arith::ConstantOp>(loc, ty, b.getFloatAttr(ty, v));
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp: In function ‘mlir::Value tessera::neighbors::{anonymous}::i1Const(mlir::OpBuilder&, mlir::Location, bool)’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:64:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {int, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   64 |   return b.create<arith::ConstantIntOp>(loc, /*value=*/v ? 1 : 0, /*width=*/1);
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp: In function ‘tessera::neighbors::{anonymous}::AxisFixup tessera::neighbors::{anonymous}::applyBCFixup(mlir::OpBuilder&, mlir::Location, mlir::Value, mlir::Value, llvm::StringRef)’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:85:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   85 |   Value geZero  = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::sge,
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   86 |                                            rawIdx, zero);
+      |                                            ~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:87:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   87 |   Value ltN     = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   88 |                                            rawIdx, N);
+      |                                            ~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:89:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AndIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   89 |   Value inBnds  = b.create<arith::AndIOp>(loc, geZero, ltN);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:92:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::XOrIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   92 |   Value oob     = b.create<arith::XOrIOp>(loc, inBnds, oneI1);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:96:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::RemSIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   96 |     Value rem        = b.create<arith::RemSIOp>(loc, rawIdx, N);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:97:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::CmpIOp; Args = {mlir::arith::CmpIPredicate, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   97 |     Value isNeg      = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::slt,
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   98 |                                                 rem, zero);
+      |                                                 ~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:99:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   99 |     Value remPlusN   = b.create<arith::AddIOp>(loc, rem, N);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:100:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  100 |     out.fixedIdx     = b.create<arith::SelectOp>(loc, isNeg, remPlusN, rem);
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:108:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SubIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  108 |   Value Nm1     = b.create<arith::SubIOp>(loc, N, oneI);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:109:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MaxSIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  109 |   Value cl0     = b.create<arith::MaxSIOp>(loc, rawIdx, zero);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:110:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MinSIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  110 |   out.fixedIdx  = b.create<arith::MinSIOp>(loc, cl0, Nm1);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp: In member function ‘void tessera::neighbors::{anonymous}::StencilLoopMaterializePass::materializeOne(mlir::Operation*)’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:224:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::DimOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  224 |       Value Na = b.create<tensor::DimOp>(loc, field, idxConst(b, loc, a));
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:232:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::EmptyOp; Args = {llvm::SmallVector<mlir::OpFoldResult, 6>&, mlir::FloatType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  232 |     Value initT = b.create<tensor::EmptyOp>(loc, sizes, floatTy);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp: In member function ‘mlir::Value tessera::neighbors::{anonymous}::StencilLoopMaterializePass::buildNest(mlir::OpBuilder&, mlir::Location, int64_t, int64_t, llvm::SmallVectorImpl<mlir::Value>&, mlir::Value, mlir::Value, mlir::FloatType, llvm::ArrayRef<mlir::Value>, llvm::ArrayRef<llvm::StringRef>, llvm::ArrayRef<mlir::Value>, mlir::ArrayAttr, mlir::ArrayAttr, mlir::Value, mlir::Value)’:
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:308:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  308 |           Value raw = b.create<arith::AddIOp>(loc, ivs[a], cd);
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:316:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::ExtractOp; Args = {mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  316 |         Value tapVal = b.create<tensor::ExtractOp>(loc, field,
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+  317 |                                                     ValueRange(idxs));
+      |                                                     ~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:321:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantIntOp; Args = {int, int}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  321 |         Value neumannAny = b.create<arith::ConstantIntOp>(
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  322 |             loc, /*value=*/0, /*width=*/1);
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:324:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, const mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  324 |           Value nv = b.create<arith::SelectOp>(
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  325 |               loc, fixups[a].neumannOOB, bcConsts[a], zeroF);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:326:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  326 |           nSum = b.create<arith::AddFOp>(loc, nSum, nv);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:327:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::OrIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  327 |           neumannAny = b.create<arith::OrIOp>(loc, neumannAny,
+      |                        ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+  328 |                                                 fixups[a].neumannOOB);
+      |                                                 ~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:330:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  330 |         Value neumannVal = b.create<arith::AddFOp>(loc, tapVal, nSum);
+      |                            ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:331:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  331 |         tapVal = b.create<arith::SelectOp>(loc, neumannAny, neumannVal,
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  332 |                                              tapVal);
+      |                                              ~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:339:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::SelectOp; Args = {mlir::Value&, const mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  339 |           tapVal = b.create<arith::SelectOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  340 |               loc, fixups[a].dirichletOOB, bcConsts[a], tapVal);
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:346:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::MulFOp; Args = {mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  346 |         Value scaled = b.create<arith::MulFOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~~~^
+  347 |             loc, tapVal,
+      |             ~~~~~~~~~~~~                       
+  348 |             f32Const(b, loc, floatTy, coeff.getValueAsDouble()));
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:349:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  349 |         sumVal = b.create<arith::AddFOp>(loc, sumVal, scaled);
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:352:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::InsertOp; Args = {mlir::Value&, mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  352 |       Value updated = b.create<tensor::InsertOp>(loc, sumVal, acc,
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+  353 |                                                    ValueRange(ivs));
+      |                                                    ~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:354:29: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::YieldOp; Args = {mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  354 |       b.create<scf::YieldOp>(loc, ValueRange{updated});
+      |       ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:359:38: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::ForOp; Args = {mlir::Value&, const mlir::Value&, mlir::Value&, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  359 |     auto forOp = b.create<scf::ForOp>(loc, zero, Ns[axis], oneI,
+      |                  ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+  360 |                                         ValueRange{acc});
+      |                                         ~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/gstoner/scratch/rocm-native-movement-20261005/src/compiler/tessera_neighbors/lib/Dialect/Neighbors/Transforms/StencilLoopMaterializePass.cpp:376:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::scf::YieldOp; Args = {mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  376 |       body.create<scf::YieldOp>(loc, ValueRange{nested});
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[48/65] Building CXX object src/compiler/tessera_neighbors/CMakeFiles/TesseraNeighbors.dir/lib/Dialect/Neighbors/Transforms/DynamicTopologyPass.cpp.o
+[49/65] Building CXX object src/solvers/scaling_resilience/CMakeFiles/TesseraSR.dir/lib/sr/passes/InsertRecomputePass.cpp.o
+[50/65] Building CXX object src/solvers/scaling_resilience/CMakeFiles/TesseraSR.dir/lib/sr/passes/OptimizerShardPass.cpp.o
+[51/65] Building CXX object src/solvers/scaling_resilience/CMakeFiles/TesseraSR.dir/lib/sr/passes/ResilienceRestartPass.cpp.o
+[52/65] Linking CXX static library src/solvers/tpp/lib/Dialect/TPP/libTesseraTPPDialect.a
+[53/65] Linking CXX static library src/solvers/tpp/lib/Passes/libTesseraTPPPasses.a
+[54/65] Building CXX object src/solvers/scaling_resilience/CMakeFiles/TesseraSR.dir/lib/sr/passes/ExportDeploymentManifestPass.cpp.o
+[55/65] Building CXX object src/solvers/scaling_resilience/CMakeFiles/TesseraSR.dir/lib/sr/passes/RegisterPasses.cpp.o
+[56/65] Building CXX object src/solvers/tpp/lib/CMakeFiles/TesseraTPPInit.dir/InitTPP.cpp.o
+[57/65] Linking CXX static library src/compiler/tessera_neighbors/libTesseraNeighbors.a
+[58/65] Linking CXX static library src/solvers/scaling_resilience/libTesseraSR.a
+[59/65] Linking CXX static library src/solvers/tpp/lib/libTesseraTPPInit.a
+[60/65] Building CXX object src/solvers/linalg/CMakeFiles/tessera_linalg_solver_passes.dir/lib/Passes/MixedPrecision.cpp.o
+[61/65] Building CXX object src/solvers/linalg/CMakeFiles/tessera_linalg_solver_passes.dir/lib/Passes/IterativeRefinement.cpp.o
+[62/65] Building CXX object src/solvers/linalg/CMakeFiles/tessera_linalg_solver_passes.dir/lib/Dialect/SolverDialect.cpp.o
+In file included from /usr/lib/llvm-23/include/mlir/Support/TypeID.h:19,
+                 from /usr/lib/llvm-23/include/mlir/IR/MLIRContext.h:13,
+                 from /usr/lib/llvm-23/include/mlir/IR/AttributeSupport.h:16,
+                 from /usr/lib/llvm-23/include/mlir/IR/Attributes.h:12,
+                 from /usr/lib/llvm-23/include/mlir/Bytecode/BytecodeImplementation.h:17,
+                 from /usr/lib/llvm-23/include/mlir/Bytecode/BytecodeOpInterface.h:17,
+                 from /home/gstoner/scratch/rocm-native-movement-20261005/src/solvers/linalg/include/tessera/Dialect/Solver/SolverDialect.h:3,
+                 from /home/gstoner/scratch/rocm-native-movement-20261005/src/solvers/linalg/lib/Dialect/SolverDialect.cpp:1:
+In function ‘llvm::hash_code llvm::hashing::detail::combine_bytes(const char*, size_t)’,
+    inlined from ‘llvm::hash_code llvm::hash_combine(const Ts& ...) [with Ts = {}]’ at /usr/lib/llvm-23/include/llvm/ADT/Hashing.h:312:40,
+    inlined from ‘static llvm::hash_code tessera::solver::GetrfOp::computePropertiesHash(const Properties&)’ at /home/gstoner/scratch/rocm-native-movement-20261005/.build/src/solvers/linalg/TesseraLinalgSolverOps.cpp.inc:157:28:
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /usr/lib/llvm-23/include/llvm/ADT/Hashing.h:51:
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h: In static member function ‘static llvm::hash_code tessera::solver::GetrfOp::computePropertiesHash(const Properties&)’:
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::solver::IRStepOp::computePropertiesHash(const Properties&)’:
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::solver::PotrfOp::computePropertiesHash(const Properties&)’:
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::solver::PotrsOp::computePropertiesHash(const Properties&)’:
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::solver::TrsmOp::computePropertiesHash(const Properties&)’:
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/usr/lib/llvm-23/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+[63/65] Linking CXX static library src/solvers/linalg/libtessera_linalg_solver_passes.a
+[64/65] Building CXX object tools/tessera-opt/CMakeFiles/tessera-opt.dir/tessera-opt.cpp.o
+[65/65] Linking CXX executable tools/tessera-opt/tessera-opt

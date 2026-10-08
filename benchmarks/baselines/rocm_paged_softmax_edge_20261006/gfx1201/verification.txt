@@ -1,0 +1,1 @@
+Live compiler/runtime and all source fingerprints verified; standalone image reused across three ranks; three edge cases plus 3 movement regression cases passed.

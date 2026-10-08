@@ -1,0 +1,45 @@
+{
+  "architecture": "gfx1151",
+  "compiler_sha256": "477fbace4a1b742d00960364ff3ba556e9e65832d477041776effdf2c3541a6b",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "exact_device_suite": {
+    "passed": 61,
+    "reason": "sibling owning-architecture cases",
+    "skipped": 3
+  },
+  "native_module_library_sha256": "a2d900b2fbc8b2f08181133106ee61e2004607b4920bab9aa704e63f6e1f595c",
+  "packet_sha256": {
+    "dynamic_bias_relu_cached.json": "3364837b9ef2c852d366194bc03a01baeec5360f6305008ff3db2ba2a57352c1",
+    "dynamic_bias_relu_uncached.json": "684cbd835814e53ae24162a7db17ee35fe20c3fd9f02c7278c7fdf81776e98fa",
+    "dynamic_cached.json": "5c3a002d757bfd8460714aabef4b38b31660183ec66bf9dd03f2f7fb26d5c8b4",
+    "dynamic_uncached.json": "1a3b8cc20b00c04fb3283d86569a18434328383c2f47d10f08575b0cacdfa240",
+    "static_bias_relu_cached.json": "01e6209128492262b6be6ff487021315defbba7de453b7a5d7f508d7a4ae8ac7",
+    "static_bias_relu_uncached.json": "ccba88707057dc84453e8214d18efb6407e3c9656e8dbd286ad1ba4b70eea655",
+    "static_cached.json": "9491cd221c9508ce1c97cc8d16a14dd8da71799886cb77f6630985da2d7cc8dc",
+    "static_uncached.json": "ff856a3e5a59130efb56054420385dfee16496b5760a305117dfd1def193e8f5"
+  },
+  "promotion_eligible": false,
+  "schema": "tessera.rocm_native_module_cache_validation.v1",
+  "source_sha256": {
+    "benchmarks/rocm/record_gfx1201_matmul_shape_key.py": "28311c5d7ac165c31a16f55c7fb4ad0a40490fac9101666c377753e30b8668f4",
+    "python/tessera/compiler/native_artifact.py": "9ea3f6a4deea0b2d66047bf6f682394cbaff9520352cab6686b5614731892921",
+    "python/tessera/compiler/rocm_native.py": "624a2ec94ca2851cbac1289dcc78bc231878d649ed0e45bf94e4c6622903e59c",
+    "python/tessera/compiler/scheduled_matmul.py": "7916e5adb76d0fc4374cb1f16fa5bc8819965d8c1077262e220cacc6a3f648e7",
+    "python/tessera/runtime.py": "1c01721ab21ed50f7de5bdcf02cf95fa045c68f7306e2cdf009f6e301e458508",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "b308e13c572ffbc0563a5cda47d3e9d13c05369e2a55cb6a1e56b0a593baa3e7",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "125e0a1ab843e20ba1d34426dbad0054d99f6760e5a8755923f2002c718e10c0",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": "bd3c03355489ec8cd409e6ef176b1142a63c8452d40ae88738acbf3ad5e64080",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "be84a6d46e8eeea5915c32984ab34cc440a5c7b00500cf5437b7dd81d49a4e1e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "779b2f4f5dd678aa1a540e38ecac40c899ddb86fb11174f8da704c20fc86f0bd",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860"
+  },
+  "sync": "ROCM-NATIVE-MODULE-CACHE-2026-10-02",
+  "transcript_sha256": {
+    "validation-tests.txt": "4fb4b3626bd8803ada443d209320e436f104488fc11bc5e65c1589570110bab4"
+  },
+  "validation_source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/CMakeLists.txt": "fc0f6df8a39bb1141d39e5c8b8dbce1c83d772feaa7e32cdacb0ff29d6fd649b",
+    "tests/unit/test_rocm_matmul_shape_key.py": "99a5b062c3bcad631348ab282dfdb849545fcd4d8e93a295f6885dfe3cafb8b1",
+    "tests/unit/test_rocm_native_image_lifetime.py": "adc0a7f28175f2cca67272260f6fad8eaaf6efbb34ec8bb205112ee3a08244d3"
+  }
+}

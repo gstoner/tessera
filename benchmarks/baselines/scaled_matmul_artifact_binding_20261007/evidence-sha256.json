@@ -1,0 +1,20 @@
+{
+  "README.md": "97ab906f1ad81a408ba4d9c3b8f6d68568c625df446fd157dc4c2d82ce6cf924",
+  "scaled-matmul-binding-sm120-device-20261007.txt": "37bcca9f53f7a7d5cd6aabcec36996a73956b99390abe42baa5ab7c285b2216f",
+  "source-sha256.json": "d73dc7d1423979e95f8cfb6aa682cc185d53f0fc216c1573544d766862fa7686",
+  "scaled-matmul-binding-target-20261007.err": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "scaled-matmul-binding-drift-20261007.txt": "db0935958887eec966b8de0f84699ce869f24038f3f3c13475cc5dd9d7d9c0d2",
+  "packet-verification.txt": "a5a04cf6de959e24181010585e0f352c38bbb7e036a8679c7ea6e3863d41cfae",
+  "scaled-matmul-binding-target-20261007.mlir": "6534c58d8a3cd6980a43817091857839dc2a21b8b0920e7e27bdeab65d4b969b",
+  "device.txt": "d8ff422db970852bc5db84a3c0ce29c56408c541e271d6fec233ed16d975124f",
+  "invocations.json": "8e538a1c522ee23bc836c3ca4052cf4f89a3b928df5a5532f3c84b8c07f82c7b",
+  "tool-sha256.json": "04446ead3ae06a5e2be06e1b4c53b68c3d0260743079a44b77d5d97bbd8c8262",
+  "generated-docs.txt": "c59ba44e9335603dcd51f5d518c55b4a88f94d7c9787121188e2beeaf3af45f8",
+  "compiler-runtime-source-sha256.json": "af2dc58cd6fcc72c6a4c237a8d20b3f0cd7bd39dc345bd27df84ad00de694e5a",
+  "scaled-matmul-binding-backend-lit-20261007.txt": "bb1fc69863f88aa0bc00f81b9609b04a96e6b457cf8fabb804e4bc9765c8bcfb",
+  "scaled-matmul-binding-binary-20261007.err": "d8a892ad5b6dc1958c17b24a60c829c10405b8fd686c051070a0db852f56ca82",
+  "scaled-matmul-binding-core-lit-20261007.txt": "15ccfd232647a9225bdf25126b11558516a786a8074ffc6f70efc025f6e2cd8e",
+  "tools-runtime-sha256.json": "e2fdbbc5be803e679f8b2604a992f278d841d841a7d8d7ae4fb7337bfba0b966",
+  "scaled-matmul-binding-lit-20261007.txt": "2465e6e48a4215d7c1cfd7a3fa2c7f12f754b78c06a63878c0410ae15426b240",
+  "scaled-matmul-binding-build-20261007.txt": "60eeec40b9b81c6b93a1d9981375f52487fa51b86551ae05debf5e62c283f56e"
+}

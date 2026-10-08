@@ -1,0 +1,228 @@
+{
+  "architecture": "sm_120",
+  "bridge_sha256": "96c348a80de54de04c6db048ce10ff2d92431afd270de6759542a6da3e0bf00e",
+  "compiler_sha256": "328e3e5b198973ae5272d35e7526fb64ecdd1acdce4f1c3298b44b9e9cbfb7d6",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "reps": 100,
+  "rows": [
+    {
+      "abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "causal": false,
+      "device_window_median_ms": 0.011119999922811985,
+      "device_window_samples_ms": [
+        0.011200319975614548,
+        0.010580480098724365,
+        0.011119999922811985
+      ],
+      "end_to_end_median_ms": 14.347226,
+      "end_to_end_samples_ms": [
+        2.579198,
+        44.197691,
+        14.347226
+      ],
+      "image_sha256": "5517bb95bd40e599cc81a0c73838c3ac6a9c52604d656b86aae4df1ea4bc579a",
+      "max_abs_errors": [
+        2.9394402120686003e-09,
+        9.307166391747668e-09,
+        4.4187389136585153e-08,
+        1.286247423848419e-08
+      ],
+      "route": "checkpoint Graph -> Schedule -> Tile -> NVIDIA Target/NVVM/PTX -> checked runtime ABI",
+      "schedule_digest": "9a3b0b1acf2901424dbc180dcec9e2064d2b38f5ad88faf53cd9db777ad307c4",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ]
+    },
+    {
+      "abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "causal": true,
+      "device_window_median_ms": 0.01569855958223343,
+      "device_window_samples_ms": [
+        0.010725120082497597,
+        0.016945280134677887,
+        0.01569855958223343
+      ],
+      "end_to_end_median_ms": 2.055603,
+      "end_to_end_samples_ms": [
+        2.055603,
+        1.906611,
+        2.144512
+      ],
+      "image_sha256": "5e2c067a973dff76aa0a282169d67a4f23aeb99043bdd75e8d4be914996e31d4",
+      "max_abs_errors": [
+        2.2287151707489627e-09,
+        3.0917764806681625e-09,
+        5.9204656593925264e-08,
+        1.352790569841833e-08
+      ],
+      "route": "checkpoint Graph -> Schedule -> Tile -> NVIDIA Target/NVVM/PTX -> checked runtime ABI",
+      "schedule_digest": "f33c2a4a535240863fb0ba25e97ba0e52d0b7525a247fad296e86082a9e44c66",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ]
+    },
+    {
+      "abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "causal": false,
+      "device_window_median_ms": 0.019217599183321,
+      "device_window_samples_ms": [
+        0.012061439454555511,
+        0.020293761044740677,
+        0.019217599183321
+      ],
+      "end_to_end_median_ms": 2.059203,
+      "end_to_end_samples_ms": [
+        2.059203,
+        2.164763,
+        1.778319
+      ],
+      "image_sha256": "138a6c4545c1aff54f6bf535e079e405739f695b87759ca25bbf85769ea7cbab",
+      "max_abs_errors": [
+        3.6373730624705836e-09,
+        3.879782620175298e-09,
+        3.791075986470105e-08,
+        1.4469814672846137e-08
+      ],
+      "route": "checkpoint Graph -> Schedule -> Tile -> NVIDIA Target/NVVM/PTX -> checked runtime ABI",
+      "schedule_digest": "e94869a6db10e95d0b36ec79ad89c32b6163c0f7d2ab7b01c72edf23a001a5b8",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ]
+    },
+    {
+      "abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "causal": true,
+      "device_window_median_ms": 0.017850879579782486,
+      "device_window_samples_ms": [
+        0.013526400551199913,
+        0.019993280991911888,
+        0.017850879579782486
+      ],
+      "end_to_end_median_ms": 2.266925,
+      "end_to_end_samples_ms": [
+        2.725781,
+        2.266925,
+        1.942842
+      ],
+      "image_sha256": "cc9d1e503c904354afa671b650b3f6fd907910ae2554a63364ed0b5ee3d2b142",
+      "max_abs_errors": [
+        3.6373730624705836e-09,
+        1.7750461309140597e-09,
+        3.02432567877986e-08,
+        1.080580309953394e-08
+      ],
+      "route": "checkpoint Graph -> Schedule -> Tile -> NVIDIA Target/NVVM/PTX -> checked runtime ABI",
+      "schedule_digest": "e3104e8b1ff4a972310aaf1e1b598a16c002c3a287aae390995a297dd75b7ea8",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ]
+    },
+    {
+      "abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "causal": false,
+      "device_window_median_ms": 0.027207359671592712,
+      "device_window_samples_ms": [
+        0.026746559888124466,
+        0.028688320890069008,
+        0.027207359671592712
+      ],
+      "end_to_end_median_ms": 2.028543,
+      "end_to_end_samples_ms": [
+        2.469877,
+        1.93452,
+        2.028543
+      ],
+      "image_sha256": "2782d40f02c2d30769a39c897678196d90fd169081ff8f8d1651f20bfb5c2803",
+      "max_abs_errors": [
+        7.935990590374198e-09,
+        7.803949420709388e-09,
+        7.320719447312385e-08,
+        2.1370707467549543e-08
+      ],
+      "route": "checkpoint Graph -> Schedule -> Tile -> NVIDIA Target/NVVM/PTX -> checked runtime ABI",
+      "schedule_digest": "601e0932a0640b21791c040112ae118746e375d5118516cc7eeebc81b496d5e8",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ]
+    },
+    {
+      "abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "causal": true,
+      "device_window_median_ms": 0.02960095927119255,
+      "device_window_samples_ms": [
+        0.02960095927119255,
+        0.029053758829832077,
+        0.030396800488233566
+      ],
+      "end_to_end_median_ms": 2.129323,
+      "end_to_end_samples_ms": [
+        2.129323,
+        1.92277,
+        2.209274
+      ],
+      "image_sha256": "3bb3d0d204baafb9243befec995969325ba988f7df2d4194fe36b1a988c87b17",
+      "max_abs_errors": [
+        6.793700199625441e-09,
+        1.0756046001786368e-08,
+        1.4398778275248603e-07,
+        2.0108810117047682e-08
+      ],
+      "route": "checkpoint Graph -> Schedule -> Tile -> NVIDIA Target/NVVM/PTX -> checked runtime ABI",
+      "schedule_digest": "bcf2bd0ed78bc6737240ed32885a90e8f6a975ed5f60feae130cee51cbb7edd1",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ]
+    }
+  ],
+  "samples": 3,
+  "schema": "tessera.nvidia.checkpoint_bias_gradient.v1",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_checkpoint_bias_gradient.py": "1504c9b06ca9664e10ca46b3de70b9fa2ddb4820f5a238d8cd75cc0e66128de2",
+    "python/tessera/compiler/nvidia_native.py": "3fac2db754cd2caa3d62fee022db74974db88ca98603777eedb7d36f12bb103d",
+    "python/tessera/compiler/scheduled_checkpoint.py": "cf416d3feded3db4ccfd50ce0002390c6d35565a4993f2911a44ec7170bea5b9",
+    "python/tessera/runtime.py": "ac45a0c7d086026128f61437a372bcb38b9ebba85c6e36d8a896d260caf3171c",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "2b6e6b5d81d26f775b91e30c22fa12f67990f37dd72a3e7437dab453e2cce787",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "54f2d27b484e0e0a5fb068edc2afa77c73fb85294b6f73290bbbc4b0c0268e5a",
+    "src/compiler/ir/TileOps.cpp": "cce2b74f5c455af7fdd60af537db40a3da5b44fdfd24c2a7127edddba88f158a",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "26f8f478cc9a3b11fe0dc2c94ad0fef70b68db2e17b99e539357b0f5791ea8c1",
+    "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": "fc92cd87b40053e71e07afd397aaf2e0fd91f1328970c3fa6dbed34237769b00",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "1a733594bfd615b0f047edbf9530091de75fb1b84fdbe3727a1ff722ac25a7ef"
+  },
+  "timing_scope": "resident CUDA-event launch windows include driver gaps; end-to-end includes host staging and synchronization; no speedup claim; automatic AD export remains separate"
+}

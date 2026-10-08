@@ -1,0 +1,182 @@
+{
+  "schema": "tessera.e8m0_tile_consumer.v1",
+  "work_item": "ROCM-FP8-BLOCKSCALE-1",
+  "sync_key": "ROCM-E8M0-TILE-2026-10-03",
+  "host": "tajasarus",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "compiler_sha256": "195dfdf090f27e2cba5930676029ec3fdab0b449761f8684a0e3af32a17a1a29",
+  "image_sha256": "c9d10b5f39e5b09ceb7c35bf6252467338d0ce8603084a38688e58b75ef50f94",
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "74b56a566e509d5ea1f8097f0b0fa3e879061580929750c29d920e8b5b14b122",
+    "src/compiler/ir/TileOps.cpp": "1f86e905da00caeaffffe9fef7883c2b972aade9df33f853e4a39a4efc819318",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "836cc4555d372f4ecb70c2c56ced8e4c100cc3b4e281d9010508fabdd5f3cdbc",
+    "tests/device/rocm/fixtures/e8m0_tile_scale.mlir": "7bb77e0c54223c76a1660db6fee5b6c271c6452afe8919821a6adb4ab9cae7d3",
+    "tests/device/rocm/test_e8m0_tile_scale.py": "b10e1ed153d561e50bcaa13705f35631f5a54fd99d7563565cb1ed607dad9f4b"
+  },
+  "route": "native Tile fixture -> ROCm lowering -> ROCDL/LLVM -> HSACO -> raw diagnostic HIP launch",
+  "graph_schedule_package_proof": false,
+  "runtime_checked_package_proof": false,
+  "performance_claim": false,
+  "oracle": "ml_dtypes.float8_e8m0fnu decoded to f64, isolated K32 partial scaling, final f32 rounding",
+  "rows": [
+    {
+      "shape_mnk": [
+        255,
+        15,
+        32
+      ],
+      "lhs_value": -1.375,
+      "elements": 3825,
+      "nan_elements": 255,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        255,
+        15,
+        32
+      ],
+      "lhs_value": 0.0,
+      "elements": 3825,
+      "nan_elements": 255,
+      "infinite_elements": 0,
+      "subnormal_elements": 0,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        255,
+        15,
+        32
+      ],
+      "lhs_value": 1.375,
+      "elements": 3825,
+      "nan_elements": 255,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        255,
+        16,
+        32
+      ],
+      "lhs_value": -1.375,
+      "elements": 4080,
+      "nan_elements": 510,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        255,
+        16,
+        32
+      ],
+      "lhs_value": 0.0,
+      "elements": 4080,
+      "nan_elements": 510,
+      "infinite_elements": 0,
+      "subnormal_elements": 0,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        255,
+        16,
+        32
+      ],
+      "lhs_value": 1.375,
+      "elements": 4080,
+      "nan_elements": 510,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        256,
+        15,
+        32
+      ],
+      "lhs_value": -1.375,
+      "elements": 3840,
+      "nan_elements": 270,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        256,
+        15,
+        32
+      ],
+      "lhs_value": 0.0,
+      "elements": 3840,
+      "nan_elements": 270,
+      "infinite_elements": 0,
+      "subnormal_elements": 0,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        256,
+        15,
+        32
+      ],
+      "lhs_value": 1.375,
+      "elements": 3840,
+      "nan_elements": 270,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        256,
+        16,
+        32
+      ],
+      "lhs_value": -1.375,
+      "elements": 4096,
+      "nan_elements": 526,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        256,
+        16,
+        32
+      ],
+      "lhs_value": 0.0,
+      "elements": 4096,
+      "nan_elements": 526,
+      "infinite_elements": 0,
+      "subnormal_elements": 0,
+      "correctness": "exact_f32_value_and_nan_mask"
+    },
+    {
+      "shape_mnk": [
+        256,
+        16,
+        32
+      ],
+      "lhs_value": 1.375,
+      "elements": 4096,
+      "nan_elements": 526,
+      "infinite_elements": 556,
+      "subnormal_elements": 96,
+      "correctness": "exact_f32_value_and_nan_mask"
+    }
+  ],
+  "device_ordinal": 0,
+  "device_identity_source": "HIP hipGetDevice + hipDeviceGetName; architecture from selected HIP device"
+}

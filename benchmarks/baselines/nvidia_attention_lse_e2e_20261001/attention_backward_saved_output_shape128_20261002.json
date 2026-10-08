@@ -1,0 +1,66 @@
+{
+  "architecture": "sm_120a",
+  "checkpoint": "saved forward output and row_lse from native forward package; deterministic_direct backward",
+  "correctness": {
+    "all_gradients_match_recompute_and_oracle": true,
+    "forward_execution_kind": "native_gpu",
+    "forward_max_abs_error": 7.078051567077637e-08,
+    "gradient_max_abs_errors": [
+      5.587935447692871e-09,
+      7.450580596923828e-09,
+      2.086162567138672e-07
+    ],
+    "lse_max_abs_error": 9.5367431640625e-07,
+    "recompute_backward_execution_kind": "native_gpu",
+    "saved_backward_execution_kind": "native_gpu"
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "packages": {
+    "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+    "backward_image": "2d52e82b56f3aba5b49bba358e724993b2b911abce7925bb83459018432528fc",
+    "backward_schedule": "c09cc9c2a282f5c09f8baf4acf18d2d027c9cf16d11ce8a42a32771d55549ad0",
+    "backward_tile": "0b3439660e3ae927ecdb7d6e46039ec1ec3c8b41ba14e2f29dd5adaadf8c2ef1",
+    "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+    "forward_image": "241580206e7fc25762e404ee2758915840340ebfca156ae7d81a55d1921e750d"
+  },
+  "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+  "schema": "tessera.nvidia.saved-lse-backward-benchmark.v1",
+  "selector_changed": false,
+  "shape_b_hq_hkv_sq_sk_d_dv": [
+    1,
+    4,
+    2,
+    128,
+    128,
+    64,
+    64
+  ],
+  "target": "nvidia_sm120",
+  "timing": {
+    "device_cv": 0.002996654557497583,
+    "device_domain": "CUDA events around repeated native backward launches on caller-owned resident buffers and caller stream; transfers are outside the event window",
+    "device_median_ms": 2.3782401084899902,
+    "device_reps": 1,
+    "device_samples_ms_per_launch": [
+      2.379040002822876,
+      2.3782401084899902,
+      2.3644158840179443,
+      2.3853759765625,
+      2.371840000152588
+    ],
+    "end_to_end_cv": 0.021004416168500906,
+    "end_to_end_domain": "runtime.launch on host arrays; includes binding, transfer, launch, and synchronization",
+    "end_to_end_median_ms": 4.079373029526323,
+    "end_to_end_reps": 1,
+    "end_to_end_samples_ms_per_launch": [
+      4.132434958592057,
+      4.079373029526323,
+      3.9950929931364954,
+      3.89825995080173,
+      4.101955040823668
+    ],
+    "samples": 5,
+    "warmup": 2
+  },
+  "work_item": "NVIDIA-ATTENTION-LSE-BACKWARD-2026-10-01"
+}

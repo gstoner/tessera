@@ -1,0 +1,4 @@
+fcae0800e5f7cd9735ca651c3ca1ed6290f2411ae514409e14480c7005ae2928  /home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt
+2a66c8fc31efdeb8cae4a9e2b506fe4a7a8d629560115f78ba90dd1a7e75adba  python/tessera/compiler/rocm_nvfp4_resident.py
+cdcf7d32d468b8f8e1f7b6aa4b21ff369163bdf7bf43877218a5202c0b228ecc  benchmarks/rocm/benchmark_resident_nvfp4.py
+0bfb577484f78aa59dcd27e1204c003b0dd592638262d552b32fd989aa9c65d3  tests/unit/test_rocm_nvfp4_resident.py

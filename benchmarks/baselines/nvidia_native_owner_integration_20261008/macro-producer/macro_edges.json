@@ -1,0 +1,227 @@
+{
+  "device": "NVIDIA GeForce RTX 5070",
+  "device_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "architecture": "sm_120",
+  "runtime_sha256": "0a166da3238a64ab991b8bc9979873be3b555aa0759f49070708ff1f799e6163",
+  "native_source_sha256": "804872425d2f7a262c253c03e758a534f140376303954d4f02cea13a8acfe306",
+  "python_source_sha256": "9197c74ebdc0a9b424627b48b974988e21e55a699975495223461d4166d2c8f5",
+  "rows": [
+    {
+      "dtype": "fp16",
+      "producer": "rmsnorm",
+      "epilogue": false,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_macro_kernel",
+      "image_digest": "c2872ecb2d7ab45e98d080ce102f1b0470abddb5f0cb04bb0f1b030573218c42",
+      "descriptor_digest": "1d14a6e51ea100cb46a1709709959c6391cde03dfd5bbc15798f832de8fe6785",
+      "max_abs_error": 0.0012650906064664014,
+      "changed_max_abs_error": 0.0012650906064664014,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "fp16",
+      "producer": "rmsnorm",
+      "epilogue": true,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "typed_fragment_global",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_fused_f16_relu_b1_r1_outf16_kernel",
+      "image_digest": "3d0f05b8c3d48900bf93fd703fe6041e4da1ba09590aab07db4dba88e36203aa",
+      "descriptor_digest": "567b4d9543410a9f490cfbbe6b2f3d0cab3a1204ca452cd02896b1b6528fc84b",
+      "max_abs_error": 0.03125,
+      "changed_max_abs_error": 0.03125,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "fp16",
+      "producer": "layernorm",
+      "epilogue": false,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_macro_kernel",
+      "image_digest": "c2872ecb2d7ab45e98d080ce102f1b0470abddb5f0cb04bb0f1b030573218c42",
+      "descriptor_digest": "adf18e44e7fe9f6afc84ec51704c2fc40478a8b807070cdca763d09f6817af2c",
+      "max_abs_error": 0.0012136239565734286,
+      "changed_max_abs_error": 0.0012136239565734286,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "fp16",
+      "producer": "layernorm",
+      "epilogue": true,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "typed_fragment_global",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_fused_f16_relu_b1_r1_outf16_kernel",
+      "image_digest": "3d0f05b8c3d48900bf93fd703fe6041e4da1ba09590aab07db4dba88e36203aa",
+      "descriptor_digest": "7badb843ee34bddfc26b2a9875800d9edc706226131028dbe2e0cd91aac80309",
+      "max_abs_error": 0.015625,
+      "changed_max_abs_error": 0.015625,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "fp16",
+      "producer": "softmax",
+      "epilogue": false,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_macro_kernel",
+      "image_digest": "c2872ecb2d7ab45e98d080ce102f1b0470abddb5f0cb04bb0f1b030573218c42",
+      "descriptor_digest": "9429a4aaadaea349ccbe6017deea652b644be46760b33f47156e75059d468c4c",
+      "max_abs_error": 5.108906293571636e-07,
+      "changed_max_abs_error": 4.2393403276719255e-07,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "fp16",
+      "producer": "softmax",
+      "epilogue": true,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "typed_fragment_global",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_fused_f16_relu_b1_r1_outf16_kernel",
+      "image_digest": "3d0f05b8c3d48900bf93fd703fe6041e4da1ba09590aab07db4dba88e36203aa",
+      "descriptor_digest": "1b46f19b14adea64f459cff82e47751e27c18b767fb8613fbd7b3ef345f964a8",
+      "max_abs_error": 3.0517578125e-05,
+      "changed_max_abs_error": 3.0517578125e-05,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "bf16",
+      "producer": "rmsnorm",
+      "epilogue": false,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_macro_kernel",
+      "image_digest": "7c91688079729d1621b4a6f6b008cededb0c920b79ea51180123286ac6fba64a",
+      "descriptor_digest": "b1abbfa6b2d254657ecc2c0af6d86ecde648927ed9c23671cb3a7562b1d3a3e2",
+      "max_abs_error": 0.00024222861975431442,
+      "changed_max_abs_error": 0.00024222861975431442,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "bf16",
+      "producer": "rmsnorm",
+      "epilogue": true,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "typed_fragment_global",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_fused_bf16_relu_b1_r1_outf16_kernel",
+      "image_digest": "22aeb087251a25be7e1bbf4eff7ff391d6a59f007ec8e42c5b0adff60cd9be4c",
+      "descriptor_digest": "2497ecd1ff2b1c1afcc478116f6f774322e66fc8c55dc0bee87599d413b10a6f",
+      "max_abs_error": 0.015625,
+      "changed_max_abs_error": 0.015625,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "bf16",
+      "producer": "layernorm",
+      "epilogue": false,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_macro_kernel",
+      "image_digest": "7c91688079729d1621b4a6f6b008cededb0c920b79ea51180123286ac6fba64a",
+      "descriptor_digest": "31e0c2a0c3019bb7305222261134c5f94322d7d5d90f29e01e3682c3f0d55540",
+      "max_abs_error": 0.007842260063625872,
+      "changed_max_abs_error": 0.007842260063625872,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "bf16",
+      "producer": "layernorm",
+      "epilogue": true,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "typed_fragment_global",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_fused_bf16_relu_b1_r1_outf16_kernel",
+      "image_digest": "22aeb087251a25be7e1bbf4eff7ff391d6a59f007ec8e42c5b0adff60cd9be4c",
+      "descriptor_digest": "e552916a5b0cc9ff0c8e554a12d920db85b9b43bb50fe7c93ed6a2bd44fc4c62",
+      "max_abs_error": 0.015625,
+      "changed_max_abs_error": 0.03125,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "bf16",
+      "producer": "softmax",
+      "epilogue": false,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_macro_kernel",
+      "image_digest": "7c91688079729d1621b4a6f6b008cededb0c920b79ea51180123286ac6fba64a",
+      "descriptor_digest": "be3e363036e0626821caf8fe630c2873a0cab408fc62cfee75e9bcd08f0ec59b",
+      "max_abs_error": 2.4163448415492894e-06,
+      "changed_max_abs_error": 2.525853233237285e-06,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    },
+    {
+      "dtype": "bf16",
+      "producer": "softmax",
+      "epilogue": true,
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "physical_route": "typed_fragment_global",
+      "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_fused_bf16_relu_b1_r1_outf16_kernel",
+      "image_digest": "22aeb087251a25be7e1bbf4eff7ff391d6a59f007ec8e42c5b0adff60cd9be4c",
+      "descriptor_digest": "c57fc0b6b37af4b29a17333fc422c032b386c0351e1261434291f376fa3c8339",
+      "max_abs_error": 1.52587890625e-05,
+      "changed_max_abs_error": 3.0517578125e-05,
+      "retained_result": "bit_identical",
+      "correctness": "passed"
+    }
+  ],
+  "timing": "not_measured_during_aggregate_validation"
+}

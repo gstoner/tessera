@@ -1,0 +1,1 @@
+Final compiler reproduces the exact program/member manifests and all four device-tested HSACO images.

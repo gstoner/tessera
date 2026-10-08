@@ -1,0 +1,1838 @@
+FFFFFF.FFFFFFFF                                                          [100%]
+=================================== FAILURES ===================================
+_ test_actual_reduction_descends_through_schedule_tile_and_target[False-shared_rhs_rows] _
+
+policy = 'shared_rhs_rows', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_actual_reduction_descends_through_schedule_tile_and_target(policy, nk):
+        graph = source(policy, nk=nk)
+        scheduled = native(graph, PREFIX)
+        assert scheduled.returncode == 0, scheduled.stderr
+        assert "schedule.artifact" in scheduled.stdout
+        assert 'algorithm = "serial_per_scale_element"' in scheduled.stdout
+        tile = native(scheduled.stdout, "tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert "tile.structured_reduction_kernel" in tile.stdout
+        assert "memref.load" in tile.stdout and "arith.bitcast" in tile.stdout
+        assert not re.search(r"^\s+%.*tensor.extract", tile.stdout, re.MULTILINE)
+        assert not re.search(r"^\s+%.*arith.extf.*f8", tile.stdout, re.MULTILINE)
+        target = native(tile.stdout, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1201}")
+>       assert target.returncode == 0, target.stderr
+E       AssertionError: <stdin>:2:3: error: 'tile.structured_reduction_kernel' op structured reduction kernel lost its native buffer/scalar ABI
+E           tile.structured_reduction_kernel attributes {arch = "gfx1201", artifact_hash = "abe2005ad2dbf70d33b7c9671b1a6ac5848877bfcf687b99cdacb5349a8bc4f7", body_hash = "bae97e5402fff8bd3e4dbe1e6b2f3581f1c1f86877e77c50d6f24e05fed5ab84", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_abe2005ad2dbf70d33b7c967", workgroup_size = 128 : i64} {
+E           ^
+E         <stdin>:2:3: note: see current operation: 
+E         "tile.structured_reduction_kernel"() <{arch = "gfx1201", artifact_hash = "abe2005ad2dbf70d33b7c9671b1a6ac5848877bfcf687b99cdacb5349a8bc4f7", body_hash = "bae97e5402fff8bd3e4dbe1e6b2f3581f1c1f86877e77c50d6f24e05fed5ab84", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_abe2005ad2dbf70d33b7c967", workgroup_size = 128 : i64}> ({
+E           "gpu.module"() <{sym_name = "tessera_scale_transpose_abe2005ad2dbf70d33b7c967_gpu"}> ({
+E             "gpu.func"() <{function_type = (memref<?xi8>, memref<?xi8>, memref<?xf32>, memref<?xf32>, memref<?xf32>, i64) -> (), kernel}> ({
+E             ^bb0(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32>, %arg3: memref<?xf32>, %arg4: memref<?xf32>, %arg5: i64):
+E               %0 = "arith.constant"() <{value = 128 : index}> : () -> index
+E               %1 = "gpu.thread_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %2 = "gpu.block_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %3 = "arith.muli"(%2, %0) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %4 = "arith.addi"(%3, %1) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %5 = "arith.index_cast"(%arg5) : (i64) -> index
+E               %6 = "arith.cmpi"(%4, %5) <{predicate = 6 : i64}> : (index, index) -> i1
+E               "scf.if"(%6) ({
+E                 %7 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %8 = "arith.remui"(%4, %7) : (index, index) -> index
+E                 %9 = "arith.divui"(%4, %7) : (index, index) -> index
+E                 %10 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %11 = "arith.remui"(%9, %10) : (index, index) -> index
+E                 %12 = "arith.divui"(%9, %10) : (index, index) -> index
+E                 %13 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                 %14 = "arith.remui"(%12, %13) : (index, index) -> index
+E                 %15 = "arith.divui"(%12, %13) : (index, index) -> index
+E                 %16 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %17 = "arith.remui"(%15, %16) : (index, index) -> index
+E                 %18 = "arith.divui"(%15, %16) : (index, index) -> index
+E                 %19 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E                 %20 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                 %21 = "arith.constant"() <{value = 1 : index}> : () -> index
+E                 %22 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %23 = "arith.muli"(%8, %22) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %24 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %25 = "arith.addi"(%23, %24) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %26 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                 %27 = "arith.minui"(%26, %25) : (index, index) -> index
+E                 %28 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                 %29 = "scf.for"(%20, %28, %21, %19) ({
+E                 ^bb0(%arg6: index, %arg7: f32):
+E                   %30 = "scf.for"(%23, %27, %21, %19) ({
+E                   ^bb0(%arg8: index, %arg9: f32):
+E                     %58 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %59 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                     %60 = "arith.muli"(%58, %59) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %61 = "arith.addi"(%60, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %62 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                     %63 = "arith.muli"(%61, %62) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %64 = "arith.addi"(%63, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %65 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                     %66 = "arith.muli"(%64, %65) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %67 = "arith.addi"(%66, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %68 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %69 = "arith.muli"(%67, %68) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %70 = "arith.addi"(%69, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %71 = "memref.load"(%arg0, %70) : (memref<?xi8>, index) -> i8
+E                     %72 = "arith.extui"(%71) : (i8) -> i32
+E                     %73 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %74 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %75 = "arith.andi"(%72, %74) : (i32, i32) -> i32
+E                     %76 = "arith.shli"(%75, %73) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %77 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %78 = "arith.andi"(%72, %77) : (i32, i32) -> i32
+E                     %79 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %80 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %81 = "arith.shrui"(%72, %80) : (i32, i32) -> i32
+E                     %82 = "arith.andi"(%81, %79) : (i32, i32) -> i32
+E                     %83 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %84 = "arith.shli"(%78, %83) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %85 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %86 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %87 = "arith.addi"(%82, %86) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %88 = "arith.shli"(%87, %85) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %89 = "arith.ori"(%88, %84) : (i32, i32) -> i32
+E                     %90 = "arith.ori"(%76, %89) : (i32, i32) -> i32
+E                     %91 = "arith.bitcast"(%90) : (i32) -> f32
+E                     %92 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %93 = "arith.uitofp"(%78) : (i32) -> f32
+E                     %94 = "arith.mulf"(%93, %92) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %95 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %96 = "arith.cmpi"(%76, %95) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %97 = "arith.negf"(%94) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %98 = "arith.select"(%96, %97, %94) : (i1, f32, f32) -> f32
+E                     %99 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %100 = "arith.cmpi"(%82, %99) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %101 = "arith.select"(%100, %98, %91) : (i1, f32, f32) -> f32
+E                     %102 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %103 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %104 = "arith.andi"(%72, %103) : (i32, i32) -> i32
+E                     %105 = "arith.cmpi"(%104, %102) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %106 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %107 = "arith.ori"(%76, %106) : (i32, i32) -> i32
+E                     %108 = "arith.bitcast"(%107) : (i32) -> f32
+E                     %109 = "arith.select"(%105, %108, %101) : (i1, f32, f32) -> f32
+E                     %110 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %111 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %112 = "arith.muli"(%110, %111) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %113 = "arith.addi"(%112, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %114 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                     %115 = "arith.muli"(%113, %114) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %116 = "arith.addi"(%115, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %117 = "memref.load"(%arg1, %116) : (memref<?xi8>, index) -> i8
+E                     %118 = "arith.extui"(%117) : (i8) -> i32
+E                     %119 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %120 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %121 = "arith.andi"(%118, %120) : (i32, i32) -> i32
+E                     %122 = "arith.shli"(%121, %119) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %123 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %124 = "arith.andi"(%118, %123) : (i32, i32) -> i32
+E                     %125 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %126 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %127 = "arith.shrui"(%118, %126) : (i32, i32) -> i32
+E                     %128 = "arith.andi"(%127, %125) : (i32, i32) -> i32
+E                     %129 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %130 = "arith.shli"(%124, %129) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %131 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %132 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %133 = "arith.addi"(%128, %132) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %134 = "arith.shli"(%133, %131) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %135 = "arith.ori"(%134, %130) : (i32, i32) -> i32
+E                     %136 = "arith.ori"(%122, %135) : (i32, i32) -> i32
+E                     %137 = "arith.bitcast"(%136) : (i32) -> f32
+E                     %138 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %139 = "arith.uitofp"(%124) : (i32) -> f32
+E                     %140 = "arith.mulf"(%139, %138) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %141 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %142 = "arith.cmpi"(%122, %141) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %143 = "arith.negf"(%140) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %144 = "arith.select"(%142, %143, %140) : (i1, f32, f32) -> f32
+E                     %145 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %146 = "arith.cmpi"(%128, %145) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %147 = "arith.select"(%146, %144, %137) : (i1, f32, f32) -> f32
+E                     %148 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %149 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %150 = "arith.andi"(%118, %149) : (i32, i32) -> i32
+E                     %151 = "arith.cmpi"(%150, %148) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %152 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %153 = "arith.ori"(%122, %152) : (i32, i32) -> i32
+E                     %154 = "arith.bitcast"(%153) : (i32) -> f32
+E                     %155 = "arith.select"(%151, %154, %147) : (i1, f32, f32) -> f32
+E                     %156 = "arith.mulf"(%109, %155) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %157 = "arith.addf"(%arg9, %156) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     "scf.yield"(%157) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   %31 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                   %32 = "arith.divui"(%arg6, %31) : (index, index) -> index
+E                   %33 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %34 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %35 = "arith.muli"(%33, %34) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %36 = "arith.addi"(%35, %8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %37 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %38 = "arith.muli"(%36, %37) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %39 = "arith.addi"(%38, %32) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %40 = "memref.load"(%arg2, %39) : (memref<?xf32>, index) -> f32
+E                   %41 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %42 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %43 = "arith.muli"(%41, %42) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %44 = "arith.addi"(%43, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %45 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %46 = "arith.muli"(%44, %45) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %47 = "arith.addi"(%46, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %48 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                   %49 = "arith.muli"(%47, %48) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %50 = "arith.addi"(%49, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %51 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                   %52 = "arith.muli"(%50, %51) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %53 = "arith.addi"(%52, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %54 = "memref.load"(%arg3, %53) : (memref<?xf32>, index) -> f32
+E                   %55 = "arith.mulf"(%30, %40) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %56 = "arith.mulf"(%55, %54) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %57 = "arith.addf"(%arg7, %56) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%57) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "memref.store"(%29, %arg4, %4) : (f32, memref<?xf32>, index) -> ()
+E                 "scf.yield"() : () -> ()
+E               }, {
+E               }) : (i1) -> ()
+E               "gpu.return"() : () -> ()
+E             }) {sym_name = "tessera_scale_transpose_abe2005ad2dbf70d33b7c967"} : () -> ()
+E           }) : () -> ()
+E         }) : () -> ()
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...\n    }) {sym_name = "tessera_scale_transpose_abe2005ad2dbf70d33b7c967"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:40: AssertionError
+_ test_actual_reduction_descends_through_schedule_tile_and_target[False-independent_rhs] _
+
+policy = 'independent_rhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_actual_reduction_descends_through_schedule_tile_and_target(policy, nk):
+        graph = source(policy, nk=nk)
+        scheduled = native(graph, PREFIX)
+        assert scheduled.returncode == 0, scheduled.stderr
+        assert "schedule.artifact" in scheduled.stdout
+        assert 'algorithm = "serial_per_scale_element"' in scheduled.stdout
+        tile = native(scheduled.stdout, "tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert "tile.structured_reduction_kernel" in tile.stdout
+        assert "memref.load" in tile.stdout and "arith.bitcast" in tile.stdout
+        assert not re.search(r"^\s+%.*tensor.extract", tile.stdout, re.MULTILINE)
+        assert not re.search(r"^\s+%.*arith.extf.*f8", tile.stdout, re.MULTILINE)
+        target = native(tile.stdout, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1201}")
+>       assert target.returncode == 0, target.stderr
+E       AssertionError: <stdin>:2:3: error: 'tile.structured_reduction_kernel' op structured reduction kernel lost its native buffer/scalar ABI
+E           tile.structured_reduction_kernel attributes {arch = "gfx1201", artifact_hash = "ad402174bff26b44f14087de81df3e416a80bd16f4c3e759b045ac9bb22d764b", body_hash = "b8e087acd28ac2bbce15ad048a36664524891e9dd5c63de0fc20669e2ecd7ab5", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_ad402174bff26b44f14087de", workgroup_size = 128 : i64} {
+E           ^
+E         <stdin>:2:3: note: see current operation: 
+E         "tile.structured_reduction_kernel"() <{arch = "gfx1201", artifact_hash = "ad402174bff26b44f14087de81df3e416a80bd16f4c3e759b045ac9bb22d764b", body_hash = "b8e087acd28ac2bbce15ad048a36664524891e9dd5c63de0fc20669e2ecd7ab5", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_ad402174bff26b44f14087de", workgroup_size = 128 : i64}> ({
+E           "gpu.module"() <{sym_name = "tessera_scale_transpose_ad402174bff26b44f14087de_gpu"}> ({
+E             "gpu.func"() <{function_type = (memref<?xi8>, memref<?xi8>, memref<?xf32>, memref<?xf32>, memref<?xf32>, i64) -> (), kernel}> ({
+E             ^bb0(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32>, %arg3: memref<?xf32>, %arg4: memref<?xf32>, %arg5: i64):
+E               %0 = "arith.constant"() <{value = 128 : index}> : () -> index
+E               %1 = "gpu.thread_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %2 = "gpu.block_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %3 = "arith.muli"(%2, %0) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %4 = "arith.addi"(%3, %1) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %5 = "arith.index_cast"(%arg5) : (i64) -> index
+E               %6 = "arith.cmpi"(%4, %5) <{predicate = 6 : i64}> : (index, index) -> i1
+E               "scf.if"(%6) ({
+E                 %7 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %8 = "arith.remui"(%4, %7) : (index, index) -> index
+E                 %9 = "arith.divui"(%4, %7) : (index, index) -> index
+E                 %10 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %11 = "arith.remui"(%9, %10) : (index, index) -> index
+E                 %12 = "arith.divui"(%9, %10) : (index, index) -> index
+E                 %13 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                 %14 = "arith.remui"(%12, %13) : (index, index) -> index
+E                 %15 = "arith.divui"(%12, %13) : (index, index) -> index
+E                 %16 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %17 = "arith.remui"(%15, %16) : (index, index) -> index
+E                 %18 = "arith.divui"(%15, %16) : (index, index) -> index
+E                 %19 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E                 %20 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                 %21 = "arith.constant"() <{value = 1 : index}> : () -> index
+E                 %22 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %23 = "arith.muli"(%8, %22) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %24 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %25 = "arith.addi"(%23, %24) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %26 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                 %27 = "arith.minui"(%26, %25) : (index, index) -> index
+E                 %28 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                 %29 = "scf.for"(%20, %28, %21, %19) ({
+E                 ^bb0(%arg6: index, %arg7: f32):
+E                   %30 = "scf.for"(%23, %27, %21, %19) ({
+E                   ^bb0(%arg8: index, %arg9: f32):
+E                     %64 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %65 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                     %66 = "arith.muli"(%64, %65) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %67 = "arith.addi"(%66, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %68 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                     %69 = "arith.muli"(%67, %68) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %70 = "arith.addi"(%69, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %71 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                     %72 = "arith.muli"(%70, %71) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %73 = "arith.addi"(%72, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %74 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %75 = "arith.muli"(%73, %74) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %76 = "arith.addi"(%75, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %77 = "memref.load"(%arg0, %76) : (memref<?xi8>, index) -> i8
+E                     %78 = "arith.extui"(%77) : (i8) -> i32
+E                     %79 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %80 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %81 = "arith.andi"(%78, %80) : (i32, i32) -> i32
+E                     %82 = "arith.shli"(%81, %79) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %83 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %84 = "arith.andi"(%78, %83) : (i32, i32) -> i32
+E                     %85 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %86 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %87 = "arith.shrui"(%78, %86) : (i32, i32) -> i32
+E                     %88 = "arith.andi"(%87, %85) : (i32, i32) -> i32
+E                     %89 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %90 = "arith.shli"(%84, %89) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %91 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %92 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %93 = "arith.addi"(%88, %92) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %94 = "arith.shli"(%93, %91) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %95 = "arith.ori"(%94, %90) : (i32, i32) -> i32
+E                     %96 = "arith.ori"(%82, %95) : (i32, i32) -> i32
+E                     %97 = "arith.bitcast"(%96) : (i32) -> f32
+E                     %98 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %99 = "arith.uitofp"(%84) : (i32) -> f32
+E                     %100 = "arith.mulf"(%99, %98) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %101 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %102 = "arith.cmpi"(%82, %101) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %103 = "arith.negf"(%100) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %104 = "arith.select"(%102, %103, %100) : (i1, f32, f32) -> f32
+E                     %105 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %106 = "arith.cmpi"(%88, %105) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %107 = "arith.select"(%106, %104, %97) : (i1, f32, f32) -> f32
+E                     %108 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %109 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %110 = "arith.andi"(%78, %109) : (i32, i32) -> i32
+E                     %111 = "arith.cmpi"(%110, %108) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %112 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %113 = "arith.ori"(%82, %112) : (i32, i32) -> i32
+E                     %114 = "arith.bitcast"(%113) : (i32) -> f32
+E                     %115 = "arith.select"(%111, %114, %107) : (i1, f32, f32) -> f32
+E                     %116 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %117 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                     %118 = "arith.muli"(%116, %117) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %119 = "arith.addi"(%118, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %120 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                     %121 = "arith.muli"(%119, %120) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %122 = "arith.addi"(%121, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %123 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %124 = "arith.muli"(%122, %123) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %125 = "arith.addi"(%124, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %126 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                     %127 = "arith.muli"(%125, %126) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %128 = "arith.addi"(%127, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %129 = "memref.load"(%arg1, %128) : (memref<?xi8>, index) -> i8
+E                     %130 = "arith.extui"(%129) : (i8) -> i32
+E                     %131 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %132 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %133 = "arith.andi"(%130, %132) : (i32, i32) -> i32
+E                     %134 = "arith.shli"(%133, %131) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %135 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %136 = "arith.andi"(%130, %135) : (i32, i32) -> i32
+E                     %137 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %138 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %139 = "arith.shrui"(%130, %138) : (i32, i32) -> i32
+E                     %140 = "arith.andi"(%139, %137) : (i32, i32) -> i32
+E                     %141 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %142 = "arith.shli"(%136, %141) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %143 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %144 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %145 = "arith.addi"(%140, %144) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %146 = "arith.shli"(%145, %143) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %147 = "arith.ori"(%146, %142) : (i32, i32) -> i32
+E                     %148 = "arith.ori"(%134, %147) : (i32, i32) -> i32
+E                     %149 = "arith.bitcast"(%148) : (i32) -> f32
+E                     %150 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %151 = "arith.uitofp"(%136) : (i32) -> f32
+E                     %152 = "arith.mulf"(%151, %150) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %153 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %154 = "arith.cmpi"(%134, %153) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %155 = "arith.negf"(%152) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %156 = "arith.select"(%154, %155, %152) : (i1, f32, f32) -> f32
+E                     %157 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %158 = "arith.cmpi"(%140, %157) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %159 = "arith.select"(%158, %156, %149) : (i1, f32, f32) -> f32
+E                     %160 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %161 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %162 = "arith.andi"(%130, %161) : (i32, i32) -> i32
+E                     %163 = "arith.cmpi"(%162, %160) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %164 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %165 = "arith.ori"(%134, %164) : (i32, i32) -> i32
+E                     %166 = "arith.bitcast"(%165) : (i32) -> f32
+E                     %167 = "arith.select"(%163, %166, %159) : (i1, f32, f32) -> f32
+E                     %168 = "arith.mulf"(%115, %167) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %169 = "arith.addf"(%arg9, %168) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     "scf.yield"(%169) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   %31 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                   %32 = "arith.divui"(%arg6, %31) : (index, index) -> index
+E                   %33 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %34 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %35 = "arith.muli"(%33, %34) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %36 = "arith.addi"(%35, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %37 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %38 = "arith.muli"(%36, %37) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %39 = "arith.addi"(%38, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %40 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %41 = "arith.muli"(%39, %40) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %42 = "arith.addi"(%41, %8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %43 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %44 = "arith.muli"(%42, %43) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %45 = "arith.addi"(%44, %32) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %46 = "memref.load"(%arg2, %45) : (memref<?xf32>, index) -> f32
+E                   %47 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %48 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %49 = "arith.muli"(%47, %48) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %50 = "arith.addi"(%49, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %51 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %52 = "arith.muli"(%50, %51) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %53 = "arith.addi"(%52, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %54 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                   %55 = "arith.muli"(%53, %54) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %56 = "arith.addi"(%55, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %57 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                   %58 = "arith.muli"(%56, %57) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %59 = "arith.addi"(%58, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %60 = "memref.load"(%arg3, %59) : (memref<?xf32>, index) -> f32
+E                   %61 = "arith.mulf"(%30, %46) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %62 = "arith.mulf"(%61, %60) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %63 = "arith.addf"(%arg7, %62) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%63) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "memref.store"(%29, %arg4, %4) : (f32, memref<?xf32>, index) -> ()
+E                 "scf.yield"() : () -> ()
+E               }, {
+E               }) : (i1) -> ()
+E               "gpu.return"() : () -> ()
+E             }) {sym_name = "tessera_scale_transpose_ad402174bff26b44f14087de"} : () -> ()
+E           }) : () -> ()
+E         }) : () -> ()
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...\n    }) {sym_name = "tessera_scale_transpose_ad402174bff26b44f14087de"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:40: AssertionError
+_ test_actual_reduction_descends_through_schedule_tile_and_target[False-shared_lhs] _
+
+policy = 'shared_lhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_actual_reduction_descends_through_schedule_tile_and_target(policy, nk):
+        graph = source(policy, nk=nk)
+        scheduled = native(graph, PREFIX)
+        assert scheduled.returncode == 0, scheduled.stderr
+        assert "schedule.artifact" in scheduled.stdout
+        assert 'algorithm = "serial_per_scale_element"' in scheduled.stdout
+        tile = native(scheduled.stdout, "tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert "tile.structured_reduction_kernel" in tile.stdout
+        assert "memref.load" in tile.stdout and "arith.bitcast" in tile.stdout
+        assert not re.search(r"^\s+%.*tensor.extract", tile.stdout, re.MULTILINE)
+        assert not re.search(r"^\s+%.*arith.extf.*f8", tile.stdout, re.MULTILINE)
+        target = native(tile.stdout, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1201}")
+>       assert target.returncode == 0, target.stderr
+E       AssertionError: <stdin>:2:3: error: 'tile.structured_reduction_kernel' op structured reduction kernel lost its native buffer/scalar ABI
+E           tile.structured_reduction_kernel attributes {arch = "gfx1201", artifact_hash = "ec1adc6c44738921f1ac0d78559481db9a5bdf679b6472596f3adc7c56beff72", body_hash = "96ae6fb47dc5d0a33b319337674214220218e289e133ac680252ff47f7ae5f4f", count = 14 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78", workgroup_size = 128 : i64} {
+E           ^
+E         <stdin>:2:3: note: see current operation: 
+E         "tile.structured_reduction_kernel"() <{arch = "gfx1201", artifact_hash = "ec1adc6c44738921f1ac0d78559481db9a5bdf679b6472596f3adc7c56beff72", body_hash = "96ae6fb47dc5d0a33b319337674214220218e289e133ac680252ff47f7ae5f4f", count = 14 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78", workgroup_size = 128 : i64}> ({
+E           "gpu.module"() <{sym_name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78_gpu"}> ({
+E             "gpu.func"() <{function_type = (memref<?xi8>, memref<?xi8>, memref<?xf32>, memref<?xf32>, memref<?xf32>, i64) -> (), kernel}> ({
+E             ^bb0(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32>, %arg3: memref<?xf32>, %arg4: memref<?xf32>, %arg5: i64):
+E               %0 = "arith.constant"() <{value = 128 : index}> : () -> index
+E               %1 = "gpu.thread_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %2 = "gpu.block_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %3 = "arith.muli"(%2, %0) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %4 = "arith.addi"(%3, %1) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %5 = "arith.index_cast"(%arg5) : (i64) -> index
+E               %6 = "arith.cmpi"(%4, %5) <{predicate = 6 : i64}> : (index, index) -> i1
+E               "scf.if"(%6) ({
+E                 %7 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %8 = "arith.remui"(%4, %7) : (index, index) -> index
+E                 %9 = "arith.divui"(%4, %7) : (index, index) -> index
+E                 %10 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %11 = "arith.remui"(%9, %10) : (index, index) -> index
+E                 %12 = "arith.divui"(%9, %10) : (index, index) -> index
+E                 %13 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E                 %14 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                 %15 = "arith.constant"() <{value = 1 : index}> : () -> index
+E                 %16 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %17 = "arith.muli"(%8, %16) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %18 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %19 = "arith.addi"(%17, %18) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %20 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                 %21 = "arith.minui"(%20, %19) : (index, index) -> index
+E                 %22 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                 %23 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %24 = "scf.for"(%14, %23, %15, %13) ({
+E                 ^bb0(%arg6: index, %arg7: f32):
+E                   %25 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %26 = "scf.for"(%14, %25, %15, %arg7) ({
+E                   ^bb0(%arg8: index, %arg9: f32):
+E                     %27 = "scf.for"(%14, %22, %15, %arg9) ({
+E                     ^bb0(%arg10: index, %arg11: f32):
+E                       %28 = "scf.for"(%17, %21, %15, %13) ({
+E                       ^bb0(%arg12: index, %arg13: f32):
+E                         %62 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                         %63 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                         %64 = "arith.muli"(%62, %63) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %65 = "arith.addi"(%64, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %66 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                         %67 = "arith.muli"(%65, %66) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %68 = "arith.addi"(%67, %arg12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %69 = "memref.load"(%arg0, %68) : (memref<?xi8>, index) -> i8
+E                         %70 = "arith.extui"(%69) : (i8) -> i32
+E                         %71 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                         %72 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                         %73 = "arith.andi"(%70, %72) : (i32, i32) -> i32
+E                         %74 = "arith.shli"(%73, %71) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %75 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                         %76 = "arith.andi"(%70, %75) : (i32, i32) -> i32
+E                         %77 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                         %78 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                         %79 = "arith.shrui"(%70, %78) : (i32, i32) -> i32
+E                         %80 = "arith.andi"(%79, %77) : (i32, i32) -> i32
+E                         %81 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                         %82 = "arith.shli"(%76, %81) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %83 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                         %84 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                         %85 = "arith.addi"(%80, %84) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %86 = "arith.shli"(%85, %83) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %87 = "arith.ori"(%86, %82) : (i32, i32) -> i32
+E                         %88 = "arith.ori"(%74, %87) : (i32, i32) -> i32
+E                         %89 = "arith.bitcast"(%88) : (i32) -> f32
+E                         %90 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                         %91 = "arith.uitofp"(%76) : (i32) -> f32
+E                         %92 = "arith.mulf"(%91, %90) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         %93 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %94 = "arith.cmpi"(%74, %93) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                         %95 = "arith.negf"(%92) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                         %96 = "arith.select"(%94, %95, %92) : (i1, f32, f32) -> f32
+E                         %97 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %98 = "arith.cmpi"(%80, %97) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %99 = "arith.select"(%98, %96, %89) : (i1, f32, f32) -> f32
+E                         %100 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %101 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %102 = "arith.andi"(%70, %101) : (i32, i32) -> i32
+E                         %103 = "arith.cmpi"(%102, %100) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %104 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                         %105 = "arith.ori"(%74, %104) : (i32, i32) -> i32
+E                         %106 = "arith.bitcast"(%105) : (i32) -> f32
+E                         %107 = "arith.select"(%103, %106, %99) : (i1, f32, f32) -> f32
+E                         %108 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                         %109 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                         %110 = "arith.muli"(%108, %109) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %111 = "arith.addi"(%110, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %112 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                         %113 = "arith.muli"(%111, %112) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %114 = "arith.addi"(%113, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %115 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                         %116 = "arith.muli"(%114, %115) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %117 = "arith.addi"(%116, %arg12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %118 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                         %119 = "arith.muli"(%117, %118) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %120 = "arith.addi"(%119, %arg10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %121 = "memref.load"(%arg1, %120) : (memref<?xi8>, index) -> i8
+E                         %122 = "arith.extui"(%121) : (i8) -> i32
+E                         %123 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                         %124 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                         %125 = "arith.andi"(%122, %124) : (i32, i32) -> i32
+E                         %126 = "arith.shli"(%125, %123) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %127 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                         %128 = "arith.andi"(%122, %127) : (i32, i32) -> i32
+E                         %129 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                         %130 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                         %131 = "arith.shrui"(%122, %130) : (i32, i32) -> i32
+E                         %132 = "arith.andi"(%131, %129) : (i32, i32) -> i32
+E                         %133 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                         %134 = "arith.shli"(%128, %133) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %135 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                         %136 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                         %137 = "arith.addi"(%132, %136) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %138 = "arith.shli"(%137, %135) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %139 = "arith.ori"(%138, %134) : (i32, i32) -> i32
+E                         %140 = "arith.ori"(%126, %139) : (i32, i32) -> i32
+E                         %141 = "arith.bitcast"(%140) : (i32) -> f32
+E                         %142 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                         %143 = "arith.uitofp"(%128) : (i32) -> f32
+E                         %144 = "arith.mulf"(%143, %142) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         %145 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %146 = "arith.cmpi"(%126, %145) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                         %147 = "arith.negf"(%144) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                         %148 = "arith.select"(%146, %147, %144) : (i1, f32, f32) -> f32
+E                         %149 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %150 = "arith.cmpi"(%132, %149) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %151 = "arith.select"(%150, %148, %141) : (i1, f32, f32) -> f32
+E                         %152 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %153 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %154 = "arith.andi"(%122, %153) : (i32, i32) -> i32
+E                         %155 = "arith.cmpi"(%154, %152) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %156 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                         %157 = "arith.ori"(%126, %156) : (i32, i32) -> i32
+E                         %158 = "arith.bitcast"(%157) : (i32) -> f32
+E                         %159 = "arith.select"(%155, %158, %151) : (i1, f32, f32) -> f32
+E                         %160 = "arith.mulf"(%107, %159) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         %161 = "arith.addf"(%arg13, %160) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         "scf.yield"(%161) : (f32) -> ()
+E                       }) : (index, index, index, f32) -> f32
+E                       %29 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                       %30 = "arith.divui"(%arg10, %29) : (index, index) -> index
+E                       %31 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                       %32 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %33 = "arith.muli"(%31, %32) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %34 = "arith.addi"(%33, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %35 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                       %36 = "arith.muli"(%34, %35) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %37 = "arith.addi"(%36, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %38 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %39 = "arith.muli"(%37, %38) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %40 = "arith.addi"(%39, %8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %41 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %42 = "arith.muli"(%40, %41) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %43 = "arith.addi"(%42, %30) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %44 = "memref.load"(%arg2, %43) : (memref<?xf32>, index) -> f32
+E                       %45 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                       %46 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %47 = "arith.muli"(%45, %46) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %48 = "arith.addi"(%47, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %49 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                       %50 = "arith.muli"(%48, %49) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %51 = "arith.addi"(%50, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %52 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                       %53 = "arith.muli"(%51, %52) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %54 = "arith.addi"(%53, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %55 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                       %56 = "arith.muli"(%54, %55) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %57 = "arith.addi"(%56, %arg10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %58 = "memref.load"(%arg3, %57) : (memref<?xf32>, index) -> f32
+E                       %59 = "arith.mulf"(%28, %44) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       %60 = "arith.mulf"(%59, %58) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       %61 = "arith.addf"(%arg11, %60) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       "scf.yield"(%61) : (f32) -> ()
+E                     }) : (index, index, index, f32) -> f32
+E                     "scf.yield"(%27) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   "scf.yield"(%26) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "memref.store"(%24, %arg4, %4) : (f32, memref<?xf32>, index) -> ()
+E                 "scf.yield"() : () -> ()
+E               }, {
+E               }) : (i1) -> ()
+E               "gpu.return"() : () -> ()
+E             }) {sym_name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78"} : () -> ()
+E           }) : () -> ()
+E         }) : () -> ()
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...\n    }) {sym_name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:40: AssertionError
+_ test_actual_reduction_descends_through_schedule_tile_and_target[True-shared_rhs_rows] _
+
+policy = 'shared_rhs_rows', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_actual_reduction_descends_through_schedule_tile_and_target(policy, nk):
+        graph = source(policy, nk=nk)
+        scheduled = native(graph, PREFIX)
+        assert scheduled.returncode == 0, scheduled.stderr
+        assert "schedule.artifact" in scheduled.stdout
+        assert 'algorithm = "serial_per_scale_element"' in scheduled.stdout
+        tile = native(scheduled.stdout, "tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert "tile.structured_reduction_kernel" in tile.stdout
+        assert "memref.load" in tile.stdout and "arith.bitcast" in tile.stdout
+        assert not re.search(r"^\s+%.*tensor.extract", tile.stdout, re.MULTILINE)
+        assert not re.search(r"^\s+%.*arith.extf.*f8", tile.stdout, re.MULTILINE)
+        target = native(tile.stdout, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1201}")
+>       assert target.returncode == 0, target.stderr
+E       AssertionError: <stdin>:2:3: error: 'tile.structured_reduction_kernel' op structured reduction kernel lost its native buffer/scalar ABI
+E           tile.structured_reduction_kernel attributes {arch = "gfx1201", artifact_hash = "06bb845133328c597668d91518a9f673b987bfdebc0c64774a2975f1ade068f7", body_hash = "b3e50aa28da12b2e743bdfe504bba2d3c571953837d9bffe8faf5f479ab1ea15", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_06bb845133328c597668d915", workgroup_size = 128 : i64} {
+E           ^
+E         <stdin>:2:3: note: see current operation: 
+E         "tile.structured_reduction_kernel"() <{arch = "gfx1201", artifact_hash = "06bb845133328c597668d91518a9f673b987bfdebc0c64774a2975f1ade068f7", body_hash = "b3e50aa28da12b2e743bdfe504bba2d3c571953837d9bffe8faf5f479ab1ea15", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_06bb845133328c597668d915", workgroup_size = 128 : i64}> ({
+E           "gpu.module"() <{sym_name = "tessera_scale_transpose_06bb845133328c597668d915_gpu"}> ({
+E             "gpu.func"() <{function_type = (memref<?xi8>, memref<?xi8>, memref<?xf32>, memref<?xf32>, memref<?xf32>, i64) -> (), kernel}> ({
+E             ^bb0(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32>, %arg3: memref<?xf32>, %arg4: memref<?xf32>, %arg5: i64):
+E               %0 = "arith.constant"() <{value = 128 : index}> : () -> index
+E               %1 = "gpu.thread_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %2 = "gpu.block_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %3 = "arith.muli"(%2, %0) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %4 = "arith.addi"(%3, %1) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %5 = "arith.index_cast"(%arg5) : (i64) -> index
+E               %6 = "arith.cmpi"(%4, %5) <{predicate = 6 : i64}> : (index, index) -> i1
+E               "scf.if"(%6) ({
+E                 %7 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %8 = "arith.remui"(%4, %7) : (index, index) -> index
+E                 %9 = "arith.divui"(%4, %7) : (index, index) -> index
+E                 %10 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %11 = "arith.remui"(%9, %10) : (index, index) -> index
+E                 %12 = "arith.divui"(%9, %10) : (index, index) -> index
+E                 %13 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                 %14 = "arith.remui"(%12, %13) : (index, index) -> index
+E                 %15 = "arith.divui"(%12, %13) : (index, index) -> index
+E                 %16 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %17 = "arith.remui"(%15, %16) : (index, index) -> index
+E                 %18 = "arith.divui"(%15, %16) : (index, index) -> index
+E                 %19 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E                 %20 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                 %21 = "arith.constant"() <{value = 1 : index}> : () -> index
+E                 %22 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %23 = "arith.muli"(%8, %22) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %24 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %25 = "arith.addi"(%23, %24) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %26 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                 %27 = "arith.minui"(%26, %25) : (index, index) -> index
+E                 %28 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                 %29 = "scf.for"(%20, %28, %21, %19) ({
+E                 ^bb0(%arg6: index, %arg7: f32):
+E                   %30 = "scf.for"(%23, %27, %21, %19) ({
+E                   ^bb0(%arg8: index, %arg9: f32):
+E                     %58 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %59 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                     %60 = "arith.muli"(%58, %59) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %61 = "arith.addi"(%60, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %62 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                     %63 = "arith.muli"(%61, %62) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %64 = "arith.addi"(%63, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %65 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                     %66 = "arith.muli"(%64, %65) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %67 = "arith.addi"(%66, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %68 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %69 = "arith.muli"(%67, %68) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %70 = "arith.addi"(%69, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %71 = "memref.load"(%arg0, %70) : (memref<?xi8>, index) -> i8
+E                     %72 = "arith.extui"(%71) : (i8) -> i32
+E                     %73 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %74 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %75 = "arith.andi"(%72, %74) : (i32, i32) -> i32
+E                     %76 = "arith.shli"(%75, %73) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %77 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %78 = "arith.andi"(%72, %77) : (i32, i32) -> i32
+E                     %79 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %80 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %81 = "arith.shrui"(%72, %80) : (i32, i32) -> i32
+E                     %82 = "arith.andi"(%81, %79) : (i32, i32) -> i32
+E                     %83 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %84 = "arith.shli"(%78, %83) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %85 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %86 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %87 = "arith.addi"(%82, %86) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %88 = "arith.shli"(%87, %85) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %89 = "arith.ori"(%88, %84) : (i32, i32) -> i32
+E                     %90 = "arith.ori"(%76, %89) : (i32, i32) -> i32
+E                     %91 = "arith.bitcast"(%90) : (i32) -> f32
+E                     %92 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %93 = "arith.uitofp"(%78) : (i32) -> f32
+E                     %94 = "arith.mulf"(%93, %92) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %95 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %96 = "arith.cmpi"(%76, %95) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %97 = "arith.negf"(%94) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %98 = "arith.select"(%96, %97, %94) : (i1, f32, f32) -> f32
+E                     %99 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %100 = "arith.cmpi"(%82, %99) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %101 = "arith.select"(%100, %98, %91) : (i1, f32, f32) -> f32
+E                     %102 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %103 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %104 = "arith.andi"(%72, %103) : (i32, i32) -> i32
+E                     %105 = "arith.cmpi"(%104, %102) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %106 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %107 = "arith.ori"(%76, %106) : (i32, i32) -> i32
+E                     %108 = "arith.bitcast"(%107) : (i32) -> f32
+E                     %109 = "arith.select"(%105, %108, %101) : (i1, f32, f32) -> f32
+E                     %110 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %111 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                     %112 = "arith.muli"(%110, %111) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %113 = "arith.addi"(%112, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %114 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %115 = "arith.muli"(%113, %114) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %116 = "arith.addi"(%115, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %117 = "memref.load"(%arg1, %116) : (memref<?xi8>, index) -> i8
+E                     %118 = "arith.extui"(%117) : (i8) -> i32
+E                     %119 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %120 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %121 = "arith.andi"(%118, %120) : (i32, i32) -> i32
+E                     %122 = "arith.shli"(%121, %119) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %123 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %124 = "arith.andi"(%118, %123) : (i32, i32) -> i32
+E                     %125 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %126 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %127 = "arith.shrui"(%118, %126) : (i32, i32) -> i32
+E                     %128 = "arith.andi"(%127, %125) : (i32, i32) -> i32
+E                     %129 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %130 = "arith.shli"(%124, %129) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %131 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %132 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %133 = "arith.addi"(%128, %132) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %134 = "arith.shli"(%133, %131) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %135 = "arith.ori"(%134, %130) : (i32, i32) -> i32
+E                     %136 = "arith.ori"(%122, %135) : (i32, i32) -> i32
+E                     %137 = "arith.bitcast"(%136) : (i32) -> f32
+E                     %138 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %139 = "arith.uitofp"(%124) : (i32) -> f32
+E                     %140 = "arith.mulf"(%139, %138) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %141 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %142 = "arith.cmpi"(%122, %141) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %143 = "arith.negf"(%140) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %144 = "arith.select"(%142, %143, %140) : (i1, f32, f32) -> f32
+E                     %145 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %146 = "arith.cmpi"(%128, %145) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %147 = "arith.select"(%146, %144, %137) : (i1, f32, f32) -> f32
+E                     %148 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %149 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %150 = "arith.andi"(%118, %149) : (i32, i32) -> i32
+E                     %151 = "arith.cmpi"(%150, %148) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %152 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %153 = "arith.ori"(%122, %152) : (i32, i32) -> i32
+E                     %154 = "arith.bitcast"(%153) : (i32) -> f32
+E                     %155 = "arith.select"(%151, %154, %147) : (i1, f32, f32) -> f32
+E                     %156 = "arith.mulf"(%109, %155) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %157 = "arith.addf"(%arg9, %156) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     "scf.yield"(%157) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   %31 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                   %32 = "arith.divui"(%arg6, %31) : (index, index) -> index
+E                   %33 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %34 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %35 = "arith.muli"(%33, %34) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %36 = "arith.addi"(%35, %8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %37 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %38 = "arith.muli"(%36, %37) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %39 = "arith.addi"(%38, %32) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %40 = "memref.load"(%arg2, %39) : (memref<?xf32>, index) -> f32
+E                   %41 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %42 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %43 = "arith.muli"(%41, %42) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %44 = "arith.addi"(%43, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %45 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %46 = "arith.muli"(%44, %45) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %47 = "arith.addi"(%46, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %48 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                   %49 = "arith.muli"(%47, %48) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %50 = "arith.addi"(%49, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %51 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                   %52 = "arith.muli"(%50, %51) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %53 = "arith.addi"(%52, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %54 = "memref.load"(%arg3, %53) : (memref<?xf32>, index) -> f32
+E                   %55 = "arith.mulf"(%30, %40) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %56 = "arith.mulf"(%55, %54) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %57 = "arith.addf"(%arg7, %56) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%57) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "memref.store"(%29, %arg4, %4) : (f32, memref<?xf32>, index) -> ()
+E                 "scf.yield"() : () -> ()
+E               }, {
+E               }) : (i1) -> ()
+E               "gpu.return"() : () -> ()
+E             }) {sym_name = "tessera_scale_transpose_06bb845133328c597668d915"} : () -> ()
+E           }) : () -> ()
+E         }) : () -> ()
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...\n    }) {sym_name = "tessera_scale_transpose_06bb845133328c597668d915"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:40: AssertionError
+_ test_actual_reduction_descends_through_schedule_tile_and_target[True-independent_rhs] _
+
+policy = 'independent_rhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_actual_reduction_descends_through_schedule_tile_and_target(policy, nk):
+        graph = source(policy, nk=nk)
+        scheduled = native(graph, PREFIX)
+        assert scheduled.returncode == 0, scheduled.stderr
+        assert "schedule.artifact" in scheduled.stdout
+        assert 'algorithm = "serial_per_scale_element"' in scheduled.stdout
+        tile = native(scheduled.stdout, "tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert "tile.structured_reduction_kernel" in tile.stdout
+        assert "memref.load" in tile.stdout and "arith.bitcast" in tile.stdout
+        assert not re.search(r"^\s+%.*tensor.extract", tile.stdout, re.MULTILINE)
+        assert not re.search(r"^\s+%.*arith.extf.*f8", tile.stdout, re.MULTILINE)
+        target = native(tile.stdout, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1201}")
+>       assert target.returncode == 0, target.stderr
+E       AssertionError: <stdin>:2:3: error: 'tile.structured_reduction_kernel' op structured reduction kernel lost its native buffer/scalar ABI
+E           tile.structured_reduction_kernel attributes {arch = "gfx1201", artifact_hash = "22277b4803916d39e144b4af910c2447f1e696fd00c6b16db5e6b3025133bdc8", body_hash = "2e59fc4febb81400d30dce1cb93b37d7d292e038b80f8bc6f1bfe372384de593", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_22277b4803916d39e144b4af", workgroup_size = 128 : i64} {
+E           ^
+E         <stdin>:2:3: note: see current operation: 
+E         "tile.structured_reduction_kernel"() <{arch = "gfx1201", artifact_hash = "22277b4803916d39e144b4af910c2447f1e696fd00c6b16db5e6b3025133bdc8", body_hash = "2e59fc4febb81400d30dce1cb93b37d7d292e038b80f8bc6f1bfe372384de593", count = 84 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_22277b4803916d39e144b4af", workgroup_size = 128 : i64}> ({
+E           "gpu.module"() <{sym_name = "tessera_scale_transpose_22277b4803916d39e144b4af_gpu"}> ({
+E             "gpu.func"() <{function_type = (memref<?xi8>, memref<?xi8>, memref<?xf32>, memref<?xf32>, memref<?xf32>, i64) -> (), kernel}> ({
+E             ^bb0(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32>, %arg3: memref<?xf32>, %arg4: memref<?xf32>, %arg5: i64):
+E               %0 = "arith.constant"() <{value = 128 : index}> : () -> index
+E               %1 = "gpu.thread_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %2 = "gpu.block_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %3 = "arith.muli"(%2, %0) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %4 = "arith.addi"(%3, %1) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %5 = "arith.index_cast"(%arg5) : (i64) -> index
+E               %6 = "arith.cmpi"(%4, %5) <{predicate = 6 : i64}> : (index, index) -> i1
+E               "scf.if"(%6) ({
+E                 %7 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %8 = "arith.remui"(%4, %7) : (index, index) -> index
+E                 %9 = "arith.divui"(%4, %7) : (index, index) -> index
+E                 %10 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %11 = "arith.remui"(%9, %10) : (index, index) -> index
+E                 %12 = "arith.divui"(%9, %10) : (index, index) -> index
+E                 %13 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                 %14 = "arith.remui"(%12, %13) : (index, index) -> index
+E                 %15 = "arith.divui"(%12, %13) : (index, index) -> index
+E                 %16 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %17 = "arith.remui"(%15, %16) : (index, index) -> index
+E                 %18 = "arith.divui"(%15, %16) : (index, index) -> index
+E                 %19 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E                 %20 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                 %21 = "arith.constant"() <{value = 1 : index}> : () -> index
+E                 %22 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %23 = "arith.muli"(%8, %22) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %24 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %25 = "arith.addi"(%23, %24) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %26 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                 %27 = "arith.minui"(%26, %25) : (index, index) -> index
+E                 %28 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                 %29 = "scf.for"(%20, %28, %21, %19) ({
+E                 ^bb0(%arg6: index, %arg7: f32):
+E                   %30 = "scf.for"(%23, %27, %21, %19) ({
+E                   ^bb0(%arg8: index, %arg9: f32):
+E                     %64 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %65 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                     %66 = "arith.muli"(%64, %65) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %67 = "arith.addi"(%66, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %68 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                     %69 = "arith.muli"(%67, %68) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %70 = "arith.addi"(%69, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %71 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                     %72 = "arith.muli"(%70, %71) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %73 = "arith.addi"(%72, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %74 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %75 = "arith.muli"(%73, %74) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %76 = "arith.addi"(%75, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %77 = "memref.load"(%arg0, %76) : (memref<?xi8>, index) -> i8
+E                     %78 = "arith.extui"(%77) : (i8) -> i32
+E                     %79 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %80 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %81 = "arith.andi"(%78, %80) : (i32, i32) -> i32
+E                     %82 = "arith.shli"(%81, %79) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %83 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %84 = "arith.andi"(%78, %83) : (i32, i32) -> i32
+E                     %85 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %86 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %87 = "arith.shrui"(%78, %86) : (i32, i32) -> i32
+E                     %88 = "arith.andi"(%87, %85) : (i32, i32) -> i32
+E                     %89 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %90 = "arith.shli"(%84, %89) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %91 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %92 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %93 = "arith.addi"(%88, %92) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %94 = "arith.shli"(%93, %91) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %95 = "arith.ori"(%94, %90) : (i32, i32) -> i32
+E                     %96 = "arith.ori"(%82, %95) : (i32, i32) -> i32
+E                     %97 = "arith.bitcast"(%96) : (i32) -> f32
+E                     %98 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %99 = "arith.uitofp"(%84) : (i32) -> f32
+E                     %100 = "arith.mulf"(%99, %98) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %101 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %102 = "arith.cmpi"(%82, %101) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %103 = "arith.negf"(%100) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %104 = "arith.select"(%102, %103, %100) : (i1, f32, f32) -> f32
+E                     %105 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %106 = "arith.cmpi"(%88, %105) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %107 = "arith.select"(%106, %104, %97) : (i1, f32, f32) -> f32
+E                     %108 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %109 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %110 = "arith.andi"(%78, %109) : (i32, i32) -> i32
+E                     %111 = "arith.cmpi"(%110, %108) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %112 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %113 = "arith.ori"(%82, %112) : (i32, i32) -> i32
+E                     %114 = "arith.bitcast"(%113) : (i32) -> f32
+E                     %115 = "arith.select"(%111, %114, %107) : (i1, f32, f32) -> f32
+E                     %116 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                     %117 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                     %118 = "arith.muli"(%116, %117) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %119 = "arith.addi"(%118, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %120 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                     %121 = "arith.muli"(%119, %120) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %122 = "arith.addi"(%121, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %123 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                     %124 = "arith.muli"(%122, %123) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %125 = "arith.addi"(%124, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %126 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                     %127 = "arith.muli"(%125, %126) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %128 = "arith.addi"(%127, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                     %129 = "memref.load"(%arg1, %128) : (memref<?xi8>, index) -> i8
+E                     %130 = "arith.extui"(%129) : (i8) -> i32
+E                     %131 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                     %132 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                     %133 = "arith.andi"(%130, %132) : (i32, i32) -> i32
+E                     %134 = "arith.shli"(%133, %131) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %135 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                     %136 = "arith.andi"(%130, %135) : (i32, i32) -> i32
+E                     %137 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                     %138 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                     %139 = "arith.shrui"(%130, %138) : (i32, i32) -> i32
+E                     %140 = "arith.andi"(%139, %137) : (i32, i32) -> i32
+E                     %141 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                     %142 = "arith.shli"(%136, %141) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %143 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                     %144 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                     %145 = "arith.addi"(%140, %144) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %146 = "arith.shli"(%145, %143) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                     %147 = "arith.ori"(%146, %142) : (i32, i32) -> i32
+E                     %148 = "arith.ori"(%134, %147) : (i32, i32) -> i32
+E                     %149 = "arith.bitcast"(%148) : (i32) -> f32
+E                     %150 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                     %151 = "arith.uitofp"(%136) : (i32) -> f32
+E                     %152 = "arith.mulf"(%151, %150) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %153 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %154 = "arith.cmpi"(%134, %153) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                     %155 = "arith.negf"(%152) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                     %156 = "arith.select"(%154, %155, %152) : (i1, f32, f32) -> f32
+E                     %157 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                     %158 = "arith.cmpi"(%140, %157) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %159 = "arith.select"(%158, %156, %149) : (i1, f32, f32) -> f32
+E                     %160 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %161 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                     %162 = "arith.andi"(%130, %161) : (i32, i32) -> i32
+E                     %163 = "arith.cmpi"(%162, %160) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                     %164 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                     %165 = "arith.ori"(%134, %164) : (i32, i32) -> i32
+E                     %166 = "arith.bitcast"(%165) : (i32) -> f32
+E                     %167 = "arith.select"(%163, %166, %159) : (i1, f32, f32) -> f32
+E                     %168 = "arith.mulf"(%115, %167) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %169 = "arith.addf"(%arg9, %168) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     "scf.yield"(%169) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   %31 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                   %32 = "arith.divui"(%arg6, %31) : (index, index) -> index
+E                   %33 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %34 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %35 = "arith.muli"(%33, %34) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %36 = "arith.addi"(%35, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %37 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %38 = "arith.muli"(%36, %37) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %39 = "arith.addi"(%38, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %40 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %41 = "arith.muli"(%39, %40) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %42 = "arith.addi"(%41, %8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %43 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %44 = "arith.muli"(%42, %43) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %45 = "arith.addi"(%44, %32) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %46 = "memref.load"(%arg2, %45) : (memref<?xf32>, index) -> f32
+E                   %47 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                   %48 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                   %49 = "arith.muli"(%47, %48) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %50 = "arith.addi"(%49, %17) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %51 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %52 = "arith.muli"(%50, %51) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %53 = "arith.addi"(%52, %14) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %54 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                   %55 = "arith.muli"(%53, %54) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %56 = "arith.addi"(%55, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %57 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                   %58 = "arith.muli"(%56, %57) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %59 = "arith.addi"(%58, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                   %60 = "memref.load"(%arg3, %59) : (memref<?xf32>, index) -> f32
+E                   %61 = "arith.mulf"(%30, %46) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %62 = "arith.mulf"(%61, %60) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %63 = "arith.addf"(%arg7, %62) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%63) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "memref.store"(%29, %arg4, %4) : (f32, memref<?xf32>, index) -> ()
+E                 "scf.yield"() : () -> ()
+E               }, {
+E               }) : (i1) -> ()
+E               "gpu.return"() : () -> ()
+E             }) {sym_name = "tessera_scale_transpose_22277b4803916d39e144b4af"} : () -> ()
+E           }) : () -> ()
+E         }) : () -> ()
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...\n    }) {sym_name = "tessera_scale_transpose_22277b4803916d39e144b4af"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:40: AssertionError
+_ test_actual_reduction_descends_through_schedule_tile_and_target[True-shared_lhs] _
+
+policy = 'shared_lhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_actual_reduction_descends_through_schedule_tile_and_target(policy, nk):
+        graph = source(policy, nk=nk)
+        scheduled = native(graph, PREFIX)
+        assert scheduled.returncode == 0, scheduled.stderr
+        assert "schedule.artifact" in scheduled.stdout
+        assert 'algorithm = "serial_per_scale_element"' in scheduled.stdout
+        tile = native(scheduled.stdout, "tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert "tile.structured_reduction_kernel" in tile.stdout
+        assert "memref.load" in tile.stdout and "arith.bitcast" in tile.stdout
+        assert not re.search(r"^\s+%.*tensor.extract", tile.stdout, re.MULTILINE)
+        assert not re.search(r"^\s+%.*arith.extf.*f8", tile.stdout, re.MULTILINE)
+        target = native(tile.stdout, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1201}")
+>       assert target.returncode == 0, target.stderr
+E       AssertionError: <stdin>:2:3: error: 'tile.structured_reduction_kernel' op structured reduction kernel lost its native buffer/scalar ABI
+E           tile.structured_reduction_kernel attributes {arch = "gfx1201", artifact_hash = "f20834a89bc480cd327379c5efc3f1922decb86a96826fe7d47080a913ec915e", body_hash = "ba74b2ee4e13fcf4e8440de6e38629185460fb2bc81042ce6c3fe744f71a3556", count = 14 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_f20834a89bc480cd327379c5", workgroup_size = 128 : i64} {
+E           ^
+E         <stdin>:2:3: note: see current operation: 
+E         "tile.structured_reduction_kernel"() <{arch = "gfx1201", artifact_hash = "f20834a89bc480cd327379c5efc3f1922decb86a96826fe7d47080a913ec915e", body_hash = "ba74b2ee4e13fcf4e8440de6e38629185460fb2bc81042ce6c3fe744f71a3556", count = 14 : i64, input_count = 4 : i64, name = "tessera_scale_transpose_f20834a89bc480cd327379c5", workgroup_size = 128 : i64}> ({
+E           "gpu.module"() <{sym_name = "tessera_scale_transpose_f20834a89bc480cd327379c5_gpu"}> ({
+E             "gpu.func"() <{function_type = (memref<?xi8>, memref<?xi8>, memref<?xf32>, memref<?xf32>, memref<?xf32>, i64) -> (), kernel}> ({
+E             ^bb0(%arg0: memref<?xi8>, %arg1: memref<?xi8>, %arg2: memref<?xf32>, %arg3: memref<?xf32>, %arg4: memref<?xf32>, %arg5: i64):
+E               %0 = "arith.constant"() <{value = 128 : index}> : () -> index
+E               %1 = "gpu.thread_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %2 = "gpu.block_id"() <{dimension = #gpu<dim x>}> : () -> index
+E               %3 = "arith.muli"(%2, %0) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %4 = "arith.addi"(%3, %1) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E               %5 = "arith.index_cast"(%arg5) : (i64) -> index
+E               %6 = "arith.cmpi"(%4, %5) <{predicate = 6 : i64}> : (index, index) -> i1
+E               "scf.if"(%6) ({
+E                 %7 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %8 = "arith.remui"(%4, %7) : (index, index) -> index
+E                 %9 = "arith.divui"(%4, %7) : (index, index) -> index
+E                 %10 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %11 = "arith.remui"(%9, %10) : (index, index) -> index
+E                 %12 = "arith.divui"(%9, %10) : (index, index) -> index
+E                 %13 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E                 %14 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                 %15 = "arith.constant"() <{value = 1 : index}> : () -> index
+E                 %16 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %17 = "arith.muli"(%8, %16) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %18 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %19 = "arith.addi"(%17, %18) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                 %20 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                 %21 = "arith.minui"(%20, %19) : (index, index) -> index
+E                 %22 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                 %23 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                 %24 = "scf.for"(%14, %23, %15, %13) ({
+E                 ^bb0(%arg6: index, %arg7: f32):
+E                   %25 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                   %26 = "scf.for"(%14, %25, %15, %arg7) ({
+E                   ^bb0(%arg8: index, %arg9: f32):
+E                     %27 = "scf.for"(%14, %22, %15, %arg9) ({
+E                     ^bb0(%arg10: index, %arg11: f32):
+E                       %28 = "scf.for"(%17, %21, %15, %13) ({
+E                       ^bb0(%arg12: index, %arg13: f32):
+E                         %62 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                         %63 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                         %64 = "arith.muli"(%62, %63) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %65 = "arith.addi"(%64, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %66 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                         %67 = "arith.muli"(%65, %66) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %68 = "arith.addi"(%67, %arg12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %69 = "memref.load"(%arg0, %68) : (memref<?xi8>, index) -> i8
+E                         %70 = "arith.extui"(%69) : (i8) -> i32
+E                         %71 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                         %72 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                         %73 = "arith.andi"(%70, %72) : (i32, i32) -> i32
+E                         %74 = "arith.shli"(%73, %71) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %75 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                         %76 = "arith.andi"(%70, %75) : (i32, i32) -> i32
+E                         %77 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                         %78 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                         %79 = "arith.shrui"(%70, %78) : (i32, i32) -> i32
+E                         %80 = "arith.andi"(%79, %77) : (i32, i32) -> i32
+E                         %81 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                         %82 = "arith.shli"(%76, %81) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %83 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                         %84 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                         %85 = "arith.addi"(%80, %84) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %86 = "arith.shli"(%85, %83) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %87 = "arith.ori"(%86, %82) : (i32, i32) -> i32
+E                         %88 = "arith.ori"(%74, %87) : (i32, i32) -> i32
+E                         %89 = "arith.bitcast"(%88) : (i32) -> f32
+E                         %90 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                         %91 = "arith.uitofp"(%76) : (i32) -> f32
+E                         %92 = "arith.mulf"(%91, %90) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         %93 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %94 = "arith.cmpi"(%74, %93) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                         %95 = "arith.negf"(%92) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                         %96 = "arith.select"(%94, %95, %92) : (i1, f32, f32) -> f32
+E                         %97 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %98 = "arith.cmpi"(%80, %97) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %99 = "arith.select"(%98, %96, %89) : (i1, f32, f32) -> f32
+E                         %100 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %101 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %102 = "arith.andi"(%70, %101) : (i32, i32) -> i32
+E                         %103 = "arith.cmpi"(%102, %100) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %104 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                         %105 = "arith.ori"(%74, %104) : (i32, i32) -> i32
+E                         %106 = "arith.bitcast"(%105) : (i32) -> f32
+E                         %107 = "arith.select"(%103, %106, %99) : (i1, f32, f32) -> f32
+E                         %108 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                         %109 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                         %110 = "arith.muli"(%108, %109) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %111 = "arith.addi"(%110, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %112 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                         %113 = "arith.muli"(%111, %112) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %114 = "arith.addi"(%113, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %115 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                         %116 = "arith.muli"(%114, %115) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %117 = "arith.addi"(%116, %arg10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %118 = "arith.constant"() <{value = 256 : index}> : () -> index
+E                         %119 = "arith.muli"(%117, %118) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %120 = "arith.addi"(%119, %arg12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                         %121 = "memref.load"(%arg1, %120) : (memref<?xi8>, index) -> i8
+E                         %122 = "arith.extui"(%121) : (i8) -> i32
+E                         %123 = "arith.constant"() <{value = 24 : i32}> : () -> i32
+E                         %124 = "arith.constant"() <{value = 128 : i32}> : () -> i32
+E                         %125 = "arith.andi"(%122, %124) : (i32, i32) -> i32
+E                         %126 = "arith.shli"(%125, %123) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %127 = "arith.constant"() <{value = 7 : i32}> : () -> i32
+E                         %128 = "arith.andi"(%122, %127) : (i32, i32) -> i32
+E                         %129 = "arith.constant"() <{value = 15 : i32}> : () -> i32
+E                         %130 = "arith.constant"() <{value = 3 : i32}> : () -> i32
+E                         %131 = "arith.shrui"(%122, %130) : (i32, i32) -> i32
+E                         %132 = "arith.andi"(%131, %129) : (i32, i32) -> i32
+E                         %133 = "arith.constant"() <{value = 20 : i32}> : () -> i32
+E                         %134 = "arith.shli"(%128, %133) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %135 = "arith.constant"() <{value = 23 : i32}> : () -> i32
+E                         %136 = "arith.constant"() <{value = 120 : i32}> : () -> i32
+E                         %137 = "arith.addi"(%132, %136) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %138 = "arith.shli"(%137, %135) <{overflowFlags = #arith.overflow<none>}> : (i32, i32) -> i32
+E                         %139 = "arith.ori"(%138, %134) : (i32, i32) -> i32
+E                         %140 = "arith.ori"(%126, %139) : (i32, i32) -> i32
+E                         %141 = "arith.bitcast"(%140) : (i32) -> f32
+E                         %142 = "arith.constant"() <{value = 0.001953125 : f32}> : () -> f32
+E                         %143 = "arith.uitofp"(%128) : (i32) -> f32
+E                         %144 = "arith.mulf"(%143, %142) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         %145 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %146 = "arith.cmpi"(%126, %145) <{predicate = 1 : i64}> : (i32, i32) -> i1
+E                         %147 = "arith.negf"(%144) <{fastmath = #arith.fastmath<none>}> : (f32) -> f32
+E                         %148 = "arith.select"(%146, %147, %144) : (i1, f32, f32) -> f32
+E                         %149 = "arith.constant"() <{value = 0 : i32}> : () -> i32
+E                         %150 = "arith.cmpi"(%132, %149) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %151 = "arith.select"(%150, %148, %141) : (i1, f32, f32) -> f32
+E                         %152 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %153 = "arith.constant"() <{value = 127 : i32}> : () -> i32
+E                         %154 = "arith.andi"(%122, %153) : (i32, i32) -> i32
+E                         %155 = "arith.cmpi"(%154, %152) <{predicate = 0 : i64}> : (i32, i32) -> i1
+E                         %156 = "arith.constant"() <{value = 2143289344 : i32}> : () -> i32
+E                         %157 = "arith.ori"(%126, %156) : (i32, i32) -> i32
+E                         %158 = "arith.bitcast"(%157) : (i32) -> f32
+E                         %159 = "arith.select"(%155, %158, %151) : (i1, f32, f32) -> f32
+E                         %160 = "arith.mulf"(%107, %159) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         %161 = "arith.addf"(%arg13, %160) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                         "scf.yield"(%161) : (f32) -> ()
+E                       }) : (index, index, index, f32) -> f32
+E                       %29 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                       %30 = "arith.divui"(%arg10, %29) : (index, index) -> index
+E                       %31 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                       %32 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %33 = "arith.muli"(%31, %32) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %34 = "arith.addi"(%33, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %35 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                       %36 = "arith.muli"(%34, %35) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %37 = "arith.addi"(%36, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %38 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %39 = "arith.muli"(%37, %38) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %40 = "arith.addi"(%39, %8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %41 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %42 = "arith.muli"(%40, %41) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %43 = "arith.addi"(%42, %30) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %44 = "memref.load"(%arg2, %43) : (memref<?xf32>, index) -> f32
+E                       %45 = "arith.constant"() <{value = 0 : index}> : () -> index
+E                       %46 = "arith.constant"() <{value = 2 : index}> : () -> index
+E                       %47 = "arith.muli"(%45, %46) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %48 = "arith.addi"(%47, %arg6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %49 = "arith.constant"() <{value = 3 : index}> : () -> index
+E                       %50 = "arith.muli"(%48, %49) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %51 = "arith.addi"(%50, %arg8) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %52 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                       %53 = "arith.muli"(%51, %52) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %54 = "arith.addi"(%53, %11) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %55 = "arith.constant"() <{value = 129 : index}> : () -> index
+E                       %56 = "arith.muli"(%54, %55) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %57 = "arith.addi"(%56, %arg10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E                       %58 = "memref.load"(%arg3, %57) : (memref<?xf32>, index) -> f32
+E                       %59 = "arith.mulf"(%28, %44) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       %60 = "arith.mulf"(%59, %58) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       %61 = "arith.addf"(%arg11, %60) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       "scf.yield"(%61) : (f32) -> ()
+E                     }) : (index, index, index, f32) -> f32
+E                     "scf.yield"(%27) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   "scf.yield"(%26) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "memref.store"(%24, %arg4, %4) : (f32, memref<?xf32>, index) -> ()
+E                 "scf.yield"() : () -> ()
+E               }, {
+E               }) : (i1) -> ()
+E               "gpu.return"() : () -> ()
+E             }) {sym_name = "tessera_scale_transpose_f20834a89bc480cd327379c5"} : () -> ()
+E           }) : () -> ()
+E         }) : () -> ()
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...\n    }) {sym_name = "tessera_scale_transpose_f20834a89bc480cd327379c5"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:40: AssertionError
+___________ test_tile_body_seal_and_sibling_architecture_are_checked ___________
+
+    def test_tile_body_seal_and_sibling_architecture_are_checked():
+        tile = native(source("shared_lhs"), PREFIX+",tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        changed, count = re.subn(r'body_hash = "[0-9a-f]{64}"',
+                                'body_hash = "'+"0"*64+'"', tile.stdout)
+        assert count == 1
+        bad = native(changed, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1201}")
+        assert bad.returncode != 0
+        assert "sealed Tile contract" in bad.stderr
+        sibling = native(tile.stdout, "tessera-rocm-executable{family=reduction input=tile output=target arch=gfx1151}")
+        assert sibling.returncode != 0
+>       assert "owning gfx1201" in sibling.stderr
+E       assert 'owning gfx1201' in '<stdin>:2:3: error: \'tile.structured_reduction_kernel\' op structured reduction kernel lost its native buffer/scalar...)\n    }) {sym_name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n'
+E        +  where '<stdin>:2:3: error: \'tile.structured_reduction_kernel\' op structured reduction kernel lost its native buffer/scalar...)\n    }) {sym_name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n' = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...\n    }) {sym_name = "tessera_scale_transpose_ec1adc6c44738921f1ac0d78"} : () -> ()\n  }) : () -> ()\n}) : () -> ()\n').stderr
+
+tests/unit/test_native_scaled_transpose_lowering.py:68: AssertionError
+_ test_native_reverse_images_and_member_launch_binding[False-shared_rhs_rows] __
+
+policy = 'shared_rhs_rows', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x0000617828248cac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798cac)
+E            #1 0x0000617828245a54 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007a76b6645cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007a76b66a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007a76b6645b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007a76b66288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007a76b6629979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007a76b663bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x000061781fe7179a mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x00006178208f024a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4024a)
+E           #10 0x00006178208e6794 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe36794)
+E           #11 0x0000617820849985 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd99985)
+E           #12 0x0000617820e9385f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e385f)
+E           #13 0x000061782435f3c8 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af3c8)
+E           #14 0x00006178221f9f4c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f4c)
+E           #15 0x0000617827af3a34 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043a34)
+E           #16 0x0000617827b56205 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x0000617827b577bf mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a77bf)
+E           #18 0x0000617827af718b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x0000617827aff901 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f901)
+E           #20 0x0000617827b01412 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x0000617827b01622 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051622)
+E           #22 0x000061782221b29e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x000061782097f841 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf841)
+E           #24 0x000061782097fb76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #25 0x000061782097d21d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd21d)
+E           #26 0x000061782097f704 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf704)
+E           #27 0x000061782097fb76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #28 0x00006178209802ce mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed02ce)
+E           #29 0x0000617820981a88 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1a88)
+E           #30 0x00006178222381f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x000061782223907f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x0000617827de62bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83362bb)
+E           #33 0x000061782223467d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x000061782223975c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278975c)
+E           #35 0x00006178222399be mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899be)
+E           #36 0x00006178206cb04c main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b04c)
+E           #37 0x00007a76b662a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007a76b662a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x0000617820779745 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc9745)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+_ test_native_reverse_images_and_member_launch_binding[False-independent_rhs] __
+
+policy = 'independent_rhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x000062a123551cac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798cac)
+E            #1 0x000062a12354ea54 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x000070630c445cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x000070630c4a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x000070630c445b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x000070630c4288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x000070630c429979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x000070630c43bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x000062a11b17a79a mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x000062a11bbf924a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4024a)
+E           #10 0x000062a11bbef794 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe36794)
+E           #11 0x000062a11bb52985 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd99985)
+E           #12 0x000062a11c19c85f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e385f)
+E           #13 0x000062a11f6683c8 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af3c8)
+E           #14 0x000062a11d502f4c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f4c)
+E           #15 0x000062a122dfca34 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043a34)
+E           #16 0x000062a122e5f205 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x000062a122e607bf mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a77bf)
+E           #18 0x000062a122e0018b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x000062a122e08901 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f901)
+E           #20 0x000062a122e0a412 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x000062a122e0a622 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051622)
+E           #22 0x000062a11d52429e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x000062a11bc88841 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf841)
+E           #24 0x000062a11bc88b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #25 0x000062a11bc8621d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd21d)
+E           #26 0x000062a11bc88704 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf704)
+E           #27 0x000062a11bc88b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #28 0x000062a11bc892ce mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed02ce)
+E           #29 0x000062a11bc8aa88 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1a88)
+E           #30 0x000062a11d5411f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x000062a11d54207f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x000062a1230ef2bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83362bb)
+E           #33 0x000062a11d53d67d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x000062a11d54275c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278975c)
+E           #35 0x000062a11d5429be mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899be)
+E           #36 0x000062a11b9d404c main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b04c)
+E           #37 0x000070630c42a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x000070630c42a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x000062a11ba82745 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc9745)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+____ test_native_reverse_images_and_member_launch_binding[False-shared_lhs] ____
+
+policy = 'shared_lhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x000059b795789cac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798cac)
+E            #1 0x000059b795786a54 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007281ea845cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007281ea8a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007281ea845b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007281ea8288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007281ea829979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007281ea83bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x000059b78d3b279a mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x000059b78de3124a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4024a)
+E           #10 0x000059b78de27794 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe36794)
+E           #11 0x000059b78dd8a985 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd99985)
+E           #12 0x000059b78e3d485f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e385f)
+E           #13 0x000059b7918a03c8 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af3c8)
+E           #14 0x000059b78f73af4c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f4c)
+E           #15 0x000059b795034a34 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043a34)
+E           #16 0x000059b795097205 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x000059b7950987bf mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a77bf)
+E           #18 0x000059b79503818b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x000059b795040901 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f901)
+E           #20 0x000059b795042412 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x000059b795042622 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051622)
+E           #22 0x000059b78f75c29e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x000059b78dec0841 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf841)
+E           #24 0x000059b78dec0b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #25 0x000059b78debe21d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd21d)
+E           #26 0x000059b78dec0704 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf704)
+E           #27 0x000059b78dec0b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #28 0x000059b78dec12ce mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed02ce)
+E           #29 0x000059b78dec2a88 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1a88)
+E           #30 0x000059b78f7791f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x000059b78f77a07f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x000059b7953272bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83362bb)
+E           #33 0x000059b78f77567d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x000059b78f77a75c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278975c)
+E           #35 0x000059b78f77a9be mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899be)
+E           #36 0x000059b78dc0c04c main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b04c)
+E           #37 0x00007281ea82a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007281ea82a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x000059b78dcba745 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc9745)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+__ test_native_reverse_images_and_member_launch_binding[True-shared_rhs_rows] __
+
+policy = 'shared_rhs_rows', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x0000652bd491acac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798cac)
+E            #1 0x0000652bd4917a54 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x00007da1e9245cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007da1e92a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x00007da1e9245b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007da1e92288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x00007da1e9229979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x00007da1e923bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x0000652bcc54379a mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x0000652bccfc224a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4024a)
+E           #10 0x0000652bccfb8794 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe36794)
+E           #11 0x0000652bccf1b985 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd99985)
+E           #12 0x0000652bcd56585f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e385f)
+E           #13 0x0000652bd0a313c8 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af3c8)
+E           #14 0x0000652bce8cbf4c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f4c)
+E           #15 0x0000652bd41c5a34 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043a34)
+E           #16 0x0000652bd4228205 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x0000652bd42297bf mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a77bf)
+E           #18 0x0000652bd41c918b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x0000652bd41d1901 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f901)
+E           #20 0x0000652bd41d3412 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x0000652bd41d3622 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051622)
+E           #22 0x0000652bce8ed29e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x0000652bcd051841 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf841)
+E           #24 0x0000652bcd051b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #25 0x0000652bcd04f21d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd21d)
+E           #26 0x0000652bcd051704 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf704)
+E           #27 0x0000652bcd051b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #28 0x0000652bcd0522ce mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed02ce)
+E           #29 0x0000652bcd053a88 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1a88)
+E           #30 0x0000652bce90a1f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x0000652bce90b07f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x0000652bd44b82bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83362bb)
+E           #33 0x0000652bce90667d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x0000652bce90b75c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278975c)
+E           #35 0x0000652bce90b9be mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899be)
+E           #36 0x0000652bccd9d04c main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b04c)
+E           #37 0x00007da1e922a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x00007da1e922a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x0000652bcce4b745 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc9745)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+__ test_native_reverse_images_and_member_launch_binding[True-independent_rhs] __
+
+policy = 'independent_rhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x000061affaf5ccac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798cac)
+E            #1 0x000061affaf59a54 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x0000790940845cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x00007909408a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x0000790940845b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x00007909408288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x0000790940829979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x000079094083bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x000061aff2b8579a mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x000061aff360424a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4024a)
+E           #10 0x000061aff35fa794 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe36794)
+E           #11 0x000061aff355d985 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd99985)
+E           #12 0x000061aff3ba785f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e385f)
+E           #13 0x000061aff70733c8 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af3c8)
+E           #14 0x000061aff4f0df4c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f4c)
+E           #15 0x000061affa807a34 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043a34)
+E           #16 0x000061affa86a205 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x000061affa86b7bf mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a77bf)
+E           #18 0x000061affa80b18b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x000061affa813901 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f901)
+E           #20 0x000061affa815412 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x000061affa815622 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051622)
+E           #22 0x000061aff4f2f29e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x000061aff3693841 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf841)
+E           #24 0x000061aff3693b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #25 0x000061aff369121d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd21d)
+E           #26 0x000061aff3693704 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf704)
+E           #27 0x000061aff3693b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #28 0x000061aff36942ce mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed02ce)
+E           #29 0x000061aff3695a88 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1a88)
+E           #30 0x000061aff4f4c1f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x000061aff4f4d07f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x000061affaafa2bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83362bb)
+E           #33 0x000061aff4f4867d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x000061aff4f4d75c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278975c)
+E           #35 0x000061aff4f4d9be mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899be)
+E           #36 0x000061aff33df04c main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b04c)
+E           #37 0x000079094082a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x000079094082a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x000061aff348d745 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc9745)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+____ test_native_reverse_images_and_member_launch_binding[True-shared_lhs] _____
+
+policy = 'shared_lhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_native_reverse_images_and_member_launch_binding(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+>       package = package_native_scaled_vjp(source(policy, (3, 2), nk))
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:76: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x00005805e024ecac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798cac)
+E            #1 0x00005805e024ba54 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x000077c3f2c45cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x000077c3f2ca61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x000077c3f2c45b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x000077c3f2c288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x000077c3f2c29979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x000077c3f2c3bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x00005805d7e7779a mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x00005805d88f624a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4024a)
+E           #10 0x00005805d88ec794 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe36794)
+E           #11 0x00005805d884f985 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd99985)
+E           #12 0x00005805d8e9985f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e385f)
+E           #13 0x00005805dc3653c8 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af3c8)
+E           #14 0x00005805da1fff4c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f4c)
+E           #15 0x00005805dfaf9a34 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043a34)
+E           #16 0x00005805dfb5c205 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x00005805dfb5d7bf mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a77bf)
+E           #18 0x00005805dfafd18b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x00005805dfb05901 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f901)
+E           #20 0x00005805dfb07412 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x00005805dfb07622 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051622)
+E           #22 0x00005805da22129e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x00005805d8985841 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf841)
+E           #24 0x00005805d8985b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #25 0x00005805d898321d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd21d)
+E           #26 0x00005805d8985704 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf704)
+E           #27 0x00005805d8985b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #28 0x00005805d89862ce mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed02ce)
+E           #29 0x00005805d8987a88 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1a88)
+E           #30 0x00005805da23e1f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x00005805da23f07f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x00005805dfdec2bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83362bb)
+E           #33 0x00005805da23a67d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x00005805da23f75c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278975c)
+E           #35 0x00005805da23f9be mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899be)
+E           #36 0x00005805d86d104c main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b04c)
+E           #37 0x000077c3f2c2a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x000077c3f2c2a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x00005805d877f745 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc9745)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+___ test_equal_shape_gradient_roles_cannot_be_swapped_without_output_binding ___
+
+    def test_equal_shape_gradient_roles_cannot_be_swapped_without_output_binding():
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching MLIR compiler required")
+        graph = source("independent_rhs").replace("7x", "2x")
+>       package = package_native_scaled_vjp(graph)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:90: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:270: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+python/tessera/compiler/native_scaled_program.py:256: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: tessera-opt: /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/lib/IR/BuiltinAttributes.cpp:127: static bool mlir::DictionaryAttr::sortInPlace(llvm::SmallVectorImpl<mlir::NamedAttribute>&): Assertion `!findDuplicateElement(array) && "DictionaryAttr element names must be unique"' failed.
+E           PLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.
+E           Stack dump:
+E           0.	Program arguments: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt "--pass-pipeline=builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})"
+E            #0 0x00005ecd8048acac llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8798cac)
+E            #1 0x00005ecd80487a54 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0
+E            #2 0x0000742cbf845cb0 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45cb0)
+E            #3 0x0000742cbf8a61ac pthread_kill (/usr/lib/x86_64-linux-gnu/libc.so.6+0xa61ac)
+E            #4 0x0000742cbf845b7e raise (/usr/lib/x86_64-linux-gnu/libc.so.6+0x45b7e)
+E            #5 0x0000742cbf8288ec abort (/usr/lib/x86_64-linux-gnu/libc.so.6+0x288ec)
+E            #6 0x0000742cbf829979 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x29979)
+E            #7 0x0000742cbf83bf75 __assert_fail (/usr/lib/x86_64-linux-gnu/libc.so.6+0x3bf75)
+E            #8 0x00005ecd780b379a mlir::DictionaryAttr::findDuplicate(llvm::SmallVectorImpl<mlir::NamedAttribute>&, bool) (.cold) BuiltinAttributes.cpp:0:0
+E            #9 0x00005ecd78b3224a mlir::NamedAttrList::getDictionary(mlir::MLIRContext*) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe4024a)
+E           #10 0x00005ecd78b28794 mlir::Operation::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xe36794)
+E           #11 0x00005ecd78a8b985 mlir::OpBuilder::create(mlir::OperationState const&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xd99985)
+E           #12 0x00005ecd790d585f mlir::LLVM::LLVMFuncOp::create(mlir::OpBuilder&, mlir::Location, mlir::LLVM::detail::LLVMFuncOpGenericAdaptorBase::Properties const&, llvm::ArrayRef<mlir::NamedAttribute>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x13e385f)
+E           #13 0x00005ecd7c5a13c8 mlir::GPUFuncOpLowering::matchAndRewrite(mlir::gpu::GPUFuncOp, mlir::gpu::GPUFuncOpAdaptor, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x48af3c8)
+E           #14 0x00005ecd7a43bf4c mlir::ConvertOpToLLVMPattern<mlir::gpu::GPUFuncOp, false>::matchAndRewrite(mlir::Operation*, llvm::ArrayRef<mlir::ValueRange>, mlir::ConversionPatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x2749f4c)
+E           #15 0x00005ecd7fd35a34 mlir::ConversionPattern::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8043a34)
+E           #16 0x00005ecd7fd98205 mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>)::'lambda'()::operator()() const PatternApplicator.cpp:0:0
+E           #17 0x00005ecd7fd997bf mlir::PatternApplicator::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&, llvm::function_ref<bool (mlir::Pattern const&)>, llvm::function_ref<void (mlir::Pattern const&)>, llvm::function_ref<llvm::LogicalResult (mlir::Pattern const&)>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x80a77bf)
+E           #18 0x00005ecd7fd3918b (anonymous namespace)::OperationLegalizer::legalize(mlir::Operation*) DialectConversion.cpp:0:0
+E           #19 0x00005ecd7fd41901 mlir::OperationConverter::applyConversion(llvm::ArrayRef<mlir::Operation*>) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x804f901)
+E           #20 0x00005ecd7fd43412 applyConversion(llvm::ArrayRef<mlir::Operation*>, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig, (anonymous namespace)::OpConversionMode) DialectConversion.cpp:0:0
+E           #21 0x00005ecd7fd43622 mlir::applyPartialConversion(mlir::Operation*, mlir::ConversionTarget const&, mlir::FrozenRewritePatternSet const&, mlir::ConversionConfig) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x8051622)
+E           #22 0x00005ecd7a45d29e (anonymous namespace)::LowerGpuOpsToROCDLOpsPass::runOnOperation() LowerGpuOpsToROCDLOps.cpp:0:0
+E           #23 0x00005ecd78bc1841 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf841)
+E           #24 0x00005ecd78bc1b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #25 0x00005ecd78bbf21d mlir::detail::OpToOpPassAdaptor::runOnOperationAsyncImpl(bool) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecd21d)
+E           #26 0x00005ecd78bc1704 mlir::detail::OpToOpPassAdaptor::run(mlir::Pass*, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecf704)
+E           #27 0x00005ecd78bc1b76 mlir::detail::OpToOpPassAdaptor::runPipeline(mlir::OpPassManager&, mlir::Operation*, mlir::AnalysisManager, bool, unsigned int, mlir::PassInstrumentor*, mlir::PassInstrumentation::PipelineParentInfo const*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xecfb76)
+E           #28 0x00005ecd78bc22ce mlir::PassManager::runPasses(mlir::Operation*, mlir::AnalysisManager) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed02ce)
+E           #29 0x00005ecd78bc3a88 mlir::PassManager::run(mlir::Operation*) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xed1a88)
+E           #30 0x00005ecd7a47a1f7 performActions(llvm::raw_ostream&, std::shared_ptr<llvm::SourceMgr> const&, mlir::MLIRContext*, mlir::MlirOptMainConfig const&) MlirOptMain.cpp:0:0
+E           #31 0x00005ecd7a47b07f llvm::LogicalResult llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>::callback_fn<mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&)::'lambda'(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef, llvm::raw_ostream&)>(long, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&) MlirOptMain.cpp:0:0
+E           #32 0x00005ecd800282bb mlir::splitAndProcessBuffer(std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::function_ref<llvm::LogicalResult (std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, llvm::MemoryBufferRef const&, llvm::raw_ostream&)>, llvm::raw_ostream&, llvm::StringRef, llvm::StringRef) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x83362bb)
+E           #33 0x00005ecd7a47667d mlir::MlirOptMain(llvm::raw_ostream&, std::unique_ptr<llvm::MemoryBuffer, std::default_delete<llvm::MemoryBuffer>>, mlir::DialectRegistry&, mlir::MlirOptMainConfig const&) (.part.0) MlirOptMain.cpp:0:0
+E           #34 0x00005ecd7a47b75c mlir::MlirOptMain(int, char**, llvm::StringRef, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x278975c)
+E           #35 0x00005ecd7a47b9be mlir::MlirOptMain(int, char**, llvm::StringRef, mlir::DialectRegistry&) (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0x27899be)
+E           #36 0x00005ecd7890d04c main (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xc1b04c)
+E           #37 0x0000742cbf82a601 (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a601)
+E           #38 0x0000742cbf82a718 __libc_start_main (/usr/lib/x86_64-linux-gnu/libc.so.6+0x2a718)
+E           #39 0x00005ecd789bb745 _start (/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt+0xcc9745)
+
+python/tessera/compiler/native_scaled_program.py:225: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_actual_reduction_descends_through_schedule_tile_and_target[False-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_actual_reduction_descends_through_schedule_tile_and_target[False-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_actual_reduction_descends_through_schedule_tile_and_target[False-shared_lhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_actual_reduction_descends_through_schedule_tile_and_target[True-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_actual_reduction_descends_through_schedule_tile_and_target[True-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_actual_reduction_descends_through_schedule_tile_and_target[True-shared_lhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_tile_body_seal_and_sibling_architecture_are_checked
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[False-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[False-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[False-shared_lhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[True-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[True-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_native_reverse_images_and_member_launch_binding[True-shared_lhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_equal_shape_gradient_roles_cannot_be_swapped_without_output_binding
+14 failed, 1 passed in 3.73s

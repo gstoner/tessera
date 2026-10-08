@@ -1,0 +1,28 @@
+{
+  "__version__": [
+    23,
+    1,
+    1
+  ],
+  "elapsed": 0.11966729164123535,
+  "tests": [
+    {
+      "code": "PASS",
+      "elapsed": 0.03179478645324707,
+      "name": "Tessera-IR v0.3.1 :: phase_f4/autodiff_reverse_scaled_matmul.mlir",
+      "output": "Exit Code: 0\n\nCommand Output (stdout):\n--\n# RUN: at line 1\n\"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt\" -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir --tessera-autodiff-paired | \"/usr/lib/llvm-23/bin/FileCheck\" /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir\n# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir --tessera-autodiff-paired\n# executed command: /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir\n# RUN: at line 2\n\"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt\" -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir --tessera-autodiff -o /dev/null\n# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_reverse_scaled_matmul.mlir --tessera-autodiff -o /dev/null\n\n--\n"
+    },
+    {
+      "code": "PASS",
+      "elapsed": 0.03226637840270996,
+      "name": "Tessera-IR v0.3.1 :: phase_f4/autodiff_linear_transpose.mlir",
+      "output": "Exit Code: 0\n\nCommand Output (stdout):\n--\n# RUN: at line 1\n\"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt\" -allow-unregistered-dialect --tessera-autodiff /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir | \"/usr/lib/llvm-23/bin/FileCheck\" /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir --check-prefix=INPLACE\n# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect --tessera-autodiff /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir\n# executed command: /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir --check-prefix=INPLACE\n# RUN: at line 2\n\"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt\" -allow-unregistered-dialect --tessera-autodiff-paired /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir | \"/usr/lib/llvm-23/bin/FileCheck\" /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir --check-prefix=PAIRED\n# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect --tessera-autodiff-paired /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir\n# executed command: /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_linear_transpose.mlir --check-prefix=PAIRED\n\n--\n"
+    },
+    {
+      "code": "PASS",
+      "elapsed": 0.01783013343811035,
+      "name": "Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul.mlir",
+      "output": "Exit Code: 0\n\nCommand Output (stdout):\n--\n# RUN: at line 1\n\"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt\" -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir --tessera-autodiff-forward | \"/usr/lib/llvm-23/bin/FileCheck\" /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir\n# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir --tessera-autodiff-forward\n# executed command: /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir\n\n--\n"
+    }
+  ]
+}

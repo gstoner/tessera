@@ -1,0 +1,46 @@
+........................................................................ [ 83%]
+............F
+=================================== FAILURES ===================================
+_______________ test_dynamic_row_resident_pitch_validation[fp16] _______________
+
+dtype = 'fp16'
+
+    @pytest.mark.parametrize("dtype",["fp16","bf16"])
+    def test_dynamic_row_resident_pitch_validation(dtype):
+        from tessera.compiler.nvidia_tensor_rhs import NvidiaNormRhsProgram
+        from tessera.compiler.emit.nvidia_cuda import NvidiaDeviceSession
+        storage=_storage(dtype)
+        x=np.ones((17,35),storage)
+        b=np.ones((35,19),storage)
+        program=rms_lhs.compile_native_lhs_matmul(x,b,dynamic_axes=("M","N","K"))
+        package=program.edge.consumer
+        artifact=NvidiaNormRhsProgram.runtime_artifact(package)
+        with NvidiaDeviceSession() as session:
+            # Genuinely padded row-major allocation is admitted with matching LDB.
+            backing=np.zeros((35,24),storage)
+            backing[:,:19]=1
+            allocation=session.upload(backing)
+            class PaddedRowView:
+                shape=(35,19)
+                dtype=allocation.dtype
+                tessera_layout="strided"
+                @property
+                def __cuda_array_interface__(self):
+                    interface=dict(allocation.__cuda_array_interface__)
+                    interface.update(shape=self.shape,strides=(24*self.dtype.itemsize,self.dtype.itemsize))
+                    return interface
+            db=PaddedRowView()
+            da=session.upload(x,layout="strided")
+            dd=session.empty((17,19),np.float32,layout="strided")
+            values={program.edge.consumer_input_name:da,program.edge.consumer_rhs_name:db,
+                    program.edge.output_name:dd,"M":17,"N":19,"K":35,"LDA":35,"LDB":24,"LDD":19}
+            receipt=rt.launch(artifact,values,stream=session.stream)
+>           assert receipt["ok"],receipt
+E           AssertionError: {'ok': False, 'runtime_status': 'device_error', 'compiler_path': 'canonical_native_descriptor', 'execution_kind': 'native', ...}
+E           assert False
+
+tests/device/nvidia/test_dynamic_row_lhs.py:102: AssertionError
+=========================== short test summary info ============================
+FAILED tests/device/nvidia/test_dynamic_row_lhs.py::test_dynamic_row_resident_pitch_validation[fp16]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed, 84 passed in 50.69s

@@ -1,0 +1,43 @@
+--- python/tessera/runtime.py
++++ candidate/runtime.py
+@@ -3238,6 +3238,25 @@
+     except UnicodeDecodeError as exc:
+         raise RuntimeError("SM120 PTX native image is not ASCII") from exc
+     entry = descriptor.entry_symbol
++    from tessera.compiler.native_artifact import LaunchGeometry
++    softmax_abis = {
++        "f16": SM120_SOFTMAX_F16_ABI,
++        "bf16": SM120_SOFTMAX_BF16_ABI,
++        "f32": SM120_SOFTMAX_F32_ABI,
++    }
++    if descriptor.abi_id in softmax_abis.values():
++        storage = descriptor.provenance.get("storage")
++        strategy = descriptor.provenance.get("schedule")
++        cooperative = strategy == "cooperative_128"
++        expected_entry = f"tessera_tile_softmax_{storage}" + (
++            "_cooperative_128" if cooperative else "")
++        geometry = ("sm120_softmax_cooperative_128_rows" if cooperative
++                    else "sm120_softmax_thread_per_row_128")
++        if (storage not in softmax_abis or strategy not in {"serial", "cooperative_128"}
++                or descriptor.abi_id != softmax_abis[storage]
++                or entry != expected_entry
++                or descriptor.geometry != LaunchGeometry(policy=geometry)):
++            raise RuntimeError("SM120 softmax schedule/entry/geometry ABI mismatch")
+     if _register_nvidia_ptx(lib, entry, ptx) != 0:
+         raise RuntimeError(f"PTX register failed for {entry}")
+ 
+@@ -3249,13 +3268,7 @@
+                 or stream is None):
+             raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
+         is_rmsnorm = entry.startswith("tessera_tile_norm_")
+-        is_resident_softmax = (
+-            entry == "tessera_tile_softmax_f16"
+-            and descriptor.abi_id == SM120_SOFTMAX_F16_ABI
+-        ) or (
+-            entry == "tessera_tile_softmax_bf16"
+-            and descriptor.abi_id == SM120_SOFTMAX_BF16_ABI
+-        )
++        is_resident_softmax = descriptor.abi_id in softmax_abis.values()
+         epilogue = descriptor.provenance.get("epilogue", {})
+         if not isinstance(epilogue, Mapping):
+             raise RuntimeError("resident SM120 epilogue policy must be a mapping")

@@ -1,0 +1,10 @@
+..........                                                               [100%]
+=============================== warnings summary ===============================
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp16]
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-bf16]
+tests/device/nvidia/test_norm_accuracy.py::test_norm_compensation_preserves_nonfinite_rms_outputs[serial-fp32]
+  /home/angstorms/scratch/next-five-compiler-slices/python/tessera/apple_gpu_ops_interception.py:83: RuntimeWarning: invalid value encountered in divide
+    out = x / np.sqrt(np.mean(x * x, axis=-1, keepdims=True) + eps)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+10 passed, 3 warnings in 6.54s

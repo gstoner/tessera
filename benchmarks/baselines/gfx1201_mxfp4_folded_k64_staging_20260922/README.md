@@ -40,3 +40,9 @@ evidence for this code revision.
 The one-lever follow-up recorder is
 `benchmarks/rocm/ablate_gfx1201_folded_codegen.py`; its variants remain
 diagnostic and are not selected by the production route.
+
+Historical recorder source: benchmark_source_20260922.py.txt is the exact
+benchmark_gfx1201_mxfp4_folded.py from source revision
+52a297422320f57b53e461705b398d75d1b88521. Its bytes match the packet recorder
+SHA256 c69c5a4917a1dbb5e731fda54e129ca203b677d78ce912921c6b7b72b30f1a37.
+Current recorder changes do not alter or re-date this historical proof.

@@ -1,0 +1,220 @@
+..................F..............................................        [100%]
+=================================== FAILURES ===================================
+_____ test_nested_equal_product_prefix_mismatch_is_rejected_before_capture _____
+
+self = <TesseraJitFn 'scaled' effect=pure deterministic=False target='rocm_gfx1201'>
+args = (array([[[[-0.5, 1, 0, ..., 0.25, -0.5, 1],
+         [-0.5, 1, 0.25, ..., 1, 1, 1],
+         [-0.5, 1, 0, ..., 0, 0.25...9 ]],
+
+        [[0.8910269 ],
+         [0.9877338 ]],
+
+        [[0.90639055],
+         [0.46675357]]]], dtype=float32))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+>               traced = trace(self._fn, *batch_specs(ordered, batch_axes, depth=self._frontend_batch_depth))
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/tessera/compiler/jit.py:1346: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+values = [array([[[[-0.5, 1, 0, ..., 0.25, -0.5, 1],
+         [-0.5, 1, 0.25, ..., 1, 1, 1],
+         [-0.5, 1, 0, ..., 0, 0.25...9 ]],
+
+        [[0.8910269 ],
+         [0.9877338 ]],
+
+        [[0.90639055],
+         [0.46675357]]]], dtype=float32)]
+axes = (0, 0, 0, 0), depth = 2
+
+    def batch_specs(values: Sequence[Any], axes: Sequence[int | None], *, depth: int = 1):
+        if type(depth) is not int or depth not in (1, 2):
+            raise ValueError("native scaled vmap requires one or two leading maps")
+        if len(values) != 4 or len(axes) != 4:
+            raise ValueError("native NVFP4 vmap requires four operand axes")
+        if tuple(axes) not in {(0, None, 0, None), (0, 0, 0, 0), (None, 0, None, 0)}:
+            raise ValueError("native NVFP4 vmap requires leading matrix/scale batch axes")
+        sizes = []
+        specs = []
+        for value, axis in zip(values, axes, strict=True):
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+            shape = tuple(value.shape)
+            if axis is not None:
+                if len(shape) != depth + 2 or any(v <= 0 for v in shape[:depth]):
+                    raise ValueError("native scaled vmap requires positive leading batch extents")
+                sizes.append(shape[:depth])
+                shape = shape[depth:]
+            elif len(shape) != 2:
+                raise ValueError("native NVFP4 vmap requires rank-two shared operands")
+            specs.append((shape, _storage_dtype(value)))
+        if len(set(sizes)) != 1:
+>           raise ValueError("native NVFP4 vmap batch extents differ")
+E           ValueError: native NVFP4 vmap batch extents differ
+
+python/tessera/compiler/native_vmap.py:44: ValueError
+
+The above exception was the direct cause of the following exception:
+
+    def test_nested_equal_product_prefix_mismatch_is_rejected_before_capture():
+        _,_,outer,values,_=nested_case("independent_rhs","fp32",False)
+        changed=(values[0],values[1].reshape(3,2,*values[1].shape[2:]),values[2],values[3])
+        with pytest.raises(ValueError,match="batch extents differ"):
+>           outer._specialized_autodiff_module(changed,{})
+
+tests/unit/test_native_nested_typed_vmap.py:51: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1276: in _specialized_autodiff_module
+    specialized = self._trace_frontend_capture(args, kwargs)[0]
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'scaled' effect=pure deterministic=False target='rocm_gfx1201'>
+args = (array([[[[-0.5, 1, 0, ..., 0.25, -0.5, 1],
+         [-0.5, 1, 0.25, ..., 1, 1, 1],
+         [-0.5, 1, 0, ..., 0, 0.25...9 ]],
+
+        [[0.8910269 ],
+         [0.9877338 ]],
+
+        [[0.90639055],
+         [0.46675357]]]], dtype=float32))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+                traced = trace(self._fn, *batch_specs(ordered, batch_axes, depth=self._frontend_batch_depth))
+            else:
+                traced = trace(self._fn, *ordered, evaluate_catalog_outputs=require_outputs)
+            # The AST module is a naming convenience here, not an input to the
+            # trace: a zero-function one (apple_gpu trace-defer, auto_batch
+            # skip) must not fail a capture that never needed it. Both fields
+            # already have their fallback in scope -- the qualname hash this
+            # line computes anyway, and the function's own name.
+            emitted = (
+                self.graph_ir.functions[0] if self.graph_ir.functions else None
+            )
+            source_hash = (
+                emitted.source_hash if emitted is not None else None
+            ) or hashlib.sha256(
+                self._fn.__qualname__.encode("utf-8")
+            ).hexdigest()
+            module = to_graph_ir_module(
+                traced,
+                name=emitted.name if emitted is not None else self._fn.__name__,
+                source_hash=source_hash,
+                target=self._legality_target(),
+            )
+            # Preserve explicit gated storage declarations across tracer SSA
+            # renaming. Concrete storage must agree with the source declaration.
+            if any(arg.dtype_status is not None for arg in self._constraint_ir_args):
+                for captured, declared in zip(
+                    module.functions[0].args, self._constraint_ir_args, strict=True
+                ):
+                    if declared.dtype_status is not None:
+                        if captured.ir_type.dtype != declared.ir_type.dtype:
+                            raise ValueError("gated Tensor storage differs from declaration")
+                        captured.dtype_status = declared.dtype_status
+            if batch_axes is not None:
+                from .native_vmap import project_batch
+                module = project_batch(module, ordered, batch_axes, depth=self._frontend_batch_depth)
+            if self.differentiation_request is not None:
+                intent = self.differentiation_request.module_intent_attrs()
+                module.module_attrs.update(intent)
+                module.functions[0].fn_attrs.update(intent)
+            # FRONTEND-IR-MEDIUM-1 (iii): the tracer rebuilds its arguments from
+            # shape and dtype alone, so the region privileges (Decision #2), the
+            # ConstraintSolver's facts (Decision #4) and the symbolic dimension
+            # names all stop here. Record what was known and declare the debt,
+            # so the loss is attributable and machine-checked rather than
+            # invisible (Decision #32).
+            from .graph_ir import declare_frontier_debt
+            declare_frontier_debt(
+                module,
+                args=self._constraint_ir_args,
+                constraints=self.constraints,
+            )
+        except Exception as exc:
+>           raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
+E           tessera._jit_boundary.TesseraJitError: tracer frontend failed: native NVFP4 vmap batch extents differ
+
+python/tessera/compiler/jit.py:1398: TesseraJitError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_nested_typed_vmap.py::test_nested_equal_product_prefix_mismatch_is_rejected_before_capture
+1 failed, 64 passed in 16.39s

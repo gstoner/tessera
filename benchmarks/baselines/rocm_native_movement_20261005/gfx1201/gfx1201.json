@@ -1,0 +1,1265 @@
+{
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "pci_bus_id": "0000:03:00.0",
+    "architecture": "gfx1201",
+    "ordinal": 0
+  },
+  "architecture": "gfx1201",
+  "rows": [
+    {
+      "family": "paged_kv",
+      "shape": [
+        4,
+        4,
+        3,
+        8,
+        1,
+        5
+      ],
+      "correctness": "bit_exact_before_and_after_timing",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "schedule_digest": "abf0c28d727cb55186a0e9ac61d465f21ddc0cd4299bbce54587c03868d9db18",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "compile_package_wall_ms": 228.426691,
+      "resident_dispatch_samples_ms": [
+        0.0044284844771027565,
+        0.0038831562269479036,
+        0.004176140762865543,
+        0.0041414531879127026,
+        0.004240656271576881
+      ],
+      "resident_dispatch_median_ms": 0.004176140762865543,
+      "resources": {
+        "block_threads": 256,
+        "launch_blocks": 1,
+        "registers": 18,
+        "local_bytes": 0,
+        "shared_bytes": 0
+      },
+      "host_wall_samples_ms": {
+        "python": [
+          0.5603985,
+          0.5497922,
+          0.5357604,
+          0.5719064,
+          0.576947,
+          0.5887976,
+          0.6034916,
+          0.6015128,
+          0.612025
+        ],
+        "native_unpooled": [
+          0.5155648,
+          0.5236542,
+          0.5024778999999999,
+          0.5075105,
+          0.4977589,
+          0.570647,
+          0.5657476,
+          0.5498213,
+          0.5709876
+        ],
+        "native_pooled": [
+          0.5039296,
+          0.5029598,
+          0.49333030000000005,
+          0.49490829999999997,
+          0.5527677,
+          0.5519222,
+          0.5280216,
+          0.5508622,
+          0.5316956
+        ]
+      },
+      "host_wall_medians_ms": {
+        "python": 0.576947,
+        "native_unpooled": 0.5236542,
+        "native_pooled": 0.5280216
+      },
+      "python_over_native_pooled": 1.092657951871666,
+      "native_unpooled_over_pooled": 0.9917287474603311,
+      "staging_counter_deltas": {
+        "python": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          }
+        ],
+        "native_pooled": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          }
+        ]
+      },
+      "image_cache_counter_deltas": {
+        "python": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_pooled": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ]
+      }
+    },
+    {
+      "family": "paged_kv",
+      "shape": [
+        32,
+        16,
+        4,
+        64,
+        3,
+        31
+      ],
+      "correctness": "bit_exact_before_and_after_timing",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "schedule_digest": "913113a646d63738173a01386705d9ef704756d1e230843b1c038393a592fc98",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "compile_package_wall_ms": 89.192013,
+      "resident_dispatch_samples_ms": [
+        0.006157577969133854,
+        0.006120703183114529,
+        0.0062141562812030315,
+        0.010500296950340271,
+        0.005724593531340361
+      ],
+      "resident_dispatch_median_ms": 0.006157577969133854,
+      "resources": {
+        "block_threads": 256,
+        "launch_blocks": 31,
+        "registers": 18,
+        "local_bytes": 0,
+        "shared_bytes": 0
+      },
+      "host_wall_samples_ms": {
+        "python": [
+          1.4890805999999999,
+          1.5740758,
+          1.6038195000000002,
+          1.5935460000000001,
+          1.5916261999999999,
+          1.7101271,
+          1.6691794000000002,
+          1.6771885000000002,
+          1.6720116999999999
+        ],
+        "native_unpooled": [
+          1.5709148000000002,
+          1.5628332999999999,
+          1.4975728,
+          1.5136224,
+          1.4825962000000001,
+          1.6828452999999999,
+          1.6075697000000002,
+          1.6223728999999998,
+          1.5996496
+        ],
+        "native_pooled": [
+          1.5459790999999998,
+          1.5078534,
+          1.5104533,
+          1.5032155,
+          1.4948385,
+          1.5174467,
+          1.6065086999999998,
+          1.6246243,
+          1.6288903000000001
+        ]
+      },
+      "host_wall_medians_ms": {
+        "python": 1.6038195000000002,
+        "native_unpooled": 1.5709148000000002,
+        "native_pooled": 1.5174467
+      },
+      "python_over_native_pooled": 1.0569198245974638,
+      "native_unpooled_over_pooled": 1.0352355703828016,
+      "staging_counter_deltas": {
+        "python": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          }
+        ],
+        "native_pooled": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          }
+        ]
+      },
+      "image_cache_counter_deltas": {
+        "python": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_pooled": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ]
+      }
+    },
+    {
+      "family": "paged_kv",
+      "shape": [
+        64,
+        32,
+        8,
+        128,
+        7,
+        249
+      ],
+      "correctness": "bit_exact_before_and_after_timing",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "schedule_digest": "05fb56372c40ab647b12c809917546e8aea66940c463252bfe1357b099b8bfff",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "compile_package_wall_ms": 115.765292,
+      "resident_dispatch_samples_ms": [
+        0.020748812705278397,
+        0.021154750138521194,
+        0.02386273443698883,
+        0.020537249743938446,
+        0.02062695287168026
+      ],
+      "resident_dispatch_median_ms": 0.020748812705278397,
+      "resources": {
+        "block_threads": 256,
+        "launch_blocks": 996,
+        "registers": 18,
+        "local_bytes": 0,
+        "shared_bytes": 0
+      },
+      "host_wall_samples_ms": {
+        "python": [
+          3.7450105000000002,
+          3.7689481999999996,
+          3.7778982,
+          3.7286754,
+          3.4468336,
+          3.4375321999999997,
+          3.4655793000000004,
+          3.4835155999999996,
+          3.4842936
+        ],
+        "native_unpooled": [
+          3.7000808999999997,
+          3.7041054000000004,
+          3.6400514,
+          3.6738166,
+          3.4243015,
+          3.3915404000000002,
+          3.3898688999999997,
+          3.3989392,
+          3.2859986
+        ],
+        "native_pooled": [
+          2.8681712999999998,
+          2.8531646,
+          2.871665,
+          2.7617311,
+          2.6340015,
+          2.672573,
+          2.7188874,
+          2.699271,
+          2.734401
+        ]
+      },
+      "host_wall_medians_ms": {
+        "python": 3.4842936,
+        "native_unpooled": 3.4243015,
+        "native_pooled": 2.734401
+      },
+      "python_over_native_pooled": 1.2742438289043925,
+      "native_unpooled_over_pooled": 1.2523040695201617,
+      "staging_counter_deltas": {
+        "python": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 0,
+            "launches": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          },
+          {
+            "allocations": 30,
+            "frees": 30,
+            "reuses": 0,
+            "launches": 10
+          }
+        ],
+        "native_pooled": [
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          },
+          {
+            "allocations": 0,
+            "frees": 0,
+            "reuses": 30,
+            "launches": 10
+          }
+        ]
+      },
+      "image_cache_counter_deltas": {
+        "python": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_unpooled": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ],
+        "native_pooled": [
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          },
+          {
+            "loads": 0,
+            "hits": 10,
+            "function_lookups": 0,
+            "unloads": 0
+          }
+        ]
+      }
+    }
+  ],
+  "repeats": 10,
+  "timing_scope": "nine rotating paired trials of checked host launch wall; native image cache enabled for all arms, warm native staging verified by counters; separate preloaded resident HIP-event dispatch windows include host launch gaps; no kernel speedup claim",
+  "compiler_sha256": "23343e05ddafa84e0137ebe19e231d989f8f5d6c893633a006d7c4ee4c9ae779",
+  "native_movement_library_sha256": "6717845ae07c5162b5125ebc759b21c0c777fcb9af684cddabf2bde4f4b3674c",
+  "native_image_library_sha256": "55122befeb059b988ed9aae4ce8228fa227be06b2c8cd8cc818bbe95d44365bf",
+  "source_sha256": {
+    "python/tessera/runtime.py": "f52bee98cbf8c67efd9cc6f92d4e48a08275f45e8a248ce4a544cdf20e3e9dd7",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "1f40f122005fc15dc46a7d70779a03db96f23273194d9133decdd9b9e839318d",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860",
+    "python/tessera/compiler/rocm_native.py": "4b726a22c716e94c2ddb647942c943a7379b97a77bcc89dad90e93b5f8a5de50",
+    "benchmarks/rocm/benchmark_native_movement.py": "2807ede7b5b1763be1a5e6b6504c0ada500df7940d564a6010ae7754c1948828"
+  }
+}

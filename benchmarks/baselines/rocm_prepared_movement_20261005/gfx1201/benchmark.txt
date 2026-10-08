@@ -1,0 +1,46 @@
+[
+  {
+    "family": "paged",
+    "large": false,
+    "medians": {
+      "jit": 0.6391340000000001,
+      "jit_unprepared": 0.9002835499999999,
+      "descriptor": 0.67592135,
+      "retained": 0.7762155
+    },
+    "retained_over_jit": 1.2144800620840073
+  },
+  {
+    "family": "paged",
+    "large": true,
+    "medians": {
+      "jit": 0.529661,
+      "jit_unprepared": 0.74629575,
+      "descriptor": 0.5775222499999999,
+      "retained": 0.68056085
+    },
+    "retained_over_jit": 1.2848989259167656
+  },
+  {
+    "family": "paged_default",
+    "large": false,
+    "medians": {
+      "jit": 0.5398654,
+      "jit_unprepared": 0.74006995,
+      "descriptor": 0.5684234,
+      "retained": 0.66381495
+    },
+    "retained_over_jit": 1.2295934319924928
+  },
+  {
+    "family": "paged_default",
+    "large": true,
+    "medians": {
+      "jit": 0.5821196,
+      "jit_unprepared": 0.7957816499999999,
+      "descriptor": 0.6221072999999999,
+      "retained": 0.7407942999999999
+    },
+    "retained_over_jit": 1.2725809266686776
+  }
+]

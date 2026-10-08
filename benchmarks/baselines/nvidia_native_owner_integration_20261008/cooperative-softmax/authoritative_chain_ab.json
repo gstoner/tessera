@@ -1,0 +1,133 @@
+{
+  "schema": "tessera.sm120.cooperative_softmax_chain_ab.v1",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "rows": [
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 2,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.4457197288389911,
+          1.4504471804354002,
+          1.438265269495208,
+          1.4689519091255285,
+          1.4125786414793269
+        ],
+        "cooperative_128": [
+          0.43195845368741587,
+          0.4219328190877356,
+          0.4252509997141632,
+          0.42463754917579616,
+          0.42454099854115734
+        ]
+      },
+      "host_speedup": 3.404597006659145,
+      "consumer_image": "9a0fd2bf2266dc68c3095fdbf81a7eb513d061e5a131fbd940201e4b670e3a64",
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 3,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.460845635103231,
+          1.4892605461434207,
+          1.450039906723594,
+          1.6060020901601424,
+          1.4286687258969655
+        ],
+        "cooperative_128": [
+          0.46724518126046116,
+          0.4503604564392431,
+          0.42888572947545484,
+          0.4322520901703022,
+          0.437334910119799
+        ]
+      },
+      "host_speedup": 3.340336207560156,
+      "consumer_image": "9a0fd2bf2266dc68c3095fdbf81a7eb513d061e5a131fbd940201e4b670e3a64",
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 2,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.441734271462668,
+          1.4196339973502539,
+          1.421331454449418,
+          1.4192131824198773,
+          1.4315570905719968
+        ],
+        "cooperative_128": [
+          0.43929126960310066,
+          0.4047699992290952,
+          0.7353932702575218,
+          0.42728754289617593,
+          0.4333020928739147
+        ]
+      },
+      "host_speedup": 3.280232147096984,
+      "consumer_image": "1bdd477b9b9097fb847f65706284943a69ee4a0162f9ea6d58e8c1e82aeeb607",
+      "correctness": "before_and_after_timing"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 3,
+      "prepared_host_wall_samples_ms": {
+        "serial": [
+          1.4832189084369352,
+          1.424252277832817,
+          1.4647381824695251,
+          1.434745817360553,
+          1.6232802723111077
+        ],
+        "cooperative_128": [
+          0.4320083588192409,
+          0.4393192727796056,
+          0.44361490819772537,
+          0.43363845377991145,
+          0.4347284557297826
+        ]
+      },
+      "host_speedup": 3.369317474308545,
+      "consumer_image": "1bdd477b9b9097fb847f65706284943a69ee4a0162f9ea6d58e8c1e82aeeb607",
+      "correctness": "before_and_after_timing"
+    }
+  ],
+  "compiler_sha256": "e6dc1489a3740fc8647dd7070bdefb3c1b5dcd7e60fb5ac14d7c84640a057dc6",
+  "runtime_path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so",
+  "runtime_sha256": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a",
+  "sources": {
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "17e1ba50d2867b076eeac8bb57dc65fc2ae7b69a5843db353917afd92a90a2de",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "3b6c5c6388f8e510f07cee01c2056100dfddc96a128626bb16318a1477402e6c",
+    "python/tessera/compiler/nvidia_native.py": "1eb682bc64e659271bcb2ebfd50329fddf7d986e5e939742c039a6989dde221c",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "56e35d99a6925d8631308f810611541bdcdda28ec074f39c848d034ac9ab8d69",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "7c5188717217fd7aa247cbdb9e72f60667492a97ddbaac55289619c1c674394d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "7b57cc8d8613742415fc4339570ace6ac689ed63fb8284aec8a01c42ecbcafbd",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "b8f9314793ecddf152de492eec4849414c6b16fbf080fe03033281152849a47d"
+  },
+  "recorder_sha256": "b50994cf8935e9a3013354bed471c82d3e3fd7b2eb875681398d203a7ddb4fb9",
+  "timing": "alternating five windows of eleven prepared whole-chain host calls; copies and completion included; no device-kernel claim",
+  "automatic_selection": false
+}

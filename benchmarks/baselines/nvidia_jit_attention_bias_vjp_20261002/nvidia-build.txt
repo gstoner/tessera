@@ -1,0 +1,36 @@
+[  2%] Built target mlir-headers
+[  2%] Built target mlir-generic-headers
+[  2%] Building AttnDialect.cpp.inc...
+[ 19%] Built target tessera_layout_algebra
+[ 19%] Built target TesseraNVIDIATableGen
+[ 19%] Built target TesseraCollectiveTypesIncGen
+[ 19%] Built target TesseraAdjointInterfaceTableGen
+[ 21%] Built target TesseraPMTableGen
+[ 21%] Building AttnDialect.h.inc...
+[ 26%] Built target TesseraCollectiveOpsIncGen
+[ 26%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 26%] Built target obj.TesseraNVIDIAIR
+[ 29%] Built target TesseraAttnTableGen
+[ 29%] Built target TesseraTangentInterfaceTableGen
+[ 29%] Built target TesseraNVIDIAIR
+[ 31%] Built target obj.TesseraCollectiveDialect
+[ 34%] Built target TesseraCollectiveDialect
+[ 36%] Built target TesseraIRTableGen
+[ 39%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 39%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 39%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 39%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 43%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 43%] Built target TesseraTileIRTableGen
+[ 48%] Built target obj.TesseraIR
+[ 48%] Built target TesseraIR
+[ 48%] Built target TesseraScheduleIR
+[ 48%] Built target obj.TesseraAttnDialect
+[ 48%] Built target TesseraAttnDialect
+[ 48%] Built target TesseraPM
+[ 95%] Built target TesseraPasses
+[ 97%] Built target obj.TesseraNVIDIAConversion
+[ 97%] Built target TesseraNVIDIAConversion
+[100%] Linking CXX executable tessera-nvidia-opt
+[100%] Built target tessera-nvidia-opt

@@ -1,0 +1,1 @@
+66 rows; 330 event + 330 end-to-end numerical windows; source and matching compiler/runtime SHA256 values verified.

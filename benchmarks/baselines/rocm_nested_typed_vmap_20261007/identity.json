@@ -1,0 +1,10 @@
+{
+  "architecture": "gfx1201",
+  "sha256": {
+    "python/tessera/compiler/native_vmap.py": "8d6df2cfe5ebe6e366d3f082ccbd757a7d69bce2b128e1eadf82a30cf0c32a3b",
+    "python/tessera/compiler/jit.py": "1064f7149923770ed57d1f25b7103db8fbad4ac283948699b27880735c23a3d3",
+    "benchmarks/rocm/benchmark_nested_typed_scaled_vmap.py": "85a3107edefd6fadbd0e912b1698d54aa7cf6f2d92a5b7c2dfb3feba2d9154a6",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt": "cfe639a2c740b0ac7e8c4682c9ab41f8e7c796af181ae7afdb0540d36cb96642",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c"
+  }
+}

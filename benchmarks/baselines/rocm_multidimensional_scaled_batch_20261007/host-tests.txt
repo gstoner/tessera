@@ -1,0 +1,29 @@
+..........................................................F............. [ 18%]
+........................................................................ [ 37%]
+........................................................................ [ 56%]
+........................................................................ [ 75%]
+........................................................................ [ 94%]
+....................                                                     [100%]
+=================================== FAILURES ===================================
+______________ test_typed_primal_rejects_unproved_contract[batch] ______________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x76fd11023b60>
+change = 'batch'
+
+    @pytest.mark.parametrize("change",["scale_shape","policy","transpose_left","batch"])
+    def test_typed_primal_rejects_unproved_contract(monkeypatch,change):
+        graph=module(monkeypatch);op=graph.functions[0].body[0]
+        if change=="scale_shape":
+            from tessera.compiler.graph_ir import tensor_ir_type
+            graph.functions[0].args[2].ir_type=tensor_ir_type((17,3),"fp32")
+        if change=="policy":op.kwargs["numeric_policy"]={"accum":"fp32","execution_mode":"approximate"}
+        if change=="transpose_left":op.kwargs["transposeA"]=True
+        if change=="batch":op.kwargs["batching"]="independent_rhs"
+>       assert not supports_typed_scaled(graph)
+E       assert not True
+E        +  where True = supports_typed_scaled(GraphIRModule(1 functions))
+
+tests/unit/test_rocm_typed_scaled_primal.py:30: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_typed_scaled_primal.py::test_typed_primal_rejects_unproved_contract[batch]
+1 failed, 379 passed in 21.56s

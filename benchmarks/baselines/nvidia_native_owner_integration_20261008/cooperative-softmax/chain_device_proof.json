@@ -1,0 +1,182 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "rows": [
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "producer_count": 1,
+      "max_abs_error": 1.7462298274040222e-08,
+      "consumer_route": "typed_fragment_global",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "7f4244085daf893d756964d902dcba0827c33c9cdb768cabc4977f32837f97d2"
+    },
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "producer_count": 2,
+      "max_abs_error": 2.3166649043560028e-08,
+      "consumer_route": "typed_fragment_global",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "61243308cc8ed4b00210ee74d334fc7578645205d7a760ab66ca00a8d64d8b6d"
+    },
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "producer_count": 3,
+      "max_abs_error": 3.702007234096527e-08,
+      "consumer_route": "typed_fragment_global",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "ba6b544eb3f96f019a46c8814491934abb3f9686e7c26eb9f6ef459a45d04bcf"
+    },
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 1,
+      "max_abs_error": 1.979223327452928e-07,
+      "consumer_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "93052802ada18802c55403b3eaa2e9ab06cdd22dc1f861c1089ec608ebd4c2c8"
+    },
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 2,
+      "max_abs_error": 2.227207176019874e-06,
+      "consumer_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "4774118d8c447946c55d36af6385e0b03c6ed46a1955ea08742816a896225c88"
+    },
+    {
+      "dtype": "fp16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 3,
+      "max_abs_error": 6.788905082544261e-07,
+      "consumer_route": "macro_cta_cp_async_2stage_shared_ab_f16",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "339d4eff02b221c7fbdb6520b79520df2a3c39d5d90351dd253e1f01476e1d9e"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "producer_count": 1,
+      "max_abs_error": 5.587935447692871e-09,
+      "consumer_route": "typed_fragment_global",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "22e318e39a7d972200f2576de89373f5d16995de68e54208c81ca9ee516ac486"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "producer_count": 2,
+      "max_abs_error": 1.4901161193847656e-08,
+      "consumer_route": "typed_fragment_global",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "6b10a65976ab2f07e676e92a2e4b6b22840ca29b412dcdff3e16b88f12cdf934"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "producer_count": 3,
+      "max_abs_error": 1.909211277961731e-08,
+      "consumer_route": "typed_fragment_global",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "2fb109a2f7b2cb6c7bed699b3e52844fd68b2479ce4aefd588a1d2984afd7f27"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 1,
+      "max_abs_error": 5.4489646572619677e-08,
+      "consumer_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "ec2e101f333fe173049d69b1e76bdf3a7276caf78b5274d329aa08d5250d2d3b"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 2,
+      "max_abs_error": 1.1755557238757319e-07,
+      "consumer_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "665fe8604ebd7d1f1344431b66172b62e4084eb84d3c0ce824df3cd570eb49fd"
+    },
+    {
+      "dtype": "bf16",
+      "shape_mkn": [
+        128,
+        4096,
+        64
+      ],
+      "producer_count": 3,
+      "max_abs_error": 4.633435697343202e-07,
+      "consumer_route": "macro_cta_cp_async_2stage_shared_ab_bf16",
+      "changed_input": "passed",
+      "retained_output": "unchanged",
+      "plan_digest": "d78460737f007335558a2f0566a353c0b74eba2d79cb8c00a7a27b5b8ce2e5fe"
+    }
+  ],
+  "runtime_sha256": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a",
+  "compiler_sha256": "b8fe61ff3e13322eb43b096a035e75ac2bdbd0bd3810eb810b8714317918029e",
+  "candidate_sources": {
+    "prepared_nvidia_lhs.py": "3b6c5c6388f8e510f07cee01c2056100dfddc96a128626bb16318a1477402e6c",
+    "nvidia_tensor_lhs.py": "17e1ba50d2867b076eeac8bb57dc65fc2ae7b69a5843db353917afd92a90a2de",
+    "matmul_prepared.cpp": "7b57cc8d8613742415fc4339570ace6ac689ed63fb8284aec8a01c42ecbcafbd"
+  },
+  "timing": "not_run",
+  "dynamic_multi_guard": "unchanged"
+}

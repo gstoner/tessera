@@ -1,0 +1,5 @@
+{
+  "python/tessera/compiler/native_vjp_plugins.py": "dd032662e338c5c71ff11c20bf83573ed2e35f8dfaacdf4e9dd996e64b779de5",
+  "benchmarks/rocm/benchmark_native_scaled_vjp.py": "9211a8f673507ac5fea7fa544a4ed7ba73da7be3d5eadf430a5d34e6da947526",
+  "tests/unit/test_native_scaled_transpose_lowering.py": "974f45eed099504c0677a0bd6f5ed1197a933eb8599b44fee0fa842634411a3b"
+}

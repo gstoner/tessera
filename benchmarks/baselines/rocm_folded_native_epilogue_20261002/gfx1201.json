@@ -1,0 +1,29 @@
+{
+  "work_item": "ROCM-MXFP4-W4A8-1",
+  "sync_key": "ROCM-FOLDED-NATIVE-EPILOGUE-2026-10-02",
+  "host": "tajasarus",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "compiler": "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "6058bc24f7fc46a7fba5f6067d7aaf747e291ddd8b9ded765c97e76c675946a3",
+  "source_sha256": {
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "8dcf716ea9c159fed82f476199f931539d44ba6402322362adcb08086b26b3ba",
+    "src/compiler/ir/TileOps.cpp": "02e40963c5e1d5c4bbd4b09fe2c85dd58cb7ca673599575607721c6313584534",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "64fef4cbf4dcb2c2d64cc6cd5da901b20c1949e5a1248480823d8ea662cf5d20",
+    "tests/unit/test_tile_folded_scale_native.py": "8d071ad275d17752364537143b730002da242f906a903623ec42efa6c61acef9",
+    "tests/device/rocm/test_folded_scale_native.py": "0753be0573f11f3c5951561d8473c8cbba799861a41d507ff728e4b747a9822c"
+  },
+  "route": "authored native Tile/GPU typed full-K MMA -> folded scale -> ROCm/ROCDL/LLVM -> HSACO",
+  "graph_package_migrated": false,
+  "production_benchmark_complete": false,
+  "device_cases": [
+    "normal",
+    "overflow_scale",
+    "underflow_scale",
+    "zero_partial",
+    "zero_reference",
+    "ragged"
+  ],
+  "final_verifier_and_device_tests": "11 passed",
+  "combined_verifier_device_w8a8_tests": "110 passed"
+}

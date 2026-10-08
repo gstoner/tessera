@@ -1,0 +1,37 @@
+-- Could NOT find LibEdit (missing: LibEdit_INCLUDE_DIRS LibEdit_LIBRARIES) 
+-- Could NOT find CURL (missing: CURL_LIBRARY CURL_INCLUDE_DIR) 
+-- Could NOT find LibEdit (missing: LibEdit_INCLUDE_DIRS LibEdit_LIBRARIES) 
+-- Could NOT find CURL (missing: CURL_LIBRARY CURL_INCLUDE_DIR) 
+-- Tessera LLVM/MLIR pin satisfied (exact): LLVM 23.1.1, MLIR 23.1.1, pin 23.1.1
+-- Building with -fPIC
+Precompiled headers are disabled by default with GCC. Pass -DCMAKE_DISABLE_PRECOMPILE_HEADERS=OFF to override.
+-- Precompiled headers disabled.
+-- TESSERA_CUDA_ARCH = sm_90a
+-- NVIDIA CUDA runtime disabled; building hardware-free Target IR tools only
+-- Could NOT find LibEdit (missing: LibEdit_INCLUDE_DIRS LibEdit_LIBRARIES) 
+-- Could NOT find CURL (missing: CURL_LIBRARY CURL_INCLUDE_DIR) 
+-- Could NOT find LibEdit (missing: LibEdit_INCLUDE_DIRS LibEdit_LIBRARIES) 
+-- Could NOT find CURL (missing: CURL_LIBRARY CURL_INCLUDE_DIR) 
+-- HIP: Using hipcc from relative path: /opt/rocm/bin/hipcc
+-- HIP_PLATFORM using hip_HIPCONFIG_EXECUTABLE: amd
+-- Tessera lit runner: /usr/lib/llvm-23/bin/lit (lit 23.1.1dev)
+-- ----------------------------------------------------
+-- Tessera 0.1.0 build configuration
+--   LLVM/MLIR version : 23.1.1
+--   CUDA support      : OFF
+--   CPU only          : OFF
+--   HIP  support      : OFF
+--   x86 backend       : OFF
+--   NVIDIA backend    : ON
+--   ROCm backend      : ON
+--   Apple backend     : OFF
+--   Clifford backend  : OFF
+--   EBM backend       : OFF
+--   Sanitizers        : off
+--   Build tests       : OFF
+--   Build examples    : OFF
+--   Build Python      : ON
+-- ----------------------------------------------------
+-- Configuring done (0.4s)
+-- Generating done (0.1s)
+-- Build files have been written to: /home/gstoner/scratch/rocm-native-movement-20261005/.build

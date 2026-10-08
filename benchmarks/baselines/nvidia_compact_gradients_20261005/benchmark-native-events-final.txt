@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 290, in <module>
+    main()
+    ~~~~^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 261, in main
+    rows.append(run_case(device,shape,causal,wrt,repetitions=args.repetitions,directory=directory))
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 152, in run_case
+    native_samples[name].append(rt._nvidia_native_descriptor_resident_device_latency(
+                                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        pkg.image,pkg.descriptor,native_args[name],stream=session.stream,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        warmup=4,reps=max(256,repetitions)))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py", line 7853, in _nvidia_native_descriptor_resident_device_latency
+    _validate_nvidia_cuda_buffer_streams(
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        [cast(Mapping[str, Any], interface) for interface in interfaces], stream)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py", line 3035, in _validate_nvidia_cuda_buffer_streams
+    raise RuntimeError(
+    ...<2 lines>...
+    )
+RuntimeError: resident SM120 CUDA buffer producer stream must match the explicit launch stream (buffer 1)

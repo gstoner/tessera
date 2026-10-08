@@ -1,0 +1,14 @@
+{
+  "TESSERA_OPT": {
+    "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+    "sha256": "e6dc1489a3740fc8647dd7070bdefb3c1b5dcd7e60fb5ac14d7c84640a057dc6"
+  },
+  "TESSERA_NVIDIA_OPT": {
+    "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+    "sha256": "e659bc19246badf53aecee727c53fcd194df139cbc708f30b22f7c4d3b2820f3"
+  },
+  "TESSERA_NVIDIA_PTX_LAUNCH_LIB": {
+    "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so",
+    "sha256": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a"
+  }
+}

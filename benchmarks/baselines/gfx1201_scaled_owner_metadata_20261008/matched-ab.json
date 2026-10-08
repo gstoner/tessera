@@ -1,0 +1,2890 @@
+{
+  "schema": "tessera.scaled_owner_metadata_ab.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid": "32386439653765666266326566373136",
+  "device_ordinal": 0,
+  "compiler_sha256": "65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "control_source_sha256": "f21f04c9bbe3d29a79c1cc638861d566a9d2201524da893f2a6e72908b30e87d",
+  "candidate_source_sha256": "1c9502b889cc2cade64e9888770d9693ad88a7b53d479e4d8675e572b1f04469",
+  "recorder_sha256": "540f14df0ff44d23b9692cb8cd624cf17ec7460ec963f1fa3966174cc4ee285c",
+  "runs": [
+    {
+      "round": 0,
+      "arm": "control",
+      "rows": [
+        {
+          "kind": "primal",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 370.091565,
+          "warm_public_wall_samples_ms": [
+            5.091156,
+            1.008294,
+            1.039824
+          ],
+          "warm_public_wall_median_ms": 1.039824,
+          "prepared_program_event_samples_ms": [
+            0.013102812692523003,
+            0.01313406229019165,
+            0.013102812692523003
+          ],
+          "prepared_program_event_median_ms": 0.013102812692523003,
+          "native_program_sha256": "ef567caf39afee3f83d84349c530a8d5c658fb9a675007c8a2ec9233a85a8875",
+          "member_image_sha256": [
+            "0757430d5b8f3e24288132bcc732b8eac7033efb9ab4655039571a86cc624876"
+          ],
+          "frontend_graph_sha256": "322925894cde5e872a934077e94428bc595e6d10686f1396c788d2a930e8eceb",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 478.731157,
+          "warm_public_wall_samples_ms": [
+            1.570447,
+            1.476999,
+            1.430349
+          ],
+          "warm_public_wall_median_ms": 1.476999,
+          "prepared_program_event_samples_ms": [
+            0.04429693892598152,
+            0.04410631209611893,
+            0.044144123792648315
+          ],
+          "prepared_program_event_median_ms": 0.044144123792648315,
+          "native_program_sha256": "eda17d9a8daa8dde9870f912656ebbaf5a5d14ab78cd2fa9d7feacb4eda1e961",
+          "member_image_sha256": [
+            "8594376d7697aa840201565dbd6cdf278ce3f149db17246513606582be488736",
+            "d199d29ea8e297f6526e88060881e80047ff62007b9f536f93a37929b0615b51",
+            "fe7e9af2be01f9dc3dcaec32966bcb3975c03247c5ae2bdb673f07f1eacb2d24",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "d746942195c939cea92f27c16900a91c0ea9c95ca1c6914bc14214df31dc80d0",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 1.1568447055854136e-07,
+          "cold_public_wall_ms": 149.233812,
+          "warm_public_wall_samples_ms": [
+            2.136166,
+            1.897581,
+            1.709573
+          ],
+          "warm_public_wall_median_ms": 1.897581,
+          "prepared_program_event_samples_ms": [
+            0.8709186315536499,
+            0.7448896169662476,
+            0.7526951432228088
+          ],
+          "prepared_program_event_median_ms": 0.7526951432228088,
+          "native_program_sha256": "c5e0a071cd0a5be48bc306c9ba2134194bda8b847909532efaed0cffa9f754dc",
+          "member_image_sha256": [
+            "ebea2713823dcc77c2ef28d39ab56e2a1fa6265c0dfd14986ee93e56d0ec7cf8",
+            "2efa21eb5c1c0bd08bf6d0cce6c1a55390384521def4bcffb50588edcd4329a0"
+          ],
+          "frontend_graph_sha256": "76c825e3086268a16e454785c1ca6f88c849a6297dfdbdbc48d8dfe447486737",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 274.673827,
+          "warm_public_wall_samples_ms": [
+            1.062527,
+            0.948841,
+            0.90655
+          ],
+          "warm_public_wall_median_ms": 0.948841,
+          "prepared_program_event_samples_ms": [
+            0.008337406441569328,
+            0.008348655886948109,
+            0.008339906111359596
+          ],
+          "prepared_program_event_median_ms": 0.008339906111359596,
+          "native_program_sha256": "198059f792fb0f60e8211da7681ce2e34ce282a97e023bc9b4a1a457c952634f",
+          "member_image_sha256": [
+            "2c7f0be7b43ac75f737e0f99bde0e700da5da737c975ba71b30dd408e4bea7b1"
+          ],
+          "frontend_graph_sha256": "0c7dbd5672e133c2a6e040b436061053581384980c31f65f324803e9a5e09fe9",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 458.130028,
+          "warm_public_wall_samples_ms": [
+            1.73999,
+            1.597729,
+            1.562106
+          ],
+          "warm_public_wall_median_ms": 1.597729,
+          "prepared_program_event_samples_ms": [
+            0.0439414381980896,
+            0.045015811920166016,
+            0.0428970642387867
+          ],
+          "prepared_program_event_median_ms": 0.0439414381980896,
+          "native_program_sha256": "fb510ab9852fbaf8bb1c0e31780c496aea85f25d2f83722e653bf79e390bcbf5",
+          "member_image_sha256": [
+            "11085c4f4f55d8767991c0654559ee6a3ac2ea1dd071174c7d0b9871e0cb10e9",
+            "7607786ba44b349f4a74366c493f71ac6cc535211a306235659ea15a170c6027",
+            "5199182189edbaf21f93e981de2e4e2b0dda1be1123f50da8d2335e2cbdb5b85",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "33a768a90b667029f402de9485577132c80d8ce9c3c1e03b7cecd79b48937855",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 5.0331469603204226e-08,
+          "cold_public_wall_ms": 141.654503,
+          "warm_public_wall_samples_ms": [
+            2.425939,
+            2.282296,
+            2.317092
+          ],
+          "warm_public_wall_median_ms": 2.317092,
+          "prepared_program_event_samples_ms": [
+            1.1804249286651611,
+            0.8321306109428406,
+            0.8266881704330444
+          ],
+          "prepared_program_event_median_ms": 0.8321306109428406,
+          "native_program_sha256": "e7a286c776fae157f94677b849505bb0265e81c5e802c580c8043f957a52275e",
+          "member_image_sha256": [
+            "b2903eeba4f5695304ba4f51f3f28edc6b2c62c46a2468cb1f082c732ff2a7eb",
+            "c8e625b3076f857464862fd2b031445a65f9c10ef0470c8572826ffc0f3a0fc4"
+          ],
+          "frontend_graph_sha256": "32be20f2dd90555a31573c1d378ef0af0ca8f95b7ba3e0db40f2a6310bdc36cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 268.068552,
+          "warm_public_wall_samples_ms": [
+            1.064551,
+            0.951706,
+            0.963454
+          ],
+          "warm_public_wall_median_ms": 0.963454,
+          "prepared_program_event_samples_ms": [
+            0.014157343655824661,
+            0.013602343387901783,
+            0.01356484368443489
+          ],
+          "prepared_program_event_median_ms": 0.013602343387901783,
+          "native_program_sha256": "fbf440fcaa5541105cb0d6a982f99376cfc32fed8739318785553c0d5b7af28d",
+          "member_image_sha256": [
+            "c88fd14e50a794c52f77c31b6deb601f097af127108c4a1a31a13108c260af42"
+          ],
+          "frontend_graph_sha256": "b946193f8c75cb00d7f05529276aa3c34236d3b1621318c9e47c42d1b840665d",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 461.382761,
+          "warm_public_wall_samples_ms": [
+            1.689374,
+            1.489703,
+            1.743342
+          ],
+          "warm_public_wall_median_ms": 1.689374,
+          "prepared_program_event_samples_ms": [
+            0.044739626348018646,
+            0.044773999601602554,
+            0.04465056210756302
+          ],
+          "prepared_program_event_median_ms": 0.044739626348018646,
+          "native_program_sha256": "3cd81b23132bd0254378a37f82bce5224ef4120d55b6cf86a753ad1d6541ed8e",
+          "member_image_sha256": [
+            "a33f25c464e366a4229dcf59f3260e9f9631054f878bc9aea150118c8fc6a67a",
+            "e7516fde2d64ca62859d68f3e682e2267e367aee2742fef67be4bafc3c6b9768",
+            "9e7a9fd13c429d3e6c02ec9a0c966f461faebba931dd65756875be64295d4def",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "763da98c7a8d0495c9c95ef6326ed338d40032d9de5b3265b2ad84d66b831251",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 8.952333307998828e-08,
+          "cold_public_wall_ms": 137.703142,
+          "warm_public_wall_samples_ms": [
+            1.911658,
+            1.576167,
+            1.861693
+          ],
+          "warm_public_wall_median_ms": 1.861693,
+          "prepared_program_event_samples_ms": [
+            0.6885442733764648,
+            0.44797128438949585,
+            0.3394984006881714
+          ],
+          "prepared_program_event_median_ms": 0.44797128438949585,
+          "native_program_sha256": "da3a591f1a6e2bd6789a14929f551ef08e561a4d504f3e4d53022be5a1e6eb52",
+          "member_image_sha256": [
+            "7a393f6109a8737350a91e500c087238a4aa115d1410b212c84cfeda885adf11",
+            "94f3157cc6ece56eded03c14e8f3cb842e4fae340e04482be4eac368f340296d"
+          ],
+          "frontend_graph_sha256": "d6f239a27fc983ed07f7c9951204e5ddd0d1441b4af93269ce861f9bb914f0cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 273.446254,
+          "warm_public_wall_samples_ms": [
+            0.965973,
+            0.866744,
+            0.854992
+          ],
+          "warm_public_wall_median_ms": 0.866744,
+          "prepared_program_event_samples_ms": [
+            0.013461155816912651,
+            0.013474905863404274,
+            0.013462374918162823
+          ],
+          "prepared_program_event_median_ms": 0.013462374918162823,
+          "native_program_sha256": "f9e9ac2c387eb83b80fa30d7566f718b318db6d0d7d234bbee5e69ead5ffbce8",
+          "member_image_sha256": [
+            "533ece79787d5a2aae2bcf72da59e319c8ec3ad8519790d46c84af33a690caca"
+          ],
+          "frontend_graph_sha256": "eb083a243753669cd9d2579a31c33de5156ee5b5f92d32b8792f757e467954ce",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 464.98,
+          "warm_public_wall_samples_ms": [
+            1.869999,
+            1.801577,
+            1.5771
+          ],
+          "warm_public_wall_median_ms": 1.801577,
+          "prepared_program_event_samples_ms": [
+            0.045284342020750046,
+            0.04525434225797653,
+            0.04402090609073639
+          ],
+          "prepared_program_event_median_ms": 0.04525434225797653,
+          "native_program_sha256": "0294fe963572284502cbb8bf2fe3191a39553c83357b6be1b7e3091468350260",
+          "member_image_sha256": [
+            "440fb70d1e6c488972b1c9375835ec6879046a280928eb171ec77cb4ecda642e",
+            "8d8a37a51a04460564a8d2d1261f54c3c5ef115602d584d4305c1617101dcab0",
+            "8232b5d537f9872968088cd20bbb627ba882aff1f0ea0df4c5c774e55f2dd115",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "1a57ffab7022cb920f961f35208935e2b3bca3d82b8b14a1a6abb8831d59a37b",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 7.645306758508053e-08,
+          "cold_public_wall_ms": 139.777416,
+          "warm_public_wall_samples_ms": [
+            1.75025,
+            1.463443,
+            1.459575
+          ],
+          "warm_public_wall_median_ms": 1.463443,
+          "prepared_program_event_samples_ms": [
+            0.556504487991333,
+            0.4683755040168762,
+            0.28805938363075256
+          ],
+          "prepared_program_event_median_ms": 0.4683755040168762,
+          "native_program_sha256": "d2d8b59acd5707c82e4b200df99eb62340c79b62b5a863026289a18309fe6f4f",
+          "member_image_sha256": [
+            "706d856ed34724c59b48fa3b4a4cb43fe2a505ef9878943b9f5522121ba05faa",
+            "cea12fbe962e3a2ea99688ab55f4d06674951afe6ba2f6667bb974bde2fdf0a8"
+          ],
+          "frontend_graph_sha256": "f49b65e06e911af44a0692e4d3738681d5b1728f3904a6e41b727a84e1c3dd12",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        }
+      ]
+    },
+    {
+      "round": 0,
+      "arm": "candidate",
+      "rows": [
+        {
+          "kind": "primal",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 266.881196,
+          "warm_public_wall_samples_ms": [
+            1.156908,
+            0.860412,
+            0.857357
+          ],
+          "warm_public_wall_median_ms": 0.860412,
+          "prepared_program_event_samples_ms": [
+            0.013429906219244003,
+            0.013482405804097652,
+            0.013429906219244003
+          ],
+          "prepared_program_event_median_ms": 0.013429906219244003,
+          "native_program_sha256": "ef567caf39afee3f83d84349c530a8d5c658fb9a675007c8a2ec9233a85a8875",
+          "member_image_sha256": [
+            "0757430d5b8f3e24288132bcc732b8eac7033efb9ab4655039571a86cc624876"
+          ],
+          "frontend_graph_sha256": "322925894cde5e872a934077e94428bc595e6d10686f1396c788d2a930e8eceb",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 455.724563,
+          "warm_public_wall_samples_ms": [
+            1.638687,
+            1.474885,
+            1.585416
+          ],
+          "warm_public_wall_median_ms": 1.585416,
+          "prepared_program_event_samples_ms": [
+            0.0443277508020401,
+            0.045030251145362854,
+            0.04511431232094765
+          ],
+          "prepared_program_event_median_ms": 0.045030251145362854,
+          "native_program_sha256": "eda17d9a8daa8dde9870f912656ebbaf5a5d14ab78cd2fa9d7feacb4eda1e961",
+          "member_image_sha256": [
+            "8594376d7697aa840201565dbd6cdf278ce3f149db17246513606582be488736",
+            "d199d29ea8e297f6526e88060881e80047ff62007b9f536f93a37929b0615b51",
+            "fe7e9af2be01f9dc3dcaec32966bcb3975c03247c5ae2bdb673f07f1eacb2d24",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "d746942195c939cea92f27c16900a91c0ea9c95ca1c6914bc14214df31dc80d0",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 1.1568447055854136e-07,
+          "cold_public_wall_ms": 14.125928,
+          "warm_public_wall_samples_ms": [
+            2.255575,
+            2.129123,
+            2.223573
+          ],
+          "warm_public_wall_median_ms": 2.223573,
+          "prepared_program_event_samples_ms": [
+            1.1504896879196167,
+            0.7445540428161621,
+            0.7528662085533142
+          ],
+          "prepared_program_event_median_ms": 0.7528662085533142,
+          "native_program_sha256": "c5e0a071cd0a5be48bc306c9ba2134194bda8b847909532efaed0cffa9f754dc",
+          "member_image_sha256": [
+            "ebea2713823dcc77c2ef28d39ab56e2a1fa6265c0dfd14986ee93e56d0ec7cf8",
+            "2efa21eb5c1c0bd08bf6d0cce6c1a55390384521def4bcffb50588edcd4329a0"
+          ],
+          "frontend_graph_sha256": "76c825e3086268a16e454785c1ca6f88c849a6297dfdbdbc48d8dfe447486737",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 267.852535,
+          "warm_public_wall_samples_ms": [
+            1.222332,
+            0.887233,
+            0.915306
+          ],
+          "warm_public_wall_median_ms": 0.915306,
+          "prepared_program_event_samples_ms": [
+            0.013109874911606312,
+            0.013094905763864517,
+            0.013119874522089958
+          ],
+          "prepared_program_event_median_ms": 0.013109874911606312,
+          "native_program_sha256": "198059f792fb0f60e8211da7681ce2e34ce282a97e023bc9b4a1a457c952634f",
+          "member_image_sha256": [
+            "2c7f0be7b43ac75f737e0f99bde0e700da5da737c975ba71b30dd408e4bea7b1"
+          ],
+          "frontend_graph_sha256": "0c7dbd5672e133c2a6e040b436061053581384980c31f65f324803e9a5e09fe9",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 466.429982,
+          "warm_public_wall_samples_ms": [
+            1.588581,
+            1.756722,
+            1.913617
+          ],
+          "warm_public_wall_median_ms": 1.756722,
+          "prepared_program_event_samples_ms": [
+            0.04306690767407417,
+            0.042926907539367676,
+            0.041902218014001846
+          ],
+          "prepared_program_event_median_ms": 0.042926907539367676,
+          "native_program_sha256": "fb510ab9852fbaf8bb1c0e31780c496aea85f25d2f83722e653bf79e390bcbf5",
+          "member_image_sha256": [
+            "11085c4f4f55d8767991c0654559ee6a3ac2ea1dd071174c7d0b9871e0cb10e9",
+            "7607786ba44b349f4a74366c493f71ac6cc535211a306235659ea15a170c6027",
+            "5199182189edbaf21f93e981de2e4e2b0dda1be1123f50da8d2335e2cbdb5b85",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "33a768a90b667029f402de9485577132c80d8ce9c3c1e03b7cecd79b48937855",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 5.0331469603204226e-08,
+          "cold_public_wall_ms": 15.099799,
+          "warm_public_wall_samples_ms": [
+            2.600643,
+            2.487146,
+            2.632454
+          ],
+          "warm_public_wall_median_ms": 2.600643,
+          "prepared_program_event_samples_ms": [
+            1.100322961807251,
+            0.822578489780426,
+            0.8230647444725037
+          ],
+          "prepared_program_event_median_ms": 0.8230647444725037,
+          "native_program_sha256": "e7a286c776fae157f94677b849505bb0265e81c5e802c580c8043f957a52275e",
+          "member_image_sha256": [
+            "b2903eeba4f5695304ba4f51f3f28edc6b2c62c46a2468cb1f082c732ff2a7eb",
+            "c8e625b3076f857464862fd2b031445a65f9c10ef0470c8572826ffc0f3a0fc4"
+          ],
+          "frontend_graph_sha256": "32be20f2dd90555a31573c1d378ef0af0ca8f95b7ba3e0db40f2a6310bdc36cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 270.057312,
+          "warm_public_wall_samples_ms": [
+            1.098255,
+            0.90686,
+            0.877805
+          ],
+          "warm_public_wall_median_ms": 0.90686,
+          "prepared_program_event_samples_ms": [
+            0.013526156544685364,
+            0.013576187193393707,
+            0.013497406616806984
+          ],
+          "prepared_program_event_median_ms": 0.013526156544685364,
+          "native_program_sha256": "fbf440fcaa5541105cb0d6a982f99376cfc32fed8739318785553c0d5b7af28d",
+          "member_image_sha256": [
+            "c88fd14e50a794c52f77c31b6deb601f097af127108c4a1a31a13108c260af42"
+          ],
+          "frontend_graph_sha256": "b946193f8c75cb00d7f05529276aa3c34236d3b1621318c9e47c42d1b840665d",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 508.161212,
+          "warm_public_wall_samples_ms": [
+            1.809213,
+            1.697139,
+            1.502347
+          ],
+          "warm_public_wall_median_ms": 1.697139,
+          "prepared_program_event_samples_ms": [
+            0.044740062206983566,
+            0.04435631260275841,
+            0.04439850151538849
+          ],
+          "prepared_program_event_median_ms": 0.04439850151538849,
+          "native_program_sha256": "3cd81b23132bd0254378a37f82bce5224ef4120d55b6cf86a753ad1d6541ed8e",
+          "member_image_sha256": [
+            "a33f25c464e366a4229dcf59f3260e9f9631054f878bc9aea150118c8fc6a67a",
+            "e7516fde2d64ca62859d68f3e682e2267e367aee2742fef67be4bafc3c6b9768",
+            "9e7a9fd13c429d3e6c02ec9a0c966f461faebba931dd65756875be64295d4def",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "763da98c7a8d0495c9c95ef6326ed338d40032d9de5b3265b2ad84d66b831251",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 8.952333307998828e-08,
+          "cold_public_wall_ms": 14.227725,
+          "warm_public_wall_samples_ms": [
+            2.119354,
+            1.655469,
+            1.654808
+          ],
+          "warm_public_wall_median_ms": 1.655469,
+          "prepared_program_event_samples_ms": [
+            0.6936410069465637,
+            0.45411643385887146,
+            0.3423614799976349
+          ],
+          "prepared_program_event_median_ms": 0.45411643385887146,
+          "native_program_sha256": "da3a591f1a6e2bd6789a14929f551ef08e561a4d504f3e4d53022be5a1e6eb52",
+          "member_image_sha256": [
+            "7a393f6109a8737350a91e500c087238a4aa115d1410b212c84cfeda885adf11",
+            "94f3157cc6ece56eded03c14e8f3cb842e4fae340e04482be4eac368f340296d"
+          ],
+          "frontend_graph_sha256": "d6f239a27fc983ed07f7c9951204e5ddd0d1441b4af93269ce861f9bb914f0cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 270.081507,
+          "warm_public_wall_samples_ms": [
+            1.063319,
+            0.896591,
+            0.973839
+          ],
+          "warm_public_wall_median_ms": 0.973839,
+          "prepared_program_event_samples_ms": [
+            0.01367365662008524,
+            0.013557406142354012,
+            0.013536187820136547
+          ],
+          "prepared_program_event_median_ms": 0.013557406142354012,
+          "native_program_sha256": "f9e9ac2c387eb83b80fa30d7566f718b318db6d0d7d234bbee5e69ead5ffbce8",
+          "member_image_sha256": [
+            "533ece79787d5a2aae2bcf72da59e319c8ec3ad8519790d46c84af33a690caca"
+          ],
+          "frontend_graph_sha256": "eb083a243753669cd9d2579a31c33de5156ee5b5f92d32b8792f757e467954ce",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 451.053887,
+          "warm_public_wall_samples_ms": [
+            1.622667,
+            1.804564,
+            1.480095
+          ],
+          "warm_public_wall_median_ms": 1.622667,
+          "prepared_program_event_samples_ms": [
+            0.044908780604600906,
+            0.044736310839653015,
+            0.04475068673491478
+          ],
+          "prepared_program_event_median_ms": 0.04475068673491478,
+          "native_program_sha256": "0294fe963572284502cbb8bf2fe3191a39553c83357b6be1b7e3091468350260",
+          "member_image_sha256": [
+            "440fb70d1e6c488972b1c9375835ec6879046a280928eb171ec77cb4ecda642e",
+            "8d8a37a51a04460564a8d2d1261f54c3c5ef115602d584d4305c1617101dcab0",
+            "8232b5d537f9872968088cd20bbb627ba882aff1f0ea0df4c5c774e55f2dd115",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "1a57ffab7022cb920f961f35208935e2b3bca3d82b8b14a1a6abb8831d59a37b",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 7.645306758508053e-08,
+          "cold_public_wall_ms": 13.579555,
+          "warm_public_wall_samples_ms": [
+            1.634129,
+            1.488581,
+            1.452211
+          ],
+          "warm_public_wall_median_ms": 1.488581,
+          "prepared_program_event_samples_ms": [
+            0.551559567451477,
+            0.4626113176345825,
+            0.2876597046852112
+          ],
+          "prepared_program_event_median_ms": 0.4626113176345825,
+          "native_program_sha256": "d2d8b59acd5707c82e4b200df99eb62340c79b62b5a863026289a18309fe6f4f",
+          "member_image_sha256": [
+            "706d856ed34724c59b48fa3b4a4cb43fe2a505ef9878943b9f5522121ba05faa",
+            "cea12fbe962e3a2ea99688ab55f4d06674951afe6ba2f6667bb974bde2fdf0a8"
+          ],
+          "frontend_graph_sha256": "f49b65e06e911af44a0692e4d3738681d5b1728f3904a6e41b727a84e1c3dd12",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        }
+      ]
+    },
+    {
+      "round": 1,
+      "arm": "candidate",
+      "rows": [
+        {
+          "kind": "primal",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 269.360088,
+          "warm_public_wall_samples_ms": [
+            1.151027,
+            0.950915,
+            0.879048
+          ],
+          "warm_public_wall_median_ms": 0.950915,
+          "prepared_program_event_samples_ms": [
+            0.013462437316775322,
+            0.013476187363266945,
+            0.013422437012195587
+          ],
+          "prepared_program_event_median_ms": 0.013462437316775322,
+          "native_program_sha256": "ef567caf39afee3f83d84349c530a8d5c658fb9a675007c8a2ec9233a85a8875",
+          "member_image_sha256": [
+            "0757430d5b8f3e24288132bcc732b8eac7033efb9ab4655039571a86cc624876"
+          ],
+          "frontend_graph_sha256": "322925894cde5e872a934077e94428bc595e6d10686f1396c788d2a930e8eceb",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 454.059052,
+          "warm_public_wall_samples_ms": [
+            1.545209,
+            1.720293,
+            1.80259
+          ],
+          "warm_public_wall_median_ms": 1.720293,
+          "prepared_program_event_samples_ms": [
+            0.044445499777793884,
+            0.04441237449645996,
+            0.04451706260442734
+          ],
+          "prepared_program_event_median_ms": 0.044445499777793884,
+          "native_program_sha256": "eda17d9a8daa8dde9870f912656ebbaf5a5d14ab78cd2fa9d7feacb4eda1e961",
+          "member_image_sha256": [
+            "8594376d7697aa840201565dbd6cdf278ce3f149db17246513606582be488736",
+            "d199d29ea8e297f6526e88060881e80047ff62007b9f536f93a37929b0615b51",
+            "fe7e9af2be01f9dc3dcaec32966bcb3975c03247c5ae2bdb673f07f1eacb2d24",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "d746942195c939cea92f27c16900a91c0ea9c95ca1c6914bc14214df31dc80d0",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 1.1568447055854136e-07,
+          "cold_public_wall_ms": 14.363752,
+          "warm_public_wall_samples_ms": [
+            2.559925,
+            2.1799,
+            2.615763
+          ],
+          "warm_public_wall_median_ms": 2.559925,
+          "prepared_program_event_samples_ms": [
+            1.1504896879196167,
+            0.7514644861221313,
+            0.7473495006561279
+          ],
+          "prepared_program_event_median_ms": 0.7514644861221313,
+          "native_program_sha256": "c5e0a071cd0a5be48bc306c9ba2134194bda8b847909532efaed0cffa9f754dc",
+          "member_image_sha256": [
+            "ebea2713823dcc77c2ef28d39ab56e2a1fa6265c0dfd14986ee93e56d0ec7cf8",
+            "2efa21eb5c1c0bd08bf6d0cce6c1a55390384521def4bcffb50588edcd4329a0"
+          ],
+          "frontend_graph_sha256": "76c825e3086268a16e454785c1ca6f88c849a6297dfdbdbc48d8dfe447486737",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 266.213333,
+          "warm_public_wall_samples_ms": [
+            1.095821,
+            0.916218,
+            1.017281
+          ],
+          "warm_public_wall_median_ms": 1.017281,
+          "prepared_program_event_samples_ms": [
+            0.013107437640428543,
+            0.013118687085807323,
+            0.013103687204420567
+          ],
+          "prepared_program_event_median_ms": 0.013107437640428543,
+          "native_program_sha256": "198059f792fb0f60e8211da7681ce2e34ce282a97e023bc9b4a1a457c952634f",
+          "member_image_sha256": [
+            "2c7f0be7b43ac75f737e0f99bde0e700da5da737c975ba71b30dd408e4bea7b1"
+          ],
+          "frontend_graph_sha256": "0c7dbd5672e133c2a6e040b436061053581384980c31f65f324803e9a5e09fe9",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 460.49363,
+          "warm_public_wall_samples_ms": [
+            1.946795,
+            1.512046,
+            1.541732
+          ],
+          "warm_public_wall_median_ms": 1.541732,
+          "prepared_program_event_samples_ms": [
+            0.04417665675282478,
+            0.043136030435562134,
+            0.044205717742443085
+          ],
+          "prepared_program_event_median_ms": 0.04417665675282478,
+          "native_program_sha256": "fb510ab9852fbaf8bb1c0e31780c496aea85f25d2f83722e653bf79e390bcbf5",
+          "member_image_sha256": [
+            "11085c4f4f55d8767991c0654559ee6a3ac2ea1dd071174c7d0b9871e0cb10e9",
+            "7607786ba44b349f4a74366c493f71ac6cc535211a306235659ea15a170c6027",
+            "5199182189edbaf21f93e981de2e4e2b0dda1be1123f50da8d2335e2cbdb5b85",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "33a768a90b667029f402de9485577132c80d8ce9c3c1e03b7cecd79b48937855",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 5.0331469603204226e-08,
+          "cold_public_wall_ms": 14.771302,
+          "warm_public_wall_samples_ms": [
+            2.621843,
+            2.297495,
+            2.609901
+          ],
+          "warm_public_wall_median_ms": 2.609901,
+          "prepared_program_event_samples_ms": [
+            1.1096738576889038,
+            0.8306688666343689,
+            0.8348516225814819
+          ],
+          "prepared_program_event_median_ms": 0.8348516225814819,
+          "native_program_sha256": "e7a286c776fae157f94677b849505bb0265e81c5e802c580c8043f957a52275e",
+          "member_image_sha256": [
+            "b2903eeba4f5695304ba4f51f3f28edc6b2c62c46a2468cb1f082c732ff2a7eb",
+            "c8e625b3076f857464862fd2b031445a65f9c10ef0470c8572826ffc0f3a0fc4"
+          ],
+          "frontend_graph_sha256": "32be20f2dd90555a31573c1d378ef0af0ca8f95b7ba3e0db40f2a6310bdc36cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 269.667217,
+          "warm_public_wall_samples_ms": [
+            1.161076,
+            1.080833,
+            0.958129
+          ],
+          "warm_public_wall_median_ms": 1.080833,
+          "prepared_program_event_samples_ms": [
+            0.013212437741458416,
+            0.013144937343895435,
+            0.013096187263727188
+          ],
+          "prepared_program_event_median_ms": 0.013144937343895435,
+          "native_program_sha256": "fbf440fcaa5541105cb0d6a982f99376cfc32fed8739318785553c0d5b7af28d",
+          "member_image_sha256": [
+            "c88fd14e50a794c52f77c31b6deb601f097af127108c4a1a31a13108c260af42"
+          ],
+          "frontend_graph_sha256": "b946193f8c75cb00d7f05529276aa3c34236d3b1621318c9e47c42d1b840665d",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 464.639127,
+          "warm_public_wall_samples_ms": [
+            2.067315,
+            1.937598,
+            1.753591
+          ],
+          "warm_public_wall_median_ms": 1.937598,
+          "prepared_program_event_samples_ms": [
+            0.043732281774282455,
+            0.04330509528517723,
+            0.04234978184103966
+          ],
+          "prepared_program_event_median_ms": 0.04330509528517723,
+          "native_program_sha256": "3cd81b23132bd0254378a37f82bce5224ef4120d55b6cf86a753ad1d6541ed8e",
+          "member_image_sha256": [
+            "a33f25c464e366a4229dcf59f3260e9f9631054f878bc9aea150118c8fc6a67a",
+            "e7516fde2d64ca62859d68f3e682e2267e367aee2742fef67be4bafc3c6b9768",
+            "9e7a9fd13c429d3e6c02ec9a0c966f461faebba931dd65756875be64295d4def",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "763da98c7a8d0495c9c95ef6326ed338d40032d9de5b3265b2ad84d66b831251",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 8.952333307998828e-08,
+          "cold_public_wall_ms": 12.157381,
+          "warm_public_wall_samples_ms": [
+            1.419349,
+            1.350508,
+            1.2522
+          ],
+          "warm_public_wall_median_ms": 1.350508,
+          "prepared_program_event_samples_ms": [
+            0.6864274740219116,
+            0.4593762457370758,
+            0.34157437086105347
+          ],
+          "prepared_program_event_median_ms": 0.4593762457370758,
+          "native_program_sha256": "da3a591f1a6e2bd6789a14929f551ef08e561a4d504f3e4d53022be5a1e6eb52",
+          "member_image_sha256": [
+            "7a393f6109a8737350a91e500c087238a4aa115d1410b212c84cfeda885adf11",
+            "94f3157cc6ece56eded03c14e8f3cb842e4fae340e04482be4eac368f340296d"
+          ],
+          "frontend_graph_sha256": "d6f239a27fc983ed07f7c9951204e5ddd0d1441b4af93269ce861f9bb914f0cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 264.057991,
+          "warm_public_wall_samples_ms": [
+            1.117042,
+            0.910437,
+            0.914466
+          ],
+          "warm_public_wall_median_ms": 0.914466,
+          "prepared_program_event_samples_ms": [
+            0.013518687337636948,
+            0.013557437807321548,
+            0.013506187126040459
+          ],
+          "prepared_program_event_median_ms": 0.013518687337636948,
+          "native_program_sha256": "f9e9ac2c387eb83b80fa30d7566f718b318db6d0d7d234bbee5e69ead5ffbce8",
+          "member_image_sha256": [
+            "533ece79787d5a2aae2bcf72da59e319c8ec3ad8519790d46c84af33a690caca"
+          ],
+          "frontend_graph_sha256": "eb083a243753669cd9d2579a31c33de5156ee5b5f92d32b8792f757e467954ce",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 447.674379,
+          "warm_public_wall_samples_ms": [
+            1.731495,
+            1.715775,
+            1.69214
+          ],
+          "warm_public_wall_median_ms": 1.715775,
+          "prepared_program_event_samples_ms": [
+            0.04483818635344505,
+            0.044512905180454254,
+            0.04452943801879883
+          ],
+          "prepared_program_event_median_ms": 0.04452943801879883,
+          "native_program_sha256": "0294fe963572284502cbb8bf2fe3191a39553c83357b6be1b7e3091468350260",
+          "member_image_sha256": [
+            "440fb70d1e6c488972b1c9375835ec6879046a280928eb171ec77cb4ecda642e",
+            "8d8a37a51a04460564a8d2d1261f54c3c5ef115602d584d4305c1617101dcab0",
+            "8232b5d537f9872968088cd20bbb627ba882aff1f0ea0df4c5c774e55f2dd115",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "1a57ffab7022cb920f961f35208935e2b3bca3d82b8b14a1a6abb8831d59a37b",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 7.645306758508053e-08,
+          "cold_public_wall_ms": 13.792271,
+          "warm_public_wall_samples_ms": [
+            1.661241,
+            1.596066,
+            1.567582
+          ],
+          "warm_public_wall_median_ms": 1.596066,
+          "prepared_program_event_samples_ms": [
+            0.5547183752059937,
+            0.4706619083881378,
+            0.28845661878585815
+          ],
+          "prepared_program_event_median_ms": 0.4706619083881378,
+          "native_program_sha256": "d2d8b59acd5707c82e4b200df99eb62340c79b62b5a863026289a18309fe6f4f",
+          "member_image_sha256": [
+            "706d856ed34724c59b48fa3b4a4cb43fe2a505ef9878943b9f5522121ba05faa",
+            "cea12fbe962e3a2ea99688ab55f4d06674951afe6ba2f6667bb974bde2fdf0a8"
+          ],
+          "frontend_graph_sha256": "f49b65e06e911af44a0692e4d3738681d5b1728f3904a6e41b727a84e1c3dd12",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        }
+      ]
+    },
+    {
+      "round": 1,
+      "arm": "control",
+      "rows": [
+        {
+          "kind": "primal",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 278.236311,
+          "warm_public_wall_samples_ms": [
+            1.088667,
+            0.984879,
+            0.958389
+          ],
+          "warm_public_wall_median_ms": 0.984879,
+          "prepared_program_event_samples_ms": [
+            0.013517437502741814,
+            0.013564937748014927,
+            0.013492437079548836
+          ],
+          "prepared_program_event_median_ms": 0.013517437502741814,
+          "native_program_sha256": "ef567caf39afee3f83d84349c530a8d5c658fb9a675007c8a2ec9233a85a8875",
+          "member_image_sha256": [
+            "0757430d5b8f3e24288132bcc732b8eac7033efb9ab4655039571a86cc624876"
+          ],
+          "frontend_graph_sha256": "322925894cde5e872a934077e94428bc595e6d10686f1396c788d2a930e8eceb",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.963607547203708e-08,
+          "cold_public_wall_ms": 459.913536,
+          "warm_public_wall_samples_ms": [
+            1.630632,
+            1.54562,
+            1.787431
+          ],
+          "warm_public_wall_median_ms": 1.630632,
+          "prepared_program_event_samples_ms": [
+            0.042685095220804214,
+            0.04276415705680847,
+            0.042540404945611954
+          ],
+          "prepared_program_event_median_ms": 0.042685095220804214,
+          "native_program_sha256": "eda17d9a8daa8dde9870f912656ebbaf5a5d14ab78cd2fa9d7feacb4eda1e961",
+          "member_image_sha256": [
+            "8594376d7697aa840201565dbd6cdf278ce3f149db17246513606582be488736",
+            "d199d29ea8e297f6526e88060881e80047ff62007b9f536f93a37929b0615b51",
+            "fe7e9af2be01f9dc3dcaec32966bcb3975c03247c5ae2bdb673f07f1eacb2d24",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "d746942195c939cea92f27c16900a91c0ea9c95ca1c6914bc14214df31dc80d0",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 0,
+          "input_shapes": [
+            [
+              2,
+              3,
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 1.1568447055854136e-07,
+          "cold_public_wall_ms": 14.159596,
+          "warm_public_wall_samples_ms": [
+            2.31112,
+            2.353652,
+            2.45249
+          ],
+          "warm_public_wall_median_ms": 2.353652,
+          "prepared_program_event_samples_ms": [
+            1.1416343450546265,
+            0.7483501434326172,
+            0.74083012342453
+          ],
+          "prepared_program_event_median_ms": 0.7483501434326172,
+          "native_program_sha256": "c5e0a071cd0a5be48bc306c9ba2134194bda8b847909532efaed0cffa9f754dc",
+          "member_image_sha256": [
+            "ebea2713823dcc77c2ef28d39ab56e2a1fa6265c0dfd14986ee93e56d0ec7cf8",
+            "2efa21eb5c1c0bd08bf6d0cce6c1a55390384521def4bcffb50588edcd4329a0"
+          ],
+          "frontend_graph_sha256": "76c825e3086268a16e454785c1ca6f88c849a6297dfdbdbc48d8dfe447486737",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 270.320378,
+          "warm_public_wall_samples_ms": [
+            1.138403,
+            0.993465,
+            0.860707
+          ],
+          "warm_public_wall_median_ms": 0.993465,
+          "prepared_program_event_samples_ms": [
+            0.013468687422573566,
+            0.013513687066733837,
+            0.013467437587678432
+          ],
+          "prepared_program_event_median_ms": 0.013468687422573566,
+          "native_program_sha256": "198059f792fb0f60e8211da7681ce2e34ce282a97e023bc9b4a1a457c952634f",
+          "member_image_sha256": [
+            "2c7f0be7b43ac75f737e0f99bde0e700da5da737c975ba71b30dd408e4bea7b1"
+          ],
+          "frontend_graph_sha256": "0c7dbd5672e133c2a6e040b436061053581384980c31f65f324803e9a5e09fe9",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 4.3060459864463496e-08,
+          "cold_public_wall_ms": 464.221468,
+          "warm_public_wall_samples_ms": [
+            1.738257,
+            1.976322,
+            1.650389
+          ],
+          "warm_public_wall_median_ms": 1.738257,
+          "prepared_program_event_samples_ms": [
+            0.044755686074495316,
+            0.04468100145459175,
+            0.044742561876773834
+          ],
+          "prepared_program_event_median_ms": 0.044742561876773834,
+          "native_program_sha256": "fb510ab9852fbaf8bb1c0e31780c496aea85f25d2f83722e653bf79e390bcbf5",
+          "member_image_sha256": [
+            "11085c4f4f55d8767991c0654559ee6a3ac2ea1dd071174c7d0b9871e0cb10e9",
+            "7607786ba44b349f4a74366c493f71ac6cc535211a306235659ea15a170c6027",
+            "5199182189edbaf21f93e981de2e4e2b0dda1be1123f50da8d2335e2cbdb5b85",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "33a768a90b667029f402de9485577132c80d8ce9c3c1e03b7cecd79b48937855",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 1,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              2,
+              3,
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 5.0331469603204226e-08,
+          "cold_public_wall_ms": 14.527779,
+          "warm_public_wall_samples_ms": [
+            2.71909,
+            2.259242,
+            2.805755
+          ],
+          "warm_public_wall_median_ms": 2.71909,
+          "prepared_program_event_samples_ms": [
+            1.1796926259994507,
+            0.8292209506034851,
+            0.8255153298377991
+          ],
+          "prepared_program_event_median_ms": 0.8292209506034851,
+          "native_program_sha256": "e7a286c776fae157f94677b849505bb0265e81c5e802c580c8043f957a52275e",
+          "member_image_sha256": [
+            "b2903eeba4f5695304ba4f51f3f28edc6b2c62c46a2468cb1f082c732ff2a7eb",
+            "c8e625b3076f857464862fd2b031445a65f9c10ef0470c8572826ffc0f3a0fc4"
+          ],
+          "frontend_graph_sha256": "32be20f2dd90555a31573c1d378ef0af0ca8f95b7ba3e0db40f2a6310bdc36cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 268.465968,
+          "warm_public_wall_samples_ms": [
+            1.04802,
+            0.878316,
+            0.88044
+          ],
+          "warm_public_wall_median_ms": 0.88044,
+          "prepared_program_event_samples_ms": [
+            0.013506187126040459,
+            0.013559937477111816,
+            0.013502437621355057
+          ],
+          "prepared_program_event_median_ms": 0.013506187126040459,
+          "native_program_sha256": "fbf440fcaa5541105cb0d6a982f99376cfc32fed8739318785553c0d5b7af28d",
+          "member_image_sha256": [
+            "c88fd14e50a794c52f77c31b6deb601f097af127108c4a1a31a13108c260af42"
+          ],
+          "frontend_graph_sha256": "b946193f8c75cb00d7f05529276aa3c34236d3b1621318c9e47c42d1b840665d",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 3.8738089958023636e-08,
+          "cold_public_wall_ms": 460.108111,
+          "warm_public_wall_samples_ms": [
+            1.987948,
+            1.718991,
+            1.507968
+          ],
+          "warm_public_wall_median_ms": 1.718991,
+          "prepared_program_event_samples_ms": [
+            0.045813217759132385,
+            0.044901032000780106,
+            0.04436727985739708
+          ],
+          "prepared_program_event_median_ms": 0.044901032000780106,
+          "native_program_sha256": "3cd81b23132bd0254378a37f82bce5224ef4120d55b6cf86a753ad1d6541ed8e",
+          "member_image_sha256": [
+            "a33f25c464e366a4229dcf59f3260e9f9631054f878bc9aea150118c8fc6a67a",
+            "e7516fde2d64ca62859d68f3e682e2267e367aee2742fef67be4bafc3c6b9768",
+            "9e7a9fd13c429d3e6c02ec9a0c966f461faebba931dd65756875be64295d4def",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "763da98c7a8d0495c9c95ef6326ed338d40032d9de5b3265b2ad84d66b831251",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 2,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              2
+            ],
+            [
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 8.952333307998828e-08,
+          "cold_public_wall_ms": 13.47416,
+          "warm_public_wall_samples_ms": [
+            1.64538,
+            1.604442,
+            1.581738
+          ],
+          "warm_public_wall_median_ms": 1.604442,
+          "prepared_program_event_samples_ms": [
+            0.6881603598594666,
+            0.45339280366897583,
+            0.3383120894432068
+          ],
+          "prepared_program_event_median_ms": 0.45339280366897583,
+          "native_program_sha256": "da3a591f1a6e2bd6789a14929f551ef08e561a4d504f3e4d53022be5a1e6eb52",
+          "member_image_sha256": [
+            "7a393f6109a8737350a91e500c087238a4aa115d1410b212c84cfeda885adf11",
+            "94f3157cc6ece56eded03c14e8f3cb842e4fae340e04482be4eac368f340296d"
+          ],
+          "frontend_graph_sha256": "d6f239a27fc983ed07f7c9951204e5ddd0d1441b4af93269ce861f9bb914f0cf",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "primal",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 266.348843,
+          "warm_public_wall_samples_ms": [
+            1.06883,
+            0.931307,
+            0.891983
+          ],
+          "warm_public_wall_median_ms": 0.931307,
+          "prepared_program_event_samples_ms": [
+            0.013538687489926815,
+            0.013566187582910061,
+            0.013524937443435192
+          ],
+          "prepared_program_event_median_ms": 0.013538687489926815,
+          "native_program_sha256": "f9e9ac2c387eb83b80fa30d7566f718b318db6d0d7d234bbee5e69ead5ffbce8",
+          "member_image_sha256": [
+            "533ece79787d5a2aae2bcf72da59e319c8ec3ad8519790d46c84af33a690caca"
+          ],
+          "frontend_graph_sha256": "eb083a243753669cd9d2579a31c33de5156ee5b5f92d32b8792f757e467954ce",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "jvp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              2,
+              3,
+              3,
+              5
+            ],
+            [
+              2,
+              3,
+              3,
+              5
+            ]
+          ],
+          "max_abs_error": 7.950637814779782e-08,
+          "cold_public_wall_ms": 454.062537,
+          "warm_public_wall_samples_ms": [
+            1.669847,
+            1.66152,
+            1.768475
+          ],
+          "warm_public_wall_median_ms": 1.669847,
+          "prepared_program_event_samples_ms": [
+            0.04489196836948395,
+            0.04491822049021721,
+            0.043937280774116516
+          ],
+          "prepared_program_event_median_ms": 0.04489196836948395,
+          "native_program_sha256": "0294fe963572284502cbb8bf2fe3191a39553c83357b6be1b7e3091468350260",
+          "member_image_sha256": [
+            "440fb70d1e6c488972b1c9375835ec6879046a280928eb171ec77cb4ecda642e",
+            "8d8a37a51a04460564a8d2d1261f54c3c5ef115602d584d4305c1617101dcab0",
+            "8232b5d537f9872968088cd20bbb627ba882aff1f0ea0df4c5c774e55f2dd115",
+            "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+          ],
+          "frontend_graph_sha256": "1a57ffab7022cb920f961f35208935e2b3bca3d82b8b14a1a6abb8831d59a37b",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        },
+        {
+          "kind": "vjp",
+          "batch_owner_operand": 3,
+          "input_shapes": [
+            [
+              3,
+              35
+            ],
+            [
+              35,
+              5
+            ],
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "output_shapes": [
+            [
+              3,
+              2
+            ],
+            [
+              2,
+              3,
+              2,
+              2
+            ]
+          ],
+          "max_abs_error": 7.645306758508053e-08,
+          "cold_public_wall_ms": 13.46685,
+          "warm_public_wall_samples_ms": [
+            1.665349,
+            1.350127,
+            1.463232
+          ],
+          "warm_public_wall_median_ms": 1.463232,
+          "prepared_program_event_samples_ms": [
+            0.4679276943206787,
+            0.45803895592689514,
+            0.28963735699653625
+          ],
+          "prepared_program_event_median_ms": 0.45803895592689514,
+          "native_program_sha256": "d2d8b59acd5707c82e4b200df99eb62340c79b62b5a863026289a18309fe6f4f",
+          "member_image_sha256": [
+            "706d856ed34724c59b48fa3b4a4cb43fe2a505ef9878943b9f5522121ba05faa",
+            "cea12fbe962e3a2ea99688ab55f4d06674951afe6ba2f6667bb974bde2fdf0a8"
+          ],
+          "frontend_graph_sha256": "f49b65e06e911af44a0692e4d3738681d5b1728f3904a6e41b727a84e1c3dd12",
+          "correctness": "independent float64 primal/JVP and finite-difference scale VJP before/after timing"
+        }
+      ]
+    }
+  ],
+  "paired": [
+    {
+      "round": 0,
+      "kind": "primal",
+      "batch_owner_operand": 0,
+      "control_over_candidate_warm_wall": 1.2085187096414278
+    },
+    {
+      "round": 0,
+      "kind": "jvp",
+      "batch_owner_operand": 0,
+      "control_over_candidate_warm_wall": 0.9316160553444648
+    },
+    {
+      "round": 0,
+      "kind": "vjp",
+      "batch_owner_operand": 0,
+      "control_over_candidate_warm_wall": 0.8533927152380425
+    },
+    {
+      "round": 0,
+      "kind": "primal",
+      "batch_owner_operand": 1,
+      "control_over_candidate_warm_wall": 1.0366380205089885
+    },
+    {
+      "round": 0,
+      "kind": "jvp",
+      "batch_owner_operand": 1,
+      "control_over_candidate_warm_wall": 0.9094945016912181
+    },
+    {
+      "round": 0,
+      "kind": "vjp",
+      "batch_owner_operand": 1,
+      "control_over_candidate_warm_wall": 0.8909688873097924
+    },
+    {
+      "round": 0,
+      "kind": "primal",
+      "batch_owner_operand": 2,
+      "control_over_candidate_warm_wall": 1.0624065456630571
+    },
+    {
+      "round": 0,
+      "kind": "jvp",
+      "batch_owner_operand": 2,
+      "control_over_candidate_warm_wall": 0.9954246529011471
+    },
+    {
+      "round": 0,
+      "kind": "vjp",
+      "batch_owner_operand": 2,
+      "control_over_candidate_warm_wall": 1.1245713450387775
+    },
+    {
+      "round": 0,
+      "kind": "primal",
+      "batch_owner_operand": 3,
+      "control_over_candidate_warm_wall": 0.89002802311265
+    },
+    {
+      "round": 0,
+      "kind": "jvp",
+      "batch_owner_operand": 3,
+      "control_over_candidate_warm_wall": 1.1102567563153745
+    },
+    {
+      "round": 0,
+      "kind": "vjp",
+      "batch_owner_operand": 3,
+      "control_over_candidate_warm_wall": 0.9831127765301318
+    },
+    {
+      "round": 1,
+      "kind": "primal",
+      "batch_owner_operand": 0,
+      "control_over_candidate_warm_wall": 1.035717177665722
+    },
+    {
+      "round": 1,
+      "kind": "jvp",
+      "batch_owner_operand": 0,
+      "control_over_candidate_warm_wall": 0.947880390142842
+    },
+    {
+      "round": 1,
+      "kind": "vjp",
+      "batch_owner_operand": 0,
+      "control_over_candidate_warm_wall": 0.9194222486986924
+    },
+    {
+      "round": 1,
+      "kind": "primal",
+      "batch_owner_operand": 1,
+      "control_over_candidate_warm_wall": 0.9765885728721956
+    },
+    {
+      "round": 1,
+      "kind": "jvp",
+      "batch_owner_operand": 1,
+      "control_over_candidate_warm_wall": 1.127470273692185
+    },
+    {
+      "round": 1,
+      "kind": "vjp",
+      "batch_owner_operand": 1,
+      "control_over_candidate_warm_wall": 1.041836452800317
+    },
+    {
+      "round": 1,
+      "kind": "primal",
+      "batch_owner_operand": 2,
+      "control_over_candidate_warm_wall": 0.814593928941844
+    },
+    {
+      "round": 1,
+      "kind": "jvp",
+      "batch_owner_operand": 2,
+      "control_over_candidate_warm_wall": 0.887176287341337
+    },
+    {
+      "round": 1,
+      "kind": "vjp",
+      "batch_owner_operand": 2,
+      "control_over_candidate_warm_wall": 1.1880285048292938
+    },
+    {
+      "round": 1,
+      "kind": "primal",
+      "batch_owner_operand": 3,
+      "control_over_candidate_warm_wall": 1.0184162123031364
+    },
+    {
+      "round": 1,
+      "kind": "jvp",
+      "batch_owner_operand": 3,
+      "control_over_candidate_warm_wall": 0.9732319214349201
+    },
+    {
+      "round": 1,
+      "kind": "vjp",
+      "batch_owner_operand": 3,
+      "control_over_candidate_warm_wall": 0.9167741183635264
+    }
+  ],
+  "median_control_over_candidate_warm_wall": 0.9798506747011637,
+  "timing_scope": "Three public warm wall samples per profile; unchanged native program/image/Graph hashes. Two counterbalanced rounds. Native event windows recorded separately, not a kernel speedup comparison. Cold wall timing is diagnostic only and excluded from the ratio."
+}

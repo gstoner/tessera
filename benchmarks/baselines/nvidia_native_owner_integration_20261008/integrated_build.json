@@ -1,0 +1,10 @@
+{
+  "runtime_sha256": "ca860af9503bbb4733c64d3a1c51634de7f7f1e09a7e3ad7720c8c6f67c58d60",
+  "compiler_sha256": "ac321f5090c4ebc66c9264003253c0317c8df3f107f02797e7910e03c37c8c4d",
+  "device": "NVIDIA GeForce RTX 5070",
+  "device_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "device_architecture": "sm_120",
+  "device_proof": "448_passed",
+  "contract_proof": "397_passed",
+  "long_chain_profiles": 4
+}

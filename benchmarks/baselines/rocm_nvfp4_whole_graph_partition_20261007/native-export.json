@@ -1,0 +1,17 @@
+{
+  "state": "artifact_only",
+  "compiler_sha256": "14a9ef37db71fffd829a6010f699b8efd24be1ccd3b6250c88000d9fc77188b9",
+  "source_sha256": {
+    "src/transforms/lib/NativeNVFP4Program.h": "42a2563f56052cb3064b9b7eb45dc5d792fa11a07f5cc605782d71b73c52c7cf",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "7f9b815fb4468897617ad33ec69c009d3db6c8902fa137fe0c11f948c9005161",
+    "python/tessera/compiler/native_nvfp4_program.py": "9087f2abd51b62a8a6ab7e45d05466a60531b48f08f0169f9f4c1f4f651deb5f",
+    "tests/unit/test_native_nvfp4_program_partition.py": "0c1007e0903a0cb4d373805ff84c937d0b021865b17a3ab84ccddb0915fbb809"
+  },
+  "native_partition_tests": 8,
+  "shared_native_and_registry_tests": 391,
+  "missing": [
+    "public JIT integration",
+    "gfx1201 numerical and lifetime replay",
+    "separate kernel and end-to-end timings"
+  ]
+}

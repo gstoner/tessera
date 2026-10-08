@@ -1,0 +1,8 @@
+gfx1151 paged_small: unchanged native image/entry; final source fingerprints and nine warm samples verified
+gfx1151 paged_large: unchanged native image/entry; final source fingerprints and nine warm samples verified
+gfx1151 full_large: unchanged native image/entry; final source fingerprints and nine warm samples verified
+gfx1151 dispatched_small: unchanged native image/entry; final source fingerprints and nine warm samples verified
+gfx1151 dispatched_large: unchanged native image/entry; final source fingerprints and nine warm samples verified
+gfx1201 paged_small: unchanged native image/entry; final source fingerprints and nine warm samples verified
+gfx1201 paged_large: unchanged native image/entry; final source fingerprints and nine warm samples verified
+gfx1201 full_large: unchanged native image/entry; final source fingerprints and nine warm samples verified

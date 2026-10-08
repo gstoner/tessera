@@ -13420,6 +13420,6 @@ Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.
 Not applicable: Apple packaging does not use the new ROCm replay cache.
 Only successful native MLIR pass output is cached; artifact and descriptor
 validation still run per call. Compiler, loaded-library, environment and full
-IR identity participate, with bounded entry/byte retention.
+IR and working-directory identity participate, with bounded entry/byte retention.
 Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
 and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.

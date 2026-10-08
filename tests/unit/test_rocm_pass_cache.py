@@ -92,3 +92,25 @@ def test_real_tool_environment_and_contents_participate(tmp_path, monkeypatch):
     second = cache._identity(tool)
     tool.write_text("v2")
     assert cache._identity(tool) != second
+
+def test_working_directory_is_part_of_replay_identity(tmp_path, monkeypatch):
+    from tessera.compiler import rocm_native
+    tool = tmp_path / "compiler"
+    tool.write_text("same binary")
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    # The binary and resolved dependencies may be identical in both dirs.
+    monkeypatch.setattr(rocm_native, "_tool_digest", lambda tool: "same contents")
+    calls = []
+    def execute(tool, source, option):
+        calls.append(str(Path.cwd()))
+        return str(Path.cwd())
+    monkeypatch.chdir(first)
+    assert cache.run(tool, "IR", "--canonicalize", execute=execute) == str(first)
+    assert cache.run(tool, "IR", "--canonicalize", execute=execute) == str(first)
+    monkeypatch.chdir(second)
+    assert cache.run(tool, "IR", "--canonicalize", execute=execute) == str(second)
+    assert cache.run(tool, "IR", "--canonicalize", execute=execute) == str(second)
+    assert calls == [str(first), str(second)]

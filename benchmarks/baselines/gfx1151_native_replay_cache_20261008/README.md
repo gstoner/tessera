@@ -41,3 +41,12 @@ packet at ../gfx1201_native_replay_cache_20261008/README.md. x86 retains its exi
 Apple do not enter this new ROCm cache path; no parity claim.
 Open: matmul ancestry caching, discovery overhead, wider unary envelopes, fresh
 gfx1151 matching-source build, generic closure and PR895 CI repair.
+
+## Main synchronization identity guard
+
+After merged PR894, replay identity also explicitly includes the working
+directory, even if the resolved compiler/library bytes are unchanged. A host
+regression proves one replay per directory and reuse within a directory.
+The packet above retains its original measured source hashes; it predates
+this identity guard and is not a fresh benchmark of the synchronized head.
+The native passes, images and ABI remain unchanged.

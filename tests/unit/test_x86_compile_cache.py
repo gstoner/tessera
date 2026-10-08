@@ -57,10 +57,12 @@ def test_exact_repeat_reruns_no_subprocess_and_rebuilds_an_equal_package(counted
     calls, _ = counted
     first = x86_native.package_elementwise(_module(), pipeline_name=PIPELINE)
     cold = len(calls)
-    # graph->schedule, schedule->tile, Tile->Target and --version. The two
-    # replays are already hits: they re-derive the same (binary, option, text)
-    # the lowering just ran, and still compare the artifact against it.
-    assert cold == 4
+    # Four compiler actions: Graph->Schedule, Schedule->Tile, Tile->Target,
+    # and --version. A cold ELF identity may also inspect loaded dependencies;
+    # those are accounted separately and must disappear on an exact repeat.
+    tool=str(find_tessera_opt())
+    assert sum(call[0]==tool for call in calls)==4
+    assert all(call[0]==tool or Path(call[0]).name in {"ldd","readelf"} for call in calls)
     second = x86_native.package_elementwise(_module(), pipeline_name=PIPELINE)
     assert len(calls) == cold
     assert first.descriptor == second.descriptor and first.image == second.image
@@ -107,9 +109,13 @@ def test_a_changed_compiler_misses(counted, monkeypatch):
     calls, _ = counted
     x86_native.package_elementwise(_module(), pipeline_name=PIPELINE)
     cold = len(calls)
+    tool=str(find_tessera_opt())
+    compiler_calls=sum(call[0]==tool for call in calls)
     monkeypatch.setattr(x86_compile_cache, "_tool_digest", lambda tool: "0" * 64)
     x86_native.package_elementwise(_module(), pipeline_name=PIPELINE)
-    assert len(calls) >= 2 * cold  # every run and the version probe rerun
+    assert sum(call[0]==tool for call in calls[cold:])>=compiler_calls
+    # Every compile action and the version probe rerun; shared dependency
+    # discovery is not itself a compiler action and may already be memoized.
 
 
 def test_a_rebuilt_shared_object_misses(counted):

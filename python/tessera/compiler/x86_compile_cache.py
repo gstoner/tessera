@@ -9,9 +9,9 @@ retired Python constructors, all of it subprocess and I/O. Every one of those
 steps is a pure function of its inputs, so each is memoized on exactly those
 inputs:
 
-* a ``tessera-opt`` run is keyed on the compiler binary's SHA-256
-  (``rocm_native._tool_digest``, memoized on the file's stat signature, so a
-  rebuilt compiler misses -- Decision #11), the pass option, and the complete
+* a ``tessera-opt`` run is keyed on the compiler's ELF dependency identity
+  (``rocm_native._tool_digest``, memoized on compiler and loaded-library stat signatures, so a
+  rebuilt compiler or dependency misses -- Decision #11), the pass option, and the complete
   source text. The source is the MLIR the compiler receives: it names the
   Graph op, every attribute, every shape and dtype, the target/arch module
   attributes and the launch bindings, so any change to the input misses;

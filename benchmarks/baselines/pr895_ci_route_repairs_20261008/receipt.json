@@ -1,0 +1,33 @@
+{
+  "parent_pr_head": "eeeb729d3a263e9b63c1ecc690de8a65d4fa1439",
+  "test_source_sha256": {
+    "tests/unit/test_native_independent_scale_batch.py": "1afafdb75362311d72764e0abb5f5b8e3b3c99f937a0fafe36e48bde170b7563",
+    "tests/unit/test_native_independent_scaled_primal.py": "75fed75aa781550239476488b9bf57883df3cf13e1a9fe692a4c61f13e4201b1",
+    "tests/unit/test_native_independent_transposed_a.py": "b9f92eb5b1ca85e8a9fb6192fb7d14101b4ef871a072071a445290498eaacaff",
+    "tests/unit/conftest.py": "9bb238a84816e02554c784846c162659e1e13e27d845d3956be55ce740cfdc03",
+    "tests/unit/test_native_nvfp4_program_partition.py": "e047b8ccdc71116b789c1668c5dea14b1f54ed3e7f87ab83e8ac615eec2590ce",
+    "tests/unit/test_native_sm120_tensor_partition.py": "657a7f5bcb30db5e4484ec79ff2fa5d02fde755bf0c1a0497e22751779824549",
+    "tests/unit/test_ssm_nvidia_replay.py": "93aed84a488e711929c12e9120b8f3f85443768474c6a7a801034b09f1297dd4",
+    "tests/device/nvidia/test_native_tensor_partition_execution.py": "b90920b797d32756a08fbb1f273f0914b64522b92b8f5c30760f62160afa5cbd",
+    "tests/device/nvidia/test_ssm_replay_async_execution.py": "3c6dc54f9ead4bb7c801bff217820849e29cc7bd071a974ffd253b29939ba9c6"
+  },
+  "compiler_sha256": "b487e3ad06ba645dcba5372dc2de7b21525f1b76fffd69aa145993d68979d2dc",
+  "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "device_probe": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0\n",
+  "scope": "CI test routing and portable fixtures; no backend numerical semantics changed",
+  "source_repair_commit": "98b715dfa",
+  "validation": {
+    "cpu_full": "2 failed, 19447 passed, 9351 skipped",
+    "remaining_failures": [
+      "test_batching_axis_has_zero_open",
+      "test_transpose_axis_has_zero_open"
+    ],
+    "native_route_post_build": "112 passed, 80 deselected",
+    "sm120_post_build": "44 passed",
+    "migrated_device": "78 passed",
+    "host_location": "13 passed, 22 deselected",
+    "audit_docs": "14 passed",
+    "generated_docs": "32 in sync",
+    "mypy_errors": 0
+  }
+}

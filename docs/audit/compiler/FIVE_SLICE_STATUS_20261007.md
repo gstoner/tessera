@@ -1393,3 +1393,12 @@ The 44-test RTX 5070 current-head receipt is preserved at
 benchmarks/baselines/pr895_current_head_validation_20261008/README.md.
 This receipt proves its named device tests, not the aggregate unit suite.
 The CI aggregate unit job remains failing and requires separate repairs.
+
+## ROCm matmul replay cache — 2026-10-08
+
+E2E-REAL-6; synchronization ROCM-MATMUL-REPLAY-CACHE-2026-10-08.
+Both gfx1151/gfx1201 pass four independent fp16 numerical profiles and
+seven alternating warm-image package A/B pairs. Native MLIR replay reuse
+removes two subprocesses; descriptor/Tile checks still execute per call.
+No kernel or generic closure claim.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.

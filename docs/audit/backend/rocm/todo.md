@@ -16199,3 +16199,13 @@ validation still run per call. Compiler, loaded-library, environment and full
 IR identity participate, with bounded entry/byte retention.
 Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
 and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
+
+## Matmul native replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-MATMUL-REPLAY-CACHE-2026-10-08.
+Native matmul replay now uses the same exact-source bounded pass cache.
+Descriptor and Tile validation remain per call. Four fp16 profiles pass on
+each owning GPU with matching images/fingerprints: gfx1151 package medians
+63.1–64.3 ms to 20.7–21.6 ms; gfx1201 42.9–43.2 ms to 17.0–17.1 ms.
+These are package overhead measurements, not kernel gains.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.

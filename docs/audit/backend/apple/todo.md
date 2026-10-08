@@ -13406,3 +13406,11 @@ validation still run per call. Compiler, loaded-library, environment and full
 IR identity participate, with bounded entry/byte retention.
 Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
 and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
+
+## Matmul native replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-MATMUL-REPLAY-CACHE-2026-10-08.
+Not applicable: this backend retains its existing native matmul replay path.
+Only artifact.target == rocm enters the bounded ROCm cache; sibling physical
+schedules and execution capabilities are unchanged.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.

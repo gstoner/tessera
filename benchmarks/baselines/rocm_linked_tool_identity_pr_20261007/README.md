@@ -91,3 +91,5 @@ execution parity; the owning gfx1201 benchmark remains separately bound to its
 recorded compiler/image identities.
 
 Published text logs normalize trailing whitespace only; original terminal logs are retained in the host scratch validation archive. Test outcomes and diagnostic text are preserved.
+
+Oversized historical failure traces are stored losslessly as matching-source-failed-node-tests.txt.gz and full-matching-source-unit.txt.gz. The final passing full-suite receipt stays plain text.

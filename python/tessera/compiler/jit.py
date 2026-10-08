@@ -1765,6 +1765,7 @@ class JitFn:
             raise TesseraJitError(
                 "native_jvp requires @jit(autodiff='forward' or 'jvp')"
             )
+        self._enforce_call_time_constraints(args, kwargs)
         ordered = self._ordered_inputs(args, kwargs)
         if ordered is None:
             raise TesseraJitError("native_jvp could not bind the compiled inputs")

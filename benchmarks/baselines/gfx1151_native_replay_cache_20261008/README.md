@@ -50,3 +50,17 @@ regression proves one replay per directory and reuse within a directory.
 The packet above retains its original measured source hashes; it predates
 this identity guard and is not a fresh benchmark of the synchronized head.
 The native passes, images and ABI remain unchanged.
+
+## Recorders and reproduction
+
+The original gfx1151 packet was recorded by the retained snapshot
+`record_gfx1151_replay_cache_20261008.py` in this directory.
+The maintained, architecture-selectable recorder is
+`benchmarks/rocm/record_rocm_unary_replay_cache.py`. It rejects a live GPU
+that differs from the requested architecture, checks numerical results before
+timing, and records package wall time separately from device execution.
+
+Run the maintained recorder from the repository root with the owning host's
+compiler/runtime environment active. Its `--help` documents output and
+architecture arguments. Reproduction on a new revision is a new receipt;
+it does not replace the source hashes or timing claims of this historical packet.

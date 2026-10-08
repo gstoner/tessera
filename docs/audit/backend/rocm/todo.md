@@ -16232,5 +16232,5 @@ gfx1201 retain numerical parity, equal images/fingerprints and three-to-one
 replay subprocess counts after PR894 and explicit cwd identity. Owning tests
 pass 23 gfx1151 / 22 gfx1201 (one unavailable NVIDIA-dialect skip).
 Package timing is 61.9–65.7 to 20.8–22.5 ms on gfx1151 and
-42.4–43.9 to 16.7–17.0 ms on gfx1201; kernel performance is unchanged.
+42.4–43.9 to 16.7–17.0 ms on gfx1201; no kernel timing is claimed.
 Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.

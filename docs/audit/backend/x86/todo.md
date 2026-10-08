@@ -9832,3 +9832,11 @@ Host numerical certificate tests are applicable; device performance is not
 applicable to this certification-only correction. Generic scaled-matmul
 batching/transpose and wider architecture-owned AD envelopes remain open.
 Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.
+
+## W1.1 current-head proof refresh — 2026-10-08
+
+Owner W1.1 / E2E-REAL-6. Sync NVIDIA-W11-CURRENT-HEAD-2026-10-08.
+Shared contracts changed: none; this refresh binds current source and tools.
+147 RTX 5070 cases and 24 correctness-gated timing profiles pass.
+Not applicable to CPU physical schedules or native CPU ABI; CUDA timing does not establish AVX-512 performance.
+Evidence: benchmarks/baselines/nvidia_w11_current_head_20261008/README.md.

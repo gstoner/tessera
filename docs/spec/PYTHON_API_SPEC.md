@@ -2350,3 +2350,21 @@ geometry, image and checked runtime ABI still determine admission/execution.
 Encoded scale storage gains no differentiation or implicit straight-through
 rule. This experimental explicit request does not change default selection or
 establish generic batching/AD, dynamic shapes or sibling backend execution.
+
+### Continuous native scaled-product packages
+
+The compiler package API admits static unencoded f32 matrices and scales for
+the exact per-block scaled product on gfx1201. The original Graph product is
+retained as the semantic witness; native export expands only its isolated
+member into structured tensor/SCF arithmetic. The multilinear native JVP uses
+the same product consumer for every active continuous operand.
+
+The native manifest explicitly binds block sizes, A/B orientations,
+independent broadcast prefixes, output count and the generated-product launch
+ABI. This is distinct from scale-adjoint roles. Checked native ownership
+retains returned outputs across changed inputs/seeds.
+Evidence: benchmarks/baselines/continuous_scaled_product_20261009/README.md.
+
+This package-level proof does not admit ordinary public f32 @jit primal/JVP
+calls yet. Wider/dynamic layouts, sibling backend execution and generic
+scaled-product coverage closure remain separate obligations.

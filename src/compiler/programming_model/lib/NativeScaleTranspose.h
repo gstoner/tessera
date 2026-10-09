@@ -12,9 +12,14 @@ static std::string nativeScaleTransposeDigest(tensor::GenerateOp generator) {
 static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
   auto member = mod->getAttrOfType<DictionaryAttr>("tessera.autodiff.scaled_member");
   auto kind = member ? member.getAs<StringAttr>("kind") : StringAttr{};
-  if (!kind || kind.getValue() != "scale_vjp")
+  bool product = kind && (kind.getValue() == "primal" || kind.getValue() == "paired_jvp");
+  if (!kind || (!product && kind.getValue() != "scale_vjp"))
     return tensor::GenerateOp{};
   auto operation = member.getAs<StringAttr>("operation");
+  if (product && (!operation || operation.getValue() != "tensor.generate") &&
+      (!operation || (operation.getValue() != "tessera.add" &&
+                      operation.getValue() != "tessera.transpose")))
+    return tensor::GenerateOp{};
   if (operation && operation.getValue() == "tessera.transpose") {
     // An inverse output seed is a movement member, not a scale reduction.
     // Keep the isolated original Graph for the result-permutation consumer.
@@ -57,8 +62,10 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
   auto role = generator ? generator->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint")
                         : StringAttr{};
   auto type = generator ? dyn_cast<RankedTensorType>(generator.getType()) : RankedTensorType{};
-  if (!generator || !role || (role.getValue() != "lhs_scale" && role.getValue() != "rhs_scale" &&
-                             role.getValue() != "lhs_matrix" && role.getValue() != "rhs_matrix") ||
+  if (!generator ||
+      (product ? !generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product")
+               : (!role || (role.getValue() != "lhs_scale" && role.getValue() != "rhs_scale" &&
+                             role.getValue() != "lhs_matrix" && role.getValue() != "rhs_matrix"))) ||
       !type || !type.hasStaticShape() || !type.getElementType().isF32() ||
       type.getNumElements() <= 0 || type.getNumElements() > INT32_MAX)
     return mod.emitError("native scale transpose lost its static f32 generated reduction"), failure();
@@ -70,7 +77,7 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
     bytes += isa<Float8E4M3FNType>(tensor.getElementType());
     floats += tensor.getElementType().isF32();
   }
-  bool matrix = role.getValue() == "lhs_matrix" || role.getValue() == "rhs_matrix";
+  bool matrix = product || role.getValue() == "lhs_matrix" || role.getValue() == "rhs_matrix";
   if ((matrix && floats != 4) || (!matrix && !((bytes == 2 && floats == 2) || floats == 4)))
     return mod.emitError("native scaled adjoint captured storage differs from its matrix/scale role"), failure();
   bool valid = true;
@@ -161,7 +168,9 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
   OperationState state(generator.getLoc(), "schedule.artifact");
   state.addAttribute("hash", b.getStringAttr(digest));
   state.addAttribute("arch", b.getStringAttr("gfx1201"));
-  state.addAttribute("shape_key", b.getStringAttr("family=scale_adjoint;count=" +
+  bool product = generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product");
+  state.addAttribute("shape_key", b.getStringAttr(
+      std::string(product ? "family=continuous_scaled_product;count=" : "family=scale_adjoint;count=") +
       std::to_string(cast<RankedTensorType>(generator.getType()).getNumElements())));
   state.addAttribute("tile", b.getDictionaryAttr({
       b.getNamedAttr("workgroup_size", b.getI64IntegerAttr(width)),
@@ -172,8 +181,9 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
     auto tensor = dyn_cast<RankedTensorType>(type);
     return tensor && tensor.getElementType().isF32();
   });
-  state.addAttribute("numeric_policy", b.getStringAttr(floating
-      ? "f32 coefficients;fp32 scaled adjoint;exact_per_block"
+  state.addAttribute("numeric_policy", b.getStringAttr(product
+      ? "f32 coefficients;fp32 scaled product;exact_per_block"
+      : floating ? "f32 coefficients;fp32 scaled adjoint;exact_per_block"
       : "E4M3FN coefficients;fp32 scale adjoint;exact_per_block"));
   b.create(state);
   return success();
@@ -309,7 +319,9 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   int64_t count = output.getNumElements();
   OpBuilder b(mod.getContext());
   b.setInsertionPointToEnd(mod.getBody());
-  std::string name = "tessera_scale_transpose_" + digest.substr(0, 24);
+  std::string name = std::string(
+      generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product")
+          ? "tessera_scaled_product_" : "tessera_scale_transpose_") + digest.substr(0, 24);
   OperationState state(generator.getLoc(), "tile.structured_reduction_kernel");
   state.addAttribute("name", b.getStringAttr(name));
   state.addAttribute("arch", b.getStringAttr("gfx1201"));

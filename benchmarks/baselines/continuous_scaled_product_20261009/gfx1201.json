@@ -1,0 +1,1899 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid_hex": "32386439653765666266326566373136",
+  "route": "original Graph witness -> native structured product -> Schedule -> Tile -> ROCm/LLVM -> HSACO",
+  "native_event_domain": "ordinary HIP program events include host dispatch gaps; excludes compilation, upload and readback",
+  "end_to_end_domain": "warm prepared owner update + invoke + read; excludes compilation/preparation",
+  "claim": "numerical and timing characterization; no default or performance promotion",
+  "compiler_sha256": "44b62c78cc3a7bd941e9780889e7c9ba8120d6047270406b46f5b27acd6befa9",
+  "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "provider_sha256": "040f9dc1247d66c6f6879a89d3778c26d5f05658fc21c136ab80577a3b40c202",
+  "recorder_sha256": "b99bd6ef17d09228cda16d4f82cd341b5afda85874526edb20a1ab2f6690d6ba",
+  "source_sha256": {
+    "src/transforms/lib/NativeFloatingScaledProduct.h": "c7642a4a5af99f713e6570e09d2041e4ce1800475e2a6bbaaa575e349ab91fc6",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "51649f0da5f95ebcca55a0832f1c646b80395c3ff00cac57ae909a02c65cdec7",
+    "src/compiler/programming_model/lib/NativeScaleTranspose.h": "622e77743d94b7b699783eb4c9d3e83f94fcf52590525c616487f33ee97c81da",
+    "python/tessera/compiler/native_scaled_program.py": "8401343266b9c441e629c0ae5f55c8ac468795de5c2bc8483c14c3dc42792db4",
+    "tests/unit/test_native_floating_scaled_product.py": "4203a29ddfe41cb6a91f993e1b5b90ceed040378294513d45f43b1afd0964f7a",
+    "tests/device/rocm/test_floating_scaled_product.py": "7202448ff71beff7c1e7c047adbec446c641cd0e5670f1cb2e42a2fe4ed86389"
+  },
+  "rows": [
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "batching": null,
+      "kind": "primal",
+      "input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 1.2263578333393532e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 58.585054939612746,
+      "native_event_samples_ms": [
+        0.002008976647630334,
+        0.0021962421014904976,
+        0.0023076562210917473,
+        0.0021983827464282513,
+        0.002225171774625778,
+        0.0022072813007980585,
+        0.0023792735300958157
+      ],
+      "native_event_median_ms": 0.0022072813007980585,
+      "end_to_end_samples_ms": [
+        0.33338600769639015,
+        0.36443513818085194,
+        0.35729212686419487,
+        0.3236168995499611,
+        0.3360011614859104,
+        0.33424701541662216,
+        0.34084985964000225
+      ],
+      "end_to_end_median_ms": 0.3360011614859104,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_30fa47a31ac854fd689c1ede",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5515281567d6711e5480dea90ab5a74276aa488d708a3e3e186da5ae2cfdb6d0"
+        }
+      ],
+      "graph_sha256": "f7e82c20bf1528d5e59577bae4d394598abd077d99ddb19b03979187d174fe6c"
+    },
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "batching": null,
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 6.769578218823735e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 266.74569700844586,
+      "native_event_samples_ms": [
+        0.024859655648469925,
+        0.024567514657974243,
+        0.024994881823658943,
+        0.024842476472258568,
+        0.02453017234802246,
+        0.024556422606110573,
+        0.016409484669566154
+      ],
+      "native_event_median_ms": 0.024567514657974243,
+      "end_to_end_samples_ms": [
+        0.6018681451678276,
+        0.5112951621413231,
+        0.5034711211919785,
+        0.6833740044385195,
+        0.5131990183144808,
+        0.5054541397839785,
+        0.5788241978734732
+      ],
+      "end_to_end_median_ms": 0.5131990183144808,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_30fa47a31ac854fd689c1ede",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5515281567d6711e5480dea90ab5a74276aa488d708a3e3e186da5ae2cfdb6d0"
+        },
+        {
+          "entry": "tessera_scaled_product_30fa47a31ac854fd689c1ede",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5515281567d6711e5480dea90ab5a74276aa488d708a3e3e186da5ae2cfdb6d0"
+        },
+        {
+          "entry": "tessera_scaled_product_30fa47a31ac854fd689c1ede",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5515281567d6711e5480dea90ab5a74276aa488d708a3e3e186da5ae2cfdb6d0"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_30fa47a31ac854fd689c1ede",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5515281567d6711e5480dea90ab5a74276aa488d708a3e3e186da5ae2cfdb6d0"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_30fa47a31ac854fd689c1ede",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5515281567d6711e5480dea90ab5a74276aa488d708a3e3e186da5ae2cfdb6d0"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        }
+      ],
+      "graph_sha256": "6d493a203d0593d47460c0eb78a35059d127f24269a74a702f74fd29a733fc99"
+    },
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "batching": "broadcast",
+      "kind": "primal",
+      "input_shapes": [
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          3,
+          9,
+          5
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 2.97259795667415e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 48.617827938869596,
+      "native_event_samples_ms": [
+        0.003623406169936061,
+        0.0035025468096137047,
+        0.003494656179100275,
+        0.0035275546833872795,
+        0.0033098282292485237,
+        0.0034961483906954527,
+        0.003460288979113102
+      ],
+      "native_event_median_ms": 0.0034961483906954527,
+      "end_to_end_samples_ms": [
+        0.4075269680470228,
+        0.38108695298433304,
+        0.3974689170718193,
+        0.4357011057436466,
+        0.4043509252369404,
+        0.37512602284550667,
+        0.48896297812461853
+      ],
+      "end_to_end_median_ms": 0.4043509252369404,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_2e558d909804cf402bfb55e5",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5f69e6aae8a0db76cbeaa78d665cdad5b901e6bddc714c34a063bbae41b796a7"
+        }
+      ],
+      "graph_sha256": "3b695b1e2d700e8fcfc6f37270659210b5923c998714e9260df98451e6c47817"
+    },
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "batching": "broadcast",
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          3,
+          9,
+          5
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          3,
+          9,
+          5
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 3.756391778186874e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 289.68985797837377,
+      "native_event_samples_ms": [
+        0.02625950053334236,
+        0.025697577744722366,
+        0.026022883132100105,
+        0.02566835843026638,
+        0.02569703198969364,
+        0.02601678855717182,
+        0.025665000081062317
+      ],
+      "native_event_median_ms": 0.025697577744722366,
+      "end_to_end_samples_ms": [
+        0.5054341163486242,
+        0.5200218874961138,
+        0.5903770215809345,
+        0.5330769345164299,
+        0.5204330664128065,
+        0.5397489294409752,
+        0.4981101956218481
+      ],
+      "end_to_end_median_ms": 0.5204330664128065,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_2e558d909804cf402bfb55e5",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5f69e6aae8a0db76cbeaa78d665cdad5b901e6bddc714c34a063bbae41b796a7"
+        },
+        {
+          "entry": "tessera_scaled_product_2e558d909804cf402bfb55e5",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5f69e6aae8a0db76cbeaa78d665cdad5b901e6bddc714c34a063bbae41b796a7"
+        },
+        {
+          "entry": "tessera_scaled_product_2e558d909804cf402bfb55e5",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5f69e6aae8a0db76cbeaa78d665cdad5b901e6bddc714c34a063bbae41b796a7"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_2e558d909804cf402bfb55e5",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5f69e6aae8a0db76cbeaa78d665cdad5b901e6bddc714c34a063bbae41b796a7"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_2e558d909804cf402bfb55e5",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "5f69e6aae8a0db76cbeaa78d665cdad5b901e6bddc714c34a063bbae41b796a7"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        }
+      ],
+      "graph_sha256": "da497f901f96a786761f3a7695520d9a0e4fdd9641183c93a24c0f9f25c0aa8b"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "batching": null,
+      "kind": "primal",
+      "input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 1.2263578333393532e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 46.20973393321037,
+      "native_event_samples_ms": [
+        0.0036420938558876514,
+        0.0035480312071740627,
+        0.003544203005731106,
+        0.00355600006878376,
+        0.003546859370544553,
+        0.003540296806022525,
+        0.00531962513923645
+      ],
+      "native_event_median_ms": 0.0035480312071740627,
+      "end_to_end_samples_ms": [
+        0.38691796362400055,
+        0.36635808646678925,
+        0.3541959449648857,
+        0.3575519658625126,
+        0.3653569146990776,
+        0.35784184001386166,
+        0.369533896446228
+      ],
+      "end_to_end_median_ms": 0.3653569146990776,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_5d6906154d5564e70876cfa6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "b914aaf27be857e52b2a638e246339ff7690af501d5743f527e7e2dce177ebff"
+        }
+      ],
+      "graph_sha256": "c48c4e83c668affec4c56276a49f2974e94cdbed336488fd176208d4bb5e12fb"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "batching": null,
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          9
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 4.081141824485712e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 259.27037303335965,
+      "native_event_samples_ms": [
+        0.0307854525744915,
+        0.030625000596046448,
+        0.030563203617930412,
+        0.030388444662094116,
+        0.030029773712158203,
+        0.030498281121253967,
+        0.030423281714320183
+      ],
+      "native_event_median_ms": 0.030498281121253967,
+      "end_to_end_samples_ms": [
+        0.7232599891722202,
+        0.6293810438364744,
+        0.7531361188739538,
+        0.619230791926384,
+        0.7560101803392172,
+        0.6308041047304869,
+        0.6666409317404032
+      ],
+      "end_to_end_median_ms": 0.6666409317404032,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_5d6906154d5564e70876cfa6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "b914aaf27be857e52b2a638e246339ff7690af501d5743f527e7e2dce177ebff"
+        },
+        {
+          "entry": "tessera_scaled_product_5d6906154d5564e70876cfa6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "b914aaf27be857e52b2a638e246339ff7690af501d5743f527e7e2dce177ebff"
+        },
+        {
+          "entry": "tessera_scaled_product_5d6906154d5564e70876cfa6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "b914aaf27be857e52b2a638e246339ff7690af501d5743f527e7e2dce177ebff"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_5d6906154d5564e70876cfa6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "b914aaf27be857e52b2a638e246339ff7690af501d5743f527e7e2dce177ebff"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_5d6906154d5564e70876cfa6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "b914aaf27be857e52b2a638e246339ff7690af501d5743f527e7e2dce177ebff"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        }
+      ],
+      "graph_sha256": "eec29fd9d5301a465cee83f794bf3a953b45bdc4b9d1d6543e66bb70097990c9"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "batching": "broadcast",
+      "kind": "primal",
+      "input_shapes": [
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          3,
+          5,
+          9
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 3.6277234161108396e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 49.19317504391074,
+      "native_event_samples_ms": [
+        0.0041728513315320015,
+        0.004111289046704769,
+        0.004110281355679035,
+        0.003840515622869134,
+        0.0041033984161913395,
+        0.004115593619644642,
+        0.004110507667064667
+      ],
+      "native_event_median_ms": 0.004110507667064667,
+      "end_to_end_samples_ms": [
+        0.3919978626072407,
+        0.4531741142272949,
+        0.3992309793829918,
+        0.4521128721535206,
+        0.4034701269119978,
+        0.4569920711219311,
+        0.43428782373666763
+      ],
+      "end_to_end_median_ms": 0.43428782373666763,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_372cec3bfc48c3f001773d7d",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "c26e5cf4c41a40be69d459c05a2d5140bfd2bfe934b41e01acbf4a30c40aa362"
+        }
+      ],
+      "graph_sha256": "28651b86875c977e383234644634b4b9569eb413cf6be32402417c7dc3c51c05"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "batching": "broadcast",
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          3,
+          5,
+          9
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          1,
+          2,
+          9
+        ],
+        [
+          3,
+          5,
+          9
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 4.5160748279871044e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 277.5441410485655,
+      "native_event_samples_ms": [
+        0.02030332013964653,
+        0.020203718915581703,
+        0.020157234743237495,
+        0.020204031839966774,
+        0.020157312974333763,
+        0.02011996880173683,
+        0.020186062902212143
+      ],
+      "native_event_median_ms": 0.020186062902212143,
+      "end_to_end_samples_ms": [
+        0.5311730783432722,
+        0.5512710195034742,
+        0.4904051311314106,
+        0.46353391371667385,
+        0.45371497981250286,
+        0.5430059973150492,
+        0.549097079783678
+      ],
+      "end_to_end_median_ms": 0.5311730783432722,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_372cec3bfc48c3f001773d7d",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "c26e5cf4c41a40be69d459c05a2d5140bfd2bfe934b41e01acbf4a30c40aa362"
+        },
+        {
+          "entry": "tessera_scaled_product_372cec3bfc48c3f001773d7d",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "c26e5cf4c41a40be69d459c05a2d5140bfd2bfe934b41e01acbf4a30c40aa362"
+        },
+        {
+          "entry": "tessera_scaled_product_372cec3bfc48c3f001773d7d",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "c26e5cf4c41a40be69d459c05a2d5140bfd2bfe934b41e01acbf4a30c40aa362"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_372cec3bfc48c3f001773d7d",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "c26e5cf4c41a40be69d459c05a2d5140bfd2bfe934b41e01acbf4a30c40aa362"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_372cec3bfc48c3f001773d7d",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "c26e5cf4c41a40be69d459c05a2d5140bfd2bfe934b41e01acbf4a30c40aa362"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        }
+      ],
+      "graph_sha256": "3c35bb8fa302975788ebc87253e9a5d299840531c57cc9ef34b96d9f658aa323"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "batching": null,
+      "kind": "primal",
+      "input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 1.2263578333393532e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 46.84620792977512,
+      "native_event_samples_ms": [
+        0.003778367070481181,
+        0.0037474296987056732,
+        0.0037521172780543566,
+        0.004043749999254942,
+        0.004042265471071005,
+        0.004033984150737524,
+        0.004039843566715717
+      ],
+      "native_event_median_ms": 0.004033984150737524,
+      "end_to_end_samples_ms": [
+        0.5888128653168678,
+        0.6595388986170292,
+        0.5890429019927979,
+        0.5970289930701256,
+        0.5105738528072834,
+        0.5177280399948359,
+        0.5227380897849798
+      ],
+      "end_to_end_median_ms": 0.5888128653168678,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_d3d388b9fc589144749da8c9",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "36475d3c0a3875786fbe65689480c02e3bc92c484f69ec12d3ac35307deaf8ee"
+        }
+      ],
+      "graph_sha256": "a322b16d199074bf00accf0fe54889b5332da1b49ccb5f65d4245e7684568fdc"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "batching": null,
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          9,
+          2
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 5.605198089009278e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 258.80608800798655,
+      "native_event_samples_ms": [
+        0.03005238249897957,
+        0.029175538569688797,
+        0.02953115664422512,
+        0.029559046030044556,
+        0.029471702873706818,
+        0.029196085408329964,
+        0.02979341335594654
+      ],
+      "native_event_median_ms": 0.02953115664422512,
+      "end_to_end_samples_ms": [
+        0.7556818891316652,
+        0.6659901700913906,
+        0.6347000598907471,
+        0.5693370476365089,
+        0.6260939408093691,
+        0.6324260029941797,
+        0.5425950512290001
+      ],
+      "end_to_end_median_ms": 0.6324260029941797,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_d3d388b9fc589144749da8c9",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "36475d3c0a3875786fbe65689480c02e3bc92c484f69ec12d3ac35307deaf8ee"
+        },
+        {
+          "entry": "tessera_scaled_product_d3d388b9fc589144749da8c9",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "36475d3c0a3875786fbe65689480c02e3bc92c484f69ec12d3ac35307deaf8ee"
+        },
+        {
+          "entry": "tessera_scaled_product_d3d388b9fc589144749da8c9",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "36475d3c0a3875786fbe65689480c02e3bc92c484f69ec12d3ac35307deaf8ee"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_d3d388b9fc589144749da8c9",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "36475d3c0a3875786fbe65689480c02e3bc92c484f69ec12d3ac35307deaf8ee"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_d3d388b9fc589144749da8c9",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "36475d3c0a3875786fbe65689480c02e3bc92c484f69ec12d3ac35307deaf8ee"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        }
+      ],
+      "graph_sha256": "adf67d86f815ac45749a1a02072c96285f5588fee449f93d584fe0a27c16cb60"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "batching": "broadcast",
+      "kind": "primal",
+      "input_shapes": [
+        [
+          2,
+          1,
+          9,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 1.7428037665800922e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 49.77376293390989,
+      "native_event_samples_ms": [
+        0.004372656345367432,
+        0.0043477341532707214,
+        0.004087741952389479,
+        0.004355234559625387,
+        0.0040768045000731945,
+        0.004350929521024227,
+        0.0040761795826256275
+      ],
+      "native_event_median_ms": 0.0043477341532707214,
+      "end_to_end_samples_ms": [
+        0.5120770074427128,
+        0.4380259197205305,
+        0.38956315256655216,
+        0.3842331934720278,
+        0.3832010552287102,
+        0.38340105675160885,
+        0.383591977879405
+      ],
+      "end_to_end_median_ms": 0.3842331934720278,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_73d2e60f0cdfeade115e8be6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "8eefc0c44ff8911469e37ef56970b600d1d712c8388d69a5cad9a0dac0aaca05"
+        }
+      ],
+      "graph_sha256": "5b0285cc02f2da5d627a64f2e65b6f04ff891736d34af44f1bf694e09bc3acaa"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "batching": "broadcast",
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          2,
+          1,
+          9,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          1,
+          9,
+          2
+        ],
+        [
+          3,
+          9,
+          5
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 3.5795038377806065e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 276.58992004580796,
+      "native_event_samples_ms": [
+        0.031171070411801338,
+        0.030731327831745148,
+        0.031108109280467033,
+        0.030980460345745087,
+        0.0306771881878376,
+        0.030730625614523888,
+        0.030961085110902786
+      ],
+      "native_event_median_ms": 0.030961085110902786,
+      "end_to_end_samples_ms": [
+        0.5831420421600342,
+        0.5569530185312033,
+        0.7294209208339453,
+        0.532766804099083,
+        0.6723429542034864,
+        0.6515730638056993,
+        0.5466430447995663
+      ],
+      "end_to_end_median_ms": 0.5831420421600342,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_73d2e60f0cdfeade115e8be6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "8eefc0c44ff8911469e37ef56970b600d1d712c8388d69a5cad9a0dac0aaca05"
+        },
+        {
+          "entry": "tessera_scaled_product_73d2e60f0cdfeade115e8be6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "8eefc0c44ff8911469e37ef56970b600d1d712c8388d69a5cad9a0dac0aaca05"
+        },
+        {
+          "entry": "tessera_scaled_product_73d2e60f0cdfeade115e8be6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "8eefc0c44ff8911469e37ef56970b600d1d712c8388d69a5cad9a0dac0aaca05"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_73d2e60f0cdfeade115e8be6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "8eefc0c44ff8911469e37ef56970b600d1d712c8388d69a5cad9a0dac0aaca05"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_73d2e60f0cdfeade115e8be6",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "8eefc0c44ff8911469e37ef56970b600d1d712c8388d69a5cad9a0dac0aaca05"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        }
+      ],
+      "graph_sha256": "cd0df172f51ecbd2322c60ab054598319ce7bd332059ecb2ce50d3723a24a72f"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "batching": null,
+      "kind": "primal",
+      "input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 1.2263578333393532e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 46.98437103070319,
+      "native_event_samples_ms": [
+        0.00422196090221405,
+        0.004107281100004911,
+        0.00443235132843256,
+        0.003952437546104193,
+        0.004417820367962122,
+        0.004412429872900248,
+        0.004646250046789646
+      ],
+      "native_event_median_ms": 0.004412429872900248,
+      "end_to_end_samples_ms": [
+        0.39538415148854256,
+        0.48650801181793213,
+        0.45728194527328014,
+        0.4825298674404621,
+        0.5232479888945818,
+        0.5152621306478977,
+        0.43811602517962456
+      ],
+      "end_to_end_median_ms": 0.4825298674404621,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_159c8a80f7d2c5b64b110cb2",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "1d6e30dea143957d164f534c860c6494bb65b3e9bdd2715778c837682b9ab54d"
+        }
+      ],
+      "graph_sha256": "8d2f6c52204e483dff72a1cb99471f361ed5e85e7db267b906d29cf34909c8b3"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "batching": null,
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          9,
+          2
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 4.106105566670237e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 266.3338480051607,
+      "native_event_samples_ms": [
+        0.03073602356016636,
+        0.02985518053174019,
+        0.02997119538486004,
+        0.03009907715022564,
+        0.02992510236799717,
+        0.029877522960305214,
+        0.029943453148007393
+      ],
+      "native_event_median_ms": 0.029943453148007393,
+      "end_to_end_samples_ms": [
+        0.6166559178382158,
+        0.5675218999385834,
+        0.5828819703310728,
+        0.6793150678277016,
+        0.6196419708430767,
+        0.5306219682097435,
+        0.6714211776852608
+      ],
+      "end_to_end_median_ms": 0.6166559178382158,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_159c8a80f7d2c5b64b110cb2",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "1d6e30dea143957d164f534c860c6494bb65b3e9bdd2715778c837682b9ab54d"
+        },
+        {
+          "entry": "tessera_scaled_product_159c8a80f7d2c5b64b110cb2",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "1d6e30dea143957d164f534c860c6494bb65b3e9bdd2715778c837682b9ab54d"
+        },
+        {
+          "entry": "tessera_scaled_product_159c8a80f7d2c5b64b110cb2",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "1d6e30dea143957d164f534c860c6494bb65b3e9bdd2715778c837682b9ab54d"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_159c8a80f7d2c5b64b110cb2",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "1d6e30dea143957d164f534c860c6494bb65b3e9bdd2715778c837682b9ab54d"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        },
+        {
+          "entry": "tessera_scaled_product_159c8a80f7d2c5b64b110cb2",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "1d6e30dea143957d164f534c860c6494bb65b3e9bdd2715778c837682b9ab54d"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_62b8694b554c",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "fa732d70fc08b920f358f4f008d1dd6f5fd54c9f1b4908140ac00ba3154fb0a9"
+        }
+      ],
+      "graph_sha256": "28d6d9b91bd9e23d4936dd810318d8717d8d6125865d05e466d3842ee9b67c1f"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "batching": "broadcast",
+      "kind": "primal",
+      "input_shapes": [
+        [
+          2,
+          1,
+          9,
+          2
+        ],
+        [
+          3,
+          5,
+          9
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 1.85724969153922e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 48.902801936492324,
+      "native_event_samples_ms": [
+        0.0042672110721468925,
+        0.004068234469741583,
+        0.004165882710367441,
+        0.004593382589519024,
+        0.0044906483963131905,
+        0.0044906483963131905,
+        0.0044840858317911625
+      ],
+      "native_event_median_ms": 0.0044840858317911625,
+      "end_to_end_samples_ms": [
+        0.4963360261172056,
+        0.40219700895249844,
+        0.4509598948061466,
+        0.45388517901301384,
+        0.5331970751285553,
+        0.4697060212492943,
+        0.42224605567753315
+      ],
+      "end_to_end_median_ms": 0.45388517901301384,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_8f54fb09fec87885ad9d4d97",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "351856f516f31e1e95b518af1bcf6a22a0fbc990e21be70c5af9edfc70f2086f"
+        }
+      ],
+      "graph_sha256": "d9baf7b66669092b799f684db61801fe7f43ad798d45d6b3906f9e55305e4e3c"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "batching": "broadcast",
+      "kind": "paired_jvp",
+      "input_shapes": [
+        [
+          2,
+          1,
+          9,
+          2
+        ],
+        [
+          3,
+          5,
+          9
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ],
+        [
+          2,
+          1,
+          9,
+          2
+        ],
+        [
+          3,
+          5,
+          9
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "max_abs_error": 5.559469701266195e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "compile_ms": 276.76177211105824,
+      "native_event_samples_ms": [
+        0.030151765793561935,
+        0.03011232800781727,
+        0.029763266444206238,
+        0.02984294481575489,
+        0.029481938108801842,
+        0.029997477307915688,
+        0.029475295916199684
+      ],
+      "native_event_median_ms": 0.02984294481575489,
+      "end_to_end_samples_ms": [
+        0.589404022321105,
+        0.6992141716182232,
+        0.7410328835248947,
+        0.7716119289398193,
+        0.7721730507910252,
+        0.7434280123561621,
+        0.5930820479989052
+      ],
+      "end_to_end_median_ms": 0.7410328835248947,
+      "members": [
+        {
+          "entry": "tessera_scaled_product_8f54fb09fec87885ad9d4d97",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "351856f516f31e1e95b518af1bcf6a22a0fbc990e21be70c5af9edfc70f2086f"
+        },
+        {
+          "entry": "tessera_scaled_product_8f54fb09fec87885ad9d4d97",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "351856f516f31e1e95b518af1bcf6a22a0fbc990e21be70c5af9edfc70f2086f"
+        },
+        {
+          "entry": "tessera_scaled_product_8f54fb09fec87885ad9d4d97",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "351856f516f31e1e95b518af1bcf6a22a0fbc990e21be70c5af9edfc70f2086f"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_8f54fb09fec87885ad9d4d97",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "351856f516f31e1e95b518af1bcf6a22a0fbc990e21be70c5af9edfc70f2086f"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        },
+        {
+          "entry": "tessera_scaled_product_8f54fb09fec87885ad9d4d97",
+          "geometry": [
+            1,
+            1,
+            1,
+            128,
+            1,
+            1
+          ],
+          "image_sha256": "351856f516f31e1e95b518af1bcf6a22a0fbc990e21be70c5af9edfc70f2086f"
+        },
+        {
+          "entry": "tessera_tile_rocm_math_add_628920266de5",
+          "geometry": [
+            1,
+            1,
+            1,
+            256,
+            1,
+            1
+          ],
+          "image_sha256": "a281c6ea9ce09650d97821b07094a964bb485a5cf9047123f77b2d151b7f209a"
+        }
+      ],
+      "graph_sha256": "c99a8e1f82707ff07a27a5dee9840280061de3b683aa1f0f285a8608a7886363"
+    }
+  ]
+}

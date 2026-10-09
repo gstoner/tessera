@@ -14,6 +14,7 @@
 
 #include "NativeNVFP4Program.h"
 #include "NativeSM120TensorProgram.h"
+#include "NativeFloatingScaledProduct.h"
 
 namespace tessera {
 static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, bool primal = false, bool reverse = false) {
@@ -291,6 +292,9 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       cloned = body.create(state);
     } else cloned = body.clone(*op, map);
     body.create<func::ReturnOp>(op->getLoc(), cloned->getResults());
+    if (!reverse && isNativeFloatingScaledProduct(cloned) &&
+        failed(expandNativeFloatingScaledProduct(cloned)))
+      return failure();
     steps.push_back(b.getDictionaryAttr({
         b.getNamedAttr("member", FlatSymbolRefAttr::get(member)),
         b.getNamedAttr("inputs", b.getDenseI64ArrayAttr(inputs)),
@@ -331,6 +335,16 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
             AddOp::getOperationName().str() : ops[index]->getName().getStringRef().str()},
         {"inputs", std::move(inputs)},
         {"output", cast<IntegerAttr>(step.get("output")).getInt()}};
+    if (!reverse && isNativeFloatingScaledProduct(ops[index])) {
+      auto product = cast<ScaledMatmulOp>(ops[index]);
+      auto block = product.getScaleLayoutAttr().getAs<ArrayAttr>("block");
+      manifestStep["lowering"] = "structured_f32_scaled_product";
+      manifestStep["continuous_contract"] = llvm::json::Object{
+          {"scale_n", cast<IntegerAttr>(block[0]).getInt()},
+          {"scale_k", cast<IntegerAttr>(block[1]).getInt()},
+          {"transposeA", bool(product.getTransposeA())},
+          {"transposeB", bool(product.getTransposeB())}};
+    }
     if (isa<TransposeOp>(ops[index])) {
       llvm::json::Array axes;
       auto permutation = transposePermutation(ops[index]);

@@ -1,9 +1,9 @@
-// Native materialization and transpose-reduction of explicit static broadcasts.
+// Native materialization and transpose-reduction of explicit static broadcasts and reshapes.
 #pragma once
 
 namespace tessera {
 static bool isNativeScaledCarrier(mlir::Operation *op) {
-  return mlir::isa<BroadcastOp, ReduceOp>(op);
+  return mlir::isa<BroadcastOp, ReduceOp, ReshapeOp>(op);
 }
 
 static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
@@ -19,6 +19,7 @@ static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
       output.getNumElements() <= 0 || output.getNumElements() > INT32_MAX)
     return op->emitError("native scaled carrier requires plain static rank-1..8 f32 tensors");
   bool reduce = isa<ReduceOp>(op);
+  bool reshape = isa<ReshapeOp>(op);
   int64_t axis = -1;
   if (reduce) {
     auto kind = op->getAttrOfType<StringAttr>("kind");
@@ -31,6 +32,15 @@ static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
     shape.erase(shape.begin()+axis);
     if (output.getShape() != ArrayRef<int64_t>(shape))
       return op->emitError("native scaled carrier reduction shape differs");
+  } else if (reshape) {
+    int64_t count = 1;
+    for (int64_t dim : input.getShape()) {
+      if (dim <= 0 || count > INT32_MAX / dim)
+        return op->emitError("native scaled reshape input extent is invalid or overflows");
+      count *= dim;
+    }
+    if (count != output.getNumElements())
+      return op->emitError("native scaled reshape must preserve element count");
   } else {
     int64_t offset = output.getRank()-input.getRank();
     if (offset < 0) return op->emitError("native scaled broadcast cannot lower rank");
@@ -46,6 +56,22 @@ static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
     Value one = arith::ConstantIndexOp::create(g, loc, 1);
     Value upper = arith::ConstantIndexOp::create(g, loc, reduce ? input.getDimSize(axis) : 1);
     Value zero = arith::ConstantOp::create(g, loc, g.getF32FloatAttr(0));
+    if (reshape) {
+      Value flat = zeroIndex;
+      for (int64_t axis = 0; axis < output.getRank(); ++axis) {
+        Value extent = arith::ConstantIndexOp::create(g, loc, output.getDimSize(axis));
+        flat = arith::AddIOp::create(g, loc,
+            arith::MulIOp::create(g, loc, flat, extent), indices[axis]);
+      }
+      SmallVector<Value> coordinates(input.getRank());
+      for (int64_t axis = input.getRank()-1; axis >= 0; --axis) {
+        Value extent = arith::ConstantIndexOp::create(g, loc, input.getDimSize(axis));
+        coordinates[axis] = arith::RemUIOp::create(g, loc, flat, extent);
+        flat = arith::DivUIOp::create(g, loc, flat, extent);
+      }
+      tensor::YieldOp::create(g, loc, tensor::ExtractOp::create(g, loc, source, coordinates));
+      return;
+    }
     if (!reduce) {
       SmallVector<Value> coordinates;
       int64_t offset=output.getRank()-input.getRank();
@@ -72,7 +98,7 @@ static mlir::LogicalResult expandNativeScaledCarrier(mlir::Operation *op) {
     });
     tensor::YieldOp::create(g, loc, loop.getResult(0));
   });
-  generator->setAttr("tessera.native.scaled_carrier", b.getStringAttr(reduce ? "sum" : "broadcast"));
+  generator->setAttr("tessera.native.scaled_carrier", b.getStringAttr(reduce ? "sum" : reshape ? "reshape" : "broadcast"));
   op->getResult(0).replaceAllUsesWith(generator.getResult());
   op->erase();
   return success();

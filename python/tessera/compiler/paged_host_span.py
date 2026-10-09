@@ -15,10 +15,12 @@ def checked_page_span(array: np.ndarray) -> tuple[int, tuple[int, ...]]:
     return span, tuple(stride // 4 for stride in byte_strides)
 
 
-def checked_host_span(array: np.ndarray, *, label: str = "tensor") -> tuple[int, tuple[int, ...]]:
+def checked_host_span(array: np.ndarray, *, label: str = "tensor", min_rank: int = 2) -> tuple[int, tuple[int, ...]]:
     """Prove positive host byte strides against the actual owning allocation."""
-    if not isinstance(array, np.ndarray) or not 2 <= array.ndim <= 32:
-        raise ValueError(f"strided {label} storage requires rank 2 through 32")
+    if type(min_rank) is not int or not 1 <= min_rank <= 32:
+        raise ValueError("host storage minimum rank must be 1 through 32")
+    if not isinstance(array, np.ndarray) or not min_rank <= array.ndim <= 32:
+        raise ValueError(f"strided {label} storage requires rank {min_rank} through 32")
     itemsize = array.dtype.itemsize
     if any(extent <= 0 for extent in array.shape):
         raise ValueError(f"strided {label}s require positive extents")

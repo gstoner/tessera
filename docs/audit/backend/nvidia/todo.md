@@ -14342,3 +14342,15 @@ Named native runtime integration passes 146 exact RTX 5070 numerical/lifetime an
 Recorder: benchmarks/nvidia/record_two_sided_tensor_dag.py; evidence: benchmarks/baselines/sm120_two_sided_tensor_dag_20261009/README.md and sm120.json.
 C++ owns both chains' intermediates; public JIT/portable replay preserve native members and bounded capacities.
 Parity validated for normalized fp16/bf16 static/bounded two-sided chains on sm_120, including public JIT and device-result lifetime. Follow-up required: external CUDA roots, general producer/layout/AD migration, and FP8/MXFP8/MXFP4 evaluation before promotion.
+
+## SCALED-RESHAPE-CARRIER-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native f32 reshape carriers preserve flat element order, byte equality and
+actual SSA through continuous product primal/JVP/reverse packaging. Frontend
+value-less computed reshape inference now uses its authored shape contract;
+checked vector roots and native C++ packing retain allocation-span guards.
+Shared frontend result-shape contract updated. Follow-up required for NVIDIA scaled-product reshape/AD physical execution; the gfx1201 carrier's physical schedule is not transferred.
+Evidence: benchmarks/baselines/gfx1201_scaled_reshape_20261009/README.md
+and gfx1201.json; recorder benchmarks/rocm/record_scaled_reshape_carrier.py.
+Generic scaled batching/transpose and dynamic shape closure remain open.

@@ -11814,3 +11814,27 @@ All four queues assessed; sibling physical execution remains independent.
 Evidence: benchmarks/baselines/sm120_two_sided_tensor_dag_20261009/README.md
 and sm120.json; benchmarks/nvidia/record_two_sided_tensor_dag.py.
 <!-- entry-fields:end -->
+
+### 2026-10-09 — native scaled reshape and root-lineage carriers
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync SCALED-RESHAPE-CARRIER-20261009.
+
+Outcome: actual f32 Graph reshape SSA enters native product primal/JVP/reverse
+programs, including original flat matrix/scale roots and reshaped outputs.
+Native copying preserves byte count and flat order; transpose follows carrier
+roots. Shared trace shape inference preserves authored computed reshape shape.
+C++ packs pitched vector storage with the same allocation-span/alias guards.
+
+Validation: 18 RX 9070 XT public compact/pitched primal/JVP/reverse cases pass.
+53 carrier/vector-pack checks, 488 adjacent native SSA cases, 81 shared trace/
+registration cases pass; groups overlap. Ruff/mypy pass. Nine source-bound
+correctness-gated native/member/public timing arms remain separate.
+
+Remaining: generic scaled batching/transpose, dynamic/alias/encoded derivative
+closure and all wider original five-slice obligations. All four queues assessed;
+sibling physical proof remains independent.
+
+Evidence: benchmarks/baselines/gfx1201_scaled_reshape_20261009/README.md
+and gfx1201.json; benchmarks/rocm/record_scaled_reshape_carrier.py.
+<!-- entry-fields:end -->

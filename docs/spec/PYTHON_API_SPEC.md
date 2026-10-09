@@ -2393,6 +2393,23 @@ readback. Native events are recorded separately in the continuous native
 product packet. Generic batching/transpose, dynamic-shape and sibling-backend
 closure remain open.
 
+### Continuous reshape carriers
+
+On gfx1201, static unencoded f32 reshape nodes may supply matrix/scale operands
+or reshape the returned continuous scaled product. Native primal/JVP/reverse
+programs retain actual Graph SSA and original floating argument roles through
+the carriers. Reshape preserves flat element order and equal logical byte
+counts; it does not imply a transpose or an alias of private intermediate
+storage. Native C++ owns the copy buffers and packs proved positive-stride
+vector roots. Authored result shapes remain intact when tracing value-less
+computed products.
+
+Exact proof covers flat roots, vector/reshaped-matrix/singleton-prefix returns,
+four active continuous derivative roles and compact/pitched vectors on RX 9070
+XT. Evidence: benchmarks/baselines/gfx1201_scaled_reshape_20261009/README.md.
+Dynamic shapes, encoded derivatives, generic batching/transpose closure and
+sibling physical execution remain separate obligations.
+
 ### Bounded SM120 producer-chain programs
 
 Ordinary `@jit(target="nvidia_sm120", shape_bounds={...})` admits static

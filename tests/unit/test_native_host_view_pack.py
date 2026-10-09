@@ -109,3 +109,13 @@ def test_native_admission_refuses_before_destination_write(library, mutation):
                   c.c_void_p(destination.ctypes.data), capacity)
     assert result == 1
     np.testing.assert_array_equal(destination, before)
+
+
+def test_vector_pack_and_capacity_preserve_byte_semantics(library):
+    source=np.arange(31,dtype=np.float32)[1::2]
+    with pytest.raises(ValueError,match="rank 2"):checked_host_span(source)
+    span,_=checked_host_span(source,min_rank=1)
+    assert span==source.itemsize+(len(source)-1)*source.strides[0]
+    np.testing.assert_array_equal(pack_host_view(library,source),source)
+    forged=np.lib.stride_tricks.as_strided(source,shape=(20,),strides=source.strides)
+    with pytest.raises(ValueError,match="backing allocation"):pack_host_view(library,forged)

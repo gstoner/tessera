@@ -29,18 +29,20 @@ def oracle(x):
         return exp/exp.sum(axis=-1,keepdims=True)
 
 @pytest.mark.parametrize("dtype", ["fp16","bf16","fp32"])
-@pytest.mark.parametrize("shape", [(3,1),(3,17),(2,3,257),(3,4096),(3,4097)])
-def test_cooperative_softmax_host_resident_and_nonfinite(dtype,shape):
+@pytest.mark.parametrize("shape", [(3,1),(3,17),(3,255),(3,256),(2,3,257),(3,4096),(3,4097)])
+@pytest.mark.parametrize("schedule", [None,"serial","cooperative_128"])
+def test_cooperative_softmax_host_resident_and_nonfinite(dtype,shape,schedule):
     dtype_storage=storage(dtype)
     source=np.random.default_rng(5070128).uniform(-20,20,shape).astype(dtype_storage)
     source.reshape(-1,shape[-1])[0]=dtype_storage(1000)
     graph=ordinary._traced_autodiff_module((source,),{})
     before=graph.to_mlir()
-    scheduled=lower_scheduled_kernel(graph,target="nvidia_sm120",schedule="cooperative_128")
+    scheduled=lower_scheduled_kernel(graph,target="nvidia_sm120",schedule=schedule)
     assert graph.to_mlir()==before
     package=nvidia_native.package_scheduled_kernel(scheduled,pipeline_name="tessera-nvidia-pipeline-sm120")
-    assert package.descriptor.entry_symbol.endswith("_cooperative_128")
-    assert package.descriptor.geometry==LaunchGeometry(policy="sm120_softmax_cooperative_128_rows")
+    cooperative=schedule=="cooperative_128" or schedule is None and shape[-1]>=256
+    assert package.descriptor.entry_symbol.endswith("_cooperative_128")==cooperative
+    assert package.descriptor.geometry==LaunchGeometry(policy=("sm120_softmax_cooperative_128_rows" if cooperative else "sm120_softmax_thread_per_row_128"))
     artifact=rt.RuntimeArtifact(metadata={"target":"nvidia_sm120"},native_image=package.image,
         launch_descriptor=package.descriptor,tile_ir=package.tile_ir,target_ir=package.target_ir)
     bindings=sorted(package.descriptor.buffers,key=lambda b:b.ordinal)

@@ -10346,3 +10346,18 @@ Shared frontend result-shape contract updated. Follow-up required for x86 compil
 Evidence: benchmarks/baselines/gfx1201_scaled_reshape_20261009/README.md
 and gfx1201.json; recorder benchmarks/rocm/record_scaled_reshape_carrier.py.
 Generic scaled batching/transpose and dynamic shape closure remain open.
+
+## NVFP4-MAGNITUDE-SEARCH-20261009
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Native candidate SSE scoring now uses magnitude units, preserving signed
+output codes, strict midpoint ties, candidate tie order and sum32 reduction.
+The attempted winner-code rematerialization was measured and rejected.
+36 exact gfx1201 leaf/bounded-program cases pass, including every finite
+positive E4M3 K16 scale pair; 351 native compiler/registry checks pass with
+three owning-image skips. Paired packets retain all producer statistics
+bitwise and compare final output against an independent oracle.
+Not applicable to x86 physical lowering: this emitter selects
+gfx1201 exclusively. CPU packing/conversion routes have independent vector
+and numerical contracts; no sibling timing or capability claim.
+Evidence: benchmarks/baselines/gfx1201_nvfp4_winner_code_ab_20261009/README.md.

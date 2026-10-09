@@ -152,7 +152,6 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
   seed = choose(b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, mean, cf(0)), seed, c32(0));
   Value bestError = cf(std::numeric_limits<double>::infinity());
   Value bestDistance = c32(99), bestExponent = seed;
-  SmallVector<Value, 32> bestCodes(32, c32(0));
   for (int delta = -4; delta <= 4; ++delta) {
     Value exponent = b.create<arith::AddIOp>(l, seed, c32(delta));
     Value valid = b.create<arith::AndIOp>(
@@ -168,7 +167,7 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
     SmallVector<Value, 7> thresholds;
     for (double midpoint : midpoints)
       thresholds.push_back(mul(cf(midpoint), scale));
-    SmallVector<Value, 32> codes, errors;
+    SmallVector<Value, 32> errors;
     for (int j = 0; j < 32; ++j) {
       Value absolute = b.create<math::AbsFOp>(l, values[j]);
       Value magnitude = c32(0);
@@ -178,14 +177,9 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
                 l, b.getI32Type(), b.create<arith::CmpFOp>(
                     l, arith::CmpFPredicate::OGT, absolute, threshold)));
       Value negative = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, values[j], cf(0));
-      codes.push_back(b.create<arith::OrIOp>(l, magnitude, choose(negative, c32(8), c32(0))));
-      // Squared reconstruction error is invariant under a common sign
-      // change. Score in magnitude units, avoiding signed reconstruction in
-      // each candidate. Both operands are finite nonnegative f64 values;
-      // subtraction differs from the signed form only by sign, including
-      // exact zero. Squaring preserves the same bits and sum32 order.
-      Value decoded = mul(magnitudeValue(magnitude), scale);
-      Value difference = sub(absolute, decoded);
+      Value decoded = mul(choose(negative, b.create<arith::NegFOp>(
+          l, magnitudeValue(magnitude)), magnitudeValue(magnitude)), scale);
+      Value difference = sub(values[j], decoded);
       errors.push_back(mul(difference, difference));
     }
     Value error = sum32(errors);
@@ -202,8 +196,29 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
     bestError = choose(better, error, bestError);
     bestDistance = choose(better, c32(std::abs(delta)), bestDistance);
     bestExponent = choose(better, exponent, bestExponent);
-    for (int j = 0; j < 32; ++j)
-      bestCodes[j] = choose(better, codes[j], bestCodes[j]);
+  }
+  // Candidate codes are used only to score their exponent. Carrying all 32
+  // through each best-candidate select extends their live ranges across the
+  // nine-way search. Encode once from the selected exponent instead. Reuse
+  // exactly the ordered strict midpoint decisions above, including ties,
+  // signed zero and the clamped exponent envelope.
+  Value winningScale = pow2(bestExponent);
+  SmallVector<Value, 7> winningThresholds;
+  for (double midpoint : midpoints)
+    winningThresholds.push_back(mul(cf(midpoint), winningScale));
+  SmallVector<Value, 32> bestCodes;
+  for (int j = 0; j < 32; ++j) {
+    Value absolute = b.create<math::AbsFOp>(l, values[j]);
+    Value magnitude = c32(0);
+    for (Value threshold : winningThresholds)
+      magnitude = b.create<arith::AddIOp>(
+          l, magnitude, b.create<arith::ExtUIOp>(
+              l, b.getI32Type(), b.create<arith::CmpFOp>(
+                  l, arith::CmpFPredicate::OGT, absolute, threshold)));
+    Value negative = b.create<arith::CmpFOp>(
+        l, arith::CmpFPredicate::OLT, values[j], cf(0));
+    bestCodes.push_back(b.create<arith::OrIOp>(
+        l, magnitude, choose(negative, c32(8), c32(0))));
   }
   Value signalSum = sum32(signal);
   Value nonzero = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, signalSum, cf(0));

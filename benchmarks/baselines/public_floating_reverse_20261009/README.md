@@ -39,6 +39,12 @@ execution or generic AD closure. Ordinary f32 primal packaging remains open.
 - 26 public mapped FP8 inverse-cotangent regressions pass.
 - Final focused public frontend/capability, dtype-flow, native AD, registry and
   lifecycle gates: 645 passed. Ruff passes; mypy ratchet is zero.
+- Required CI unit marker lane: 19,644 passed, 9,559 skipped and two
+  failures in the generic scaled_matmul batching/transpose zero-open guards.
+  Their states/assertions are unchanged; this dependent draft is not
+  merge-ready. The subsequent parent sync changes only documentation and
+  the excluded native compiler-route bias-JVP fixture, checked separately.
+- Benchmark delivery/citation/generated-doc registry gates: 72 passed.
 - Mixed matrix storage is rejected; semantic f32 admission does not widen the
   FP8/packed primal selector.
 - Device packet: `gfx1201.json`.

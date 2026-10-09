@@ -58,6 +58,20 @@ int tessera_nvidia_matmul_invoke_resident(uint64_t handle,
 // allocates and retains both operand edges; views contain roots and output.
 int tessera_nvidia_matmul_invoke_dag_resident(uint64_t handle,
     const TesseraNvidiaMatmulHostView *views, size_t count, void *stream);
+// Ordered synchronous DAG roots: one declared producer stream per input view.
+// Streams, root allocations and the output belong to the checked context.
+// Events order differing streams before native producers/consumer; completion
+// retires all borrowed reads. Default-stream sentinels 1/2 follow CUDA semantics.
+int tessera_nvidia_matmul_invoke_dag_resident_ordered(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producer_streams, size_t producer_count, void *stream);
+// Profile the current borrowed resident frame while holding the same lease.
+// Full-program and grouped-stage event windows are independent, not additive.
+// Producer event waits precede the program start timestamp.
+int tessera_nvidia_matmul_profile_dag_resident_ordered(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producer_streams, size_t producer_count, void *stream,
+    int repeats, float *stage_ms, size_t stage_count, float *program_ms);
 // CUDA-event profiles of the last successful host frame. Rejects stale shared
 // arena leases. Stage windows group repeated kernels and are not additive.
 int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,

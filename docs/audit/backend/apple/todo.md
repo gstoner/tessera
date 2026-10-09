@@ -13955,3 +13955,19 @@ Not applicable to Apple physical lowering: this emitter selects
 gfx1201 exclusively. Metal conversion/encoding consumers retain independent
 numerical and physical proof obligations; no sibling execution claim.
 Evidence: benchmarks/baselines/gfx1201_nvfp4_winner_code_ab_20261009/README.md.
+
+## SM120-ORDERED-RESIDENT-ROOTS-20261009
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Two native CUDA ABI entry points accept borrowed resident roots and explicit
+producer streams. C++ validates allocation ownership, capacity, shapes and
+aliasing before inserting producer event/waits; private intermediates remain
+native-owned through synchronous completion. Primitive CUDA array-interface
+dtype metadata is authoritative. Graph/Schedule/Tile member semantics and
+numerical policies are unchanged.
+Evidence: benchmarks/baselines/sm120_ordered_resident_dag_20261009/README.md
+and sm120.json; recorder benchmarks/nvidia/record_ordered_resident_tensor_dag.py.
+Not applicable to Apple physical execution: CUDA allocation/context/event
+semantics do not establish Metal command-buffer ownership. Follow-up required
+for an equivalent borrowed Metal-root contract; Apple JIT execution and general
+AD obligations remain open. No Apple exact-device proof is transferred.

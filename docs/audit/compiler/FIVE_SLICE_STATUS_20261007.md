@@ -1561,3 +1561,28 @@ This closes the named shared-result sum boundary. Dynamic/alias and singleton
 prefix shapes, generic scaled closure, NVIDIA two-sided producer DAGs and the
 original broader backend obligations remain open. No sibling device proof
 or physical schedule is inferred.
+
+## Resident frontend architectural delivery — 2026-10-09
+
+W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 now connects compact resident
+FP16/BF16 roots through ordinary public JIT and bounded M/N/K specialization.
+PR927 establishes two-sided primal DAG entry; PR928 establishes bounded
+dynamic entry. The single-sided follow-up adds normalization/softmax chains
+with raw row-major RHS, explicit ordered native invocation/profile/output
+exports and separate host-column/resident-row physical specializations.
+
+Current single-sided evidence: 542 focused WSL host gates pass, one skips;
+44 new RTX5070 device cases and 81 adjacent two-sided/saved-LSE-JVP cases pass.
+Two isolated packets each record 30 active frames, retaining one native
+contract per dtype/producer program. Native program events are 16.9–41.8 us;
+public resident completed calls are 0.493–1.075 ms. Ratios do not establish
+a general speedup. Evidence:
+benchmarks/baselines/sm120_single_sided_resident_tensor_20261009/README.md.
+
+Native MLIR Graph export and Schedule/Tile/Target/LLVM-PTX generation remain
+the execution foundation; the frontend projects metadata rather than computing
+backend results. Mixed/pitched/generic resident inputs and resident AD remain
+open. GFX1201 NVFP4 model/quality and broader layout/AD obligations, general
+saved-LSE composition and the ROCm W8A8/MXFP4/image-family obligations remain
+open. This delivery does not close the five-slice program or generic scaled
+batching/transpose closure, and does not transfer CUDA device proof to siblings.

@@ -141,8 +141,8 @@ class PreparedLhsCall(PreparedMatmulCall):
         from .prepared_nvidia_matmul import HostView
         if self.pid != os.getpid() or not self._finalizer.alive:
             raise ValueError("prepared resident tensor owner is closed or belongs to another process")
-        if not self.program.rhs_chain or self.program!=self.resident_snapshot:
-            raise ValueError("prepared resident DAG package changed or has no RHS chain")
+        if self.program!=self.resident_snapshot or self.rhs_layout!="row_major":
+            raise ValueError("prepared resident tensor package changed or raw RHS is not row-major")
         self.program.validate()
         roots,_=_checked_device_arguments(self.program,list(ordered))
         values=[*roots,output]
@@ -152,7 +152,8 @@ class PreparedLhsCall(PreparedMatmulCall):
         common=[ct.c_uint64,ct.POINTER(HostView),ct.c_size_t,
                 ct.POINTER(ct.c_uint64),ct.c_size_t,ct.c_void_p]
         if repeats:
-            name="tessera_nvidia_matmul_profile_dag_resident_ordered"
+            name=("tessera_nvidia_matmul_profile_dag_resident_ordered" if self.program.rhs_chain
+                  else "tessera_nvidia_matmul_profile_lhs_resident_ordered")
             if not hasattr(self.lib,name):raise RuntimeError("native ordered resident profiler unavailable")
             fn=getattr(self.lib,name)
             fn.argtypes=common+[ct.c_int,ct.POINTER(ct.c_float),ct.c_size_t,ct.POINTER(ct.c_float)]
@@ -160,12 +161,14 @@ class PreparedLhsCall(PreparedMatmulCall):
             stages=(ct.c_float*len(self.component_receipts))();program=ct.c_float()
             self._check(fn(*arguments,repeats,stages,len(stages),ct.byref(program)))
             return {"program_ms":program.value,"grouped_stage_ms":list(stages)}
-        name="tessera_nvidia_matmul_invoke_dag_resident_ordered"
+        name=("tessera_nvidia_matmul_invoke_dag_resident_ordered" if self.program.rhs_chain
+              else "tessera_nvidia_matmul_invoke_lhs_resident_ordered")
         if not hasattr(self.lib,name):raise RuntimeError("native ordered resident DAG API unavailable")
         fn=getattr(self.lib,name);fn.argtypes=common;fn.restype=ct.c_int
         self._check(fn(*arguments))
         return {"component_receipts":tuple({**receipt,
-            "native_call_binding":"prepared_cpp_ordered_resident_tensor_dag"}
+            "native_call_binding":("prepared_cpp_ordered_resident_tensor_dag" if self.program.rhs_chain
+                                    else "prepared_cpp_ordered_resident_tensor_lhs")}
             for receipt in self.component_receipts)}
 
     def resident_to_host(self,ordered):
@@ -175,8 +178,8 @@ class PreparedLhsCall(PreparedMatmulCall):
         from .prepared_nvidia_matmul import HostView
         if self.pid != os.getpid() or not self._finalizer.alive:
             raise ValueError("prepared resident tensor owner is closed or belongs to another process")
-        if not self.program.rhs_chain or self.program!=self.resident_snapshot:
-            raise ValueError("prepared resident DAG package changed or has no RHS chain")
+        if self.program!=self.resident_snapshot or self.rhs_layout!="row_major":
+            raise ValueError("prepared resident tensor package changed or raw RHS is not row-major")
         # Constructor admission and the exact deep snapshot above seal all
         # images/contracts. Repeating full IR validation adds host work without
         # strengthening this unchanged native owner.
@@ -188,7 +191,8 @@ class PreparedLhsCall(PreparedMatmulCall):
         destination.data,destination.bytes,destination.rank=output.ctypes.data,output.nbytes,2
         destination.dtype=2 if output.dtype==np.float16 else 1
         destination.shape[:]=output.shape;destination.strides[:]=output.strides
-        name="tessera_nvidia_matmul_invoke_dag_resident_to_host_ordered"
+        name=("tessera_nvidia_matmul_invoke_dag_resident_to_host_ordered" if self.program.rhs_chain
+              else "tessera_nvidia_matmul_invoke_lhs_resident_to_host_ordered")
         if not hasattr(self.lib,name):
             raise RuntimeError("native ordered resident completed-output API unavailable")
         fn=getattr(self.lib,name)
@@ -196,10 +200,12 @@ class PreparedLhsCall(PreparedMatmulCall):
                      ct.POINTER(ct.c_uint64),ct.c_size_t,ct.POINTER(HostView)]
         fn.restype=ct.c_int
         self._check(fn(self.handle,views,len(roots),declared,len(streams),ct.byref(destination)))
-        receipts=tuple({**receipt,"native_call_binding":"prepared_cpp_ordered_resident_tensor_dag"}
+        receipts=tuple({**receipt,"native_call_binding":("prepared_cpp_ordered_resident_tensor_dag" if self.program.rhs_chain
+                                    else "prepared_cpp_ordered_resident_tensor_lhs")}
                        for receipt in self.component_receipts)
         return output,{**self.receipt_fields,"component_receipts":receipts,"output":output,
-                       "native_call_binding":"prepared_cpp_ordered_resident_tensor_dag"}
+                       "native_call_binding":("prepared_cpp_ordered_resident_tensor_dag" if self.program.rhs_chain
+                                    else "prepared_cpp_ordered_resident_tensor_lhs")}
 
     def invoke_resident(self,ordered,output,*,stream):
         """Borrow declared CUDA roots through native synchronous completion."""

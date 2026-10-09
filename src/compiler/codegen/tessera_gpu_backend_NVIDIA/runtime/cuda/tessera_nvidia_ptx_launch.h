@@ -79,6 +79,19 @@ int tessera_nvidia_matmul_profile_dag_resident_ordered(uint64_t handle,
     const TesseraNvidiaMatmulHostView *views, size_t count,
     const uint64_t *producer_streams, size_t producer_count, void *stream,
     int repeats, float *stage_ms, size_t stage_count, float *program_ms);
+// Single-sided row-major raw RHS contracts. The native owner materializes
+// only the LHS producer chain; all external reads retain producer ordering.
+int tessera_nvidia_matmul_invoke_lhs_resident_ordered(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producer_streams, size_t producer_count, void *stream);
+int tessera_nvidia_matmul_invoke_lhs_resident_to_host_ordered(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *roots, size_t count,
+    const uint64_t *producer_streams, size_t producer_count,
+    const TesseraNvidiaMatmulHostView *output);
+int tessera_nvidia_matmul_profile_lhs_resident_ordered(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producer_streams, size_t producer_count, void *stream,
+    int repeats, float *stage_ms, size_t stage_count, float *program_ms);
 // CUDA-event profiles of the last successful host frame. Rejects stale shared
 // arena leases. Stage windows group repeated kernels and are not additive.
 int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,

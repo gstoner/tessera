@@ -2292,10 +2292,6 @@ class JitFn:
         from .nvidia_tensor_lhs import candidate, project_rhs_storage
         if not candidate(module):
             return _JIT_FALLBACK
-        if resident:
-            from .nvidia_tensor_dag import candidate as dag_candidate
-            if not dag_candidate(module):
-                raise ValueError("public resident frontend requires the native two-operand producer DAG")
         # Once this semantic edge matches, compilation/launch failures propagate.
         # They must never be replaced by eager arithmetic.
         module = project_rhs_storage(module, ordered)

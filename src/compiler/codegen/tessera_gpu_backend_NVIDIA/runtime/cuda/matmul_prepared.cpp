@@ -313,6 +313,26 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
       cuModuleUnload(module); return 1;
     }
     if (append) {
+      // Bounded chains retain their maximum input/output staging frame from
+      // the first attachment. A smaller first invocation must not introduce
+      // a new allocation when the active shape later reaches its capacity.
+      if (owner.dynamicAxes && owner.followingProducers.empty()) {
+        size_t total = 0;
+        for (size_t i = 0; i < owner.count; ++i) {
+          if (owner.bytes[i] > SIZE_MAX - total - 255) {
+            cuModuleUnload(module); return bad("bounded tensor staging overflow");
+          }
+          total = (total + owner.bytes[i] + 255) & ~size_t(255);
+        }
+        const size_t hostBytes = total;
+        if (owner.bytes[0] > SIZE_MAX - total - 255) {
+          cuModuleUnload(module); return bad("bounded tensor edge staging overflow");
+        }
+        total = (total + owner.bytes[0] + 255) & ~size_t(255);
+        if (!owner.arena->grow(total) || !owner.arena->growHost(hostBytes)) {
+          cuModuleUnload(module); return 1;
+        }
+      }
       CUdeviceptr scratch = 0;
       if (!owner.producerScratch && !ok(cuMemAlloc(&scratch, owner.bytes[0]),
                                        "allocate producer chain scratch")) {

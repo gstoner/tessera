@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-08
+last_updated: 2026-10-09
 audit_role: reference
 ---
 
@@ -1521,3 +1521,27 @@ The result-axis prerequisite fixes actual malformed Graph admission and native
 AD axis inversion. It does not close the five-slice objective: the scaled GPU
 program still needs Schedule/Tile result materialization and ownership proof
 before public nonzero out_axes can be admitted.
+
+## Current delivery and bounded-chain extension — 2026-10-09
+
+PR912 publishes continuous gfx1201 native scaled products and public primal/JVP
+integration: 504 public numerical cases and sixteen public profiles, with
+native-event timings recorded separately. The broader WSL CI lane has
+20,441 passes, 9,583 skips and the two generic scaled batching/transpose closure
+failures. Its Ruff/mypy check is green. Earlier named pending statements are
+historical source receipts, not a current completion declaration.
+
+The SM120 bounded-chain extension now projects every actual RMSNorm/LayerNorm/
+softmax result into a v4 native capacity/lifetime manifest. Matching full
+LLVM/MLIR 23.1.1 and exact-source CUDA providers build. 57 native/legacy and 331
+focused drift checks pass. RTX5070 proves 32 public/portable capacity/reuse
+cases. Twelve correctness-gated profiles separate full public latency from
+producer/consumer CUDA events. Native staging is fixed from small first frame
+through capacity; original and dynamic Graph witnesses remain distinct.
+Evidence: benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md.
+
+This closes the previously refused named bounded multi-producer Graph route,
+not arbitrary W1.1 producer kinds/async composition. NVFP4 checkpoint model
+quality, wider attention multi-result composition, generic closure and ROCm
+W8A8/MXFP4 broader attribution still need their own engineering and proof.
+The original five-slice objective remains incomplete.

@@ -11718,3 +11718,26 @@ and original cross-backend route/performance obligations.
 Evidence: benchmarks/baselines/gfx1201_continuous_reverse_residuals_20261009/README.md
 and gfx1201.json.
 <!-- entry-fields:end -->
+
+### 2026-10-09 — continuous mapped SSA dependencies
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+PRs: pending; sync CONTINUOUS-SCALED-MAPPED-SSA-20261009.
+
+Outcome: frontend semantic projection retains individual computed product
+shapes and late batch acquisition. Native MLIR owns arithmetic, AD, storage
+lifetimes and Schedule/Tile/native lowering; no Python numerical backend.
+
+Validation: 127 root policies across primal/JVP/VJP, 30 nested certificates,
+twelve native packages and 60 exact gfx1201 numerical cases. Adjacent host:
+554 passed, 13 skipped. Ruff and zero-error mypy pass. Nine tiny-frame packet:
+native primal 6.588–8.460 us, JVP 45.261–46.954 us, reverse 34.728–60.964 us;
+public warm wall time is separate. All four queues assessed.
+Full CPU gate: 20,859 passed, 9,604 skipped, 11 warnings; two failures in test_batching_rule_closure (generic scaled_matmul batching/transpose), 384.96 seconds. No tests or contract states were weakened.
+
+Remaining: broadcasted intermediate sums, aliases, dynamic/save policies,
+generic scaled batching/transpose and cross-backend route/performance closure.
+
+Evidence: benchmarks/baselines/gfx1201_continuous_mapped_ssa_20261009/README.md
+and gfx1201.json.
+<!-- entry-fields:end -->

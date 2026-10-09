@@ -540,6 +540,11 @@ LogicalResult ScaledMatmulOp::verify() {
     auto policy = getNumericPolicyAttr();
     auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr{};
     auto mode = policy ? policy.getAs<StringAttr>("execution_mode") : StringAttr{};
+    const bool floatingMatrices = aType && bType &&
+        aType.getElementType().isF32() && bType.getElementType().isF32();
+    const bool byteMatrices = aType && bType &&
+        isa<Float8E4M3FNType>(aType.getElementType()) &&
+        isa<Float8E4M3FNType>(bType.getElementType());
     if (!aType || !bType || !rType || !sa || !sb ||
         (typedBroadcast ? !hasExactScaledBroadcastPrefix({aType, bType, sa, sb}, rType)
                         : (rType.getRank() < 3 ||
@@ -548,15 +553,15 @@ LogicalResult ScaledMatmulOp::verify() {
                            sa.getRank() != aType.getRank() || sb.getRank() != bType.getRank())) ||
         !aType.hasStaticShape() || !bType.hasStaticShape() ||
         !rType.hasStaticShape() || !sa.hasStaticShape() || !sb.hasStaticShape() ||
-        (!typedBroadcast && getTransposeA()) || !isa<Float8E4M3FNType>(aType.getElementType()) ||
-        !isa<Float8E4M3FNType>(bType.getElementType()) ||
+        (!typedBroadcast && !floatingMatrices && getTransposeA()) ||
+        (!floatingMatrices && !byteMatrices) ||
         !rType.getElementType().isF32() || !layout || layout.size() != 3 ||
         !granularity || granularity.getValue() != "block" ||
         !block || block.size() != 2 || !isa<IntegerAttr>(block[0]) ||
         !isa<IntegerAttr>(block[1]) || !format || !policy || policy.size() != 2 ||
         !accum || accum.getValue() != "fp32" || !mode ||
         mode.getValue() != "exact_per_block")
-      return emitOpError("typed shared-RHS batches require static E4M3 A[B,M,K], B matrices, f32 output and exact block scales");
+      return emitOpError("typed shared-RHS batches require static E4M3/f32 A/B matrices, f32 output and exact block scales");
     auto batchShape = rType.getShape().drop_back(2);
     int64_t batches = 1;
     for (int64_t extent : batchShape) {

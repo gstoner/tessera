@@ -61,8 +61,8 @@ inline mlir::LogicalResult verifyStructuredReductionCarrier(mlir::Operation *op)
       floats += memref.getElementType().isF32();
     }
   }
-  if (bytes != 2 || floats != 2)
-    return op->emitOpError("structured scale reduction requires two E4M3 byte buffers and two f32 inputs");
+  if (!((bytes == 2 && floats == 2) || (floats == 4 && !wave)))
+    return op->emitOpError("structured scaled reduction requires checked E4M3/f32 or serial four-f32 inputs");
   return success();
 }
 } // namespace tessera

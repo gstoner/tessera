@@ -58,12 +58,13 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
         ret.getNumOperands() != forward.getNumArguments() ||
         root.getNumArguments() != forward.getNumArguments() + 1)
       return root.emitError("scaled transpose export needs explicit scale roles and one output seed");
-    llvm::SmallDenseSet<int64_t> scaleArguments;
+    llvm::SmallDenseSet<int64_t> floatingArguments;
     forward.walk([&](ScaledMatmulOp product) {
-      for (unsigned index : {2u, 3u}) {
+      for (unsigned index = 0; index < product->getNumOperands(); ++index) {
+        if (!product.isLinearInOperand(index)) continue;
         auto argument = dyn_cast<BlockArgument>(product->getOperand(index));
         if (argument && argument.getOwner() == &forward.getBody().front())
-          scaleArguments.insert(argument.getArgNumber());
+          floatingArguments.insert(argument.getArgNumber());
       }
     });
     std::function<LogicalResult(Value)> visitCotangent =
@@ -113,7 +114,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       auto role = dyn_cast<IntegerAttr>(attr);
       if (!role || role.getInt() < 0 ||
           role.getInt() >= forward.getNumArguments() ||
-          !scaleArguments.contains(role.getInt()) ||
+          !floatingArguments.contains(role.getInt()) ||
           llvm::is_contained(gradientRoles, role.getInt()))
         return root.emitError("scaled transpose export requires unique floating scale roles");
       auto type = dyn_cast<RankedTensorType>(forward.getArgument(role.getInt()).getType());
@@ -146,7 +147,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       }
       auto kind = op.getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint");
       if (op.getName().getStringRef() != "tensor.generate" || !kind ||
-          (kind.getValue() != "lhs_scale" && kind.getValue() != "rhs_scale") ||
+          (kind.getValue() != "lhs_scale" && kind.getValue() != "rhs_scale" &&
+           kind.getValue() != "lhs_matrix" && kind.getValue() != "rhs_matrix") ||
           op.getNumRegions() != 1)
         return op.emitError("scaled transpose result must retain its native reduction");
       llvm::SetVector<Value> captures;

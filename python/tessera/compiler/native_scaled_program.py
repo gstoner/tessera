@@ -110,7 +110,7 @@ class NativeScaledProgram:
                     raise ValueError("native scaled sum has an invalid scalar ABI")
             elif step["operation"] == "tensor.generate" and kind == "scale_vjp":
                 if (len(step["inputs"]) != 4 or len(member["scalars"]) != 1 or
-                    step.get("gradient_role") not in {"lhs_scale", "rhs_scale"} or
+                    step.get("gradient_role") not in {"lhs_scale", "rhs_scale", "lhs_matrix", "rhs_matrix"} or
                     type(step.get("gradient_argument")) is not int or
                     step["gradient_argument"] not in roles or
                     step["inputs"] != sorted(set(step["inputs"])) or
@@ -201,8 +201,12 @@ class NativeScaledProgram:
                 if (schedule not in {"serial_per_scale_element", "wave_per_scale_element"} or
                     member["scalars"] != [count] or
                     output_buffer["storage"] != "f32" or
-                    sorted(row["storage"] for row in captured) !=
-                        ["f32", "f32", "f8E4M3FN", "f8E4M3FN"] or
+                    sorted(row["storage"] for row in captured) not in
+                        (["f32"] * 4, ["f32", "f32", "f8E4M3FN", "f8E4M3FN"]) or
+                    (all(row["storage"] == "f32" for row in captured) and
+                     schedule != "serial_per_scale_element") or
+                    (step["gradient_role"] in {"lhs_matrix", "rhs_matrix"} and
+                     any(row["storage"] != "f32" for row in captured)) or
                     member["geometry"] != geometry):
                     raise ValueError("native scale reduction storage/count/geometry differs")
             elif step["operation"] == "tessera.transpose":

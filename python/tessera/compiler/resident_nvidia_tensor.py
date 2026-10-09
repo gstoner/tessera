@@ -41,7 +41,7 @@ def _cuda_metadata_dtype(value,interface):
     return physical
 
 
-def cuda_frontend_specs(values):
+def cuda_frontend_specs(values,*,ranks=(1,2)):
     """Read strict compact CUDA storage metadata for abstract frontend tracing."""
     import math
     specs=[]
@@ -50,7 +50,7 @@ def cuda_frontend_specs(values):
         if not isinstance(interface,dict) or type(interface.get("version")) is not int or interface["version"]!=3:
             raise ValueError("resident frontend requires version-three CUDA metadata")
         shape=interface.get("shape")
-        if (not isinstance(shape,(tuple,list)) or not 1<=len(shape)<=2
+        if (not isinstance(shape,(tuple,list)) or len(shape) not in ranks
                 or any(type(d) is not int or not 0<d<2**63 for d in shape)):
             raise ValueError("resident frontend CUDA shape is malformed")
         try:
@@ -65,7 +65,7 @@ def cuda_frontend_specs(values):
         if (not isinstance(data,(tuple,list)) or len(data)!=2 or type(data[0]) is not int
                 or not 0<data[0]<2**64 or type(data[1]) is not bool):
             raise ValueError("resident frontend CUDA pointer metadata is malformed")
-        dense=(dtype.itemsize,) if len(shape)==1 else (shape[1]*dtype.itemsize,dtype.itemsize)
+        dense=tuple(math.prod(shape[axis+1:])*dtype.itemsize for axis in range(len(shape)))
         strides=interface.get("strides")
         if strides is not None and (
                 not isinstance(strides,(tuple,list)) or len(strides)!=len(shape)

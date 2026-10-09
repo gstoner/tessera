@@ -6,6 +6,23 @@ owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+## SM120-RESIDENT-ATTENTION-JVP-20261009
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Public native_jvp captures compact rank-four FP32 resident attention roots
+into typed Graph IR and existing native MLIR AD/Schedule/Tile/Target/LLVM-PTX
+packages. Structural certification records zero concrete frontend executions
+and requires native numerical authority; it does not claim frontend numerical
+differential execution. Native producer events order private Q/K/V/tangent
+snapshots, with context/capacity/alignment/alias/stream guards and held outputs.
+43 exact RTX5070 device cases pass; 101 adjacent host cases and four additional
+negative certificate cases pass. Two isolated packets record maximum error
+below 2.6e-8, separate forward/JVP kernel events and completed public calls.
+Resident/host wall ratios span 1.213–1.293; no speedup is claimed.
+Evidence: benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md.
+
+Shared frontend host regressions are assessed in WSL. Not applicable to AVX-512 physical lowering: resident CUDA ownership is NVIDIA-only, and no x86 exact-device parity is claimed.
+
 ## SM120-SINGLE-SIDED-RESIDENT-PRODUCERS-20261009
 
 Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.

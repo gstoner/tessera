@@ -16750,3 +16750,20 @@ dominant measured ingest stage. No hardware-instruction or promotion claim.
 Next: optimize native candidate search/reduction while preserving codes, scale
 choice, stats and final numerics. Generic batching/transpose and model quality
 remain open. Evidence: benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/leaf_attribution.json.
+
+## CONTINUOUS-SCALED-MAPPED-SSA-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Shared frontend projection preserves each computed SSA semantic shape, including
+fully shared producers before late-mapped consumers. Native MLIR retains AD,
+buffer lifetime, Schedule/Tile and numerical lowering ownership.
+
+127 root policies pass across primal/JVP/VJP; 60 exact gfx1201 numerical cases
+and twelve nested native packages pass, including shared-gradient reduction,
+result placement and compiler/eager-free replay. Nine measured tiny frames:
+native primal 6.588–8.460 us, JVP 45.261–46.954 us, reverse 34.728–60.964 us.
+Public warm wall time is recorded separately; no promotion/speedup claim.
+Broadcasted scalar/mapped sums, aliases, dynamic shapes and generic closure
+remain open. Sibling frontend parity requires owning native consumers.
+Recorder: benchmarks/rocm/record_continuous_scaled_mapped_ssa.py.
+Evidence: benchmarks/baselines/gfx1201_continuous_mapped_ssa_20261009/README.md.

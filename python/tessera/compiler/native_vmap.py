@@ -220,47 +220,98 @@ def project_batch(module: GraphIRModule, values: Sequence[Any], axes: Sequence[i
 
 
 def _project_composed_batch(module, values, axes, *, depth, scale_transpose, broadcast_prefix):
-    """Project semantic batch types per product; native MLIR owns arithmetic."""
-    from .rocm_typed_scaled_native import requests_composed_typed_scaled, supports_composed_scale_jvp, requests_floating_scaled, supports_scaled_reverse
+    """Project each SSA value's semantic shape; native MLIR owns arithmetic."""
+    from types import SimpleNamespace
+    from .rocm_typed_scaled_native import (
+        requests_composed_typed_scaled, supports_composed_scale_jvp,
+        requests_floating_scaled, supports_scaled_reverse)
     floating = requests_floating_scaled(module)
-    if not requests_composed_typed_scaled(module) and not floating:raise ValueError("native composed maps require typed scaled products and sums")
-    function=module.functions[0]
-    if len(function.args)!=len(values) or len(function.result_types)!=1 or function.result_types[0].rank!=2:
+    if not requests_composed_typed_scaled(module) and not floating:
+        raise ValueError("native composed maps require typed scaled products and sums")
+    function = module.functions[0]
+    if (len(function.args) != len(values) or len(function.result_types) != 1
+            or function.result_types[0].rank != 2):
         raise ValueError("native composed maps require one scalar matrix result")
     import numpy as np
-    prefixes=[tuple(value.shape[:depth]) for value,axis in zip(values,axes,strict=True) if axis is not None]
-    if not prefixes:raise ValueError("native composed maps require a mapped operand")
-    batch=np.broadcast_shapes(*prefixes) if broadcast_prefix else prefixes[0]
-    output=tensor_ir_type((*batch,*function.result_types[0].shape),function.result_types[0].dtype)
-    arguments={arg.name:(i,arg) for i,arg in enumerate(function.args)}
-    source_types={arg.name:copy.deepcopy(arg) for arg in function.args}
-    scale_roles=set()
+    prefixes = [tuple(value.shape[:depth]) for value, axis in zip(values, axes, strict=True)
+                if axis is not None]
+    if not prefixes:
+        raise ValueError("native composed maps require a mapped operand")
+    batch = np.broadcast_shapes(*prefixes) if broadcast_prefix else prefixes[0]
+    output = tensor_ir_type((*batch, *function.result_types[0].shape), function.result_types[0].dtype)
+    arguments = {arg.name: i for i, arg in enumerate(function.args)}
+    scalar_types = {"%" + arg.name: copy.deepcopy(arg.ir_type) for arg in function.args}
+    physical = {"%" + arg.name: value for arg, value in zip(function.args, values, strict=True)}
+    mapped_axes = {"%" + arg.name: axis for arg, axis in zip(function.args, axes, strict=True)}
+    projected_types = {
+        "%" + arg.name: tensor_ir_type(tuple(value.shape), _storage_dtype(value))
+        for arg, value in zip(function.args, values, strict=True)}
+    scale_roles: set[int] = set()
     for op in function.body:
-        if op.op_name=="tessera.scaled_matmul":
-            if any(value.removeprefix("%") not in arguments for value in op.operands):
-                raise ValueError("native composed maps require explicit product inputs")
-            positions=[arguments[value.removeprefix("%")][0] for value in op.operands]
-            member=copy.deepcopy(module);fn=member.functions[0]
-            fn.args=[copy.deepcopy(source_types[value.removeprefix("%")]) for value in op.operands]
-            fn.body=[copy.deepcopy(op)];fn.result_types=[copy.deepcopy(op.inferred_type)]
-            fn.return_values=["%"+op.result_names[0]]
-            projected=project_batch(member,[values[i] for i in positions],[axes[i] for i in positions],
-                depth=depth,scale_transpose=scale_transpose,broadcast_prefix=broadcast_prefix)
-            child=projected.functions[0].body[0]
-            if str(child.inferred_type)!=str(output):
-                raise ValueError("native composed map products must carry the same result batch")
-            op.kwargs=copy.deepcopy(child.kwargs);op.operand_types=list(child.operand_types)
-            scale_roles.update(positions if floating else positions[2:])
-        elif op.op_name=="tessera.add":
-            op.operand_types=[str(output)]*len(op.operands)
+        if len(op.result_names) != 1 or any(value not in scalar_types for value in op.operands):
+            raise ValueError("native composed map requires prefix SSA")
+        scalar_result = copy.deepcopy(op.inferred_type)
+        if scalar_result is None:
+            raise ValueError("native composed map requires typed results")
+        if op.op_name == "tessera.scaled_matmul":
+            if not floating and any(value.removeprefix("%") not in arguments for value in op.operands):
+                raise ValueError("encoded composed maps require explicit product inputs")
+            member = copy.deepcopy(module)
+            fn = member.functions[0]
+            fn.args = []
+            for value in op.operands:
+                argument = copy.deepcopy(function.args[0])
+                argument.name = value.removeprefix("%")
+                argument.ir_type = copy.deepcopy(scalar_types[value])
+                fn.args.append(argument)
+            fn.body = [copy.deepcopy(op)]
+            fn.result_types = [scalar_result]
+            fn.return_values = ["%" + op.result_names[0]]
+            child_axes = [mapped_axes[value] for value in op.operands]
+            if any(axis is not None for axis in child_axes):
+                member = project_batch(member, [physical[value] for value in op.operands], child_axes,
+                    depth=depth, scale_transpose=scale_transpose, broadcast_prefix=broadcast_prefix)
+            child = member.functions[0].body[0]
+            result_type = child.inferred_type
+            op.kwargs = copy.deepcopy(child.kwargs)
+            op.operand_types = list(child.operand_types)
+            eligible = op.operands if floating else op.operands[2:]
+            scale_roles.update(arguments[value.removeprefix("%")] for value in eligible
+                               if value.removeprefix("%") in arguments)
+        elif op.op_name == "tessera.add":
+            left, right = (projected_types[value] for value in op.operands)
+            if str(left) != str(right):
+                raise ValueError("native composed sum requires matching projected storage")
+            result_type = left
+            op.operand_types = [str(left), str(right)]
+        elif op.op_name == "tessera.transpose":
+            source = projected_types[op.operands[0]]
+            leading = source.rank - scalar_types[op.operands[0]].rank
+            permutation = list(range(leading)) + [axis + leading for axis in op.kwargs["permutation"]]
+            result_type = tensor_ir_type(tuple(source.shape[axis] for axis in permutation), source.dtype)
+            op.kwargs = {"permutation": permutation}
+            op.operand_types = [str(source)]
         else:
-            raise ValueError("native composed maps require native product/sum SSA")
-        op.inferred_type=output;op.inferred_types=(output,);op.result_type=str(output)
-    for arg,value in zip(function.args,values,strict=True):
-        arg.ir_type=tensor_ir_type(tuple(value.shape),_storage_dtype(value))
-    function.result_types=[output]
+            raise ValueError("native composed maps require native product/sum/permutation SSA")
+        if result_type is None:
+            raise ValueError("native composed map lost a product result")
+        op.inferred_type = result_type
+        op.inferred_types = (result_type,)
+        op.result_type = str(result_type)
+        value = "%" + op.result_names[0]
+        scalar_types[value] = scalar_result
+        projected_types[value] = result_type
+        # Shape/dtype metadata only: no host/device intermediate allocation.
+        physical[value] = SimpleNamespace(
+            shape=tuple(map(int, result_type.shape)), dtype=result_type.dtype)
+        mapped_axes[value] = 0 if result_type.rank > scalar_result.rank else None
+    for arg, value in zip(function.args, values, strict=True):
+        arg.ir_type = tensor_ir_type(tuple(value.shape), _storage_dtype(value))
+    if str(projected_types[function.return_values[0]]) != str(output):
+        raise ValueError("native composed map result differs from the logical map frame")
+    function.result_types = [output]
     admission = supports_scaled_reverse if scale_transpose else supports_composed_scale_jvp
-    if not admission(module,tuple(sorted(scale_roles))):
+    if not admission(module, tuple(sorted(scale_roles))):
         raise ValueError("native composed map requires the exact scale-product semantic contract")
     return module
 

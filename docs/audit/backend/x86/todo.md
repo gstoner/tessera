@@ -10296,3 +10296,14 @@ Native leaf-readiness update (GFX1201-BOUNDED-NVFP4-ROWS-20261009):
 not applicable to this backend's ownership. Separate converter/storage
 readiness and intermediate receipts belong to the private HIP program;
 no sibling numeric, dtype, scheduling or ABI support is inferred.
+
+## CONTINUOUS-SCALED-MAPPED-SSA-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Shared frontend projection preserves each computed SSA semantic shape, including
+fully shared producers before late-mapped consumers. Native MLIR retains AD,
+buffer lifetime, Schedule/Tile and numerical lowering ownership.
+Sibling outcome: follow-up required for equivalent native mapped chains.
+CPU scaled-program lowering does not consume this HIP allocation/lifetime ABI.
+No physical schedule or exact-device evidence is transferred.
+Evidence: benchmarks/baselines/gfx1201_continuous_mapped_ssa_20261009/README.md.

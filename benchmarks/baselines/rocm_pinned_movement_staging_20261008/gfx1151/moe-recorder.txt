@@ -1,0 +1,44 @@
+import hashlib,json,os,time
+from pathlib import Path
+from statistics import median
+from unittest.mock import patch
+import numpy as np
+import tessera as ts
+from tessera import runtime as rt
+from tests.unit.test_public_movement_frontend import dispatched,inputs
+from benchmarks.rocm.benchmark_native_movement import device_identity
+assert os.environ['TESSERA_ROCM_CHIP']=='gfx1151'
+rows=[]
+for label,large in [('small',False),('large',True)]:
+    args,expected=inputs('dispatched',large=large)
+    fn=ts.jit(target='rocm_gfx1151',native_required=True)(dispatched)
+    np.testing.assert_array_equal(fn(*args),expected)
+    assert fn.execution_kind=='native_gpu'
+    assert fn.compile_bundle.schedule.producer=='tessera-opt.tessera-graph-to-schedule'
+    windows={'pageable':[],'pinned':[]}
+    def forbidden(*a,**k): raise AssertionError('warm compiler invocation')
+    with patch('subprocess.run',forbidden),patch('subprocess.Popen',forbidden),patch('subprocess.check_output',forbidden):
+        for setting in ('0','1'):
+            os.environ['TESSERA_ROCM_MOVEMENT_PINNED_STAGING']=setting
+            for _ in range(4): np.testing.assert_array_equal(fn(*args),expected)
+        for n in range(7):
+            arms=[('pageable','0'),('pinned','1')]
+            if n%2:arms.reverse()
+            for name,setting in arms:
+                os.environ['TESSERA_ROCM_MOVEMENT_PINNED_STAGING']=setting
+                start=time.perf_counter_ns()
+                for _ in range(128): output=fn(*args)
+                windows[name].append((time.perf_counter_ns()-start)/1e6)
+                np.testing.assert_array_equal(output,expected)
+        retained=fn(*args);original=retained.copy()
+        args[1][...] *= np.float32(-.75);args[0][:]=args[0][::-1]
+        for setting in ('0','1'):
+            os.environ['TESSERA_ROCM_MOVEMENT_PINNED_STAGING']=setting
+            np.testing.assert_array_equal(fn(*args),args[1][args[0]])
+            np.testing.assert_array_equal(retained,original)
+    assert min(sum(windows.values(),[]))>20
+    rows.append(dict(profile=label,input_shape=list(args[1].shape),output_shape=list(expected.shape),image_digest=fn.compile_bundle.native_image.image_digest,abi_id=fn.compile_bundle.launch_descriptor.abi_id,public_window_ms=windows,repeats=128,paired_ratios=[p/c for p,c in zip(windows['pinned'],windows['pageable'],strict=True)],public_median_ms={k:median(v)/128 for k,v in windows.items()},correctness='passed_before_and_after_timing'))
+packet=dict(schema='tessera.rocm.pinned_moe_staging.v1',architecture='gfx1151',device=device_identity(rt._load_hip_for_launch(),'gfx1151'),scope='completed JIT with transfers, compiler forbidden warm; no GPU kernel speedup claim',source_hashes={'src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp':hashlib.sha256(Path('.transfer/native_movement_pinned.cpp').read_bytes()).hexdigest(),'tests/unit/test_public_movement_frontend.py':hashlib.sha256(Path('tests/unit/test_public_movement_frontend.py').read_bytes()).hexdigest(),'recorder':hashlib.sha256(Path(__file__).read_bytes()).hexdigest()},runtime_sha256=hashlib.sha256(Path(os.environ['TESSERA_ROCM_NATIVE_MOVEMENT_LIB']).read_bytes()).hexdigest(),cases=rows)
+Path('.transfer/pinned-moe.json').write_text(json.dumps(packet,indent=2)+'\n')
+for r in rows:print(r['profile'],r['public_median_ms'],median(r['paired_ratios']))
+rt._clear_rocm_native_image_cache()

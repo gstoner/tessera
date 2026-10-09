@@ -1,0 +1,58 @@
+.transfer/native_movement_pinned.cpp: In function ‘int {anonymous}::identity(Identity&)’:
+.transfer/native_movement_pinned.cpp:53:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   53 |       hipCtxGetCurrent(&context) != hipSuccess ||
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from .transfer/native_movement_pinned.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+.transfer/native_movement_pinned.cpp: In function ‘bool {anonymous}::residentContext(const ResidentMovement&)’:
+.transfer/native_movement_pinned.cpp:602:26: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  602 |          hipCtxGetCurrent(&context)==hipSuccess &&
+      |          ~~~~~~~~~~~~~~~~^~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp: In function ‘bool {anonymous}::identity(const Program&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:88:21: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   88 |     hipCtxGetCurrent(&ctx)==hipSuccess && device==p.device && ctx==p.context;
+      |     ~~~~~~~~~~~~~~~~^~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp: In function ‘int tessera_rocm_nvfp4_prepare(const void* const*, const size_t*, const char* const*, const int64_t*, const unsigned int*, const void* const*, const size_t*, uint64_t*)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:180:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  180 |       hipCtxGetCurrent(&p->context)!=hipSuccess)return 2;
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp: In function ‘bool {anonymous}::identity(const Program&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:93:26: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   93 |          hipCtxGetCurrent(&context) == hipSuccess &&
+      |          ~~~~~~~~~~~~~~~~^~~~~~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp: In function ‘int tessera_rocm_program_prepare(const char*, uint32_t, uint32_t, const TesseraRocmProgramBuffer*, uint32_t, const TesseraRocmProgramStep*, const void* const*, const uint64_t*, uint64_t*)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:221:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  221 |       hipCtxGetCurrent(&p->context) != hipSuccess) return 2;
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+..................................ss...ss...............                 [100%]
+52 passed, 4 skipped in 19.17s
+gfx1151 small compact {'pageable': 1.901214078125, 'pinned': 0.490706640625} 0.25475794676251695
+gfx1151 small padded {'pageable': 2.0006804296875, 'pinned': 0.5911081875} 0.2938181333040602
+gfx1151 small permuted {'pageable': 2.004112609375, 'pinned': 0.5857958984375} 0.2933829184545495
+gfx1151 small fortran {'pageable': 1.9916569921875, 'pinned': 0.5770578046875} 0.2904379458855783
+gfx1151 large compact {'pageable': 2.4381374609375, 'pinned': 0.7377818515625} 0.3086603319839014
+gfx1151 large padded {'pageable': 2.669621078125, 'pinned': 0.9656173046875} 0.3611966981840572
+gfx1151 large permuted {'pageable': 2.5889847890625, 'pinned': 0.900507203125} 0.34782251596429176
+gfx1151 large fortran {'pageable': 2.6297557734375, 'pinned': 0.8987678359375} 0.3444330387481387

@@ -7,6 +7,7 @@
 #include <climits>
 #include <cstdint>
 #include <cstring>
+#include <cstdlib>
 #include <limits>
 #include <map>
 #include <memory>
@@ -30,6 +31,9 @@ struct Arena {
   std::array<void *, 3> buffers{};
   std::array<size_t, 3> capacities{};
   std::vector<void *> retired;
+  std::array<void *, 3> hostBuffers{};
+  std::array<size_t, 3> hostCapacities{};
+  std::vector<void *> retiredHost;
   void *pendingLease = nullptr;
   bool poisoned = false;
 };
@@ -71,6 +75,17 @@ int clearArena(State &s, Arena &arena, bool completed = false) {
     arena.retired.pop_back();
     ++s.frees;
   }
+  for (size_t i = 0; i < 3; ++i) {
+    if (arena.hostBuffers[i]) {
+      if (hipHostFree(arena.hostBuffers[i]) != hipSuccess) return 9;
+      arena.hostBuffers[i] = nullptr;
+      arena.hostCapacities[i] = 0;
+    }
+  }
+  while (!arena.retiredHost.empty()) {
+    if (hipHostFree(arena.retiredHost.back()) != hipSuccess) return 9;
+    arena.retiredHost.pop_back();
+  }
   arena.poisoned = false;
   return 0;
 }
@@ -102,6 +117,23 @@ int grow(State &s, Arena &arena, size_t index, size_t bytes) {
   arena.capacities[index] = bytes;
   return 0;
 }
+// Native-owned pinned scratch is private; every call recopies borrowed data.
+// Allocation/free happens only after this arena has established completion.
+int growHost(Arena &arena, size_t index, size_t bytes) {
+  if (arena.hostBuffers[index] && arena.hostCapacities[index] >= bytes) return 0;
+  arena.retiredHost.reserve(arena.retiredHost.size()+1);
+  void *next = nullptr;
+  if (hipHostMalloc(&next, bytes, hipHostMallocDefault) != hipSuccess) return 4;
+  if (arena.hostBuffers[index] && hipHostFree(arena.hostBuffers[index]) != hipSuccess) {
+    arena.retiredHost.push_back(next);
+    arena.poisoned = true;
+    return 9;
+  }
+  arena.hostBuffers[index] = next;
+  arena.hostCapacities[index] = bytes;
+  return 0;
+}
+
 struct Memref {
   void *allocated, *aligned;
   int64_t offset, elements, stride;
@@ -176,14 +208,24 @@ extern "C" int tessera_rocm_movement_launch(
   if (!slot) slot = std::make_unique<Arena>();
   Arena &arena = *slot;
   if (arena.poisoned || arena.pendingLease) return 10;
-  bool retain = reuse && inputBytes+indexBytes+outputBytes <= maxRetainedBytes;
+  const char *pinnedSetting = std::getenv("TESSERA_ROCM_MOVEMENT_PINNED_STAGING");
+  if (pinnedSetting && std::strcmp(pinnedSetting, "0") &&
+      std::strcmp(pinnedSetting, "1")) return 1;
+  // Default is best-effort pinned staging; 0 is the pageable control and 1
+  // explicitly requires pinned staging (including allocation-failure refusal).
+  bool pinned = !pinnedSetting || std::strcmp(pinnedSetting, "1") == 0;
+  bool retain = reuse && inputBytes+indexBytes+outputBytes <=
+      (pinned ? maxRetainedBytes/2 : maxRetainedBytes);
   if (!retain) {
     if (int rc = clearArena(s,arena,true)) return rc;
   } else {
     size_t retained = 0;
-    for (size_t i=0; i<3; ++i)
-      retained += std::max(arena.capacities[i],
-                          std::array<size_t,3>{inputBytes,indexBytes,outputBytes}[i]);
+    for (size_t i=0; i<3; ++i) {
+      size_t bytes = std::array<size_t,3>{inputBytes,indexBytes,outputBytes}[i];
+      retained += std::max(arena.capacities[i], bytes);
+      retained += pinned ? std::max(arena.hostCapacities[i], bytes)
+                         : arena.hostCapacities[i];
+    }
     if (retained > maxRetainedBytes)
       if (int rc = clearArena(s,arena,true)) return rc;
   }
@@ -214,8 +256,24 @@ extern "C" int tessera_rocm_movement_launch(
   for (size_t i=0; i<3; ++i)
     if (int rc=grow(s,arena,i,std::array<size_t,3>{inputBytes,indexBytes,outputBytes}[i]))
       return finish(rc);
-  if (hipMemcpy(arena.buffers[0],input,inputBytes,hipMemcpyHostToDevice) != hipSuccess ||
-      hipMemcpy(arena.buffers[1],indices,indexBytes,hipMemcpyHostToDevice) != hipSuccess)
+  const void *inputSource = input, *indexSource = indices;
+  void *outputDestination = output;
+  if (pinned) {
+    for (size_t i=0; i<3; ++i) {
+      int rc=growHost(arena,i,std::array<size_t,3>{inputBytes,indexBytes,outputBytes}[i]);
+      if (rc==4 && !pinnedSetting) {pinned=false;break;}
+      if (rc) return finish(rc);
+    }
+    if (pinned) {
+      std::memcpy(arena.hostBuffers[0], input, inputBytes);
+      std::memcpy(arena.hostBuffers[1], indices, indexBytes);
+      inputSource = arena.hostBuffers[0];
+      indexSource = arena.hostBuffers[1];
+      outputDestination = arena.hostBuffers[2];
+    }
+  }
+  if (hipMemcpy(arena.buffers[0],inputSource,inputBytes,hipMemcpyHostToDevice) != hipSuccess ||
+      hipMemcpy(arena.buffers[1],indexSource,indexBytes,hipMemcpyHostToDevice) != hipSuccess)
     return finish(5);
   std::array<Memref,3> refs;
   std::vector<void *> arguments;
@@ -236,8 +294,9 @@ extern "C" int tessera_rocm_movement_launch(
     arena.poisoned=true;
     return 7;
   }
-  if (hipMemcpy(output,arena.buffers[2],outputBytes,hipMemcpyDeviceToHost) != hipSuccess)
+  if (hipMemcpy(outputDestination,arena.buffers[2],outputBytes,hipMemcpyDeviceToHost) != hipSuccess)
     return finish(5,true);
+  if (pinned) std::memcpy(output, arena.hostBuffers[2], outputBytes);
   return finish(0,true);
 } catch (...) { return 12; }
 
@@ -297,7 +356,8 @@ extern "C" int tessera_rocm_math_launch(
   std::array<size_t,3> bytes={lhsBytes,rhsBytes,outputBytes};
   bool retain=reuse && lhsBytes+rhsBytes+outputBytes<=maxRetainedBytes;
   size_t retained=0;
-  for(size_t i=0;i<3;++i) retained+=std::max(arena.capacities[i],bytes[i]);
+  for(size_t i=0;i<3;++i)
+    retained+=std::max(arena.capacities[i],bytes[i])+arena.hostCapacities[i];
   if (!retain || retained>maxRetainedBytes)
     if (int rc=clearArena(s,arena,true)) return rc;
   void *lease=nullptr,*module=nullptr,*function=nullptr;

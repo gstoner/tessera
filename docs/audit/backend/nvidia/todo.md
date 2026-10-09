@@ -13891,3 +13891,27 @@ Evidence: benchmarks/baselines/rocm_strided_paged_kv_20261008/README.md.
 Follow-up required: the native Schedule gate still rejects strided pages
 until an SM120 Target consumer and checked launch ABI are implemented.
 Compact NVIDIA routing is unchanged; no new NVIDIA physical parity is claimed.
+
+
+## Native pinned movement staging — 2026-10-08
+
+Owner E2E-REAL-6; synchronization ROCM-PINNED-MOVEMENT-STAGING-20261008.
+Native private pinned scratch now accelerates completed host movement calls;
+all borrowed source/index data is recopied, and completed output remains a
+separate caller array. Default is best-effort pinned with native pageable
+fallback after allocation failure. Explicit 0/1 controls select pageable/strict
+pinned behavior. The 128 MiB retained budget counts host and device scratch;
+shared math ownership and process/context cleanup remain checked.
+Graph/Schedule/Tile/Target/LLVM images, descriptor ABI and physical schedules
+are unchanged. Twenty source hashes and sixteen unchanged image digests are
+verified. Seven rotating paired rounds per profile have compiler recovery
+forbidden; public calls and resident kernel events remain separate scopes.
+Native failure/binding gates pass seven host tests, including partial pinned
+allocation fallback and free/completion quarantine. The controlled HIP graph
+fixture now declares the required API surface and refuses graph execution;
+physical graph proof remains architecture-specific.
+Evidence: benchmarks/baselines/rocm_pinned_movement_staging_20261008/README.md.
+Not applicable: this changes HIP-owned host scratch only, not CUDA allocation,
+streams or SM120 compiler images. The shared controlled test fixture is assessed;
+no new NVIDIA physical parity is claimed. Its own staging/ownership plan remains
+separate and requires RTX 5070 evidence for further changes.

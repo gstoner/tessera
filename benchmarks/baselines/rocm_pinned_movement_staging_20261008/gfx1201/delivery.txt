@@ -1,0 +1,65 @@
+.transfer/native_movement_pinned.cpp: In function ‘int {anonymous}::identity(Identity&)’:
+.transfer/native_movement_pinned.cpp:53:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   53 |       hipCtxGetCurrent(&context) != hipSuccess ||
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from .transfer/native_movement_pinned.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+.transfer/native_movement_pinned.cpp: In function ‘bool {anonymous}::residentContext(const ResidentMovement&)’:
+.transfer/native_movement_pinned.cpp:602:26: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  602 |          hipCtxGetCurrent(&context)==hipSuccess &&
+      |          ~~~~~~~~~~~~~~~~^~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp: In function ‘bool {anonymous}::identity(const Program&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:88:21: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   88 |     hipCtxGetCurrent(&ctx)==hipSuccess && device==p.device && ctx==p.context;
+      |     ~~~~~~~~~~~~~~~~^~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp: In function ‘int tessera_rocm_nvfp4_prepare(const void* const*, const size_t*, const char* const*, const int64_t*, const unsigned int*, const void* const*, const size_t*, uint64_t*)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:180:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  180 |       hipCtxGetCurrent(&p->context)!=hipSuccess)return 2;
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp: In function ‘bool {anonymous}::identity(const Program&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:93:26: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   93 |          hipCtxGetCurrent(&context) == hipSuccess &&
+      |          ~~~~~~~~~~~~~~~~^~~~~~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp: In function ‘int tessera_rocm_program_prepare(const char*, uint32_t, uint32_t, const TesseraRocmProgramBuffer*, uint32_t, const TesseraRocmProgramStep*, const void* const*, const uint64_t*, uint64_t*)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:221:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  221 |       hipCtxGetCurrent(&p->context) != hipSuccess) return 2;
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+...............................sss..sss...............                   [100%]
+=============================== warnings summary ===============================
+../next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464
+  /home/angstorms/scratch/next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: timeout
+
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+48 passed, 6 skipped, 1 warning in 7.41s
+gfx1201 small compact {'pageable': 2.4828986484375, 'pinned': 0.5443597421875} 0.22362012355558866
+gfx1201 small padded {'pageable': 2.54598125, 'pinned': 0.6689586171875} 0.265591486824065
+gfx1201 small permuted {'pageable': 2.59633409375, 'pinned': 0.6692356953125} 0.2558779100938069
+gfx1201 small fortran {'pageable': 2.5709600546875, 'pinned': 0.664595671875} 0.2583058498025787
+gfx1201 large compact {'pageable': 2.6091345, 'pinned': 0.8849430234375} 0.3391711019257535
+gfx1201 large padded {'pageable': 2.8305550546875, 'pinned': 1.1065761796875} 0.3900715481082199
+gfx1201 large permuted {'pageable': 2.74410084375, 'pinned': 1.015993078125} 0.37024626133512517
+gfx1201 large fortran {'pageable': 2.7065961484375, 'pinned': 1.02461728125} 0.3667521061424898

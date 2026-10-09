@@ -1,0 +1,786 @@
+{
+  "architecture": "sm_120",
+  "device": {
+    "name": "NVIDIA GeForce RTX 5070",
+    "uuid_hex": "cba12639821a7a104cd3f918f9c0a545",
+    "ordinal": 0
+  },
+  "rows": [
+    {
+      "dtype": "fp16",
+      "depth_per_operand": 1,
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "cold_compile_and_public_call_ms": 1412.462387001142,
+      "max_abs_error": 1.2898817658424377e-07,
+      "native_program_event_samples_ms": [
+        0.027586499229073524,
+        0.027011999860405922,
+        0.028072500601410866,
+        0.026928750798106194,
+        0.027395250275731087,
+        0.026986999437212944,
+        0.026944750919938087
+      ],
+      "native_program_event_median_ms": 0.027011999860405922,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.009584999643266201,
+          0.008924500085413456,
+          0.009181500412523746
+        ],
+        [
+          0.008790750056505203,
+          0.008600249886512756,
+          0.008444749750196934
+        ],
+        [
+          0.008658249862492085,
+          0.009155499748885632,
+          0.008783250115811825
+        ],
+        [
+          0.009288249537348747,
+          0.008809500373899937,
+          0.009037749841809273
+        ],
+        [
+          0.00912449974566698,
+          0.009732499718666077,
+          0.009803250432014465
+        ],
+        [
+          0.009399999864399433,
+          0.008641749620437622,
+          0.008315499871969223
+        ],
+        [
+          0.010190749540925026,
+          0.010025749914348125,
+          0.009059499949216843
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        0.9253930184058845,
+        0.8111409842967987,
+        0.7155299535952508,
+        0.711999018676579,
+        0.7285000174306333,
+        0.6819990230724216,
+        0.7361290045082569
+      ],
+      "public_resident_completed_median_ms": 0.7285000174306333,
+      "public_host_completed_samples_ms": [
+        3.4703449928201735,
+        0.8179099531844258,
+        0.6799190305173397,
+        0.7620790274813771,
+        0.6150179542601109,
+        0.6637790356762707,
+        0.6429980276152492
+      ],
+      "public_host_completed_median_ms": 0.6799190305173397,
+      "resident_over_host_median_ratio": 1.0714511356982155,
+      "program_contract_digest": "de35128a7bb349e0c4bd61b32b3a5487b38bfc3073b4e9eb180612b971368661",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "a10907546952086d8d166e31bade053be53b999d7d741b03882ed7a5923671a0"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    },
+    {
+      "dtype": "fp16",
+      "depth_per_operand": 1,
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "cold_compile_and_public_call_ms": 1208.2392890006304,
+      "max_abs_error": 9.936856804415584e-05,
+      "native_program_event_samples_ms": [
+        0.03627375140786171,
+        0.035447001457214355,
+        0.05925225093960762,
+        0.07536999881267548,
+        0.03218650072813034,
+        0.03477824851870537,
+        0.033520251512527466
+      ],
+      "native_program_event_median_ms": 0.035447001457214355,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.008702250197529793,
+          0.016668250784277916,
+          0.012523000128567219
+        ],
+        [
+          0.0091967498883605,
+          0.01656224951148033,
+          0.012684750370681286
+        ],
+        [
+          0.009953750297427177,
+          0.016627000644803047,
+          0.012371749617159367
+        ],
+        [
+          0.008185249753296375,
+          0.016601499170064926,
+          0.012737499549984932
+        ],
+        [
+          0.008888499811291695,
+          0.016648000106215477,
+          0.012272999621927738
+        ],
+        [
+          0.007310499902814627,
+          0.017370250076055527,
+          0.01057450007647276
+        ],
+        [
+          0.007747000083327293,
+          0.016554249450564384,
+          0.011449499987065792
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        0.7773300167173147,
+        0.7493699667975307,
+        1.4504290302284062,
+        0.7619000389240682,
+        0.7227889727801085,
+        0.7688999758102,
+        0.8295400184579194
+      ],
+      "public_resident_completed_median_ms": 0.7688999758102,
+      "public_host_completed_samples_ms": [
+        3.2790330005809665,
+        0.727510021533817,
+        0.8202710305340588,
+        0.7277799886651337,
+        0.6964189815334976,
+        0.758590002078563,
+        0.7401699549518526
+      ],
+      "public_host_completed_median_ms": 0.7401699549518526,
+      "resident_over_host_median_ratio": 1.0388154378141656,
+      "program_contract_digest": "59d1ed4fcad5b62070c99ba362207e58af95b81301a8488b3d8e5f3c86797402",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<129x513xf16>, %arg1: tensor<513x65xf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>, tensor<513x65xf16>) -> tensor<129x65xf32>\n    return %2 : tensor<129x65xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "f9d4b861a288f62252039f5e2d0bbfc7ebc7eac7dd30513e180707d7d9ba6fb8"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    },
+    {
+      "dtype": "fp16",
+      "depth_per_operand": 2,
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "cold_compile_and_public_call_ms": 1530.592049995903,
+      "max_abs_error": 1.7043203115463257e-07,
+      "native_program_event_samples_ms": [
+        0.04788525030016899,
+        0.045101750642061234,
+        0.04822099953889847,
+        0.04754975065588951,
+        0.04504675045609474,
+        0.04544125124812126,
+        0.04752200096845627
+      ],
+      "native_program_event_median_ms": 0.04752200096845627,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.009549000300467014,
+          0.010363000445067883,
+          0.009305249899625778,
+          0.008544749580323696,
+          0.008588500320911407
+        ],
+        [
+          0.010627999901771545,
+          0.010569499805569649,
+          0.008923999965190887,
+          0.008668499998748302,
+          0.009661249816417694
+        ],
+        [
+          0.010032749734818935,
+          0.010010500438511372,
+          0.008250500075519085,
+          0.009600499644875526,
+          0.008898749947547913
+        ],
+        [
+          0.009649249725043774,
+          0.010584250092506409,
+          0.009835249744355679,
+          0.008643249981105328,
+          0.008635500445961952
+        ],
+        [
+          0.00961725041270256,
+          0.01028124988079071,
+          0.009111500345170498,
+          0.008185749873518944,
+          0.00867875013500452
+        ],
+        [
+          0.009291750378906727,
+          0.010496499948203564,
+          0.009522750042378902,
+          0.009930750355124474,
+          0.008864999748766422
+        ],
+        [
+          0.00962425023317337,
+          0.009970249608159065,
+          0.009237750433385372,
+          0.008945499546825886,
+          0.008953750133514404
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        1.4667589566670358,
+        0.9389619808644056,
+        1.0494139860384166,
+        0.8709710091352463,
+        0.9999829926528037,
+        0.8727209642529488,
+        0.9625719976611435
+      ],
+      "public_resident_completed_median_ms": 0.9625719976611435,
+      "public_host_completed_samples_ms": [
+        3.3494039671495557,
+        1.207795983646065,
+        0.769880018197,
+        0.9230910218320787,
+        4.6293389750644565,
+        0.8103600121103227,
+        0.7803600165061653
+      ],
+      "public_host_completed_median_ms": 0.9230910218320787,
+      "resident_over_host_median_ratio": 1.0427704038879135,
+      "program_contract_digest": "908015613d28132640c8e3d88c3dc5443d3afb09e7d8a7f3f4abb33acb296399",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %4 : tensor<17x19xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "07c490630ced23ff3aa7cf178906078ad5dc368adcd46a3f0c9cf6bf17151e55",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "85cf684735824e614eb09eab42a69ad3dc45d43e8072bed836057be2e01859e3",
+        "a10907546952086d8d166e31bade053be53b999d7d741b03882ed7a5923671a0"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    },
+    {
+      "dtype": "fp16",
+      "depth_per_operand": 2,
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "cold_compile_and_public_call_ms": 1557.6628699782304,
+      "max_abs_error": 0.00013469717760017375,
+      "native_program_event_samples_ms": [
+        0.05671875178813934,
+        0.05570574849843979,
+        0.05620900169014931,
+        0.05803550034761429,
+        0.05787000060081482,
+        0.07115499675273895,
+        0.05380349978804588
+      ],
+      "native_program_event_median_ms": 0.05671875178813934,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.009102500043809414,
+          0.009549999609589577,
+          0.016640249639749527,
+          0.017557499930262566,
+          0.013950750231742859
+        ],
+        [
+          0.00934125017374754,
+          0.00928299967199564,
+          0.01659250073134899,
+          0.01770949922502041,
+          0.012263249605894089
+        ],
+        [
+          0.008593750186264515,
+          0.009820249862968922,
+          0.01759899966418743,
+          0.017520999535918236,
+          0.012566249817609787
+        ],
+        [
+          0.010059249587357044,
+          0.009296500124037266,
+          0.016984250396490097,
+          0.017633000388741493,
+          0.013320500031113625
+        ],
+        [
+          0.008627749979496002,
+          0.008489750325679779,
+          0.016969000920653343,
+          0.017379000782966614,
+          0.012363499961793423
+        ],
+        [
+          0.01452150009572506,
+          0.010482500307261944,
+          0.01934574916958809,
+          0.018053000792860985,
+          0.015084249898791313
+        ],
+        [
+          0.009261749684810638,
+          0.009512499906122684,
+          0.016612499952316284,
+          0.017648249864578247,
+          0.012562500312924385
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        0.9792729979380965,
+        0.901772000361234,
+        0.9080920135602355,
+        0.9132220293395221,
+        0.9131619590334594,
+        0.9629229898564517,
+        0.9009719942696393
+      ],
+      "public_resident_completed_median_ms": 0.9131619590334594,
+      "public_host_completed_samples_ms": [
+        3.5086559946648777,
+        0.9494330151937902,
+        0.8804620010778308,
+        0.8873219485394657,
+        0.8320710039697587,
+        0.9454429964534938,
+        0.8816310437396169
+      ],
+      "public_host_completed_median_ms": 0.8873219485394657,
+      "resident_over_host_median_ratio": 1.0291213471463503,
+      "program_contract_digest": "6c8e7dfcde0cb67a2255bb5da101ff781a57921b4b817864a68576ba174b86d0",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<129x513xf16>, %arg1: tensor<513x65xf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>, tensor<513x65xf16>) -> tensor<129x65xf32>\n    return %4 : tensor<129x65xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "7e9e19b95a4377e0d2c1ae8aef2fa262de52ca42cd50975bc8ec8fffc71f45ee",
+        "627b3f5f3a8ee4eb94e8b64f96ef3978d5f30260fcc4e0586d6661d7a3de8440",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "bddd0c166001bca97f6c79e34fac8c11a27e9d55a874e12b4df9f4adaabdd622",
+        "f9d4b861a288f62252039f5e2d0bbfc7ebc7eac7dd30513e180707d7d9ba6fb8"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    },
+    {
+      "dtype": "bf16",
+      "depth_per_operand": 1,
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "cold_compile_and_public_call_ms": 1194.4368029944599,
+      "max_abs_error": 0.000396728515625,
+      "native_program_event_samples_ms": [
+        0.06577125191688538,
+        0.028066499158740044,
+        0.027991000562906265,
+        0.02759850025177002,
+        0.027331499382853508,
+        0.027878999710083008,
+        0.028220249339938164
+      ],
+      "native_program_event_median_ms": 0.027991000562906265,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.009654249995946884,
+          0.00802375003695488,
+          0.008787750266492367
+        ],
+        [
+          0.009274750016629696,
+          0.009336750023066998,
+          0.009449999779462814
+        ],
+        [
+          0.010033500380814075,
+          0.008568000048398972,
+          0.008451749570667744
+        ],
+        [
+          0.009933999739587307,
+          0.009169249795377254,
+          0.008984499610960484
+        ],
+        [
+          0.010444499552249908,
+          0.00868150033056736,
+          0.009084999561309814
+        ],
+        [
+          0.008632250130176544,
+          0.009007750079035759,
+          0.009679749608039856
+        ],
+        [
+          0.009492750279605389,
+          0.009115000255405903,
+          0.00929224956780672
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        0.7808009977452457,
+        0.6998500321060419,
+        0.7366699865087867,
+        0.7002080092206597,
+        0.745290017221123,
+        0.6768889725208282,
+        1.008532999549061
+      ],
+      "public_resident_completed_median_ms": 0.7366699865087867,
+      "public_host_completed_samples_ms": [
+        3.103790048044175,
+        0.6742089753970504,
+        0.6546789663843811,
+        0.6514689885079861,
+        0.5991979851387441,
+        0.7316890405490994,
+        0.6491190288215876
+      ],
+      "public_host_completed_median_ms": 0.6546789663843811,
+      "resident_over_host_median_ratio": 1.1252385128198334,
+      "program_contract_digest": "f124ed571ede851c561a643db2fb3ee749df1fb643bf047102bd484efdfefdae",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "9fe153d2de4da3fff63ba644af1d53837c932ba1d0462b9370ec4c4ce8ab735b"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    },
+    {
+      "dtype": "bf16",
+      "depth_per_operand": 1,
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "cold_compile_and_public_call_ms": 1188.4801110136323,
+      "max_abs_error": 0.0004740096628665924,
+      "native_program_event_samples_ms": [
+        0.03494799882173538,
+        0.033250998705625534,
+        0.03449049964547157,
+        0.03258674964308739,
+        0.034647248685359955,
+        0.0660102516412735,
+        0.034139249473810196
+      ],
+      "native_program_event_median_ms": 0.03449049964547157,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.007940749637782574,
+          0.017121000215411186,
+          0.01238549966365099
+        ],
+        [
+          0.014689999632537365,
+          0.016978750005364418,
+          0.012776999734342098
+        ],
+        [
+          0.008689249865710735,
+          0.016598500311374664,
+          0.012590750120580196
+        ],
+        [
+          0.00973374955356121,
+          0.01670224964618683,
+          0.012089500203728676
+        ],
+        [
+          0.009258249774575233,
+          0.01662449911236763,
+          0.01245024986565113
+        ],
+        [
+          0.009052000008523464,
+          0.016860250383615494,
+          0.012260249815881252
+        ],
+        [
+          0.009437999688088894,
+          0.016600750386714935,
+          0.012014499865472317
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        0.7776799611747265,
+        0.804619980044663,
+        0.804440991487354,
+        0.7359489682130516,
+        0.7367200450971723,
+        0.7548200082965195,
+        0.7119489600881934
+      ],
+      "public_resident_completed_median_ms": 0.7548200082965195,
+      "public_host_completed_samples_ms": [
+        3.420923021622002,
+        0.7758300052955747,
+        0.6784289726056159,
+        0.7122089737094939,
+        0.6950890528969467,
+        0.6952289841137826,
+        0.7414290448650718
+      ],
+      "public_host_completed_median_ms": 0.7122089737094939,
+      "resident_over_host_median_ratio": 1.0598293986174996,
+      "program_contract_digest": "e919110056ad609cf937eeae7dee28a307a743885cf9682861d094be14fc441b",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<129x513xbf16>, %arg1: tensor<513x65xbf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>, tensor<513x65xbf16>) -> tensor<129x65xf32>\n    return %2 : tensor<129x65xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "76019052c9ea405f308926bb730534c2ebb75cbed522f28c4431e0c4180d9f75"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    },
+    {
+      "dtype": "bf16",
+      "depth_per_operand": 2,
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "cold_compile_and_public_call_ms": 1549.02255901834,
+      "max_abs_error": 0.00395965576171875,
+      "native_program_event_samples_ms": [
+        0.048204999417066574,
+        0.04713524878025055,
+        0.04653275012969971,
+        0.04929624870419502,
+        0.04515250027179718,
+        0.08427474647760391,
+        0.048383500427007675
+      ],
+      "native_program_event_median_ms": 0.048204999417066574,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.00943399965763092,
+          0.009695500135421753,
+          0.009258500300347805,
+          0.009412500075995922,
+          0.008659499697387218
+        ],
+        [
+          0.008812000043690205,
+          0.008996750228106976,
+          0.009102250449359417,
+          0.008059250190854073,
+          0.0084027498960495
+        ],
+        [
+          0.009176000021398067,
+          0.009937000460922718,
+          0.009008999913930893,
+          0.009393749758601189,
+          0.009349999949336052
+        ],
+        [
+          0.009170999750494957,
+          0.009846000000834465,
+          0.008768250234425068,
+          0.008403000421822071,
+          0.008706750348210335
+        ],
+        [
+          0.009860250167548656,
+          0.009793500415980816,
+          0.008935750462114811,
+          0.008301500231027603,
+          0.009263750165700912
+        ],
+        [
+          0.009949250146746635,
+          0.009877500124275684,
+          0.009509249590337276,
+          0.00834800023585558,
+          0.008160250261425972
+        ],
+        [
+          0.0099267503246665,
+          0.009928000159561634,
+          0.00954775046557188,
+          0.008911250159144402,
+          0.00841050036251545
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        1.156795013230294,
+        0.9069310035556555,
+        1.0661639971658587,
+        0.8549119811505079,
+        1.3831080286763608,
+        0.8818309870548546,
+        0.9725820273160934
+      ],
+      "public_resident_completed_median_ms": 0.9725820273160934,
+      "public_host_completed_samples_ms": [
+        3.470821015071124,
+        1.1036440264433622,
+        0.769949983805418,
+        1.0619640233926475,
+        0.8792410371825099,
+        1.0496730101294816,
+        0.7449699915014207
+      ],
+      "public_host_completed_median_ms": 1.0496730101294816,
+      "resident_over_host_median_ratio": 0.9265571448732605,
+      "program_contract_digest": "f6a9ce0d4f3550a6ef265de36ee33ef7391c01aa16784075736928ebf6dcd41c",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %4 : tensor<17x19xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "0a04d0cf99f7ebe9269cebc4ce6abf7c712485797e98c3487b7755439c97f414",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "eb422448d15e774f18b58ab1faa2471a04fd53185dafabd6231eebae57f96497",
+        "9fe153d2de4da3fff63ba644af1d53837c932ba1d0462b9370ec4c4ce8ab735b"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    },
+    {
+      "dtype": "bf16",
+      "depth_per_operand": 2,
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "cold_compile_and_public_call_ms": 1556.4477549633011,
+      "max_abs_error": 0.0004684985615313053,
+      "native_program_event_samples_ms": [
+        0.059382498264312744,
+        0.06033549830317497,
+        0.05998925119638443,
+        0.05912899971008301,
+        0.0614672489464283,
+        0.0562794990837574,
+        0.06035050004720688
+      ],
+      "native_program_event_median_ms": 0.05998925119638443,
+      "grouped_stage_event_samples_ms": [
+        [
+          0.008088749833405018,
+          0.00881775002926588,
+          0.017135750502347946,
+          0.01799125038087368,
+          0.01205924991518259
+        ],
+        [
+          0.008569000288844109,
+          0.00934625044465065,
+          0.0166034996509552,
+          0.01753474958240986,
+          0.013255249708890915
+        ],
+        [
+          0.01042299997061491,
+          0.009522249922156334,
+          0.01656324975192547,
+          0.017568249255418777,
+          0.012756500393152237
+        ],
+        [
+          0.007594999857246876,
+          0.008927499875426292,
+          0.016999000683426857,
+          0.017536750063300133,
+          0.01300750020891428
+        ],
+        [
+          0.008521500043570995,
+          0.008479000069200993,
+          0.016516000032424927,
+          0.01761550083756447,
+          0.012315750122070312
+        ],
+        [
+          0.008472000248730183,
+          0.00786800030618906,
+          0.016835499554872513,
+          0.01750425063073635,
+          0.012570000253617764
+        ],
+        [
+          0.008228500373661518,
+          0.007884000428020954,
+          0.017123999074101448,
+          0.0180830005556345,
+          0.012230499647557735
+        ]
+      ],
+      "public_resident_completed_samples_ms": [
+        1.0220929980278015,
+        0.8719110046513379,
+        0.8653720142319798,
+        0.8953619981184602,
+        0.8952019852586091,
+        0.9177220053970814,
+        0.9312320034950972
+      ],
+      "public_resident_completed_median_ms": 0.8953619981184602,
+      "public_host_completed_samples_ms": [
+        3.7081179907545447,
+        0.9059320436790586,
+        0.847930961754173,
+        0.8393910247832537,
+        0.8649009978398681,
+        0.8305910159833729,
+        0.8958719554357231
+      ],
+      "public_host_completed_median_ms": 0.8649009978398681,
+      "resident_over_host_median_ratio": 1.0352190601637297,
+      "program_contract_digest": "e9b4683c8a3598c1c0d8d1927b13c341fc0117e8e139f8e939aa22965f626391",
+      "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<129x513xbf16>, %arg1: tensor<513x65xbf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>, tensor<513x65xbf16>) -> tensor<129x65xf32>\n    return %4 : tensor<129x65xf32>\n  }\n}\n\n",
+      "image_digests": [
+        "19699f30bd8bdb118525661d8c4074af83d381bf2d48c4cfa9d18d48054966ec",
+        "99b13111471364aa6665d2749c56e54055a4e72f821a3af342f8ea186d420c76",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "04176a66bf888de23e4dc27e94f0e1ba6e91474fe630a36a4d50ffcf6923566b",
+        "76019052c9ea405f308926bb730534c2ebb75cbed522f28c4431e0c4180d9f75"
+      ],
+      "correctness": "independent float64 oracle and bitwise resident/host equality; retained outputs; compiler/frontend disabled"
+    }
+  ],
+  "route": "Python/text frontend abstract metadata->typed Graph->Schedule->Tile->NVIDIA Target->LLVM/PTX->ordered native CUDA ABI",
+  "timing_scope": "Public completed wall time includes result allocation/download and input-stream waits; native program/grouped members are distinct CUDA event domains",
+  "sources": {
+    "python/tessera/compiler/jit.py": "b87bb6849491aadb72e2d990458dd2b8aa6f146263567a61abb0eec7cf763006",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "dc51aae5817f44e867b82355b452967c16d723dbc717a86404aa0c398ce3c3fe",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "adb4cb947077c1d63df2ed32fa8ec5fb9c533e13024533aba089377218c19321",
+    "python/tessera/compiler/nvidia_tensor_dag.py": "8321fd9f316fd1bd3d5964e152fd1a7963aa19bf18f0788cbbaf2d3b820b9996",
+    "tests/unit/test_public_resident_tensor_frontend.py": "a0dc9f96ac07427f0450040fb812e5b7b046b528f7e9848e5a22a5d4eb2c986a",
+    "tests/device/nvidia/test_public_resident_tensor_frontend.py": "9daec4623836858c961ae63c1cb48dc10d41ed870d1288f689e256be751c6592",
+    "benchmarks/nvidia/record_public_resident_tensor_frontend.py": "ff07eaef449fd87cc0116238b99fe5ccd3d477706a2c38db9e12b9db0b16ff89",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "a5697ee0bc0da90f6e042488a680bd3cfb419b1c74a9f080ceca9d1defda0993",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "39c4748546a0662a63ad131ae533b2308081e7f165eac41bbd4ab97bd61ec30f",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "b8f9314793ecddf152de492eec4849414c6b16fbf080fe03033281152849a47d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "3bfdede3d2f21dd2d2fa12772e68114dec5ab0ea3ffe60ed8622f70cd430cfac"
+  },
+  "tools": {
+    "TESSERA_OPT": "39d59eee080a6b0d44edaefae009a0947982a7e1c28aeb44f68d897c9011aa56",
+    "TESSERA_NVIDIA_OPT": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "285bdc70a2d9ecf6746566562ecdb1ca9b8d1e0a6cb7b6f456967a5065766e6d"
+  }
+}

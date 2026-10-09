@@ -36,6 +36,13 @@ int tessera_rocm_program_prepare(
     const TesseraRocmProgramBuffer *buffers, uint32_t step_count,
     const TesseraRocmProgramStep *steps, const void *const *inputs,
     const uint64_t *input_bytes, uint64_t *handle);
+// Pack a checked positive-stride read-only host view into compact borrowed
+// destination storage. This performs byte movement only, before HIP upload.
+// Source/destination spans must be disjoint. Rank and strides are byte facts.
+int tessera_rocm_program_pack_host_view(
+    const void *source, uint64_t source_span, uint32_t rank,
+    const uint64_t *shape, const uint64_t *byte_strides, uint32_t item_bytes,
+    void *destination, uint64_t destination_bytes);
 // Upload all arguments atomically with respect to contract admission.
 // A failed device operation poisons the owner; close is then required.
 int tessera_rocm_program_update(uint64_t handle, const void *const *inputs,

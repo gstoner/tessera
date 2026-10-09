@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-07
+last_updated: 2026-10-08
 audit_role: reference
 ---
 
@@ -11542,4 +11542,25 @@ closure remain open. FP32-scale adjoints do not imply discrete scale AD.
 
 Evidence: benchmarks/baselines/rocm_scaled_vjp_wave_20261007/README.md,
 identity.json, scaled-vjp-wave-paired-20261007.json, native-registry-tests.txt.
+<!-- entry-fields:end -->
+
+### 2026-10-08 — non-leading typed scaled map integration
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync SCALED-MAP-AXIS-INTEGRATION-20261008.
+
+Outcome: Alias-only nested input-axis projection retains scalar bounds.
+Native host packing checks positive storage spans and preserves strict compact
+descriptor admission. Native Graph/Schedule/Tile/Target/LLVM continues to own
+primal/JVP/VJP arithmetic. Reverse results restore original axes after native
+unbroadcast, rather than reshaping a permuted adjoint. Exact gfx1201 execution
+and separate completed-public/native-program-event timings are recorded;
+all four backend queues are assessed.
+
+Remaining: Generic scaled-product closure, dynamic maps, nonzero output axes,
+wider storage derivatives, NVIDIA packed-axis integration and sibling native
+parity remain open. No primitive coverage promotion or weakened closure gate.
+
+Evidence: benchmarks/baselines/scaled_map_axes_20261008/README.md, device.json,
+owning-tests.txt, host-tests.txt, mypy.txt, native-build.txt.
 <!-- entry-fields:end -->

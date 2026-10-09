@@ -13520,3 +13520,24 @@ Evidence: benchmarks/baselines/rocm_pinned_movement_staging_20261008/README.md.
 Not applicable: this changes HIP-owned host scratch only. Metal allocation,
 Graph/Target routes and runtime ABI are unchanged; no Apple device parity is
 claimed from ROCm transfers. Apple execution obligations remain separate.
+
+## Non-leading typed scaled maps — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization
+SCALED-MAP-AXIS-INTEGRATION-20261008.
+Static gfx1201 typed FP8/MXFP8 maps now admit positive/negative input-axis
+indices at each nested level, including mixed Cartesian policies. Frontend
+projection preserves alias storage and scalar source bounds; original owners
+remain independent. Native MLIR continues to own batched arithmetic and
+scale differentiation. Reverse results undo singleton unbroadcast axes and
+the original permutation instead of reshaping an adjoint into the wrong order.
+Checked native host byte packing materializes positive-stride inputs before
+the unchanged compact descriptor/program ABI. Backing ownership, overflow,
+source/destination disjointness and capacity are checked before reads/writes.
+Encoded E8M0 scale gradients and NVIDIA non-leading packed maps are not admitted.
+Evidence: benchmarks/baselines/scaled_map_axes_20261008/README.md.
+Generic batching/transpose closure remains open; registry states and zero-open
+CI assertions are unchanged. Dynamic maps, nonzero output axes, wider storage
+derivatives and sibling physical execution remain follow-up required.
+
+Follow-up required for Metal non-leading scaled-map primal/AD execution; no Apple kernel, image or allocation API changes and no Metal parity claim.

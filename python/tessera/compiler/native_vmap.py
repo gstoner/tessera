@@ -21,45 +21,74 @@ def _storage_dtype(value):
 
 def mixed_batch_policies(owner):
     policies = getattr(owner, "_frontend_batch_policies", ())
-    return bool(policies and any(policy != policies[0] for policy in policies[1:]))
+    return bool(policies and (
+        any(policy != policies[0] for policy in policies[1:])
+        or any(axis not in (None, 0) for policy in policies for axis in policy)
+    ))
+
+
+def _map_axis_order(rank, policies, role):
+    """Resolve nested axes against each scalar-call argument, outermost first."""
+    remaining = list(range(rank))
+    mapped = []
+    for policy in policies:
+        axis = policy[role]
+        if axis is None:
+            continue
+        if type(axis) is not int or not -len(remaining) <= axis < len(remaining):
+            raise ValueError("native scaled map axis is outside the operand rank")
+        mapped.append(remaining.pop(axis % len(remaining)))
+    if len(remaining) != 2:
+        raise ValueError("native mixed map operand rank differs from its level policy")
+    return tuple(mapped + remaining)
 
 
 def normalize_mixed_batch_inputs(values, policies):
-    """Insert missing map levels as aliasing singleton frontend views."""
+    """Expose map axes as leading alias views; never evaluate or copy tensors."""
     import numpy as np
     if not 4 <= len(values) <= 128 or not policies or any(len(p) != len(values) for p in policies):
         raise ValueError("native mixed maps require four operands and explicit level policies")
     extents = [None] * len(policies)
-    shapes = []
-    for role, value in enumerate(values):
-        mapped = [p[role] is not None for p in policies]
-        shape = tuple(value.shape)
-        if len(shape) != sum(mapped) + 2:
-            raise ValueError("native mixed map operand rank differs from its level policy")
-        cursor = 0
-        prefix = []
-        for level, active in enumerate(mapped):
-            if active:
-                size = shape[cursor]
-                cursor += 1
-                if size <= 0 or (extents[level] is not None and extents[level] != size):
-                    raise ValueError("native mixed map batch extents differ at one map level")
-                extents[level] = size
-                prefix.append(size)
-            else:
-                prefix.append(1)
-        shapes.append(tuple(prefix) + shape[cursor:] if any(mapped) else shape)
-    if any(extent is None for extent in extents):
-        raise ValueError("native mixed map must map an operand at every level")
     result = []
-    for value, shape in zip(values, shapes, strict=True):
+    for role, value in enumerate(values):
         if not isinstance(value, np.ndarray):
             raise TypeError("native mixed maps require ndarray storage")
-        view = value.reshape(shape)
+        active = [p[role] is not None for p in policies]
+        view = value.transpose(_map_axis_order(value.ndim, policies, role))
+        # Missing levels are singleton axes for native broadcast/unbroadcast.
+        # expand_dims is an alias even when the map permutation is strided.
+        if any(active):
+            for level, mapped in enumerate(active):
+                if not mapped:
+                    view = np.expand_dims(view, level)
+                else:
+                    size = view.shape[level]
+                    if size <= 0 or (extents[level] is not None and extents[level] != size):
+                        raise ValueError("native mixed map batch extents differ at one map level")
+                    extents[level] = size
         if not np.shares_memory(value, view):
-            raise ValueError("native mixed map singleton projection must preserve storage")
+            raise ValueError("native mixed map axis projection must preserve storage")
         result.append(view)
+    if any(extent is None for extent in extents):
+        raise ValueError("native mixed map must map an operand at every level")
     return result
+
+
+def restore_mapped_gradient(gradient, source, policies, role):
+    """Undo singleton unbroadcast views and the input-axis permutation."""
+    import numpy as np
+    order = _map_axis_order(source.ndim, policies, role)
+    active = [p[role] is not None for p in policies]
+    view = gradient
+    if any(active):
+        for level in reversed(range(len(active))):
+            if not active[level]:
+                view = np.squeeze(view, axis=level)
+    inverse = tuple(order.index(axis) for axis in range(source.ndim))
+    view = view.transpose(inverse)
+    if view.shape != source.shape:
+        raise ValueError("native scaled transpose result differs from its original map shape")
+    return view
 
 
 def batch_specs(values: Sequence[Any], axes: Sequence[int | None], *, depth: int = 1, broadcast_prefix: bool = False):
@@ -245,9 +274,10 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
     coupled = axes in {(0, None, 0, None), (0, 0, 0, 0), (None, 0, None, 0)}
     if not coupled and (
             len(axes) != len(arguments) or not any(axis is not None for axis in axes) or
-            any(axis not in (None, 0) for axis in axes) or
             target != "rocm_gfx1201" or
             (request is not None and not forward_scales)):
+        raise ValueError("native NVFP4 vmap requires leading matrix/scale batch axes")
+    if target != "rocm_gfx1201" and any(axis not in (None, 0) for axis in axes):
         raise ValueError("native NVFP4 vmap requires leading matrix/scale batch axes")
     parent_axes = fn._frontend_batch_axes
     parent_depth = getattr(fn, "_frontend_batch_depth", 0) if parent_axes is not None else 0
@@ -279,9 +309,16 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
         if arg.dim_names:
             if len(arg.dim_names) != argument_depth + 2:
                 raise ValueError("native scaled vmap annotations must retain each leading map")
-            arg.dim_names = (batch_symbol, *arg.dim_names)
+            if not -(len(arg.dim_names) + 1) <= axis <= len(arg.dim_names):
+                raise ValueError("native scaled map axis is outside the operand rank")
+            position = axis % (len(arg.dim_names) + 1)
+            arg.dim_names = (*arg.dim_names[:position], batch_symbol, *arg.dim_names[position:])
         if arg.ir_type.rank == argument_depth + 2:
-            arg.ir_type = tensor_ir_type((batch_symbol, *arg.ir_type.shape),
+            if not -(arg.ir_type.rank + 1) <= axis <= arg.ir_type.rank:
+                raise ValueError("native scaled map axis is outside the operand rank")
+            position = axis % (arg.ir_type.rank + 1)
+            shape = arg.ir_type.shape
+            arg.ir_type = tensor_ir_type((*shape[:position], batch_symbol, *shape[position:]),
                                          arg.ir_type.dtype, layout=arg.ir_type.layout)
     owner._constraint_ir_args = arguments
     owner._frontend_batch_policies = policies

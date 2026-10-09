@@ -1,0 +1,1345 @@
+{
+  "schema": "tessera.rocm.scaled_map_axes.v1",
+  "architecture": "gfx1201",
+  "python": "3.14.4 (main, Aug 20 2026, 10:41:58) [GCC 15.2.0]",
+  "device_lines": [
+    "Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor",
+    "Name:                    gfx1201",
+    "Marketing Name:          AMD Radeon RX 9070 XT"
+  ],
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "b32bdc6a9e628328e34b354d441d837edc4679cd4294bd5a7179c04c6853f7ae",
+    "python/tessera/compiler/native_vmap.py": "c89ddc04c61abfae78b30de6ba4dc971fd1de8a85464b50706e88cd957271e7f",
+    "python/tessera/compiler/paged_host_span.py": "fa4f39e3c0296d790598d330665c2aaf530b380dc92e43c0bd81c6b92812b395",
+    "python/tessera/compiler/native_scaled_program.py": "15ac9c2c834f6d4adf22ff0c744bf07376eac3a24958b8523b36cb57e5b39584",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e9a76f3ac03dd6758e699891e501a84488e9fca2b9e44e4fd3dfdc4c83e19ad3",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "e77d9e19742f78da1f05cb23f766032827bd51b58b60f178161c7139698ef425",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "1b21a7849493fbf5bc864d81f22ae8f351d1dcd07a7ec58cbb2c7a7ed30de874",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "cee2a5f585cf6029b3ee40bdac24484651508e533b34a3e847fd7729cc4749ed",
+    "tests/unit/test_native_scaled_map_axes.py": "87ac28b3e8a81606509a9777e26c875ad7c2f5105454c716e9874e9d3044b11c",
+    "tests/unit/test_native_host_view_pack.py": "ddd2b2780fa403f9845ad54abb8a3229bd7c2665a1a1aaa2db9c51224f0bce8b",
+    "tests/device/rocm/test_scaled_map_axes.py": "6de5a694fbb6b8fa7d94e87aafc0696b83977627bfea13d59a4903b3152359ca",
+    "benchmarks/rocm/benchmark_scaled_map_axes.py": "6be311bf777c92edd7415556264b9c7b1d1aa856a14d5c216be0a5c298f43b61"
+  },
+  "runtime_path": "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.transfer/libtessera_rocm_scaled_map_pack.so",
+  "runtime_sha256": "9d80998bfa923a6a620486dd656ba16c4cac697a3129c315f9853780c383ba68",
+  "compiler_sha256": {
+    "TESSERA_OPT": "2d40aa3e23704fa92a087a672728f66fbbc3c97177cdeb4286757f78937c29b4",
+    "TESSERA_ROCM_OPT": "40b90a1277505c4e340ce7e202f2736f7a3b92f3ae5a9366a82eb408c4c56790"
+  },
+  "rows": [
+    {
+      "format": "fp32",
+      "rhs_transposed": false,
+      "profile": "single",
+      "axes": [
+        [
+          1,
+          2,
+          -1,
+          1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          256
+        ],
+        [
+          256,
+          5,
+          3
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          1
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          768,
+          1
+        ],
+        [
+          5,
+          1,
+          1280
+        ],
+        [
+          8,
+          4,
+          24
+        ],
+        [
+          4,
+          8,
+          4
+        ]
+      ],
+      "output_shape": [
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 2.3658249617142246e-06,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "graph_sha256": "b90033289e3868cb16fe1b3205587850359184d3786a72a3bd0605c4e89ebbc4",
+      "image_sha256": [
+        "8e303e02acf14b4de2d4195163ff5f2ef90e8a295f73ce6d9d8fb66c1b8c8980"
+      ],
+      "public_completed_call_samples_ms": [
+        1.3419596944004297,
+        0.8715571602806449,
+        0.9007245898828842,
+        0.913634903554339,
+        0.9626423779991455,
+        1.1065193102695048,
+        0.9353180939797312
+      ],
+      "public_completed_call_median_ms": 0.9353180939797312,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.009550308808684349,
+        0.009797764010727406,
+        0.00989510491490364,
+        0.01094316691160202,
+        0.010948960669338703,
+        0.010992259718477726,
+        0.01097883004695177
+      ],
+      "native_resident_program_event_median_ms": 0.01094316691160202,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        39.118064880371094,
+        40.13164138793945,
+        40.53034973144531,
+        44.823211669921875,
+        44.84694290161133,
+        45.024295806884766,
+        44.96928787231445
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "fp32",
+      "rhs_transposed": false,
+      "profile": "nested",
+      "axes": [
+        [
+          2,
+          0,
+          -1,
+          1
+        ],
+        [
+          1,
+          -1,
+          0,
+          2
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          2,
+          256
+        ],
+        [
+          2,
+          256,
+          5,
+          3
+        ],
+        [
+          3,
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          512,
+          1536,
+          256,
+          1
+        ],
+        [
+          3840,
+          5,
+          1,
+          1280
+        ],
+        [
+          48,
+          16,
+          8,
+          4
+        ],
+        [
+          8,
+          4,
+          4,
+          16
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 1.4977469007249056e-06,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "graph_sha256": "b8bfc01c30430370de79f4459e88d70335034f754bf3eb95fed5412b0779c68d",
+      "image_sha256": [
+        "e336269171a8bc18b2fc0fcdbcc08947e8beb4f42b2aae2300176b6f341e1539"
+      ],
+      "public_completed_call_samples_ms": [
+        1.491106188041158,
+        1.0208649982814677,
+        1.079525813111104,
+        1.0700964339775965,
+        1.0767647763714194,
+        1.0927878465736285,
+        1.098424218071159
+      ],
+      "public_completed_call_median_ms": 1.079525813111104,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.010491921566426754,
+        0.01085180975496769,
+        0.010860543698072433,
+        0.010868003591895103,
+        0.010865789838135242,
+        0.010867984965443611,
+        0.010856905952095985
+      ],
+      "native_resident_program_event_median_ms": 0.010860543698072433,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        42.974910736083984,
+        44.449012756347656,
+        44.48478698730469,
+        44.515342712402344,
+        44.50627517700195,
+        44.51526641845703,
+        44.469886779785156
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "fp32",
+      "rhs_transposed": false,
+      "profile": "cartesian",
+      "axes": [
+        [
+          1,
+          null,
+          -1,
+          null
+        ],
+        [
+          null,
+          1,
+          null,
+          -1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          2,
+          256
+        ],
+        [
+          256,
+          3,
+          5
+        ],
+        [
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          2304,
+          1
+        ],
+        [
+          5,
+          1280,
+          1
+        ],
+        [
+          8,
+          4,
+          72
+        ],
+        [
+          4,
+          4,
+          8
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 1.1310932457320177e-06,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_b_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "graph_sha256": "8d57f607e5eb61c4c961405a4094d3ec985dd4ce91dd4f7a0534972f3c8d04ae",
+      "image_sha256": [
+        "ce85e0c0470d9e5c18a14a4c823817030b1c8fc538d4807251d3823aa91d35ec"
+      ],
+      "public_completed_call_samples_ms": [
+        1.2092359102098271,
+        1.1162475930177607,
+        1.125847440562211,
+        1.1418526555644348,
+        1.1360619391780347,
+        1.1102364369435236,
+        1.1330427514621988
+      ],
+      "public_completed_call_median_ms": 1.1330427514621988,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.01138540729880333,
+        0.010844036936759949,
+        0.01084848865866661,
+        0.010844352655112743,
+        0.010828495025634766,
+        0.010845569893717766,
+        0.01083650067448616
+      ],
+      "native_resident_program_event_median_ms": 0.010844352655112743,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        46.63462829589844,
+        44.41717529296875,
+        44.43540954589844,
+        44.4184684753418,
+        44.353515625,
+        44.42345428466797,
+        44.38630676269531
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "fp32",
+      "rhs_transposed": true,
+      "profile": "single",
+      "axes": [
+        [
+          1,
+          2,
+          -1,
+          1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          256
+        ],
+        [
+          5,
+          256,
+          3
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          1
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          768,
+          1
+        ],
+        [
+          256,
+          1,
+          1280
+        ],
+        [
+          8,
+          4,
+          24
+        ],
+        [
+          4,
+          8,
+          4
+        ]
+      ],
+      "output_shape": [
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 2.3658249617142246e-06,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "graph_sha256": "a54840ff09038d7f4d3f2fbf6217e2573ebe665554b7791fe9b95ed61d9812ab",
+      "image_sha256": [
+        "f742183a093013bdb17987a38a1b8123507222dd5b69effe94d9d0054b267ec3"
+      ],
+      "public_completed_call_samples_ms": [
+        1.085479998437222,
+        1.017630405840464,
+        1.0165758794755675,
+        1.0252471547573805,
+        1.0241234413115308,
+        1.0235254376311786,
+        1.0181125689996406
+      ],
+      "public_completed_call_median_ms": 1.0235254376311786,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.020415306091308594,
+        0.01988329365849495,
+        0.019913839176297188,
+        0.019888827577233315,
+        0.019890522584319115,
+        0.01987142115831375,
+        0.019887909293174744
+      ],
+      "native_resident_program_event_median_ms": 0.019888827577233315,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        83.62109375,
+        81.44197082519531,
+        81.56708526611328,
+        81.46463775634766,
+        81.4715805053711,
+        81.39334106445312,
+        81.46087646484375
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "fp32",
+      "rhs_transposed": true,
+      "profile": "nested",
+      "axes": [
+        [
+          2,
+          0,
+          -1,
+          1
+        ],
+        [
+          1,
+          -1,
+          0,
+          2
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          2,
+          256
+        ],
+        [
+          2,
+          5,
+          256,
+          3
+        ],
+        [
+          3,
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          512,
+          1536,
+          256,
+          1
+        ],
+        [
+          3840,
+          256,
+          1,
+          1280
+        ],
+        [
+          48,
+          16,
+          8,
+          4
+        ],
+        [
+          8,
+          4,
+          4,
+          16
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 1.4977469007249056e-06,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "graph_sha256": "622dc4654c8370faf0c54465cb207a84a81477ddf44be4d1930928389b95faef",
+      "image_sha256": [
+        "b66c53cd3e61b2cd8bad90c362e22961d52e2ba4d0cd04782313cbaa3acc9768"
+      ],
+      "public_completed_call_samples_ms": [
+        1.2109826930100098,
+        1.1805605900008231,
+        1.089871657313779,
+        1.09119633998489,
+        1.1026860665879212,
+        1.0984974724124186,
+        1.1385810939827934
+      ],
+      "public_completed_call_median_ms": 1.1026860665879212,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.01992936246097088,
+        0.01991618424654007,
+        0.019911406561732292,
+        0.01990021951496601,
+        0.019895410165190697,
+        0.019900863990187645,
+        0.019921161234378815
+      ],
+      "native_resident_program_event_median_ms": 0.019911406561732292,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        81.63066864013672,
+        81.57669067382812,
+        81.55712127685547,
+        81.51129913330078,
+        81.4916000366211,
+        81.5139389038086,
+        81.59707641601562
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "fp32",
+      "rhs_transposed": true,
+      "profile": "cartesian",
+      "axes": [
+        [
+          1,
+          null,
+          -1,
+          null
+        ],
+        [
+          null,
+          1,
+          null,
+          -1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          2,
+          256
+        ],
+        [
+          5,
+          3,
+          256
+        ],
+        [
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          2304,
+          1
+        ],
+        [
+          256,
+          1280,
+          1
+        ],
+        [
+          8,
+          4,
+          72
+        ],
+        [
+          4,
+          4,
+          8
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 1.1310932457320177e-06,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_f32.wmma_exact.v1",
+      "graph_sha256": "616600308086e11f72994bc664090fe81881f2629525cf05ec34b8bde12c91e4",
+      "image_sha256": [
+        "1e7dee9fbdbe74b5a40ff98984245bc9edd80a19e4450446c31f964883908a08"
+      ],
+      "public_completed_call_samples_ms": [
+        1.2257148118806072,
+        1.090134035621304,
+        1.1076746523031034,
+        1.0998102807207033,
+        1.1050233442801982,
+        1.0908722833846696,
+        1.080875787010882
+      ],
+      "public_completed_call_median_ms": 1.0998102807207033,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.019532252103090286,
+        0.019527817144989967,
+        0.019504887983202934,
+        0.019530532881617546,
+        0.01950703375041485,
+        0.01951456628739834,
+        0.019507460296154022
+      ],
+      "native_resident_program_event_median_ms": 0.01951456628739834,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        80.00410461425781,
+        79.9859390258789,
+        79.89202117919922,
+        79.99706268310547,
+        79.90081024169922,
+        79.9316635131836,
+        79.90255737304688
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "e8m0",
+      "rhs_transposed": false,
+      "profile": "single",
+      "axes": [
+        [
+          1,
+          2,
+          -1,
+          1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          256
+        ],
+        [
+          256,
+          5,
+          3
+        ],
+        [
+          3,
+          8,
+          3
+        ],
+        [
+          8,
+          3,
+          5
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          768,
+          1
+        ],
+        [
+          5,
+          1,
+          1280
+        ],
+        [
+          8,
+          1,
+          24
+        ],
+        [
+          5,
+          40,
+          1
+        ]
+      ],
+      "output_shape": [
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_b_sa_sb_o_m_n_k.f32.wide_scale.v1",
+      "graph_sha256": "153f24d639fa8a78f819cc6428ca819cb69b8aab2163b72a66b09cedb20ea285",
+      "image_sha256": [
+        "b0cbbd6145e35d245e077875f3b78ab543caa7a6493de95237354ceaa76c8900"
+      ],
+      "public_completed_call_samples_ms": [
+        1.1049736858694814,
+        1.0564775657257996,
+        1.0751206573331729,
+        1.0497484399820678,
+        1.0514332752791233,
+        0.9466203118790872,
+        0.9500915621174499
+      ],
+      "public_completed_call_median_ms": 1.0514332752791233,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.02546110562980175,
+        0.025469018146395683,
+        0.025475190952420235,
+        0.02546309307217598,
+        0.025473657995462418,
+        0.02544291503727436,
+        0.025476723909378052
+      ],
+      "native_resident_program_event_median_ms": 0.025469018146395683,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        104.28868865966797,
+        104.32109832763672,
+        104.34638214111328,
+        104.29682922363281,
+        104.34010314941406,
+        104.21417999267578,
+        104.3526611328125
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "e8m0",
+      "rhs_transposed": false,
+      "profile": "nested",
+      "axes": [
+        [
+          2,
+          0,
+          -1,
+          1
+        ],
+        [
+          1,
+          -1,
+          0,
+          2
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          2,
+          256
+        ],
+        [
+          2,
+          256,
+          5,
+          3
+        ],
+        [
+          3,
+          3,
+          8,
+          2
+        ],
+        [
+          8,
+          2,
+          5,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          512,
+          1536,
+          256,
+          1
+        ],
+        [
+          3840,
+          5,
+          1,
+          1280
+        ],
+        [
+          48,
+          16,
+          2,
+          1
+        ],
+        [
+          10,
+          5,
+          1,
+          80
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_b_sa_sb_o_m_n_k.f32.wide_scale.v1",
+      "graph_sha256": "c91ea51d037ea9117ce98ca52ec8a7cf62a97125ddc9bf5d3d3a115d15b6c88b",
+      "image_sha256": [
+        "2c8c6eb2f5672110fc1362fdbf501925b88e4c267bea296c37c03c5209ce4143"
+      ],
+      "public_completed_call_samples_ms": [
+        1.159087405540049,
+        1.0796543429023586,
+        1.0691355346352793,
+        1.2571031547849998,
+        1.0268113765050657,
+        1.0429245958221145,
+        1.0597426007734612
+      ],
+      "public_completed_call_median_ms": 1.0691355346352793,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.025244656950235367,
+        0.025217652320861816,
+        0.02524755522608757,
+        0.025234615430235863,
+        0.025230171158909798,
+        0.025245776399970055,
+        0.025787195190787315
+      ],
+      "native_resident_program_event_median_ms": 0.025244656950235367,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        103.40211486816406,
+        103.29150390625,
+        103.41398620605469,
+        103.3609848022461,
+        103.34278106689453,
+        103.40670013427734,
+        105.62435150146484
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "e8m0",
+      "rhs_transposed": false,
+      "profile": "cartesian",
+      "axes": [
+        [
+          1,
+          null,
+          -1,
+          null
+        ],
+        [
+          null,
+          1,
+          null,
+          -1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          2,
+          256
+        ],
+        [
+          256,
+          3,
+          5
+        ],
+        [
+          3,
+          8,
+          2
+        ],
+        [
+          8,
+          5,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          2304,
+          1
+        ],
+        [
+          5,
+          1280,
+          1
+        ],
+        [
+          8,
+          1,
+          72
+        ],
+        [
+          5,
+          1,
+          40
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_b_sa_sb_o_m_n_k.f32.wide_scale.v1",
+      "graph_sha256": "f5ab7bc7875b5fcf25d068ae5568dafebdd30b892d82bc5d9e544e27f7a1cf30",
+      "image_sha256": [
+        "8d7798ca5faa58119cfd479d648cf7dbb95423d8f1bf2e15b4d25486f65148b7"
+      ],
+      "public_completed_call_samples_ms": [
+        1.1962535936618224,
+        1.0631910627125762,
+        1.0518857525312342,
+        1.0527915655984543,
+        1.0575644409982488,
+        1.0456028103362769,
+        1.0569751539151184
+      ],
+      "public_completed_call_median_ms": 1.0569751539151184,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.025423826649785042,
+        0.02541334740817547,
+        0.025406204164028168,
+        0.02592208795249462,
+        0.02543538436293602,
+        0.025408128276467323,
+        0.025415975600481033
+      ],
+      "native_resident_program_event_median_ms": 0.025415975600481033,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        104.13599395751953,
+        104.09307098388672,
+        104.06381225585938,
+        106.17687225341797,
+        104.18333435058594,
+        104.07169342041016,
+        104.10383605957031
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "e8m0",
+      "rhs_transposed": true,
+      "profile": "single",
+      "axes": [
+        [
+          1,
+          2,
+          -1,
+          1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          256
+        ],
+        [
+          5,
+          256,
+          3
+        ],
+        [
+          3,
+          8,
+          3
+        ],
+        [
+          8,
+          3,
+          5
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          768,
+          1
+        ],
+        [
+          256,
+          1,
+          1280
+        ],
+        [
+          8,
+          1,
+          24
+        ],
+        [
+          5,
+          40,
+          1
+        ]
+      ],
+      "output_shape": [
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.f32.wide_scale.v1",
+      "graph_sha256": "46802ebcaa4fd3c21002fbf3801f787a6b7a77ca00d2e5e520360604273f2250",
+      "image_sha256": [
+        "03bf18bf335677804f7cce7875f25fe06e900af357d5fc1b2629b76af8301e74"
+      ],
+      "public_completed_call_samples_ms": [
+        1.114215723646339,
+        0.9940700037986971,
+        0.9864531239145435,
+        0.9932783432304859,
+        0.9936981878126971,
+        1.0169369052164257,
+        0.9865978136076592
+      ],
+      "public_completed_call_median_ms": 0.9936981878126971,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.028258701786398888,
+        0.028716182336211205,
+        0.02886298857629299,
+        0.02876352146267891,
+        0.02817242033779621,
+        0.028763819485902786,
+        0.028454987332224846
+      ],
+      "native_resident_program_event_median_ms": 0.028716182336211205,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        115.74764251708984,
+        117.6214828491211,
+        118.2228012084961,
+        117.81538391113281,
+        115.39423370361328,
+        117.81660461425781,
+        116.55162811279297
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "e8m0",
+      "rhs_transposed": true,
+      "profile": "nested",
+      "axes": [
+        [
+          2,
+          0,
+          -1,
+          1
+        ],
+        [
+          1,
+          -1,
+          0,
+          2
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          3,
+          2,
+          256
+        ],
+        [
+          2,
+          5,
+          256,
+          3
+        ],
+        [
+          3,
+          3,
+          8,
+          2
+        ],
+        [
+          8,
+          2,
+          5,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          512,
+          1536,
+          256,
+          1
+        ],
+        [
+          3840,
+          256,
+          1,
+          1280
+        ],
+        [
+          48,
+          16,
+          2,
+          1
+        ],
+        [
+          10,
+          5,
+          1,
+          80
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.f32.wide_scale.v1",
+      "graph_sha256": "604c37af495328e77c9f898ea983a17c86ee820f6443d1c8455d616d4f8b4886",
+      "image_sha256": [
+        "0f47c027825fa4ca38821b9168ef91f38dd84cd1af4762c80c5c109930e4d10a"
+      ],
+      "public_completed_call_samples_ms": [
+        1.1963024953729473,
+        1.0858272507903166,
+        1.0912026264122687,
+        1.0506359103601426,
+        1.08754874963779,
+        1.0690656927181408,
+        1.0946607508230954
+      ],
+      "public_completed_call_median_ms": 1.08754874963779,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.028026800602674484,
+        0.028535395860671997,
+        0.02836795523762703,
+        0.029399026185274124,
+        0.028324026614427567,
+        0.02876087836921215,
+        0.028461074456572533
+      ],
+      "native_resident_program_event_median_ms": 0.028461074456572533,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        114.79777526855469,
+        116.8809814453125,
+        116.19514465332031,
+        120.41841125488281,
+        116.01521301269531,
+        117.80455780029297,
+        116.5765609741211
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    },
+    {
+      "format": "e8m0",
+      "rhs_transposed": true,
+      "profile": "cartesian",
+      "axes": [
+        [
+          1,
+          null,
+          -1,
+          null
+        ],
+        [
+          null,
+          1,
+          null,
+          -1
+        ]
+      ],
+      "input_shapes": [
+        [
+          3,
+          2,
+          256
+        ],
+        [
+          5,
+          3,
+          256
+        ],
+        [
+          3,
+          8,
+          2
+        ],
+        [
+          8,
+          5,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          2304,
+          1
+        ],
+        [
+          256,
+          1280,
+          1
+        ],
+        [
+          8,
+          1,
+          72
+        ],
+        [
+          5,
+          1,
+          40
+        ]
+      ],
+      "output_shape": [
+        2,
+        3,
+        3,
+        5
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "passed_before_and_after_timing",
+      "route": "Graph->Schedule->Tile->ROCm Target->LLVM->HSACO",
+      "abi_id": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.f32.wide_scale.v1",
+      "graph_sha256": "ec60f93f57f54882ab28e4f53071ae0f33678ab72a11f8f5e5f9c8d3ffb1f106",
+      "image_sha256": [
+        "54d43256d029c1b64739624bb631348f9f8a9304bff001a23cf31d9ba7ffd1a6"
+      ],
+      "public_completed_call_samples_ms": [
+        1.2362865600152873,
+        1.1641795936156996,
+        1.1035398711101152,
+        1.0836813744390383,
+        1.0599539382383227,
+        1.0975597251672298,
+        1.1116800960735418
+      ],
+      "public_completed_call_median_ms": 1.1035398711101152,
+      "public_calls_per_window": 32,
+      "native_resident_program_event_samples_ms": [
+        0.02831134758889675,
+        0.02800804376602173,
+        0.028406530618667603,
+        0.027804439887404442,
+        0.02847517654299736,
+        0.027966780588030815,
+        0.028438957408070564
+      ],
+      "native_resident_program_event_median_ms": 0.02831134758889675,
+      "native_event_repetitions": 4096,
+      "native_event_windows_ms": [
+        115.9632797241211,
+        114.720947265625,
+        116.3531494140625,
+        113.8869857788086,
+        116.63432312011719,
+        114.55193328857422,
+        116.48596954345703
+      ],
+      "scope": "public includes view packing/transfers/readback; native event is resident program enqueue loop"
+    }
+  ],
+  "closure": "named static positive-stride map extension; generic closure remains unproved"
+}

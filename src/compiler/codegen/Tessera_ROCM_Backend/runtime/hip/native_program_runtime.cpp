@@ -158,6 +158,42 @@ int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
 }
 } // namespace
 
+extern "C" int tessera_rocm_program_pack_host_view(
+    const void *source, uint64_t sourceSpan, uint32_t rank,
+    const uint64_t *shape, const uint64_t *strides, uint32_t itemBytes,
+    void *destination, uint64_t destinationBytes) {
+  constexpr uint64_t limit = INT64_MAX;
+  if (!source || !destination || !shape || !strides || rank < 2 || rank > 32 ||
+      !itemBytes || itemBytes > 8 || sourceSpan > limit ||
+      destinationBytes > limit) return 1;
+  uint64_t count = 1, span = itemBytes;
+  for (uint32_t axis = 0; axis < rank; ++axis) {
+    if (!shape[axis] || shape[axis] > limit || !strides[axis] ||
+        strides[axis] % itemBytes || strides[axis] > limit ||
+        count > limit / shape[axis]) return 1;
+    count *= shape[axis];
+    if (shape[axis] - 1 > (limit - span) / strides[axis]) return 1;
+    span += (shape[axis] - 1) * strides[axis];
+  }
+  if (count > limit / itemBytes || count * itemBytes != destinationBytes ||
+      span > sourceSpan) return 1;
+  uintptr_t src = reinterpret_cast<uintptr_t>(source);
+  uintptr_t dst = reinterpret_cast<uintptr_t>(destination);
+  if (src > UINTPTR_MAX - sourceSpan || dst > UINTPTR_MAX - destinationBytes ||
+      (src < dst + destinationBytes && dst < src + sourceSpan)) return 1;
+  const auto *input = static_cast<const unsigned char *>(source);
+  auto *output = static_cast<unsigned char *>(destination);
+  for (uint64_t index = 0; index < count; ++index) {
+    uint64_t remaining = index, offset = 0;
+    for (uint32_t axis = rank; axis-- > 0;) {
+      offset += (remaining % shape[axis]) * strides[axis];
+      remaining /= shape[axis];
+    }
+    std::memcpy(output + index * itemBytes, input + offset, itemBytes);
+  }
+  return 0;
+}
+
 extern "C" int tessera_rocm_program_prepare(
     const char *architecture, uint32_t arguments, uint32_t buffers,
     const TesseraRocmProgramBuffer *contract, uint32_t steps,

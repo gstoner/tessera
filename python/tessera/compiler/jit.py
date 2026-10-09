@@ -2027,6 +2027,14 @@ class JitFn:
             raise ValueError("descriptor input bindings differ from traced argument names")
         buffers = {name: value.storage if isinstance(value, NVFP4Tensor) else value
                    for name, value in arguments.items()}
+        if typed_scaled and any(not value.flags.c_contiguous for value in buffers.values()):
+            from .native_scaled_program import pack_host_view
+            library = rt._load_rocm_native_movement_runtime()
+            if library is None:
+                raise ValueError("native scaled strided storage requires the checked HIP owner")
+            # Descriptor layout remains compact. Checked native byte movement
+            # materializes alias views before the unchanged launch ABI is bound.
+            buffers = {name: pack_host_view(library, value) for name, value in buffers.items()}
         arrays = []
         # Storage preparation only: dimensions and types come from the checked
         # compiler descriptor, never an eager numerical implementation.
@@ -2937,13 +2945,16 @@ class JitFn:
             if plugin_result is not None:
                 self.last_backward_execution = dict(plugin_result.execution)
                 self._native_backward_artifact = plugin_result.runtime_artifact
-                from .native_vmap import mixed_batch_policies
+                from .native_vmap import mixed_batch_policies, restore_mapped_gradient
                 if mixed_batch_policies(self):
                     raw = self._ordered_inputs(args, kwargs, normalize_batch=False)
                     if raw is None:
                         raise TesseraJitError("native VJP requires all primal arguments")
-                    return tuple(gradient.reshape(raw[index].shape) for gradient, index in
-                                 zip(plugin_result.gradients, request.wrt_indices, strict=True))
+                    return tuple(restore_mapped_gradient(
+                        gradient, raw[index], self._frontend_batch_policies, index
+                    ) for gradient, index in zip(
+                        plugin_result.gradients, request.wrt_indices, strict=True
+                    ))
                 return plugin_result.gradients
         if target_family == "rocm":
             if len(graph_ops) == 1:

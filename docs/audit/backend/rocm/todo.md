@@ -16321,3 +16321,24 @@ MoE host staging executes with changed-index/value and retained-output proof.
 Small paired completed-call ratio is 0.983 (minor effect); large is 0.378.
 No gfx1201 MoE admission is added. Final host gates pass 445 with 17 hardware/tool
 skips; generated docs and ownership plan checks pass.
+
+## Non-leading typed scaled maps — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization
+SCALED-MAP-AXIS-INTEGRATION-20261008.
+Static gfx1201 typed FP8/MXFP8 maps now admit positive/negative input-axis
+indices at each nested level, including mixed Cartesian policies. Frontend
+projection preserves alias storage and scalar source bounds; original owners
+remain independent. Native MLIR continues to own batched arithmetic and
+scale differentiation. Reverse results undo singleton unbroadcast axes and
+the original permutation instead of reshaping an adjoint into the wrong order.
+Checked native host byte packing materializes positive-stride inputs before
+the unchanged compact descriptor/program ABI. Backing ownership, overflow,
+source/destination disjointness and capacity are checked before reads/writes.
+Encoded E8M0 scale gradients and NVIDIA non-leading packed maps are not admitted.
+Evidence: benchmarks/baselines/scaled_map_axes_20261008/README.md.
+Generic batching/transpose closure remains open; registry states and zero-open
+CI assertions are unchanged. Dynamic maps, nonzero output axes, wider storage
+derivatives and sibling physical execution remain follow-up required.
+
+Owning gfx1201 native primal/JVP/VJP, changed-input/compiler-free replay and separate public/native-event timing are recorded. gfx1151 FP8 WMMA is unavailable, so this typed physical route is not applicable there; no gfx1151 arithmetic parity is transferred.

@@ -406,6 +406,29 @@ def _scaled_abi_binding(package):
         return _cached_scaled_abi(package)
     return _marshal_scaled_abi(package)
 
+def pack_host_view(lib, array):
+    """Materialize checked storage bytes in native C++; never tensor arithmetic."""
+    from .paged_host_span import checked_host_span
+    span, strides = checked_host_span(array)
+    if array.flags.c_contiguous:
+        return array
+    if not hasattr(lib, "tessera_rocm_program_pack_host_view"):
+        raise ValueError("native scaled strided storage requires the matching host pack ABI")
+    pack = lib.tessera_rocm_program_pack_host_view
+    pack.argtypes = [
+        c.c_void_p, c.c_uint64, c.c_uint32, c.POINTER(c.c_uint64),
+        c.POINTER(c.c_uint64), c.c_uint32, c.c_void_p, c.c_uint64,
+    ]
+    packed = np.empty(array.shape, dtype=array.dtype)
+    rank = array.ndim
+    _status(pack(
+        c.c_void_p(array.ctypes.data), span, rank,
+        (c.c_uint64 * rank)(*array.shape), (c.c_uint64 * rank)(*strides),
+        array.itemsize, c.c_void_p(packed.ctypes.data), packed.nbytes,
+    ))
+    return packed
+
+
 class PreparedScaledProgram:
     """One native owner; all member execution and private storage are in C++."""
     def __init__(self, package: NativeScaledProgram, inputs, *, runtime_library: str):
@@ -459,8 +482,9 @@ class PreparedScaledProgram:
             if storage == "f8E4M3FN" and str(array.dtype) == "float8_e4m3fn":
                 array = array.view(np.uint8)
             dtype = contract.numpy_dtype
-            if dtype is None or array.dtype != dtype or array.shape != contract.shape or not array.flags.c_contiguous or array.nbytes != contract.bytes:
+            if dtype is None or array.dtype != dtype or array.shape != contract.shape or array.nbytes != contract.bytes:
                 raise ValueError("native scaled input storage/shape/layout differs")
+            array = pack_host_view(self.lib, array)
             arrays.append(array)
         return arrays, (c.c_void_p*count)(*(a.ctypes.data for a in arrays)), (c.c_uint64*count)(*(a.nbytes for a in arrays))
 

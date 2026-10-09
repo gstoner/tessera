@@ -792,6 +792,7 @@ rocm,tessera_rocm_program_cache_stats,rocm_program_cache_stats,,src/compiler/cod
 rocm,tessera_rocm_program_cache_stats,rocm_program_cache_stats,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h
 rocm,tessera_rocm_program_close,rocm_program_close,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
 rocm,tessera_rocm_program_invoke,rocm_program_invoke,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
+rocm,tessera_rocm_program_pack_host_view,rocm_program_pack_host_view,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
 rocm,tessera_rocm_program_prepare,rocm_program_prepare,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
 rocm,tessera_rocm_program_prepare,rocm_program_prepare,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h
 rocm,tessera_rocm_program_read,rocm_program_read,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp

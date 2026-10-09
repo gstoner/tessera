@@ -2310,3 +2310,28 @@ certification compares the scalar-map oracle and projected Graph.
 Mixed policies, nonleading/deeper maps, E8M0 storage AD and generic linear
 transpose remain open. Evidence:
 benchmarks/baselines/rocm_nested_typed_vmap_20261007/README.md.
+
+### Non-leading public typed scaled input maps
+
+On rocm_gfx1201, typed E4M3 FP8 matrices with FP32 block scales or E8M0
+MXFP8 scales admit integer in_axes at any input position, including negative
+indices. Nested axes are resolved outermost first against each remaining
+scalar-call argument. Every map retains out_axes=0; original M/N/K/scale
+bounds remain attached to their logical dimensions even after insertion of a
+non-leading map dimension. Explicit mixed policies may map matrices and scales
+at different levels, including Cartesian batches.
+
+Frontend normalization is an alias-only axis permutation/singleton insertion.
+Compiler-owned Graph/Schedule/Tile/Target arithmetic consumes compact physical
+inputs after checked native C++ host byte packing. Production packing performs
+no tensor arithmetic and does not change kernel images or numerical policy.
+Positive whole-element source strides require proven NumPy allocation capacity;
+negative/zero storage strides and forged backing extents are refused.
+
+FP32 scale native_jvp seeds follow the primal input axes.
+native_backward returns scale adjoints in each caller input's original axis
+order, with absent map levels unbroadcast by native reductions. Encoded E8M0
+storage has no implicit derivative. FP8 matrix-storage AD, dynamic maps,
+nonzero output axes, and packed NVIDIA non-leading maps remain open. This
+extension does not establish generic primitive batching/transpose closure.
+Evidence: benchmarks/baselines/scaled_map_axes_20261008/README.md.

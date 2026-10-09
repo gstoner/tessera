@@ -381,8 +381,9 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   auto yield = cast<tensor::YieldOp>(body.getTerminator());
   Value value = mapping.lookup(yield.getValue());
   auto carrierKind = generator->getAttrOfType<StringAttr>("tessera.native.scaled_carrier");
-  bool broadcastCarrier = carrierKind && carrierKind.getValue()=="broadcast";
-  if (!broadcastCarrier) {
+  bool copyCarrier = carrierKind &&
+      (carrierKind.getValue()=="broadcast" || carrierKind.getValue()=="reshape");
+  if (!copyCarrier) {
   auto reduction = value.getDefiningOp<scf::ForOp>();
   auto zero = reduction && reduction.getNumResults() == 1
       ? reduction.getInitArgs()[0].getDefiningOp<arith::ConstantOp>()

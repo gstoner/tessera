@@ -174,7 +174,7 @@ extern "C" int tessera_rocm_program_pack_host_view(
     const uint64_t *shape, const uint64_t *strides, uint32_t itemBytes,
     void *destination, uint64_t destinationBytes) {
   constexpr uint64_t limit = INT64_MAX;
-  if (!source || !destination || !shape || !strides || rank < 2 || rank > 32 ||
+  if (!source || !destination || !shape || !strides || rank < 1 || rank > 32 ||
       !itemBytes || itemBytes > 8 || sourceSpan > limit ||
       destinationBytes > limit) return 1;
   uint64_t count = 1, span = itemBytes;

@@ -2133,7 +2133,7 @@ class JitFn:
             raise ValueError("native composed scaled primal requires explicit host tensors")
         from .paged_host_span import checked_host_span
         for value in ordered:
-            checked_host_span(value)
+            checked_host_span(value, min_rank=1)
         self.frontend_differential(*args,**kwargs)
         module=self._traced_autodiff_module(args,kwargs)
         from .rocm_typed_scaled_native import supports_composed_scaled_primal
@@ -2690,14 +2690,16 @@ class JitFn:
             normalize_target_kind(self.target) in {"rocm", "rocm_gfx1201"}
             and (requests_typed_scaled(self.graph_ir)
                  or requests_composed_typed_scaled(self.graph_ir)
-                 or requests_floating_scaled(self.graph_ir))
+                 or requests_floating_scaled(self.graph_ir)
+                 or any(op.op_name == "tessera.scaled_matmul"
+                        for fn in self.graph_ir.functions for op in fn.body))
         )
         if native_scaled_frame:
             from .paged_host_span import checked_host_span
             # Prove storage before tracing/certification can evaluate a borrowed
             # view. Native preparation later packs bytes and checks its ABI.
             for value in (*ordered, *tangent_values):
-                checked_host_span(value)
+                checked_host_span(value, min_rank=1)
             if any(value.dtype != np.dtype("float32") for value in tangent_values):
                 raise TesseraJitError("native scaled JVP tangents require fp32 storage")
         traced_module = self._specialized_autodiff_module(args, kwargs)
@@ -2760,7 +2762,8 @@ class JitFn:
             if (normalize_target_kind(self.target) not in {"rocm", "rocm_gfx1201"}
                     or not supports_composed_scale_jvp(traced_module, request.wrt_indices)):
                 raise TesseraJitError("native JVP requires one operation or an admitted scaled product/sum Graph")
-        source = graph_ops[0]
+        source = (next(op for op in graph_ops if op.op_name == "tessera.scaled_matmul")
+                  if len(graph_ops) != 1 else graph_ops[0])
         target = normalize_target_kind(self.target)
         if target == "rocm_gfx1201":
             target = "rocm"
@@ -2916,20 +2919,22 @@ class JitFn:
             composed_scale = supports_scaled_reverse(
                 source_module, self.differentiation_request.wrt_indices)
         if len(graph_ops) == 1 or composed_scale:
+            plugin_source = (next(op for op in graph_ops if op.op_name == "tessera.scaled_matmul")
+                             if composed_scale else graph_ops[0])
             from .native_vjp_plugins import (
                 native_vjp_frontend_proof_policy,
                 native_vjp_plugin_available,
             )
 
-            if native_vjp_plugin_available(graph_ops[0].op_name, target_kind):
+            if native_vjp_plugin_available(plugin_source.op_name, target_kind):
                 proof_policy = native_vjp_frontend_proof_policy(
-                    graph_ops[0].op_name, target_kind
+                    plugin_source.op_name, target_kind
                 )
                 if proof_policy == "non_reexecuting_state_lineage":
                     frontend_certificate = self._frontend_nonreexecuting_certificate(
                         args,
                         kwargs,
-                        graph_consumers=(graph_ops[0].op_name,),
+                        graph_consumers=(plugin_source.op_name,),
                     )
                 else:
                     from .effects import infer_graph_effects
@@ -2940,14 +2945,14 @@ class JitFn:
 
                     source_effect, _ = infer_graph_effects(graph_ops)
                     if not native_vjp_differential_safe(
-                        graph_ops[0], target_kind, source_effect.name
+                        plugin_source, target_kind, source_effect.name
                     ):
                         raise TesseraJitError(
                             "native VJP plugin cannot safely run its frontend "
                             "differential certificate for this effect envelope"
                         )
                     exemptions = native_vjp_differential_effect_exemptions(
-                        graph_ops[0], target_kind, source_effect.name
+                        plugin_source, target_kind, source_effect.name
                     )
                     frontend_certificate = self.frontend_differential(
                         *args, _permitted_effect_ops=exemptions, **kwargs
@@ -2998,7 +3003,7 @@ class JitFn:
                                   "tessera.arch": '"' + chip + '"'},
                 )
             plugin_result = execute_native_vjp_family(
-                source=graph_ops[0],
+                source=plugin_source,
                 target=target_kind,
                 ordered_inputs=ordered,
                 arg_names=self.arg_names,
@@ -3033,7 +3038,7 @@ class JitFn:
             if len(graph_ops) == 1:
                 raise TesseraJitError(
                     "no registered ROCm native VJP plugin for "
-                    f"{graph_ops[0].op_name.removeprefix('tessera.')!r}"
+                    f"{plugin_source.op_name.removeprefix('tessera.')!r}"
                 )
             raise TesseraJitError(
                 "ROCm native backward requires one registered Graph op"
@@ -3042,7 +3047,7 @@ class JitFn:
             if len(graph_ops) == 1:
                 raise TesseraJitError(
                     "no registered NVIDIA SM120 native VJP plugin for "
-                    f"{graph_ops[0].op_name.removeprefix('tessera.')!r}"
+                    f"{plugin_source.op_name.removeprefix('tessera.')!r}"
                 )
             raise TesseraJitError(
                 "NVIDIA SM120 native backward requires one registered Graph op"
@@ -3051,7 +3056,7 @@ class JitFn:
             if len(graph_ops) == 1:
                 raise TesseraJitError(
                     "no registered x86 native VJP plugin for "
-                    f"{graph_ops[0].op_name.removeprefix('tessera.')!r}"
+                    f"{plugin_source.op_name.removeprefix('tessera.')!r}"
                 )
             raise TesseraJitError(
                 "x86 native backward currently requires one registered Graph op"

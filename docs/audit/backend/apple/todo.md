@@ -13928,3 +13928,15 @@ Named native runtime integration passes 146 exact RTX 5070 numerical/lifetime an
 Recorder: benchmarks/nvidia/record_two_sided_tensor_dag.py; evidence: benchmarks/baselines/sm120_two_sided_tensor_dag_20261009/README.md and sm120.json.
 C++ owns both chains' intermediates; public JIT/portable replay preserve native members and bounded capacities.
 Not applicable to Metal lowering: the exporter selects nvidia_sm120 exclusively. Apple producer-DAG bufferization and native execution remain separate obligations.
+
+## SCALED-RESHAPE-CARRIER-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native f32 reshape carriers preserve flat element order, byte equality and
+actual SSA through continuous product primal/JVP/reverse packaging. Frontend
+value-less computed reshape inference now uses its authored shape contract;
+checked vector roots and native C++ packing retain allocation-span guards.
+Shared frontend result-shape contract updated. Follow-up required for Apple compiled scaled-product reshape/AD carriers; no Metal or Apple CPU execution claim.
+Evidence: benchmarks/baselines/gfx1201_scaled_reshape_20261009/README.md
+and gfx1201.json; recorder benchmarks/rocm/record_scaled_reshape_carrier.py.
+Generic scaled batching/transpose and dynamic shape closure remain open.

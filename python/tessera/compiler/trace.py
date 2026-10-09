@@ -169,10 +169,9 @@ def _matmul_shape(ins: List[Tuple[int, ...]], kw: dict) -> Tuple[int, ...]:
 
 
 def _transpose_shape(ins: List[Tuple[int, ...]], kw: dict) -> Tuple[int, ...]:
-    s = ins[0]
-    if len(s) < 2:
-        return s
-    return (*s[:-2], s[-1], s[-2])
+    from .graph_ir import _transpose_permutation
+    shape = ins[0]
+    return tuple(shape[axis] for axis in _transpose_permutation(len(shape), kw))
 
 
 def _broadcast_shape(ins: List[Tuple[int, ...]], kw: dict) -> Tuple[int, ...]:
@@ -273,6 +272,13 @@ class TraceBuilder:
                 if "dtype" in kwargs:
                     raise TesseraTraceError("trace: duplicate cast dtype")
                 ir_kwargs["dtype"] = a
+                call_args.append(a)
+            elif graph_name == "tessera.transpose" and position == 1:
+                if isinstance(a, Tracer) or not (a is None or isinstance(a, (tuple, list))):
+                    raise TesseraTraceError("transpose axes must be static attributes")
+                if "axes" in kwargs:
+                    raise TesseraTraceError("trace: duplicate transpose axes")
+                ir_kwargs["axes"] = a
                 call_args.append(a)
             elif graph_name == "tessera.kv_cache.read" and position in (1, 2):
                 if isinstance(a, Tracer):
@@ -1212,7 +1218,7 @@ def _gpu_straightline_op(agb, op: IROp, env) -> np.ndarray:
     if nm in ("tessera.add", "tessera.sub", "tessera.mul", "tessera.div"):
         return agb.gpu_binary(nm.split(".", 1)[1], ins[0], ins[1])
     if nm == "tessera.transpose":
-        return np.ascontiguousarray(ins[0].T)
+        return np.ascontiguousarray(np.transpose(ins[0], kw.get("axes", kw.get("permutation"))))
     raise TesseraTraceError(
         f"trace exec: op {nm!r} is not executable on apple_gpu")
 

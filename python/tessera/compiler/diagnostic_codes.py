@@ -2731,11 +2731,11 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         severity="error",
         summary=(
             "A `tessera.transpose` op's `tessera.dim_names_in` and "
-            "`tessera.dim_names_out` are not a permutation of each other."
+            "`tessera.dim_names_out` do not follow the declared axis permutation."
         ),
         fix_hint=(
-            "Adjust the output names so they're a reordering of the input "
-            "names (same multiset)."
+            "Order output names by the canonical permutation attribute, or "
+            "reverse input names when no permutation is declared."
         ),
         spec="docs/spec/SHAPE_SYSTEM.md §11.2",
         sprint="V5",

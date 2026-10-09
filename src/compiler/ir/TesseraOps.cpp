@@ -2801,24 +2801,10 @@ LogicalResult TransposeOp::verify() {
            << inTy.getRank() << " -> " << outTy.getRank();
   if (inTy.getElementType() != outTy.getElementType())
     return emitOpError("transpose must preserve element type");
-  // Multiset of static dim sizes must agree; dynamic dims contribute
-  // nothing to the check (they could legitimately be any size).
-  SmallVector<int64_t> inDims, outDims;
-  for (int64_t i = 0, e = inTy.getRank(); i < e; ++i) {
-    if (!ShapedType::isDynamic(inTy.getDimSize(i)))
-      inDims.push_back(inTy.getDimSize(i));
-    if (!ShapedType::isDynamic(outTy.getDimSize(i)))
-      outDims.push_back(outTy.getDimSize(i));
-  }
-  if (inDims.size() == outDims.size()) {
-    SmallVector<int64_t> a(inDims.begin(), inDims.end());
-    SmallVector<int64_t> b(outDims.begin(), outDims.end());
-    std::sort(a.begin(), a.end());
-    std::sort(b.begin(), b.end());
-    if (a != b)
-      return emitOpError(
-          "output static dims must be a permutation of input static dims");
-  }
+  if (!transposePermutation(getOperation()))
+    return emitOpError(
+        "requires a rank-sized unique nonnegative i64 permutation and result "
+        "dimensions matching the declared input axes (reverse order by default)");
   return success();
 }
 

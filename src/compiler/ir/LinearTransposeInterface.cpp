@@ -1,4 +1,5 @@
 #include "Tessera/IR/ScaledBatchContract.h"
+#include "Tessera/IR/TransposeUtils.h"
 //===- LinearTransposeInterface.cpp - Graph IR linear transpose -*- C++ -*-===//
 
 #include "Tessera/IR/TesseraOps.h"
@@ -336,11 +337,29 @@ llvm::SmallVector<mlir::Value> TransposeOp::buildLinearTranspose(
   if (outputCotangents.size() != 1 || !outputCotangents[0])
     return {mlir::Value()};
 
-  // Graph IR transpose currently means reverse all dimensions, so it is
-  // self-adjoint.  An explicit permutation attribute must carry and invert
-  // that permutation here when the Graph contract grows one.
+  auto permutation = transposePermutation(getOperation());
+  // An unranked default reverse remains self-adjoint. Explicit or ranked
+  // axes must have a verified inverse before constructing the adjoint.
+  if (!permutation && (mlir::isa<mlir::RankedTensorType>(getX().getType()) ||
+                       (*this)->hasAttr("permutation")))
+    return {mlir::Value()};
   auto grad = builder.create<TransposeOp>(
       getLoc(), getX().getType(), outputCotangents[0]);
+  // Carry layout/policy obligations rather than erasing them in AD.
+  grad->setAttrs((*this)->getAttrs());
+  // The adjoint consumes primal output axes and restores primal input axes.
+  for (auto pair : {std::pair{"tessera.dim_names_in", "tessera.dim_names_out"},
+                    std::pair{"tessera.dim_names_out", "tessera.dim_names_in"}}) {
+    grad->removeAttr(pair.first);
+    if (auto names = (*this)->getAttr(pair.second))
+      grad->setAttr(pair.first, names);
+  }
+  if (permutation) {
+    llvm::SmallVector<int64_t> inverse(permutation->size());
+    for (size_t outputAxis = 0; outputAxis < permutation->size(); ++outputAxis)
+      inverse[(*permutation)[outputAxis]] = outputAxis;
+    grad->setAttr("permutation", builder.getDenseI64ArrayAttr(inverse));
+  }
   return {grad.getY()};
 }
 

@@ -1,0 +1,1290 @@
+[1/8] Building CXX object src/transforms/lib/CMakeFiles/TesseraPasses.dir/CanonicalizeTesseraIR.cpp.o
+In file included from /home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/CanonicalizeTesseraIR.cpp:3:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/../include/Tessera/Transforms/CompositeDecomposition.h: In member function ‘virtual llvm::LogicalResult tessera::composite::RewriteNTKRopeToRope::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/../include/Tessera/Transforms/CompositeDecomposition.h:144:51: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::RankedTensorType&, mlir::DenseElementsAttr&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  144 |           rewriter.create<mlir::arith::ConstantOp>(op->getLoc(), thetaTy, splat);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/PatternMatch.h:12,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/ControlFlowInterfaces.h:19,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Dialect/Arith/IR/Arith.h:17,
+                 from /home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/../include/Tessera/Transforms/CompositeDecomposition.h:45:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+In file included from /home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/CanonicalizeTesseraIR.cpp:200:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/ANNConstantComposition.h: In member function ‘virtual llvm::LogicalResult {anonymous}::ComposeConstantANN::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/ANNConstantComposition.h:67:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseFPElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   67 |     auto weight=r.create<arith::ConstantOp>(last->getLoc(),DenseFPElementsAttr::get(tensor({k,n}),weights));
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/ANNConstantComposition.h:68:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseFPElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   68 |     auto offset=r.create<arith::ConstantOp>(last->getLoc(),DenseFPElementsAttr::get(tensor({m,n}),biases));
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[2/8] Building CXX object src/compiler/ir/CMakeFiles/obj.TesseraIR.dir/LinearTransposeInterface.cpp.o
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In function ‘llvm::SmallVector<mlir::Value> tessera::transposeImplicitBroadcast(mlir::Operation*, mlir::Value, mlir::Value, mlir::OpBuilder&, mlir::ValueRange, llvm::StringRef)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:68:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::CustomAdjointCallOp; Args = {llvm::SmallVector<mlir::Type, 6>, mlir::StringAttr, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   68 |       auto fallback = builder.create<CustomAdjointCallOp>(
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   69 |           op->getLoc(), llvm::SmallVector<mlir::Type>{input.getType()},
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   70 |           builder.getStringAttr(fallbackKey), mlir::ValueRange{dy, input});
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/TilingInterface.h:18,
+                 from /home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/include/Tessera/IR/TesseraOps.h:9,
+                 from /home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:5:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:86:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   85 |     grad = builder
+      |            ~~~~~~~               
+   86 |                .create<ReduceOp>(op->getLoc(), reducedTy, grad,
+      |                ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   87 |                                  builder.getStringAttr("sum"),
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   88 |                                  builder.getI64IntegerAttr(axis))
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:92:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   92 |     grad = builder.create<ReshapeOp>(op->getLoc(), inTy, grad).getY();
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::MatmulOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:295:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value&, mlir::Value, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  294 |     dLhs = builder
+      |            ~~~~~~~               
+  295 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  296 |                    getLoc(), getLhs().getType(), dy, getRhs(),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  297 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  298 |                    builder.getBoolAttr(false),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  299 |                    builder.getBoolAttr(!getTransposeB()))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:303:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value, mlir::Value&, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  302 |     dLhs = builder
+      |            ~~~~~~~               
+  303 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  304 |                    getLoc(), getLhs().getType(), getRhs(), dy,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  305 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  306 |                    builder.getBoolAttr(getTransposeB()),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  307 |                    builder.getBoolAttr(true))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:313:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value, mlir::Value&, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  312 |     dRhs = builder
+      |            ~~~~~~~               
+  313 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  314 |                    getLoc(), getRhs().getType(), getLhs(), dy,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  315 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  316 |                    builder.getBoolAttr(!getTransposeA()),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  317 |                    builder.getBoolAttr(false))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:321:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value&, mlir::Value, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  320 |     dRhs = builder
+      |            ~~~~~~~               
+  321 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  322 |                    getLoc(), getRhs().getType(), dy, getLhs(),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  323 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  324 |                    builder.getBoolAttr(true),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~
+  325 |                    builder.getBoolAttr(getTransposeA()))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::TransposeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:346:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::TransposeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  346 |   auto grad = builder.create<TransposeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  347 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::ReshapeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:364:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  364 |   auto grad = builder.create<ReshapeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  365 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SqueezeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:373:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::UnsqueezeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  373 |   auto grad = builder.create<UnsqueezeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  374 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::UnsqueezeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:384:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SqueezeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  384 |   auto grad = builder.create<SqueezeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  385 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::FlattenOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:396:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  395 |   return {builder
+      |           ~~~~~~~                
+  396 |               .create<ReshapeOp>(getLoc(), getX().getType(),
+      |               ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  397 |                                  outputCotangents[0])
+      |                                  ~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::ViewOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:406:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  405 |   return {builder
+      |           ~~~~~~~                
+  406 |               .create<ReshapeOp>(getLoc(), getX().getType(),
+      |               ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  407 |                                  outputCotangents[0])
+      |                                  ~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::PermuteOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/LinearTransposeInterface.cpp:423:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::PermuteOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  423 |   auto grad = builder.create<PermuteOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  424 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[3/8] Building CXX object src/transforms/lib/CMakeFiles/TesseraPasses.dir/TesseraToLinalgPass.cpp.o
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp: In member function ‘virtual llvm::LogicalResult {anonymous}::UnsqueezeLowering::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp:1035:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseIntElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1035 |           rewriter.create<arith::ConstantOp>(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 1036 |               op->getLoc(), rewriter.getIndexTensorAttr(expected)));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/PatternMatch.h:12,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/ControlFlowInterfaces.h:19,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Dialect/Arith/IR/Arith.h:17,
+                 from /home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp:37:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp: In member function ‘virtual llvm::LogicalResult {anonymous}::BroadcastLowering::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp:1085:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::tensor::EmptyOp; Args = {llvm::ArrayRef<long int>, mlir::Type}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1085 |     Value init = rewriter.create<tensor::EmptyOp>(loc, outTy.getShape(), outTy.getElementType());
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp: In lambda function:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp:1093:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::linalg::YieldOp; Args = {mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1093 |           b.create<linalg::YieldOp>(l, args[0]);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp: In member function ‘virtual llvm::LogicalResult {anonymous}::BroadcastLowering::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const’:
+/home/angstorms/scratch/scaled-map-axis-integration/src/transforms/lib/TesseraToLinalgPass.cpp:1090:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::linalg::GenericOp; Args = {mlir::TypeRange, mlir::ValueRange, mlir::ValueRange, llvm::SmallVector<mlir::AffineMap, 6>&, llvm::SmallVector<mlir::utils::IteratorType, 12>&, {anonymous}::BroadcastLowering::matchAndRewrite(mlir::Operation*, mlir::PatternRewriter&) const::<lambda(mlir::OpBuilder&, mlir::Location, mlir::ValueRange)>}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1090 |     auto generic = rewriter.create<linalg::GenericOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 1091 |         loc, TypeRange{outTy}, ValueRange{op->getOperand(0)}, ValueRange{init}, maps, iterators,
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1092 |         [](OpBuilder &b, Location l, ValueRange args) {
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ 1093 |           b.create<linalg::YieldOp>(l, args[0]);
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~      
+ 1094 |         });
+      |         ~~                                            
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[4/8] Building CXX object src/compiler/ir/CMakeFiles/obj.TesseraIR.dir/TesseraOps.cpp.o
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/AffineExpr.h:20,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/AffineMap.h:17,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/BuiltinAttributeInterfaces.h:12,
+                 from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/BuiltinTypes.h:12,
+                 from /home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/include/Tessera/IR/ScaledBatchContract.h:4,
+                 from /home/angstorms/scratch/scaled-map-axis-integration/src/compiler/ir/TesseraOps.cpp:1:
+In function ‘llvm::hash_code llvm::hashing::detail::combine_bytes(const char*, size_t)’,
+    inlined from ‘llvm::hash_code llvm::hash_combine(const Ts& ...) [with Ts = {}]’ at /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:312:40,
+    inlined from ‘static llvm::hash_code tessera::AbsoluteOp::computePropertiesHash(const Properties&)’ at /home/angstorms/scratch/scaled-map-axis-integration/.build-output-axes/src/compiler/ir/TesseraOps.cpp.inc:1183:28:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:51:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h: In static member function ‘static llvm::hash_code tessera::AbsoluteOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::AcosOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::AddOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ArchSTEOneHotOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ArchWeightedSumOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::AsinOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::AtanOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::AttnCompressedBlocksOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::BitwiseAndOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::BitwiseNotOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::BitwiseOrOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::BitwiseXorOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::BroadcastOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CPUMsaBlockSparseOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CPUProfilerProbeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CPUReferenceOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CacheCommitOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CachePageLookupOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CacheRollbackOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CeilOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CosOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::CoshOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::DigammaOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::DivOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::EBMEnergyQuadraticOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ErfOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ErfcOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ExpOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ExpandOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::Expm1Op::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::FlashAttnBwdOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::FlattenOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::FloorDivOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::FloorOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::GameSubsetMobiusOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::GameSubsetZetaOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::GameSupersetMobiusOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::GameSupersetZetaOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::GeluOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::IsFiniteOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::IsInfOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::IsNanOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::KVCacheAppendOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LatentKVCompressOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LatentKVExpandKOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LatentKVExpandVOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LgammaOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::Log1pOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LogOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LogicalAndOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LogicalNotOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LogicalOrOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::LogicalXorOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::MLADecodeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::MQAAttentionOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::MaximumOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::MinimumOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ModOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::MoeDispatchOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::MorScatterOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::MulOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsHaloExchangeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsHaloPackOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsHaloRegionOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsHaloTransportOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsHaloUnpackOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsNeighborReadOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsPipelineConfigOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsStencilApplyOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::NeighborsStencilDefineOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::PermuteOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::PopcountOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::PowOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ReciprocalOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ReluOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ReshapeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::RopeMergeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::RopeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::RoundOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::RsqrtOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SelectOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SigmoidOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SignOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SiluMulOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SiluOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SinOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SinhOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SoftplusOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SpecAcceptOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SpecAcceptSampleOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SpecAcceptTreeSampleOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SqrtOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SqueezeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::StopGradientOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::SubOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::TanOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::TanhOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::TargetVerifyOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::TransposeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::TridiagonalSolveOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::TruncOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::UnsqueezeOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::ViewOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h: In static member function ‘static llvm::hash_code tessera::WhereOp::computePropertiesHash(const Properties&)’:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:161:21: warning: ‘buf’ may be used uninitialized [-Wmaybe-uninitialized]
+  161 |   return xxh3_64bits(reinterpret_cast<const uint8_t *>(data), len) ^
+      |          ~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/Support/xxhash.h:46:19: note: by argument 1 of type ‘const uint8_t*’ {aka ‘const unsigned char*’} to ‘uint64_t llvm::xxh3_64bits(const uint8_t*, size_t)’ declared here
+   46 | LLVM_ABI uint64_t xxh3_64bits(const uint8_t *data, size_t len);
+      |                   ^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/include/llvm/ADT/Hashing.h:309:48: note: ‘buf’ declared here
+  309 |   std::array<char, std::max<size_t>(1, Total)> buf;
+      |                                                ^~~
+[5/8] Linking CXX static library src/compiler/ir/libTesseraIR.a
+[6/8] Linking CXX static library src/transforms/lib/libTesseraPasses.a
+[7/8] Linking CXX executable src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt
+[8/8] Linking CXX executable tools/tessera-opt/tessera-opt

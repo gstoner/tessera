@@ -2300,10 +2300,12 @@ def Tessera_TransposeOp : Op<
   let arguments = (ins TensorType:$x);
   let results = (outs TensorType:$y);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
-  // Sprint V1 (2026-05-22): rank-preserving permutation.  Input and
-  // output must have the same rank; the multiset of static dim sizes
-  // must be a permutation (dynamic dims are unconstrained).  Element
-  // type must match.
+  // Rank-preserving permutation. The optional DenseI64ArrayAttr
+  // "permutation" names each result axis's source axis; without it, axes
+  // reverse. Axes are unique/nonnegative and cover the input rank. Known
+  // result dimensions agree with their selected source dimensions; dynamic
+  // dimensions remain compatible. Element types match. Optimization metadata
+  // is preserved independently of these semantic axes.
   let hasVerifier = 1;
   // Phase 1 (front-to-back closure plan): a no-perm (reverse-dims) transpose
   // is its own inverse — `transpose(transpose(x)) -> x`. Picked up by

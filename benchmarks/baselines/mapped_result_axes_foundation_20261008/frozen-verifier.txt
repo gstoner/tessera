@@ -1,0 +1,144 @@
+........FFFFFFFFFF..                                                     [100%]
+=================================== FAILURES ===================================
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 1, 0, 2>] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = array<i64: 1, 0, 2>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...y<i64: 1, 0, 2>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[3x5x2xf32-permutation = array<i64: 1, 0, 2>] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<3x5x2xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = array<i64: 1, 0, 2>} : (tensor<2x3x5xf32>) -> tensor<3x5x2xf32>
+E         return %0 : tensor<3x5x2xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...y<i64: 1, 0, 2>} : (tensor<2x3x5xf32>) -> tensor<3x5x2xf32>\n    return %0 : tensor<3x5x2xf32>\n  }\n}\n\n', stderr='').returncode
+___ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-] ____
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ....transpose %arg0 : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 0, 2>] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = array<i64: 0, 0, 2>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...y<i64: 0, 0, 2>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1, 3>] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = array<i64: 0, 1, 3>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...y<i64: 0, 1, 3>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1, -1>] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = array<i64: 0, 1, -1>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...<i64: 0, 1, -1>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1>] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = array<i64: 0, 1>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...rray<i64: 0, 1>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1, 2, 3>] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = array<i64: 0, 1, 2, 3>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...64: 0, 1, 2, 3>} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = [0 : i64, 1 : i64, 2 : i64]] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = [0, 1, 2]} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...ion = [0, 1, 2]} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+_ test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = "identity"] _
+tests/unit/test_graph_transpose_axis_contract.py:63: in test_graph_transpose_rejects_malformed_axes_before_lowering
+    assert compiled.returncode != 0, compiled.stdout
+E   AssertionError: module {
+E       func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<2x3x5xf32> {
+E         %0 = tessera.transpose %arg0 {permutation = "identity"} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>
+E         return %0 : tensor<2x3x5xf32>
+E       }
+E     }
+E     
+E     
+E   assert 0 != 0
+E    +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'], ...on = "identity"} : (tensor<2x3x5xf32>) -> tensor<2x3x5xf32>\n    return %0 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').returncode
+=========================== short test summary info ============================
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 1, 0, 2>]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[3x5x2xf32-permutation = array<i64: 1, 0, 2>]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 0, 2>]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1, 3>]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1, -1>]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1>]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = array<i64: 0, 1, 2, 3>]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = [0 : i64, 1 : i64, 2 : i64]]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_graph_transpose_rejects_malformed_axes_before_lowering[2x3x5xf32-permutation = "identity"]
+10 failed, 10 passed in 0.51s

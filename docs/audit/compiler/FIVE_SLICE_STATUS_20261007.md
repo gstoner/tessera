@@ -6,8 +6,8 @@ audit_role: reference
 # Five compiler slices after PR 892: completion evidence
 
 This is an evidence ledger, not a closure declaration. The coordinated source
-is the unpublished `codex/next-five-compiler-slices` scratch branch on
-Super-Bear. GPU evidence remains architecture-specific. Individual packets
+is the published draft PR895–902 stack, with dependent engineering
+checkpoints on Super-Bear. GPU evidence remains architecture-specific. Individual packets
 bind their actual dirty source and compiler/runtime binaries; an older packet
 is not proof of every later source change.
 
@@ -1508,3 +1508,16 @@ continues frontend/AD integration in the ROCm route slice; all five programs
 retain the wider dynamic/composed/storage and performance obligations recorded
 above. Native host preparation is now owned below the Python binding for this
 admitted family, with remaining matched cost explicitly measured.
+
+### Mapped result-axis foundation (2026-10-08)
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1;
+synchronization MAP-RESULT-AXES-FOUNDATION-20261008, dependent on PR902.
+Exact Graph permutation verification, ordinary-source axis normalization,
+inverse native AD and static general-rank Linalg materialization are integrated.
+Evidence: benchmarks/baselines/mapped_result_axes_foundation_20261008/README.md.
+
+The result-axis prerequisite fixes actual malformed Graph admission and native
+AD axis inversion. It does not close the five-slice objective: the scaled GPU
+program still needs Schedule/Tile result materialization and ownership proof
+before public nonzero out_axes can be admitted.

@@ -11584,3 +11584,27 @@ No primitive coverage promotion or weakened zero-open gate.
 Evidence: benchmarks/baselines/native_scaled_jvp_frame_20261008/README.md,
 delivery.json, scaled-jvp-frame-paired-final.json, host-tests.txt, sm120-tests.txt.
 <!-- entry-fields:end -->
+
+### 2026-10-08 — mapped result-axis semantic foundation
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending dependent checkpoint; sync MAP-RESULT-AXES-FOUNDATION-20261008.
+
+Outcome: Exact Graph transpose axes replace multiset-only verification.
+Keyword/positional/negative frontend axes carry canonical permutations.
+Native reverse AD inverts declared axes; static general-rank Linalg lowering
+carries activity/pure facts. Symbolic constraints and SSA dimension names follow
+the declared axes; native shape inference shares that decoder. 53 host cases include actual native CPU execution
+and changed-input replay; 381 final axis/symbolic/diagnostic/pass cases pass.
+451 focused registry/frontend/shape gates pass.
+Diagnostic CPU timing records five profiles; compilation and execution are
+separate. Existing gfx1201 and RTX5070 routes are checked independently.
+
+Remaining: Native result-permutation program membership, Schedule/Tile
+materialization, ownership/ABI and exact GPU timing, public nonzero out_axes,
+dynamic/wider storage/layout and generic scaled-product closure. No primitive
+coverage promotion or weakened closure gate.
+
+Evidence: benchmarks/baselines/mapped_result_axes_foundation_20261008/README.md,
+source-tests.txt, registry-tests.txt, cpu.json, identity.json.
+<!-- entry-fields:end -->

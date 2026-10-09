@@ -17,7 +17,7 @@
 //   tessera.flash_attention  (B,H,S,D) layout; output = Q shape
 //   tessera.reduce_*        shape[axis] collapsed
 //   tessera.reshape         result shape taken from tessera.target_shape attr
-//   tessera.transpose       permutation from tessera.perm attr
+//   tessera.transpose       verified canonical permutation or default reversal
 //   tessera.concat          concatenated along tessera.axis attr
 //   tessera.slice           shape from tessera.sizes attr
 //
@@ -28,6 +28,7 @@
 //
 //===----------------------------------------------------------------------===//
 
+#include "Tessera/IR/TransposeUtils.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
 #include "mlir/IR/Operation.h"
@@ -160,8 +161,7 @@ static std::optional<Shape> inferTranspose(
   if (op->getNumOperands() < 1) return std::nullopt;
   auto src = lookupResult(table, op->getOperand(0));
   if (!src) return std::nullopt;
-  auto perm_attr = op->getAttrOfType<mlir::ArrayAttr>("tessera.perm");
-  auto perm = attrToShape(perm_attr);
+  auto perm = tessera::transposePermutation(op);
   if (!perm || perm->size() != src->size()) return std::nullopt;
   Shape out(src->size());
   for (size_t i = 0; i < perm->size(); ++i)

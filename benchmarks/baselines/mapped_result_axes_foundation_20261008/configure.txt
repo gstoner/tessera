@@ -1,0 +1,81 @@
+-- The C compiler identification is GNU 15.2.0
+-- The CXX compiler identification is GNU 15.2.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found ZLIB: /usr/lib/x86_64-linux-gnu/libz.so (found version "1.3.1")
+-- Found zstd: /usr/lib/x86_64-linux-gnu/libzstd.so
+-- Found LibXml2: /usr/lib/x86_64-linux-gnu/libxml2.so (found version "2.15.2")
+-- Tessera LLVM/MLIR pin satisfied (exact): LLVM 23.1.1, MLIR 23.1.1, pin 23.1.1
+-- Linker detection: GNU ld
+-- Performing Test SUPPORTS_LIBCXX_HARDENING_MODE
+-- Performing Test SUPPORTS_LIBCXX_HARDENING_MODE - Success
+-- Performing Test LLVM_USES_LIBSTDCXX
+-- Performing Test LLVM_USES_LIBSTDCXX - Success
+-- Performing Test LLVM_DEFAULT_TO_GLIBCXX_USE_CXX11_ABI
+-- Performing Test LLVM_DEFAULT_TO_GLIBCXX_USE_CXX11_ABI - Success
+-- Performing Test C_SUPPORTS_FPIC
+-- Performing Test C_SUPPORTS_FPIC - Success
+-- Performing Test CXX_SUPPORTS_FPIC
+-- Performing Test CXX_SUPPORTS_FPIC - Success
+-- Building with -fPIC
+-- Performing Test C_SUPPORTS_FNO_SEMANTIC_INTERPOSITION
+-- Performing Test C_SUPPORTS_FNO_SEMANTIC_INTERPOSITION - Success
+-- Performing Test CXX_SUPPORTS_FNO_SEMANTIC_INTERPOSITION
+-- Performing Test CXX_SUPPORTS_FNO_SEMANTIC_INTERPOSITION - Success
+-- Performing Test SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG
+-- Performing Test SUPPORTS_FVISIBILITY_INLINES_HIDDEN_FLAG - Success
+-- Performing Test CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG
+-- Performing Test CXX_SUPPORTS_SUGGEST_OVERRIDE_FLAG - Success
+-- Performing Test CXX_WSUGGEST_OVERRIDE_ALLOWS_ONLY_FINAL
+-- Performing Test CXX_WSUGGEST_OVERRIDE_ALLOWS_ONLY_FINAL - Success
+-- Performing Test C_WCOMMENT_ALLOWS_LINE_WRAP
+-- Performing Test C_WCOMMENT_ALLOWS_LINE_WRAP - Failed
+-- Performing Test C_SUPPORTS_CTAD_MAYBE_UNSUPPORTED_FLAG
+-- Performing Test C_SUPPORTS_CTAD_MAYBE_UNSUPPORTED_FLAG - Failed
+-- Performing Test CXX_SUPPORTS_CTAD_MAYBE_UNSUPPORTED_FLAG
+-- Performing Test CXX_SUPPORTS_CTAD_MAYBE_UNSUPPORTED_FLAG - Success
+-- Performing Test LINKER_SUPPORTS_COLOR_DIAGNOSTICS
+-- Performing Test LINKER_SUPPORTS_COLOR_DIAGNOSTICS - Failed
+Precompiled headers are disabled by default with GCC. Pass -DCMAKE_DISABLE_PRECOMPILE_HEADERS=OFF to override.
+-- Precompiled headers disabled.
+-- Looking for os_signpost_interval_begin
+-- Looking for os_signpost_interval_begin - not found
+-- Looking for flock
+-- Looking for flock - found
+-- Performing Test LLVM_LINKER_SUPPORTS_B_SYMBOLIC_FUNCTIONS
+-- Performing Test LLVM_LINKER_SUPPORTS_B_SYMBOLIC_FUNCTIONS - Success
+-- Tessera lit runner: /home/angstorms/toolchains/llvm-23.1.1-assertions/./bin/llvm-lit (lit 23.1.1dev)
+-- Looking for C++ include ffi.h
+-- Looking for C++ include ffi.h - found
+-- Looking for C++ include ffi/ffi.h
+-- Looking for C++ include ffi/ffi.h - not found
+-- Found Python3: /usr/bin/python3 (found version "3.14.4") found components: Interpreter
+-- Found Python3: /usr/bin/python3 (found version "3.14.4") found components: Interpreter Development Development.Module Development.Embed
+-- ----------------------------------------------------
+-- Tessera 0.1.0 build configuration
+--   LLVM/MLIR version : 23.1.1
+--   CUDA support      : OFF
+--   CPU only          : OFF
+--   HIP  support      : OFF
+--   x86 backend       : OFF
+--   NVIDIA backend    : OFF
+--   ROCm backend      : ON
+--   Apple backend     : OFF
+--   Clifford backend  : OFF
+--   EBM backend       : OFF
+--   Sanitizers        : off
+--   Build tests       : ON
+--   Build examples    : ON
+--   Build Python      : ON
+-- ----------------------------------------------------
+-- Configuring done (2.7s)
+-- Generating done (0.2s)
+-- Build files have been written to: /home/angstorms/scratch/scaled-map-axis-integration/.build-output-axes

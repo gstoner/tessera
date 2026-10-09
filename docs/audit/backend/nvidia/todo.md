@@ -13950,3 +13950,14 @@ Evidence: benchmarks/baselines/native_scaled_jvp_frame_20261008/README.md.
 Generic scaled_matmul batching/transpose closure remains open.
 
 Parity validated for four existing SM120 attention JVP regression cases on RTX5070. NVIDIA scaled-product AD and non-leading packed maps remain follow-up required.
+
+### Mapped result-axis foundation (2026-10-08)
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1;
+synchronization MAP-RESULT-AXES-FOUNDATION-20261008, dependent on PR902.
+Exact Graph permutation verification, ordinary-source axis normalization,
+axis-ordered symbolic constraints/SSA propagation, inverse native AD and
+static general-rank Linalg materialization are integrated.
+Evidence: benchmarks/baselines/mapped_result_axes_foundation_20261008/README.md.
+
+Existing exact RTX5070 attention JVP regression passes four cases with the fresh core. Follow-up required for native mapped-result Schedule/Tile materialization and CUDA lifetime/ABI proof; attention parity is not transpose parity.

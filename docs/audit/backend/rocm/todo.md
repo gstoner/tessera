@@ -16356,3 +16356,14 @@ Evidence: benchmarks/baselines/native_scaled_jvp_frame_20261008/README.md.
 Generic scaled_matmul batching/transpose closure remains open.
 
 Parity validated on owning gfx1201: 36 numerical cases. gfx1151 typed FP8 WMMA is not applicable. Shared movement span admission passes owning replay: 52 gfx1151 cases (four architecture/family skips) and 48 gfx1201 cases (six architecture/family skips).
+
+### Mapped result-axis foundation (2026-10-08)
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1;
+synchronization MAP-RESULT-AXES-FOUNDATION-20261008, dependent on PR902.
+Exact Graph permutation verification, ordinary-source axis normalization,
+axis-ordered symbolic constraints/SSA propagation, inverse native AD and
+static general-rank Linalg materialization are integrated.
+Evidence: benchmarks/baselines/mapped_result_axes_foundation_20261008/README.md.
+
+Existing gfx1201 scaled primal/JVP/VJP replay is revalidated with the fresh core. Follow-up required for a native result-permutation program member, Schedule/Tile ownership and separate kernel/public timings. gfx1151 FP8 WMMA remains not applicable.

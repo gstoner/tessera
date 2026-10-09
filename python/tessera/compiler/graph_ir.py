@@ -57,6 +57,7 @@ _POSITIONAL_ATTR_PARAMS: Dict[str, tuple[str, ...]] = {
     # operand — that one is catalog arity drift, fixed in op_catalog instead.
     "tessera.arange": ("start",),
     "tessera.cast": ("dtype",),
+    "tessera.transpose": ("axes",),
     "tessera.chunk": ("chunks",),
     "tessera.dynamic_slice": ("start_indices", "slice_sizes"),
     "tessera.dynamic_update_slice": ("start_indices",),
@@ -1052,6 +1053,21 @@ class IROp:
         else:
             lhs = ""
             type_str = f" : {types_in}" if types_in else ""
+        emitted_kwargs = self.kwargs
+        if self.op_name == "tessera.transpose":
+            emitted_kwargs = dict(self.kwargs)
+            if any(emitted_kwargs.get(key) is not None for key in ("axes", "permutation")):
+                rank = self.inferred_type.rank if self.inferred_type is not None else None
+                if rank is None:
+                    raw = emitted_kwargs.get("axes")
+                    if raw is None: raw = emitted_kwargs.get("permutation")
+                    if not isinstance(raw, (tuple, list)):
+                        raise ValueError("transpose axes must be a full integer permutation")
+                    rank = len(raw)
+                emitted_kwargs["permutation"] = _transpose_permutation(rank, emitted_kwargs)
+            elif "permutation" in emitted_kwargs:
+                emitted_kwargs.pop("permutation")
+            emitted_kwargs.pop("axes", None)
         attr_parts = []
         if self.attrs:
             attr_parts.append(self.attrs)
@@ -1060,8 +1076,11 @@ class IROp:
         nullable_attention_attrs = {"bias", "window", "softcap", "logit_softcap", "dropout", "dropout_p"}
         attention = self.op_name in {"tessera.flash_attn", "tessera.flash_attn_bwd"}
         attr_parts.extend(
-            f"{key} = {_format_named_attr(key, value)}"
-            for key, value in self.kwargs.items()
+            f"{key} = " + (
+                ("array<i64: " + ", ".join(map(str, value)) + ">" if value else "array<i64>")
+                if self.op_name == "tessera.transpose" and key == "permutation"
+                else _format_named_attr(key, value))
+            for key, value in emitted_kwargs.items()
             if not (attention and value is None and key in nullable_attention_attrs)
             and not (self.op_name == "tessera.scaled_matmul" and key in {"batching", "physical_contract"} and value is None)
         )
@@ -2423,15 +2442,18 @@ class _OpExtractor(ast.NodeVisitor):
             if value is None:
                 return None
             result = result_name or self._fresh()
+            source_type = self._value_types.get(value, TENSOR_OPAQUE)
+            output_type = _shape_transpose([source_type])
             self.ops.append(IROp(
                 result=result,
                 op_name="tessera.transpose",
                 operands=[value],
-                operand_types=[str(self._value_types.get(value, TENSOR_OPAQUE))],
-                result_type=str(self._value_types.get(value, TENSOR_OPAQUE)),
+                operand_types=[str(source_type)],
+                result_type=str(output_type),
+                inferred_type=output_type,
                 source_span=_span_from_ast(node),
             ))
-            self._value_types[f"%{result}"] = self._value_types.get(value, TENSOR_OPAQUE)
+            self._value_types[f"%{result}"] = output_type
             return f"%{result}"
         return None
 
@@ -4114,11 +4136,31 @@ def _shape_kv_cache_read(operand_types: List[IRType],
     return (TENSOR_OPAQUE, TENSOR_OPAQUE)
 
 
+def _transpose_permutation(rank: int, attrs: Optional[Dict[str, Any]] = None) -> tuple[int, ...]:
+    candidates = []
+    for key in ("axes", "permutation"):
+        raw = (attrs or {}).get(key)
+        if raw is None:
+            continue
+        if (not isinstance(raw, (tuple, list)) or len(raw) != rank or
+                any(type(axis) is not int or not -rank <= axis < rank for axis in raw)):
+            raise ValueError("transpose axes must be a full integer permutation of the input rank")
+        normalized = tuple(axis % rank for axis in raw)
+        if len(set(normalized)) != rank:
+            raise ValueError("transpose axes must be unique")
+        candidates.append(normalized)
+    if candidates and any(candidate != candidates[0] for candidate in candidates):
+        raise ValueError("transpose axes and permutation disagree")
+    return candidates[0] if candidates else tuple(reversed(range(rank)))
+
+
 def _shape_transpose(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:
     first = operand_types[0]
     if first.rank is None:
         return first
-    return tensor_ir_type(tuple(reversed(first.shape)), first.dtype, layout=first.layout)
+    permutation = _transpose_permutation(first.rank, attrs)
+    return tensor_ir_type(tuple(first.shape[axis] for axis in permutation),
+                          first.dtype, layout=first.layout)
 
 
 def _shape_reduce_trailing(operand_types: List[IRType], attrs: Optional[Dict[str, Any]] = None) -> IRType:

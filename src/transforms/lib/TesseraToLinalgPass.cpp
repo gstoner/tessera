@@ -3108,8 +3108,8 @@ struct UnaryActLowering : public RewritePattern {
   }
 };
 
-// tessera.transpose (rank-2; explicit permutations remain authoritative even
-// when a square tensor's input and output types happen to be equal).
+// tessera.transpose: explicit rank-preserving permutations, including mapped
+// result axes. Equal-sized axes never imply an identity permutation.
 struct TransposeLowering : public RewritePattern {
   TransposeLowering(MLIRContext *ctx)
       : RewritePattern("tessera.transpose", /*benefit=*/1, ctx) {}
@@ -3122,20 +3122,35 @@ struct TransposeLowering : public RewritePattern {
     auto outTy = dyn_cast<RankedTensorType>(op->getResult(0).getType());
     if (!inTy || !outTy || !inTy.hasStaticShape() || !outTy.hasStaticShape())
       return rewriter.notifyMatchFailure(op, "static-shape tensors required");
-    if (inTy.getRank() != 2)
-      return rewriter.notifyMatchFailure(
-          op, "Phase 1 transpose is rank-2 only (op has no permutation attr)");
-    auto permutation = tessera::plainTransposePermutation(op);
+    // The native AD pass marks activity before lowering. Carry that
+    // lifecycle fact; other layout/policy obligations still need a consumer.
+    for (NamedAttribute attr : op->getAttrs()) {
+      if (attr.getName() == "permutation") continue;
+      if (attr.getName() == "tessera.effect_kind" &&
+          attr.getValue() == rewriter.getStringAttr("pure")) continue;
+      auto activity = dyn_cast<StringAttr>(attr.getValue());
+      if (attr.getName() == "tessera.autodiff.activity" && activity &&
+          (activity.getValue() == "active" || activity.getValue() == "inactive"))
+        continue;
+      return rewriter.notifyMatchFailure(op, "transpose policy requires its native consumer");
+    }
+    auto permutation = tessera::transposePermutation(op);
     if (!permutation) return failure();
-    if ((*permutation)[0] == 0 && (*permutation)[1] == 1 && inTy == outTy) {
+    bool identity = true;
+    for (size_t axis = 0; axis < permutation->size(); ++axis)
+      identity &= (*permutation)[axis] == static_cast<int64_t>(axis);
+    if (identity && inTy == outTy && tessera::plainTransposePermutation(op)) {
       rewriter.replaceOp(op, op->getOperand(0));
       return success();
     }
-    if (outTy.getDimSize(0) != inTy.getDimSize(1) ||
-        outTy.getDimSize(1) != inTy.getDimSize(0))
-      return rewriter.notifyMatchFailure(op, "result must be the [1,0] transpose");
-    rewriter.replaceOp(op,
-                       emitTranspose2d(rewriter, op->getLoc(), op->getOperand(0)));
+    Value init = tensor::EmptyOp::create(
+        rewriter, op->getLoc(), outTy.getShape(), outTy.getElementType());
+    auto materialized = linalg::TransposeOp::create(
+        rewriter, op->getLoc(), op->getOperand(0), init,
+        ArrayRef<int64_t>(*permutation));
+    for (StringRef key : {"tessera.autodiff.activity", "tessera.effect_kind"})
+      if (auto fact = op->getAttr(key)) materialized->setAttr(key, fact);
+    rewriter.replaceOp(op, materialized.getResults());
     return success();
   }
 };

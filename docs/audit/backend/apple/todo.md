@@ -13555,3 +13555,14 @@ Evidence: benchmarks/baselines/native_scaled_jvp_frame_20261008/README.md.
 Generic scaled_matmul batching/transpose closure remains open.
 
 Follow-up required for native Metal scaled-product execution/AD; no Metal runtime or physical schedule changes. Host byte-packer tests do not prove Apple GPU parity.
+
+### Mapped result-axis foundation (2026-10-08)
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1;
+synchronization MAP-RESULT-AXES-FOUNDATION-20261008, dependent on PR902.
+Exact Graph permutation verification, ordinary-source axis normalization,
+axis-ordered symbolic constraints/SSA propagation, inverse native AD and
+static general-rank Linalg materialization are integrated.
+Evidence: benchmarks/baselines/mapped_result_axes_foundation_20261008/README.md.
+
+Follow-up required for native Metal result-axis materialization and mapped outputs. Shared Graph semantics apply; no Apple physical schedule or device execution parity is claimed.

@@ -1,0 +1,111 @@
+..FFFF                                                                   [100%]
+=================================== FAILURES ===================================
+_ test_symbolic_names_follow_actual_axes_even_for_equal_dimensions[False-permutation = array<i64: 2, 0, 1>,-expected0] _
+
+opt = '/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'
+axes = 'permutation = array<i64: 2, 0, 1>,', expected = ['K', 'M', 'N']
+correct = False
+
+    @pytest.mark.parametrize(("axes", "expected"), [
+        ("permutation = array<i64: 2, 0, 1>,", ["K", "M", "N"]),
+        ("", ["K", "N", "M"]),
+    ])
+    @pytest.mark.parametrize("correct", [True, False])
+    def test_symbolic_names_follow_actual_axes_even_for_equal_dimensions(opt, axes, expected, correct):
+        names = expected if correct else ["M", "N", "K"]
+        output_names = ", ".join(f'"{name}"' for name in names)
+        source = module("3x3x3xf32", "3x3x3xf32",
+                        axes + 'tessera.dim_names_in = ["M", "N", "K"], '
+                        + "tessera.dim_names_out = [" + output_names + "]")
+        compiled = invoke(opt, source, "--tessera-symdim-equality")
+>       assert (compiled.returncode == 0) == correct, compiled.stderr
+E       AssertionError: 
+E       assert (0 == 0) == False
+E        +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt', '...["M", "N", "K"]} : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>\n    return %0 : tensor<3x3x3xf32>\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_graph_transpose_axis_contract.py:266: AssertionError
+_ test_symbolic_names_follow_actual_axes_even_for_equal_dimensions[False--expected1] _
+
+opt = '/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'
+axes = '', expected = ['K', 'N', 'M'], correct = False
+
+    @pytest.mark.parametrize(("axes", "expected"), [
+        ("permutation = array<i64: 2, 0, 1>,", ["K", "M", "N"]),
+        ("", ["K", "N", "M"]),
+    ])
+    @pytest.mark.parametrize("correct", [True, False])
+    def test_symbolic_names_follow_actual_axes_even_for_equal_dimensions(opt, axes, expected, correct):
+        names = expected if correct else ["M", "N", "K"]
+        output_names = ", ".join(f'"{name}"' for name in names)
+        source = module("3x3x3xf32", "3x3x3xf32",
+                        axes + 'tessera.dim_names_in = ["M", "N", "K"], '
+                        + "tessera.dim_names_out = [" + output_names + "]")
+        compiled = invoke(opt, source, "--tessera-symdim-equality")
+>       assert (compiled.returncode == 0) == correct, compiled.stderr
+E       AssertionError: 
+E       assert (0 == 0) == False
+E        +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt', '...["M", "N", "K"]} : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>\n    return %0 : tensor<3x3x3xf32>\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_graph_transpose_axis_contract.py:266: AssertionError
+______ test_symbolic_names_propagate_through_unannotated_transpose[True] _______
+
+opt = '/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'
+correct = True
+
+    @pytest.mark.parametrize("correct", [True, False])
+    def test_symbolic_names_propagate_through_unannotated_transpose(opt, correct):
+        names = '["K", "M", "N"]' if correct else '["M", "N", "K"]'
+        source = (
+            'module { func.func @flow(%x: tensor<3x3x3xf32> '
+            '{tessera.dim_names = ["M", "N", "K"]}) -> tensor<3x3x3xf32> {'
+            '%a = "tessera.transpose"(%x) {permutation = array<i64: 2, 0, 1>}'
+            ' : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>'
+            '%b = "tessera.transpose"(%a) {permutation = array<i64: 1, 2, 0>, '
+            'tessera.dim_names_in = ' + names + ', '
+            'tessera.dim_names_out = ["M", "N", "K"]}'
+            ' : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>'
+            'return %b : tensor<3x3x3xf32> } }'
+        )
+        compiled = invoke(opt, source, "--tessera-symdim-equality")
+>       assert (compiled.returncode == 0) == correct, compiled.stderr
+E       AssertionError: <stdin>:1:221: error: 'tessera.transpose' op SYMDIM_FLOW_INCONSISTENCY: propagated dim-names disagree with explicit 'tessera.dim_names_in' annotation
+E         module { func.func @flow(%x: tensor<3x3x3xf32> {tessera.dim_names = ["M", "N", "K"]}) -> tensor<3x3x3xf32> {%a = "tessera.transpose"(%x) {permutation = array<i64: 2, 0, 1>} : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>%b = "tessera.transpose"(%a) {permutation = array<i64: 1, 2, 0>, tessera.dim_names_in = ["K", "M", "N"], tessera.dim_names_out = ["M", "N", "K"]} : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>return %b : tensor<3x3x3xf32> } }
+E                                                                                                                                                                                                                                     ^
+E         <stdin>:1:221: note: see current operation: %1 = "tessera.transpose"(%0) {permutation = array<i64: 1, 2, 0>, tessera.dim_names_in = ["K", "M", "N"], tessera.dim_names_out = ["M", "N", "K"]} : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>
+E         
+E       assert (1 == 0) == True
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt', '...dim_names_in = ["K", "M", "N"], tessera.dim_names_out = ["M", "N", "K"]} : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>\n').returncode
+
+tests/unit/test_graph_transpose_axis_contract.py:286: AssertionError
+______ test_symbolic_names_propagate_through_unannotated_transpose[False] ______
+
+opt = '/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'
+correct = False
+
+    @pytest.mark.parametrize("correct", [True, False])
+    def test_symbolic_names_propagate_through_unannotated_transpose(opt, correct):
+        names = '["K", "M", "N"]' if correct else '["M", "N", "K"]'
+        source = (
+            'module { func.func @flow(%x: tensor<3x3x3xf32> '
+            '{tessera.dim_names = ["M", "N", "K"]}) -> tensor<3x3x3xf32> {'
+            '%a = "tessera.transpose"(%x) {permutation = array<i64: 2, 0, 1>}'
+            ' : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>'
+            '%b = "tessera.transpose"(%a) {permutation = array<i64: 1, 2, 0>, '
+            'tessera.dim_names_in = ' + names + ', '
+            'tessera.dim_names_out = ["M", "N", "K"]}'
+            ' : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>'
+            'return %b : tensor<3x3x3xf32> } }'
+        )
+        compiled = invoke(opt, source, "--tessera-symdim-equality")
+>       assert (compiled.returncode == 0) == correct, compiled.stderr
+E       AssertionError: 
+E       assert (0 == 0) == False
+E        +  where 0 = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt', '...["M", "N", "K"]} : (tensor<3x3x3xf32>) -> tensor<3x3x3xf32>\n    return %1 : tensor<3x3x3xf32>\n  }\n}\n\n', stderr='').returncode
+
+tests/unit/test_graph_transpose_axis_contract.py:286: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_symbolic_names_follow_actual_axes_even_for_equal_dimensions[False-permutation = array<i64: 2, 0, 1>,-expected0]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_symbolic_names_follow_actual_axes_even_for_equal_dimensions[False--expected1]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_symbolic_names_propagate_through_unannotated_transpose[True]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_symbolic_names_propagate_through_unannotated_transpose[False]
+4 failed, 2 passed, 42 deselected in 0.54s

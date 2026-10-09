@@ -1,4 +1,8 @@
-"""Native two-sided producer DAG ownership and Schedule/Tile integration."""
+"""Host-free: native MLIR manifest and Schedule/Tile contract tests.
+
+These compiler/verifier checks do not execute CUDA or claim GPU numerical proof.
+Exact SM120 execution lives in tests/device/nvidia/test_native_tensor_dag.py.
+"""
 import copy
 import itertools
 import json

@@ -25,6 +25,12 @@ inputs and retained results; reject stale profiling leases and forged manifests;
 and forbid recompilation during warm replay. 368 native-manifest/diagnostic/
 pass-metadata/audit gates passed. Ruff passes; mypy reports zero errors.
 
+Full CPU CI selection: 20,872 passed, 9,619 skipped, three failures in
+361.54 seconds before the host-free declaration fix. Two are the existing
+generic scaled batching/transpose closure gaps. The new compiler-only test
+module declaration failure was fixed, and all 1,019 host-claim policy tests
+then passed. The full suite has not been rerun after that docstring-only fix.
+
 ## Timing
 
 Recorder: benchmarks/nvidia/record_two_sided_tensor_dag.py.

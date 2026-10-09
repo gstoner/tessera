@@ -51,6 +51,13 @@ def project_rhs_storage(module, ordered, *, dynamic=False, rhs_storage_order=Non
         if consumer.kwargs.get("rhs_storage_order","row_major")!="row_major":
             raise ValueError("computed RHS requires row-major native materialization")
         return module
+    if all(hasattr(value,"__cuda_array_interface__") for value in ordered):
+        from .resident_nvidia_tensor import cuda_frontend_specs
+        cuda_frontend_specs(ordered)
+        if consumer.kwargs.get("rhs_storage_order","row_major")!="row_major":
+            raise ValueError("resident raw RHS requires a row-major native contract")
+        consumer.kwargs["rhs_storage_order"]="row_major"
+        return module
     if "rhs_storage_order" not in consumer.kwargs:
         names = [arg.name for arg in fn.args]
         rhs = ordered[names.index(consumer.operands[1].removeprefix("%"))]

@@ -134,6 +134,15 @@ def specialization_key(roles,ordered,bounds):
     return tuple(signature)
 
 
+def _resident_layout_key(programs,key,resident):
+    """Retain a host-created column RHS package alongside a resident row one."""
+    previous=programs.get(key)
+    if (resident and previous is not None and not previous.rhs_chain
+            and previous.edge.consumer.descriptor.provenance["b_layout"]!="row_major"):
+        return (key,"resident_row_major")
+    return key
+
+
 class BoundedLhsDispatcher:
     def __init__(self,jit,bounds,certificate,rhs_storage_order=None):
         self.jit=weakref.ref(jit)
@@ -169,13 +178,10 @@ class BoundedLhsDispatcher:
                 raise ValueError("shape_bounds requires tensor producer/matmul inputs")
             bounds=dict(self.bounds)
             key=specialization_key(self.roles,ordered,bounds) if self.roles is not None else None
+            key=_resident_layout_key(self.programs,key,resident)
             program=self.programs.get(key)
             if program is None:
                 module=jit._traced_autodiff_module(ordered,{})
-                if resident:
-                    from .nvidia_tensor_dag import candidate as dag_candidate
-                    if not dag_candidate(module):
-                        raise ValueError("bounded resident frontend requires the native two-operand producer DAG")
                 module=lhs.project_rhs_storage(module,ordered,dynamic=True,
                                                rhs_storage_order=self.rhs_storage_order)
                 if not lhs.candidate(module):
@@ -185,7 +191,7 @@ class BoundedLhsDispatcher:
                 roles=program.semantics["roles"]
                 if self.roles is not None and roles!=self.roles:
                     raise ValueError("bounded LHS frontend role certificate changed")
-                key=specialization_key(roles,ordered,bounds)
+                key=_resident_layout_key(self.programs,specialization_key(roles,ordered,bounds),resident)
                 graph=module if program.rhs_chain else lhs._semantic_graph(
                     program.edge.m,program.edge.k,program.edge.n,
                     program.edge.dtype,program.semantics,tuple(bounds))

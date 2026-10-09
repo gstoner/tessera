@@ -7,6 +7,9 @@ audit_role: reference
 
 
 
+
+
+
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -11837,4 +11840,29 @@ sibling physical proof remains independent.
 
 Evidence: benchmarks/baselines/gfx1201_scaled_reshape_20261009/README.md
 and gfx1201.json; benchmarks/rocm/record_scaled_reshape_carrier.py.
+<!-- entry-fields:end -->
+
+### 2026-10-09 — resident SM120 saved-LSE public forward AD
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-RESIDENT-ATTENTION-JVP-20261009.
+
+Outcome: compact rank-four FP32 CUDA roots reach public native_jvp through
+metadata-only frontend capture, typed Graph IR and the existing native MLIR
+AD/Schedule/Tile/Target/LLVM-PTX products. Native C++ events order producer
+writes before private Q/K/V and active tangent snapshots. Context, allocation,
+alignment, private-arena aliasing and stream contracts are checked.
+
+412 focused host/registry/lifecycle tests and 43 exact RTX5070 device cases
+pass. Two isolated correctness-gated packets record maximum error below
+2.6e-8, independent forward/JVP kernel events and completed public call times.
+Resident/host wall ratios span 1.213–1.293; no speedup is claimed.
+The structural frontend certificate reports zero concrete executions and
+requires native physical-package numerical authority.
+
+Remaining: resident ordinary tuple forward and reverse AD, dynamic/pitched/
+mixed roots, composed/nested attention AD and frontend binding performance.
+All four backend queues assessed; no sibling architecture evidence transfer.
+
+Evidence: benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md.
 <!-- entry-fields:end -->

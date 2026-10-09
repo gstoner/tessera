@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-07
+last_updated: 2026-10-09
 audit_role: plan
 plan_state: open
 ---
@@ -293,6 +293,19 @@ Operands stay **fp8** into the dot, the dot accumulates in **fp32**, and the fp3
 
 **Remaining Graph-owned packaging and frontend retirement**
 
+- Current resident AD slice (2026-10-09, sync SM120-RESIDENT-ATTENTION-JVP-20261009):
+  compact rank-four FP32 public native_jvp roots reach the typed Graph and
+  native MLIR AD/Schedule/Tile/Target/LLVM-PTX route. A structural certificate
+  records zero concrete frontend executions; native snapshots order producer
+  streams and preserve private saved-LSE lifetime. 412 focused host gates and
+  43 exact RTX5070 device tests pass. Two packets prove error below 2.6e-8 and
+  separate forward/JVP event timing from public calls; resident/host wall ratios
+  span 1.213–1.293, so no speedup is claimed. Resident ordinary tuple forward,
+  reverse/dynamic/composed AD and frontend binding costs remain open.
+  [Evidence](../../../benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md).
+
+
+
 - Current slice (2026-10-01, sync COMPILER-NEXT-FIVE-2026-10-01): the
   public SM120 RMSNorm -> matmul edge again passed with a four-iteration typed
   accumulator; 21-sample timings remain noisy. Saved-LSE attention passed
@@ -345,7 +358,7 @@ remain artifact claims; exact-device execution stays backend-owned.
 
 - Current slice (2026-09-30, sync E2E-REAL-6-RESIDENT-DYNAMIC-MNK-2026-09-30): The Graph-to-package contract composes bounded dynamic M/N/K on gfx1201 and sm_120. Exact-device fp16/bf16 parity, padded host ingress, allocation residency, and image reuse pass. Separate fp16 and bf16 event packets support stage attribution only; gfx1201 variation is high. Apple and x86 need independent resident consumers; wider physical layouts and remaining W1.1 producers stay open. [Evidence](../../../benchmarks/baselines/resident_dynamic_mnk_20260930/README.md).
 
-- Latest: [2026-10-07 — native paged-KV flat-token indexing](INTEGRATED_COMPILER_LOG.md#2026-10-07--native-paged-kv-flat-token-indexing)
+- Latest: [2026-10-09 — resident SM120 saved-LSE public forward AD](INTEGRATED_COMPILER_LOG.md#2026-10-09--resident-sm120-saved-lse-public-forward-ad)
 
 Current increment: checked rank-four broadcast saved-LSE packages and private tape execute on SM120; physical bias extents, deterministic reduction and saved-state pairing are bound through native Graph/Schedule/Tile and checked CUDA descriptors. [Evidence](../../../benchmarks/baselines/nvidia_broadcast_checkpoint_package_20261003/README.md). Broader W1.1, frontend/AD and sibling routes remain open.
 

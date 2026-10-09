@@ -259,4 +259,51 @@ __all__ = [
     "certify_frontends",
     "certify_frontends_non_reexecuting",
     "graph_signature",
+    "ResidentFrontendCertificate",
+    "certify_resident_frontends",
 ]
+
+
+@dataclass(frozen=True)
+class ResidentFrontendCertificate:
+    """Abstract metadata/topology proof; numerical authority stays native."""
+    contract: Mapping[str, Any]
+
+    @property
+    def digest(self) -> str:
+        return str(self.contract["digest"])
+
+    def validate(self) -> None:
+        body=dict(self.contract)
+        actual=str(body.pop("digest",""))
+        if (body.get("schema")!="tessera.frontend_resident_structural.v1" or
+                actual!=_digest(body) or not body.get("structural_match") or
+                body.get("concrete_executions")!=0 or
+                body.get("numerical_authority")!="physical_package_required"):
+            raise ValueError("resident frontend certificate is invalid")
+
+
+def certify_resident_frontends(
+    *, legacy_module: GraphIRModule, tracer_module: GraphIRModule,
+    signature: Sequence[tuple[tuple[int, ...], np.dtype]],
+    graph_consumers: Sequence[str],
+) -> ResidentFrontendCertificate:
+    """Bind typed resident tracing to a retained AST topology without reads."""
+    permitted=frozenset(graph_consumers)
+    observed={op.op_name for fn in tracer_module.functions for op in fn.body}
+    if not observed or not observed<=permitted:
+        raise ValueError("resident frontend has an unowned Graph operation")
+    if tracer_module.module_attrs.get("tessera.frontend.authority")!='"tracer"':
+        raise ValueError("resident certificate requires tracer authority")
+    legacy=graph_signature(legacy_module);tracer=graph_signature(tracer_module)
+    body={"schema":"tessera.frontend_resident_structural.v1",
+          "proof_mode":"abstract_metadata_structural","concrete_executions":0,
+          "numerical_authority":"physical_package_required",
+          "metadata_signature":[[str(dtype),list(shape)] for shape,dtype in signature],
+          "graph_consumers":sorted(permitted),"legacy_graph_digest":_digest(legacy),
+          "tracer_graph_digest":_digest(tracer),"structural_match":legacy==tracer,
+          "typed_graph_digest":hashlib.sha256(tracer_module.to_mlir(
+              target="nvidia_sm120",canonical=True).encode()).hexdigest()}
+    result=ResidentFrontendCertificate({**body,"digest":_digest(body)})
+    result.validate()
+    return result

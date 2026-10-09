@@ -181,3 +181,13 @@ contract tests, and `tests/tessera-ir/` contains native MLIR fixtures.
 ## License
 
 Apache License 2.0 — see [LICENSE](LICENSE).
+
+### Resident attention forward AD on NVIDIA SM120
+
+The named static compact FP32 native_jvp attention route accepts resident
+CUDA Q/K/V and tangent roots through typed Graph IR, native MLIR AD,
+Schedule/Tile, Target and LLVM/PTX packages. Native stream ordering and private
+snapshots are numerically proved on RTX5070. Structural frontend certification
+performs zero concrete tensor executions; numerical authority is the native
+package. This is not full resident attention AD or a general performance claim.
+See [the exact-device packet](benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md).

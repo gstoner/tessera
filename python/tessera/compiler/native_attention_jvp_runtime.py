@@ -146,20 +146,52 @@ class PreparedAttentionJVP:
             if tuple(metadata.get("arg_names",()))!=self.names:
                 raise ValueError("attention JVP launch names disagree with native activity")
             if len(args)!=len(self.shapes):raise ValueError("attention JVP launch arity disagrees")
-            values=tuple(np.asarray(x) for x in args)
-            if any(x.dtype!=np.float32 or x.shape!=shape
-                   for x,shape in zip(values,self.shapes,strict=True)):
-                raise ValueError("attention JVP host storage disagrees with native contract")
-            values=tuple(np.ascontiguousarray(x) for x in values)
+            resident=any(hasattr(value,"__cuda_array_interface__") for value in args)
+            if resident:
+                from .resident_nvidia_tensor import cuda_frontend_specs
+                if not all(hasattr(value,"__cuda_array_interface__") for value in args):
+                    raise ValueError("attention JVP requires all resident roots or all host roots")
+                specs=cuda_frontend_specs(args,ranks=(4,))
+                if any(dtype!=np.dtype("float32") or shape!=expected
+                       for (shape,dtype),expected in zip(specs,self.shapes,strict=True)):
+                    raise ValueError("attention JVP resident storage disagrees with native contract")
+                values=tuple(args)
+            else:
+                values=tuple(np.asarray(x) for x in args)
+                if any(x.dtype!=np.float32 or x.shape!=shape
+                       for x,shape in zip(values,self.shapes,strict=True)):
+                    raise ValueError("attention JVP host storage disagrees with native contract")
+                values=tuple(np.ascontiguousarray(x) for x in values)
             if not self.handle:self._prepare()
             outputs=tuple(np.empty(self.output_shape,np.float32) for _ in range(2))
-            pointers=(ct.c_void_p*len(values))(*(x.ctypes.data for x in values))
-            lengths=(ct.c_size_t*len(values))(*(x.nbytes for x in values))
+            if resident:
+                import math
+                interfaces=tuple(value.__cuda_array_interface__ for value in values)
+                pointers=(ct.c_void_p*len(values))(*(item["data"][0] for item in interfaces))
+                lengths=(ct.c_size_t*len(values))(*(math.prod(shape)*dtype.itemsize for shape,dtype in specs))
+                streams=(ct.c_uint64*len(values))(*(item["stream"] for item in interfaces))
+            else:
+                pointers=(ct.c_void_p*len(values))(*(x.ctypes.data for x in values))
+                lengths=(ct.c_size_t*len(values))(*(x.nbytes for x in values))
             destinations=(ct.c_void_p*2)(*(x.ctypes.data for x in outputs))
             sizes=(ct.c_size_t*2)(*(x.nbytes for x in outputs))
             times=(ct.c_float*2)()
-            self._check(self._library().tessera_nvidia_attention_jvp_invoke(
-                self.handle,pointers,lengths,len(values),destinations,sizes,times))
+            if resident:
+                lib=self._library()
+                try:
+                    invoke=lib.tessera_nvidia_attention_jvp_invoke_resident_ordered
+                except AttributeError as exc:
+                    raise RuntimeError("native attention runtime lacks ordered resident JVP ABI") from exc
+                invoke.argtypes=[
+                    ct.c_uint64,ct.POINTER(ct.c_void_p),ct.POINTER(ct.c_size_t),ct.c_size_t,
+                    ct.POINTER(ct.c_uint64),ct.c_size_t,ct.POINTER(ct.c_void_p),
+                    ct.POINTER(ct.c_size_t),ct.POINTER(ct.c_float)]
+                invoke.restype=ct.c_int
+                self._check(invoke(self.handle,pointers,lengths,len(values),streams,len(values),
+                                   destinations,sizes,times))
+            else:
+                self._check(self._library().tessera_nvidia_attention_jvp_invoke(
+                    self.handle,pointers,lengths,len(values),destinations,sizes,times))
             self.last_device_ms=tuple(times)
             return outputs
 

@@ -2402,6 +2402,7 @@ struct AttentionSchedule {
   StringRef arch;
   StringRef storage;
   StringRef accum = "f32";
+  StringRef outputStorage = "f32";
   SmallVector<int64_t> qShape;
   SmallVector<int64_t> kShape;
   SmallVector<int64_t> vShape;
@@ -2725,8 +2726,11 @@ static FailureOr<AttentionSchedule> getAttentionSchedule(Operation *op) {
       output.getShape() !=
           ArrayRef<int64_t>({schedule.batch, schedule.queryHeads,
                              schedule.queryRows, schedule.valueDim}) ||
-      !output.getElementType().isF32())
+      (!output.getElementType().isF32() &&
+       !(nvidia && output.getElementType() == q.getElementType() &&
+         (output.getElementType().isF16() || output.getElementType().isBF16()))))
     return failure();
+  schedule.outputStorage = storageName(output.getElementType());
   Type qElement = q.getElementType();
   if (k.getElementType() != qElement || v.getElementType() != qElement)
     return failure();
@@ -2847,6 +2851,8 @@ static std::string attentionScheduleDigest(const AttentionSchedule &schedule) {
        ";backward_lse_policy=" + schedule.backwardLsePolicy +
        ";backward_lse_selection=" + schedule.backwardLseSelection)
           .str();
+  if (schedule.outputStorage != "f32")
+    contract += ";output_storage=" + schedule.outputStorage.str();
   for (int64_t dim : schedule.biasShape) contract += ";bias_dim=" + std::to_string(dim);
   return llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(contract)),
                      /*LowerCase=*/true);
@@ -3997,6 +4003,8 @@ struct GraphToSchedulePass
           builder.getStringAttr(selected->backwardLsePolicy),
           builder.getStringAttr(selected->backwardLseSelection));
       Operation *scheduled = scheduledOp.getOperation();
+      if (selected->outputStorage != "f32")
+        scheduled->setAttr("output_storage", builder.getStringAttr(selected->outputStorage));
       if (!selected->biasShape.empty())
         scheduled->setAttr("bias_shape", builder.getDenseI64ArrayAttr(selected->biasShape));
       for (OpOperand &use : llvm::make_early_inc_range(op->getResult(0).getUses()))
@@ -6379,6 +6387,9 @@ struct ScheduleToTilePass
           scheduled.getBackwardLsePolicy() != selected->backwardLsePolicy ||
           scheduled.getBackwardLseSelection() !=
               selected->backwardLseSelection;
+      auto outputStorage = scheduled->getAttrOfType<StringAttr>("output_storage");
+      altered |= selected->outputStorage == "f32" ? scheduled->hasAttr("output_storage") :
+          (!outputStorage || outputStorage.getValue() != selected->outputStorage);
       auto biasShape = scheduled->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
       altered |= selected->biasShape.empty() ? scheduled->hasAttr("bias_shape") :
           (!biasShape || biasShape.asArrayRef() != ArrayRef<int64_t>(selected->biasShape));
@@ -6431,8 +6442,11 @@ struct ScheduleToTilePass
           scheduled.emitError("NVIDIA scheduled attention must be the function result");
           return signalPassFailure();
         }
+        std::string outputSuffix = selected->outputStorage == "f32" ? "" :
+            (Twine("out_") + selected->outputStorage + "_").str();
         std::string name = (Twine("tessera_tile_attention_") + selected->storage + "_" +
-            (selected->causal ? "causal_" : "full_") + scheduled.getArtifactHash().take_front(10)).str();
+            (selected->causal ? "causal_" : "full_") + outputSuffix +
+            scheduled.getArtifactHash().take_front(10)).str();
         if (SymbolTable::lookupSymbolIn(mod, name)) {
           scheduled.emitError("NVIDIA scheduled attention symbol already exists");
           return signalPassFailure();
@@ -6484,6 +6498,8 @@ struct ScheduleToTilePass
       }
       OperationState kernelState(loc, "tile.attention_kernel");
       kernelState.addOperands(operands);
+      if (selected->outputStorage != "f32")
+        kernelState.addAttribute("output_storage", builder.getStringAttr(selected->outputStorage));
       kernelState.addAttribute("storage",
                                builder.getStringAttr(selected->storage));
       kernelState.addAttribute("accum", builder.getStringAttr(selected->accum));

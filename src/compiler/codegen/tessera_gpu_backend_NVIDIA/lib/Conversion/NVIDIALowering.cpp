@@ -2476,6 +2476,13 @@ static LogicalResult materializeSm120AttentionKernel(
     return op->emitError("attention broadcast bias requires fixed batch/head and positive or symbolic sequence dimensions");
   if (dynamicBias && !hasSavedLse)
     return op->emitError("symbolic physical bias requires saved LSE");
+  auto outputStorage = op->getAttrOfType<StringAttr>("output_storage");
+  bool halfOutput = outputStorage && outputStorage.getValue() != "f32";
+  if (op->hasAttr("output_storage") &&
+      (!outputStorage || (halfOutput &&
+       (hasSavedLse || outputStorage.getValue() != storage.getValue() ||
+        (!f16Storage && !bf16Storage)))))
+    return op->emitError("half attention result requires matching f16/bf16 storage and no saved LSE");
   Location loc = op->getLoc();
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
@@ -2671,9 +2678,12 @@ static LogicalResult materializeSm120AttentionKernel(
     builder.setInsertionPointAfter(accumLoop);
     Value result = arith::DivFOp::create(builder, loc, accumLoop.getResult(1),
                                          accumLoop.getResult(0));
-    Value outPtr = LLVM::GEPOp::create(builder, loc, in[outputIndex].getType(), f32,
+    Type outputType = halfOutput ? storageType : Type(f32);
+    if (halfOutput)
+      result = arith::TruncFOp::create(builder, loc, outputType, result);
+    Value outPtr = LLVM::GEPOp::create(builder, loc, in[outputIndex].getType(), outputType,
                                        in[outputIndex], ValueRange{linearOut});
-    LLVM::StoreOp::create(builder, loc, result, outPtr, 4);
+    LLVM::StoreOp::create(builder, loc, result, outPtr, halfOutput ? 2 : 4);
     if (hasSavedLse) {
       Value ln2 = arith::ConstantFloatOp::create(
           builder, loc, f32, APFloat(0.6931471805599453f));

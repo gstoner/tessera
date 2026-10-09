@@ -16811,3 +16811,20 @@ Parity validated on exact gfx1201 for static f32 flat/reshaped product primal/JV
 Evidence: benchmarks/baselines/gfx1201_scaled_reshape_20261009/README.md
 and gfx1201.json; recorder benchmarks/rocm/record_scaled_reshape_carrier.py.
 Generic scaled batching/transpose and dynamic shape closure remain open.
+
+## NVFP4-MAGNITUDE-SEARCH-20261009
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6.
+Native candidate SSE scoring now uses magnitude units, preserving signed
+output codes, strict midpoint ties, candidate tie order and sum32 reduction.
+The attempted winner-code rematerialization was measured and rejected.
+36 exact gfx1201 leaf/bounded-program cases pass, including every finite
+positive E4M3 K16 scale pair; 351 native compiler/registry checks pass with
+three owning-image skips. Paired packets retain all producer statistics
+bitwise and compare final output against an independent oracle.
+Parity validated for gfx1201 explicit NVFP4 ingest on RX 9070 XT.
+The optimization is native MLIR/ROCDL/LLVM lowering; no Python math or
+physical selector change. gfx1151 does not support this named RDNA4 ingest
+consumer and needs its own physical route. W8A8/MXFP4, model quality and
+generic scaled batching/transpose remain open.
+Evidence: benchmarks/baselines/gfx1201_nvfp4_winner_code_ab_20261009/README.md.

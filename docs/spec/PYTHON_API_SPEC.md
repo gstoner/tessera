@@ -2414,3 +2414,40 @@ subsets and fused final stores. See
 `benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md`.
 This establishes the bounded named chain envelope; arbitrary producer kinds,
 external asynchronous consumers and sibling architectures remain separate.
+
+### Native NVFP4 bounded-row compile and replay
+
+The native export pass accepts an explicit
+`tessera.native.nvfp4_m_bound = B : i64` module request for the named gfx1201
+conversion/storage/product Graph. It verifies `B >= M > 0` and checked byte
+capacities, retains the original Graph under `original_graph_ir`, and derives
+the activation `[B,K]`, row-scale `[B]` and returned `[B,N]` capacity types.
+Actual conversion/storage operations and numerical policies are preserved.
+
+The native `tessera.native.nvfp4_program.v2` record adds `active_m`, `m_bound`
+and `original_graph_ir`. Its `source_graph_ir` and members describe the
+verified capacity Graph. The existing static v1 record remains unchanged.
+For the admitted five-input gfx1201 conversion/storage/product function,
+`function.compile_native_nvfp4_program(*example_inputs, m_bound=B)` requests this
+native capacity export. It retains the verified traced frontend contract;
+subsequent ordinary calls and serialized portable artifacts accept
+`1 <= active_M <= B` with fixed N/K and checked input dtype/shape/policy.
+Warm execution uses the compiled capacity images without retracing or recompiling.
+
+The native HIP owner validates actual host spans, allocates at capacity, changes
+only checked active-row geometry, retires captured graphs before rebinding, and
+returns an independent active-row output. Native sessions expose
+`frame_stats()` capacity, active rows and allocation counters without addresses.
+Existing static v1 packages and static APIs retain their fixed-M behavior.
+Eight exact gfx1201 device cases and twelve source-bound timing rows establish
+this named envelope; the oracle uses decoded post-ingest operands, not original
+BF16 checkpoint or model quality. See
+`benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/README.md`.
+
+Native session leaf diagnostics follow the actual converter/storage edges:
+convert()/run_conversion_graph() produce packed/exponent/statistic receipts;
+store()/run_storage_graph() require conversion and produce fragment/plane
+receipts. conversion_diagnostics() and storage_diagnostics() check native
+readiness and completion. Re-running a producer invalidates dependent weights
+and output. These are native session methods, not frontend arithmetic or
+new generic operation support.

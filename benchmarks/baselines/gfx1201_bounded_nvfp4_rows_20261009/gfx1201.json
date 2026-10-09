@@ -1,0 +1,2438 @@
+{
+  "schema": "tessera.gfx1201.bounded_nvfp4_rows.v1",
+  "target": "rocm_gfx1201",
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "uuid_hex": "32386439653765666266326566373136",
+    "ordinal": 0
+  },
+  "compiler_sha256": "4bf2dd9a1748197253debf57c1cfb445aaf08277b218326635ac1a2d1a5a8164",
+  "target_tool_sha256": "69e84b888c3e93a87efee6282978df5465d9d9b5234b3a52c1eb6ea61d2d0af8",
+  "runtime_sha256": "2a8a97842fb41f5151055ec99272039004c436e7c8f76f1313f7b0b70b63e9aa",
+  "image_runtime_sha256": "cd29afc8e768d6c2e81b79ea3b3c19f91e74b8b9799ebbd1bd12630b48765249",
+  "source_sha256": {
+    "src/transforms/lib/NativeNVFP4Program.h": "d5edc2bdf3a247e097be8ecb6d8cc09afc06cb7bd1ad34947fb8d33e6ad62fa6",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "7b2769af755ce3ac832fb24e0ee615ba6853e57176b962d67fb1572a5766cbf8",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860",
+    "python/tessera/compiler/jit.py": "08028991f7239407d6f9b30bf1387c7b3e2ec72747547418ede44ab9a79ec689",
+    "python/tessera/compiler/native_nvfp4_program.py": "94254347a69fbca2139cfce3ead7732dbf5d40b4bba992c7fce6136fe6fb6ceb",
+    "python/tessera/compiler/native_resident_nvfp4.py": "fb7834cda3c1e71c652108c701d41abc0073682c87c3a3517b43b00dfc1f9702",
+    "python/tessera/compiler/rocm_nvfp4_program.py": "fff90c14c3323971326fbafec4372dad8b76e0329b8af35b2d74afbb607756fe",
+    "python/tessera/compiler/rocm_nvfp4_resident.py": "418b11fd5927148b64136e687af3ee82d4d0e60d5c0fccd71c825bbf8234c86a",
+    "tests/device/rocm/test_nvfp4_bounded_rows.py": "569e6862c77464c57c00da2d8a69769528a1cff241b7455cb4e691a648debbec",
+    "tests/unit/test_native_nvfp4_bounded_rows.py": "908e5fa32667eb18282720f680986453fb7c36b41621a03eade9b2733ac9d86c"
+  },
+  "recorder_sha256": "46f2fa1505ff6c1230ead3d9938364d63e4250ce686082c9242d09f6ec56f20f",
+  "numeric_policy": "explicit NVFP4 requantization and folded-row approximate product; no original-BF16/model quality claim",
+  "native_domain": "HIP events; 128 repetitions/window; ingest is conversion plus storage; consumer and three-stage program timed independently",
+  "public_domain": "warm ordinary JIT call: host checks/packing, all-input upload, native program, synchronization and readback; changed values; compiler forbidden",
+  "claim": "bounded-row correctness and latency characterization; no selector promotion or A/B speedup",
+  "profiles": [
+    {
+      "bounds_mnk": [
+        257,
+        32,
+        64
+      ],
+      "compile_ms": 3618.565358920023,
+      "plan_sha256": "fc724783da49248403242d46d3ef956e6d474defb7c5dcfa25dab3a71147fa8e",
+      "component_image_digests": [
+        "362f8dc8c6e6950d8922cee5075a28ec78a05aa80b52034cd8dbb8038ed84fb0",
+        "6b1906b9e744d1ea395695a2e8ad574211905306cd4455ea6311000afe25ddf8",
+        "599aa232294c4861fda167b3805b5ba0309d72ed0db0f32fb21ac1603617de23"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "362f8dc8c6e6950d8922cee5075a28ec78a05aa80b52034cd8dbb8038ed84fb0",
+          "entry_symbol": "tessera_nvfp4_ingest_2b385f104c186d8f",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 4
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "8a7973f5ff2318cdafb4ab8bfbf9fc28498b15bfa344e94a7b4da4a9864aa695",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              16,
+              32
+            ],
+            "schedule_digest": "2b385f104c186d8feb34a394095c1c603d2734ece2f92b432f254cfffed8025a",
+            "schedule_ir_digest": "a3abb4fe821ea7fbdfeea733debd4944e0a44562e91c57a52a52b245db9a733b",
+            "shape_nk": [
+              32,
+              64
+            ],
+            "tile_ir_digest": "110afe9592351d54aff952765a99427eb0d1e6ace75b3268b06f75f55417e120",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "0b9939aa913eeed18fb9e5db9b5c47ab11524d199c2c42bd6f0c2a04c42c4d45",
+          "cache_fingerprint": "89caefc3ff8b59c79590ce19e9c2856bc0443467b4f7b3a556b7794df15f54e9"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "6b1906b9e744d1ea395695a2e8ad574211905306cd4455ea6311000afe25ddf8",
+          "entry_symbol": "tessera_mxfp4_storage_cdafef5ff253deef",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 3
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            }
+          ],
+          "geometry": {
+            "grid": [
+              4,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "c12e11a9dbc4ca925ca63581bc595bcca2c3ec948d7927a336725f0cfb871922",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "cdafef5ff253deeff0b72039913603d79de43f9baabcee4dcecaf62ad7cc8ecf",
+            "schedule_ir_digest": "5966813ed0a21ca8a490d6318a9606c8c4cb84aa0bc9575a4650043e30f3974e",
+            "shape_nk": [
+              32,
+              64
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "cdac9cf928cee686f4a296d365e5825b1dde141c6bd2d5ac93e99ddafd027739",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "7d93669b2acab98a2e107fa05b2cee20dc70dd77f32253cba5411446847d16c2",
+          "cache_fingerprint": "4c841768aad054f536224a7187c4bb77160eeeec0b46b0dae93e2cca2662d1ea"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "599aa232294c4861fda167b3805b5ba0309d72ed0db0f32fb21ac1603617de23",
+          "entry_symbol": "tessera_rocm_folded_matmul_fda3911e41ae4811",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 3
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 257
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              2,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "authored_target_ir": "module attributes {tessera.arch = \"gfx1201\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"rocm_gfx1201\"} {\n  func.func @packed_folded_w4a8(%arg0: tensor<257x64xui8>, %arg1: tensor<32x32xui8>, %arg2: tensor<257xf32>, %arg3: tensor<3x32xui8>) -> tensor<257x32xbf16> {\n    %0 = bufferization.to_buffer %arg0 : tensor<257x64xui8> to memref<257x64xui8>\n    %intptr = memref.extract_aligned_pointer_as_index %0 : memref<257x64xui8> -> index\n    %1 = arith.index_cast %intptr : index to i64\n    %2 = llvm.inttoptr %1 : i64 to !llvm.ptr\n    %3 = bufferization.to_buffer %arg1 : tensor<32x32xui8> to memref<32x32xui8>\n    %intptr_0 = memref.extract_aligned_pointer_as_index %3 : memref<32x32xui8> -> index\n    %4 = arith.index_cast %intptr_0 : index to i64\n    %5 = llvm.inttoptr %4 : i64 to !llvm.ptr\n    %6 = bufferization.to_buffer %arg2 : tensor<257xf32> to memref<257xf32>\n    %intptr_1 = memref.extract_aligned_pointer_as_index %6 : memref<257xf32> -> index\n    %7 = arith.index_cast %intptr_1 : index to i64\n    %8 = llvm.inttoptr %7 : i64 to !llvm.ptr\n    %9 = bufferization.to_buffer %arg3 : tensor<3x32xui8> to memref<3x32xui8>\n    %intptr_2 = memref.extract_aligned_pointer_as_index %9 : memref<3x32xui8> -> index\n    %10 = arith.index_cast %intptr_2 : index to i64\n    %11 = llvm.inttoptr %10 : i64 to !llvm.ptr\n    %alloc = memref.alloc() : memref<257x32xbf16>\n    %intptr_3 = memref.extract_aligned_pointer_as_index %alloc : memref<257x32xbf16> -> index\n    %12 = arith.index_cast %intptr_3 : index to i64\n    %13 = llvm.inttoptr %12 : i64 to !llvm.ptr\n    %c257_i64 = arith.constant 257 : i64\n    %c32_i64 = arith.constant 32 : i64\n    %c64_i64 = arith.constant 64 : i64\n    tessera_rocm.scaled_wmma_gemm {abi = \"a_bpacked_sa_scaleplane_d_m_n_k\", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = \"isolated_k_stage\", m = 257 : i64, macro_k = 64 : i64, n = 32 : i64, name = \"packed_folded_w4a8\", numeric_policy = {accum = \"f32\", execution_mode = \"folded_row_reference_explicit_approximate\", storage = \"e4m3_raw_u8\"}, output = \"bf16\", package_abi = \"tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1\", partial_combine = \"row_reference_after_full_k\", physical_contract = \"rocm_mxfp4_w4a8_packed_folded_prefill_v1\", scale_format = \"e8m0_k32_plus_row_reference\", scale_k = 64 : i64, stage_k = 64 : i64, tessera.schedule_hash = \"28bc2efcd36ab6a694da34c6b9cb250926e42a52adc8002070a069406b205a5a\", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}\n    %14 = bufferization.to_tensor %alloc : memref<257x32xbf16> to tensor<257x32xbf16>\n    return %14 : tensor<257x32xbf16>\n  }\n}\n\n",
+            "authored_target_ir_sha256": "d74ba6a4dabcfa507646937eb4e20a66d67f5901cc8d2b4b367212c5dff42c9d",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "aa1a97c4426d5b4cd46848683af8f89f5bc0cc20ad7d00d9e76a5ce5bda5954a",
+            "hsaco_sha256": "e0220035a93f73462b52c7936de19f6f187af07dc1854e69a45e968374d8bcf9",
+            "image_k": 64,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mn_fixed_k",
+            "image_whole_m": false,
+            "image_whole_n": false,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "28bc2efcd36ab6a694da34c6b9cb250926e42a52adc8002070a069406b205a5a",
+            "schedule_ir_sha256": "5edfd672d6479a2aa5ea8e8a1661fad26ad2d4de001b2faf0b214c188588872e",
+            "shape": [
+              32,
+              64
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "95c53cc93696509d2be0c29b3999628ad8a7ffe7e66c23643387223629febe42",
+            "tile_ir_sha256": "4776e6faf3c7eeb00f17d35d3a25cfa4a31ce5f806525f3a237d219ab3b1227b",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "5f3c16b022e8ff56cdb24923aaa855edbd80e77779d9777dcdfdfecd9121b8cf",
+          "cache_fingerprint": "6ef22bcbc1c1cb3ed43caaef415c295edd9f63002534d0545a8a30497fed75e9"
+        }
+      ],
+      "rows": [
+        {
+          "active_mnk": [
+            17,
+            32,
+            64
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 257,
+            "active_m": 17,
+            "allocation_bytes": 38324,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.09867000579833984,
+                0.09082607179880142,
+                0.09061884880065918,
+                0.09057369828224182,
+                0.09078704565763474,
+                0.09240345656871796,
+                0.09510742872953415
+              ],
+              "median_ms": 0.09082607179880142
+            },
+            "consumer": {
+              "samples_ms": [
+                0.018631726503372192,
+                0.018590547144412994,
+                0.01869361661374569,
+                0.018596038222312927,
+                0.018601499497890472,
+                0.0186786949634552,
+                0.018613608554005623
+              ],
+              "median_ms": 0.018613608554005623
+            },
+            "combined": {
+              "samples_ms": [
+                0.11345957964658737,
+                0.11317449808120728,
+                0.11316122114658356,
+                0.11689125746488571,
+                0.13939937949180603,
+                0.16493508219718933,
+                0.16487443447113037
+              ],
+              "median_ms": 0.11689125746488571
+            }
+          },
+          "public_warm_samples_ms": [
+            28.261346044018865,
+            2.576506929472089,
+            2.4952308740466833,
+            2.5351280346512794,
+            2.4342050310224295,
+            2.513847080990672,
+            2.3559159599244595
+          ],
+          "public_warm_median_ms": 2.513847080990672
+        },
+        {
+          "active_mnk": [
+            257,
+            32,
+            64
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 257,
+            "active_m": 257,
+            "allocation_bytes": 38324,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.10298843681812286,
+                0.10305585712194443,
+                0.09944336861371994,
+                0.09495565295219421,
+                0.09854360669851303,
+                0.11972367018461227,
+                0.14410240948200226
+              ],
+              "median_ms": 0.10298843681812286
+            },
+            "consumer": {
+              "samples_ms": [
+                0.021208977326750755,
+                0.020745547488331795,
+                0.020710233598947525,
+                0.020833047106862068,
+                0.02069929614663124,
+                0.020747413858771324,
+                0.021038437262177467
+              ],
+              "median_ms": 0.020747413858771324
+            },
+            "combined": {
+              "samples_ms": [
+                0.16471396386623383,
+                0.16473200917243958,
+                0.16463802754878998,
+                0.16468554735183716,
+                0.16470101475715637,
+                0.16478349268436432,
+                0.1646934300661087
+              ],
+              "median_ms": 0.16470101475715637
+            }
+          },
+          "public_warm_samples_ms": [
+            2.9272069223225117,
+            2.810083096846938,
+            2.850080141797662,
+            2.6799149345606565,
+            2.889745170250535,
+            2.7848039753735065,
+            2.8835420962423086
+          ],
+          "public_warm_median_ms": 2.850080141797662
+        },
+        {
+          "active_mnk": [
+            1,
+            32,
+            64
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 257,
+            "active_m": 1,
+            "allocation_bytes": 38324,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.1467750519514084,
+                0.14588691294193268,
+                0.14412377774715424,
+                0.14376512169837952,
+                0.1440112143754959,
+                0.14411787688732147,
+                0.14396797120571136
+              ],
+              "median_ms": 0.14411787688732147
+            },
+            "consumer": {
+              "samples_ms": [
+                0.02177993766963482,
+                0.0212977584451437,
+                0.02129712514579296,
+                0.021757202222943306,
+                0.021328382194042206,
+                0.021312132477760315,
+                0.02175110951066017
+              ],
+              "median_ms": 0.021328382194042206
+            },
+            "combined": {
+              "samples_ms": [
+                0.16570201516151428,
+                0.16636310517787933,
+                0.1657773107290268,
+                0.16558140516281128,
+                0.16560541093349457,
+                0.16526851058006287,
+                0.16552868485450745
+              ],
+              "median_ms": 0.16560541093349457
+            }
+          },
+          "public_warm_samples_ms": [
+            2.7659640181809664,
+            2.611903939396143,
+            2.5305990129709244,
+            2.6200308930128813,
+            2.667240099981427,
+            2.425750019028783,
+            2.4762460961937904
+          ],
+          "public_warm_median_ms": 2.611903939396143
+        },
+        {
+          "active_mnk": [
+            200,
+            32,
+            64
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 257,
+            "active_m": 200,
+            "allocation_bytes": 38324,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.14653396606445312,
+                0.1458204686641693,
+                0.1440100371837616,
+                0.14399878680706024,
+                0.14398494362831116,
+                0.14393362402915955,
+                0.14397534728050232
+              ],
+              "median_ms": 0.14399878680706024
+            },
+            "consumer": {
+              "samples_ms": [
+                0.02099689096212387,
+                0.02080962434411049,
+                0.021060016006231308,
+                0.020984312519431114,
+                0.020981891080737114,
+                0.02098860964179039,
+                0.02079368755221367
+              ],
+              "median_ms": 0.020984312519431114
+            },
+            "combined": {
+              "samples_ms": [
+                0.16453981399536133,
+                0.1642131507396698,
+                0.16446878015995026,
+                0.1649591624736786,
+                0.1643282175064087,
+                0.16442525386810303,
+                0.1644246131181717
+              ],
+              "median_ms": 0.16442525386810303
+            }
+          },
+          "public_warm_samples_ms": [
+            3.333898028358817,
+            2.563491929322481,
+            2.5824380572885275,
+            2.6233759708702564,
+            2.508806996047497,
+            2.4750130251049995,
+            2.4774479679763317
+          ],
+          "public_warm_median_ms": 2.563491929322481
+        }
+      ]
+    },
+    {
+      "bounds_mnk": [
+        513,
+        80,
+        256
+      ],
+      "compile_ms": 3471.3044541422278,
+      "plan_sha256": "cef11d0b0214778e6081a89c689a87100ddef47249c286287d396b162df4e87c",
+      "component_image_digests": [
+        "569e519000239b90b75c0c06351096c93049ad9c849f41c311592fc426fcf15e",
+        "d40d421e96996e626ea39b754f19cfdf6cfb8a9e163b543c97faded41d01b8a9",
+        "54c5a892e2b3d7a4aee36caaaa37a6d71e915d5432d01b19a1cb75e59d4a6c60"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "569e519000239b90b75c0c06351096c93049ad9c849f41c311592fc426fcf15e",
+          "entry_symbol": "tessera_nvfp4_ingest_ff842b756cb9589e",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 16
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              3,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "316ad5302e34d2b7380e4f0d62e320612141bc12d1bf0ca640271cf32e38bb4a",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              40,
+              80
+            ],
+            "schedule_digest": "ff842b756cb9589e2917aa3787b0070fadc32b2864f5eb96cf8a97c6f1cbe899",
+            "schedule_ir_digest": "3934aee6ccec38779aedac4e30941e5d5ad8b27cde4941e6fa5076c0257a10e0",
+            "shape_nk": [
+              80,
+              256
+            ],
+            "tile_ir_digest": "0c8b03f9f137a3ad4aab14919530e5c302b38d6665cf8fbd748b7a5f643f44e9",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "635d318a311a35c848b8d6d0e7e50389af7b488c9dde2fec6a1e5a027d1c2293",
+          "cache_fingerprint": "28e4edae07b85826c754688aed7878e97456e91f9f3508f601a7544b409a1ba1"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "d40d421e96996e626ea39b754f19cfdf6cfb8a9e163b543c97faded41d01b8a9",
+          "entry_symbol": "tessera_mxfp4_storage_59e07f7bd0a8cba5",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 8
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 9
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            }
+          ],
+          "geometry": {
+            "grid": [
+              40,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "15e48efbef3f58f259da01fc93679d1f72dad2d46544c29fee568eeaf1bd1e2d",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "59e07f7bd0a8cba552f55390f2f93457f7a80549e5548c0639e8a110547a46e7",
+            "schedule_ir_digest": "f33a0600f42ebc4733ad1f1de72a9c8e98f844dd84a307965c49030b18914c96",
+            "shape_nk": [
+              80,
+              256
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "3201795254ff4a9f4d809250d9c39a993273900aec7a266879a14e2d7e2b3141",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "7281555db483fa662ff702ebe5e1f9701652ef25fe4863cb16efdadc65f4f364",
+          "cache_fingerprint": "ba85cfae14582cc19c4eeaa74476fdd44347b7bf58a423bf2b5bf8dcd988545f"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "54c5a892e2b3d7a4aee36caaaa37a6d71e915d5432d01b19a1cb75e59d4a6c60",
+          "entry_symbol": "tessera_rocm_folded_matmul_6ce9facaf7520ee3",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 513
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 128
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 513
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 9
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 513
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 80
+            }
+          ],
+          "geometry": {
+            "grid": [
+              2,
+              3,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "authored_target_ir": "module attributes {tessera.arch = \"gfx1201\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"rocm_gfx1201\"} {\n  func.func @packed_folded_w4a8(%arg0: tensor<513x256xui8>, %arg1: tensor<80x128xui8>, %arg2: tensor<513xf32>, %arg3: tensor<9x80xui8>) -> tensor<513x80xbf16> {\n    %0 = bufferization.to_buffer %arg0 : tensor<513x256xui8> to memref<513x256xui8>\n    %intptr = memref.extract_aligned_pointer_as_index %0 : memref<513x256xui8> -> index\n    %1 = arith.index_cast %intptr : index to i64\n    %2 = llvm.inttoptr %1 : i64 to !llvm.ptr\n    %3 = bufferization.to_buffer %arg1 : tensor<80x128xui8> to memref<80x128xui8>\n    %intptr_0 = memref.extract_aligned_pointer_as_index %3 : memref<80x128xui8> -> index\n    %4 = arith.index_cast %intptr_0 : index to i64\n    %5 = llvm.inttoptr %4 : i64 to !llvm.ptr\n    %6 = bufferization.to_buffer %arg2 : tensor<513xf32> to memref<513xf32>\n    %intptr_1 = memref.extract_aligned_pointer_as_index %6 : memref<513xf32> -> index\n    %7 = arith.index_cast %intptr_1 : index to i64\n    %8 = llvm.inttoptr %7 : i64 to !llvm.ptr\n    %9 = bufferization.to_buffer %arg3 : tensor<9x80xui8> to memref<9x80xui8>\n    %intptr_2 = memref.extract_aligned_pointer_as_index %9 : memref<9x80xui8> -> index\n    %10 = arith.index_cast %intptr_2 : index to i64\n    %11 = llvm.inttoptr %10 : i64 to !llvm.ptr\n    %alloc = memref.alloc() : memref<513x80xbf16>\n    %intptr_3 = memref.extract_aligned_pointer_as_index %alloc : memref<513x80xbf16> -> index\n    %12 = arith.index_cast %intptr_3 : index to i64\n    %13 = llvm.inttoptr %12 : i64 to !llvm.ptr\n    %c513_i64 = arith.constant 513 : i64\n    %c80_i64 = arith.constant 80 : i64\n    %c256_i64 = arith.constant 256 : i64\n    tessera_rocm.scaled_wmma_gemm {abi = \"a_bpacked_sa_scaleplane_d_m_n_k\", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 256 : i64, k_step_schedule = \"isolated_k_stage\", m = 513 : i64, macro_k = 256 : i64, n = 80 : i64, name = \"packed_folded_w4a8\", numeric_policy = {accum = \"f32\", execution_mode = \"folded_row_reference_explicit_approximate\", storage = \"e4m3_raw_u8\"}, output = \"bf16\", package_abi = \"tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1\", partial_combine = \"row_reference_after_full_k\", physical_contract = \"rocm_mxfp4_w4a8_packed_folded_prefill_v1\", scale_format = \"e8m0_k32_plus_row_reference\", scale_k = 256 : i64, stage_k = 64 : i64, tessera.schedule_hash = \"23cc0213477c41f69836602e3f59464b7b2ce12110473a5a2b72521fbeafdf76\", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}\n    %14 = bufferization.to_tensor %alloc : memref<513x80xbf16> to tensor<513x80xbf16>\n    return %14 : tensor<513x80xbf16>\n  }\n}\n\n",
+            "authored_target_ir_sha256": "27c3dae6d8b4643487391181211b0b77028daa64a4c2303d93763008b893a7d8",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "ecfa9fed32768f2f7125795f5f51207c85265c06d647036b24b3a888b0c3c1ce",
+            "hsaco_sha256": "d52d5b99507665091833522be9f00ef5bad2a0c2339f1cae68f8d7859a484ab2",
+            "image_k": 256,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mn_fixed_k",
+            "image_whole_m": false,
+            "image_whole_n": false,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "23cc0213477c41f69836602e3f59464b7b2ce12110473a5a2b72521fbeafdf76",
+            "schedule_ir_sha256": "36ae517e3be0908f3e7edb3d0b9e8b22d055dc12da192218ec5729d82be889ef",
+            "shape": [
+              80,
+              256
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "ba99fd5d2402d2c2803b79cdcbd09606c79d4851788e24fb0d4fd1bc238f641d",
+            "tile_ir_sha256": "ec39f5a85a65113d1e427358400bc23f2fbe2c560795a5a90fa22394824c0b29",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "dfb479d0fbed0429b23dbbe24f8a582c6df3251d4d47f1d055098bcb1c697869",
+          "cache_fingerprint": "7e0ac614631c1787661d0892c780b9325c138a193218187455fb43addd91d800"
+        }
+      ],
+      "rows": [
+        {
+          "active_mnk": [
+            17,
+            80,
+            256
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 513,
+            "active_m": 17,
+            "allocation_bytes": 259076,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.198643758893013,
+                0.09737563878297806,
+                0.09662173688411713,
+                0.09656806290149689,
+                0.09677087515592575,
+                0.09661216288805008,
+                0.12009888142347336
+              ],
+              "median_ms": 0.09677087515592575
+            },
+            "consumer": {
+              "samples_ms": [
+                0.01925797574222088,
+                0.02067180536687374,
+                0.020853757858276367,
+                0.02070055529475212,
+                0.020871875807642937,
+                0.02093883603811264,
+                0.020649930462241173
+              ],
+              "median_ms": 0.02070055529475212
+            },
+            "combined": {
+              "samples_ms": [
+                0.16491955518722534,
+                0.16487377882003784,
+                0.1648702621459961,
+                0.1654634326696396,
+                0.16491812467575073,
+                0.16490969061851501,
+                0.16490647196769714
+              ],
+              "median_ms": 0.16490969061851501
+            }
+          },
+          "public_warm_samples_ms": [
+            19.497549161314964,
+            2.6211619842797518,
+            2.3646028712391853,
+            2.3163510486483574,
+            2.2801319137215614,
+            2.4299458600580692,
+            2.4051398504525423
+          ],
+          "public_warm_median_ms": 2.4051398504525423
+        },
+        {
+          "active_mnk": [
+            513,
+            80,
+            256
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 513,
+            "active_m": 513,
+            "allocation_bytes": 259076,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.10476569086313248,
+                0.10503837466239929,
+                0.10104073584079742,
+                0.09659730643033981,
+                0.09655481576919556,
+                0.10973414033651352,
+                0.12862464785575867
+              ],
+              "median_ms": 0.10476569086313248
+            },
+            "consumer": {
+              "samples_ms": [
+                0.02082555554807186,
+                0.021046960726380348,
+                0.02101024240255356,
+                0.020846491679549217,
+                0.0208149291574955,
+                0.020856492221355438,
+                0.021030554547905922
+              ],
+              "median_ms": 0.020856492221355438
+            },
+            "combined": {
+              "samples_ms": [
+                0.16507406532764435,
+                0.16506116092205048,
+                0.165025532245636,
+                0.16501927375793457,
+                0.1650518774986267,
+                0.16506437957286835,
+                0.16502219438552856
+              ],
+              "median_ms": 0.1650518774986267
+            }
+          },
+          "public_warm_samples_ms": [
+            9.962362004444003,
+            11.402281001210213,
+            5.5751430336385965,
+            9.313559858128428,
+            5.53350686095655,
+            5.395794985815883,
+            4.671495873481035
+          ],
+          "public_warm_median_ms": 5.5751430336385965
+        },
+        {
+          "active_mnk": [
+            1,
+            80,
+            256
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 513,
+            "active_m": 1,
+            "allocation_bytes": 259076,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.14748311042785645,
+                0.1465984433889389,
+                0.1444418728351593,
+                0.14416636526584625,
+                0.14537540078163147,
+                0.14451542496681213,
+                0.1445993185043335
+              ],
+              "median_ms": 0.1445993185043335
+            },
+            "consumer": {
+              "samples_ms": [
+                0.02069680392742157,
+                0.021168828010559082,
+                0.020675234496593475,
+                0.021161796525120735,
+                0.020640546455979347,
+                0.02130242995917797,
+                0.02103625051677227
+              ],
+              "median_ms": 0.02103625051677227
+            },
+            "combined": {
+              "samples_ms": [
+                0.16581298410892487,
+                0.1649400293827057,
+                0.16507722437381744,
+                0.1650291532278061,
+                0.16503272950649261,
+                0.16484007239341736,
+                0.16505390405654907
+              ],
+              "median_ms": 0.16503272950649261
+            }
+          },
+          "public_warm_samples_ms": [
+            2.8038909658789635,
+            2.637552795931697,
+            2.4954720865935087,
+            2.6237070560455322,
+            2.453332068398595,
+            2.421962097287178,
+            2.449664054438472
+          ],
+          "public_warm_median_ms": 2.4954720865935087
+        },
+        {
+          "active_mnk": [
+            200,
+            80,
+            256
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 513,
+            "active_m": 200,
+            "allocation_bytes": 259076,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.14749783277511597,
+                0.14675681293010712,
+                0.14455102384090424,
+                0.1445319652557373,
+                0.1442917436361313,
+                0.14420565962791443,
+                0.14430302381515503
+              ],
+              "median_ms": 0.1445319652557373
+            },
+            "consumer": {
+              "samples_ms": [
+                0.021446164697408676,
+                0.021059921011328697,
+                0.02132953144609928,
+                0.021395772695541382,
+                0.021016476675868034,
+                0.021384991705417633,
+                0.02206171117722988
+              ],
+              "median_ms": 0.021384991705417633
+            },
+            "combined": {
+              "samples_ms": [
+                0.1653498411178589,
+                0.16501665115356445,
+                0.16550993919372559,
+                0.1653568148612976,
+                0.16610753536224365,
+                0.1654512882232666,
+                0.16534081101417542
+              ],
+              "median_ms": 0.1653568148612976
+            }
+          },
+          "public_warm_samples_ms": [
+            5.396418971940875,
+            7.052669068798423,
+            3.4713551867753267,
+            3.3748107962310314,
+            3.4077728632837534,
+            3.350964980199933,
+            3.3664449583739042
+          ],
+          "public_warm_median_ms": 3.4077728632837534
+        }
+      ]
+    },
+    {
+      "bounds_mnk": [
+        256,
+        64,
+        1024
+      ],
+      "compile_ms": 3517.2269539907575,
+      "plan_sha256": "7289b1b62b474e50f731af684c21af3ee1f7fe77820fb473338fc7fa47691460",
+      "component_image_digests": [
+        "723e9b232eb91f44bdfcc77c7eb58b030f2cd669f5f7a6118d3546ad97b46bb1",
+        "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+        "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+      ],
+      "component_descriptors": [
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "723e9b232eb91f44bdfcc77c7eb58b030f2cd669f5f7a6118d3546ad97b46bb1",
+          "entry_symbol": "tessera_nvfp4_ingest_f6c7da4fc556aa60",
+          "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "scales",
+              "direction": "input",
+              "dtype": "fp8_e4m3",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "globals",
+              "direction": "input",
+              "dtype": "fp64",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 8
+            },
+            {
+              "ordinal": 3,
+              "name": "packed",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "exponents",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 5,
+              "name": "stats",
+              "direction": "output",
+              "dtype": "fp64",
+              "rank": 3,
+              "layout": "row_major",
+              "alignment": 8
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "scales",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "scales",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "globals",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 2
+            },
+            {
+              "binding": "packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "stats",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "stats",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "stats",
+              "dimension": 2,
+              "predicate": "eq",
+              "value": 2
+            }
+          ],
+          "geometry": {
+            "grid": [
+              8,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "f55f7a2ca522586e138fad7cba0a9b0a2a1c6a3c609b971c8e412e490c29ce99",
+            "numeric_policy": {
+              "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+              "destination_format": "mxfp4_e2m1_e8m0_k32",
+              "destination_scale_order": "k_group_n",
+              "execution_mode": "explicit_scale_requantization",
+              "lossy_steps": [
+                "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+              ],
+              "source_format": "nvfp4_e2m1_e4m3_k16",
+              "source_scale_application": "projection_global_times_e4m3"
+            },
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "row_offsets": [
+              0,
+              32,
+              64
+            ],
+            "schedule_digest": "f6c7da4fc556aa600f5e5a584d5913d1fe1a6de080e268976225d058455e1f3f",
+            "schedule_ir_digest": "1fac328ec4e6c030f40e2c549ba592a5cc6ef5eec49e07430cc75b97c5f54bf3",
+            "shape_nk": [
+              64,
+              1024
+            ],
+            "tile_ir_digest": "291194ea76cd4896ddefc05a0fe7abe962b8736c4066b3b2257cd297274b6db3",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "4a95b9ed3b1c5de3c210fac9520cdcd87ead55eeec4e269d528c07fb5e6e23ae",
+          "cache_fingerprint": "dd1035319545fe514abea8eace904706053809720a93c1514066343baa812a5f"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+          "entry_symbol": "tessera_mxfp4_storage_f605d740bc207b92",
+          "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "codes",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "exponents",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "fragment",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 3,
+              "name": "plane",
+              "direction": "output",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            }
+          ],
+          "scalars": [],
+          "shape_guards": [
+            {
+              "binding": "codes",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "codes",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "exponents",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 32
+            },
+            {
+              "binding": "exponents",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "fragment",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "fragment",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 33
+            },
+            {
+              "binding": "plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            }
+          ],
+          "geometry": {
+            "grid": [
+              128,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "a57a5fca955eca3f2ba028121a556e2f72d900d5303f312c66c54132412a8aa6",
+            "lossy_steps": [],
+            "ownership": "private_outputs_distinct_readonly_inputs",
+            "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+            "schedule_digest": "f605d740bc207b92e044651ffb789811df1e067a4c71f6cba0072a1034f479f6",
+            "schedule_ir_digest": "4eec2572bd28416e3d08b5ac5b0ab60b52b14efa122b9898d0f7a8663cbc1d72",
+            "shape_nk": [
+              64,
+              1024
+            ],
+            "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "tile_ir_digest": "65f65bec2f9fefdf081f88f6939e1f43f15bc29758880c74c1bcb3d5f059c9d7",
+            "work_item": "ROCM-NVFP4-INGEST-1"
+          },
+          "descriptor_digest": "b2ca0158b4d0d5a12b9012dc3d0fc75aafb74fa543713f34ceb331df7aee9947",
+          "cache_fingerprint": "76a0590d8999553d0ccdef90c5945f0295fca02b0795b3a8d44c59c074a58185"
+        },
+        {
+          "schema_version": "tessera.launch_descriptor.v1",
+          "image_digest": "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270",
+          "entry_symbol": "tessera_rocm_folded_matmul_2100b9e22640694d",
+          "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "buffers": [
+            {
+              "ordinal": 0,
+              "name": "a",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 1,
+              "name": "b_packed",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 2,
+              "name": "a_scale",
+              "direction": "input",
+              "dtype": "fp32",
+              "rank": 1,
+              "layout": "row_major",
+              "alignment": 4
+            },
+            {
+              "ordinal": 3,
+              "name": "scale_plane",
+              "direction": "input",
+              "dtype": "uint8",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 1
+            },
+            {
+              "ordinal": 4,
+              "name": "output",
+              "direction": "output",
+              "dtype": "bf16",
+              "rank": 2,
+              "layout": "row_major",
+              "alignment": 2
+            }
+          ],
+          "scalars": [
+            {
+              "ordinal": 5,
+              "name": "M",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 6,
+              "name": "N",
+              "dtype": "int64"
+            },
+            {
+              "ordinal": 7,
+              "name": "K",
+              "dtype": "int64"
+            }
+          ],
+          "shape_guards": [
+            {
+              "binding": "a",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "b_packed",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 512
+            },
+            {
+              "binding": "a_scale",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 33
+            },
+            {
+              "binding": "scale_plane",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            },
+            {
+              "binding": "output",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "output",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 64
+            }
+          ],
+          "geometry": {
+            "grid": [
+              1,
+              1,
+              1
+            ],
+            "workgroup": [
+              256,
+              1,
+              1
+            ],
+            "policy": null
+          },
+          "dynamic_local_memory_bytes": 0,
+          "workspace": {
+            "bytes": 0,
+            "alignment": 1,
+            "lifetime": "launch",
+            "initialization": "undefined"
+          },
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "approximate_policy": "explicit_allow",
+            "authored_target_ir": "module attributes {tessera.arch = \"gfx1201\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"rocm_gfx1201\"} {\n  func.func @packed_folded_w4a8(%arg0: tensor<256x1024xui8>, %arg1: tensor<64x512xui8>, %arg2: tensor<256xf32>, %arg3: tensor<33x64xui8>) -> tensor<256x64xbf16> {\n    %0 = bufferization.to_buffer %arg0 : tensor<256x1024xui8> to memref<256x1024xui8>\n    %intptr = memref.extract_aligned_pointer_as_index %0 : memref<256x1024xui8> -> index\n    %1 = arith.index_cast %intptr : index to i64\n    %2 = llvm.inttoptr %1 : i64 to !llvm.ptr\n    %3 = bufferization.to_buffer %arg1 : tensor<64x512xui8> to memref<64x512xui8>\n    %intptr_0 = memref.extract_aligned_pointer_as_index %3 : memref<64x512xui8> -> index\n    %4 = arith.index_cast %intptr_0 : index to i64\n    %5 = llvm.inttoptr %4 : i64 to !llvm.ptr\n    %6 = bufferization.to_buffer %arg2 : tensor<256xf32> to memref<256xf32>\n    %intptr_1 = memref.extract_aligned_pointer_as_index %6 : memref<256xf32> -> index\n    %7 = arith.index_cast %intptr_1 : index to i64\n    %8 = llvm.inttoptr %7 : i64 to !llvm.ptr\n    %9 = bufferization.to_buffer %arg3 : tensor<33x64xui8> to memref<33x64xui8>\n    %intptr_2 = memref.extract_aligned_pointer_as_index %9 : memref<33x64xui8> -> index\n    %10 = arith.index_cast %intptr_2 : index to i64\n    %11 = llvm.inttoptr %10 : i64 to !llvm.ptr\n    %alloc = memref.alloc() : memref<256x64xbf16>\n    %intptr_3 = memref.extract_aligned_pointer_as_index %alloc : memref<256x64xbf16> -> index\n    %12 = arith.index_cast %intptr_3 : index to i64\n    %13 = llvm.inttoptr %12 : i64 to !llvm.ptr\n    %c256_i64 = arith.constant 256 : i64\n    %c64_i64 = arith.constant 64 : i64\n    %c1024_i64 = arith.constant 1024 : i64\n    tessera_rocm.scaled_wmma_gemm {abi = \"a_bpacked_sa_scaleplane_d_m_n_k\", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 1024 : i64, k_step_schedule = \"isolated_k_stage\", m = 256 : i64, macro_k = 1024 : i64, n = 64 : i64, name = \"packed_folded_w4a8\", numeric_policy = {accum = \"f32\", execution_mode = \"folded_row_reference_explicit_approximate\", storage = \"e4m3_raw_u8\"}, output = \"bf16\", package_abi = \"tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1\", partial_combine = \"row_reference_after_full_k\", physical_contract = \"rocm_mxfp4_w4a8_packed_folded_prefill_v1\", scale_format = \"e8m0_k32_plus_row_reference\", scale_k = 1024 : i64, stage_k = 64 : i64, tessera.schedule_hash = \"8fa464652db43958180ab5a6727445288c8751f777d1c033b268962ae5709d6c\", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}\n    %14 = bufferization.to_tensor %alloc : memref<256x64xbf16> to tensor<256x64xbf16>\n    return %14 : tensor<256x64xbf16>\n  }\n}\n\n",
+            "authored_target_ir_sha256": "5b8cbf8d6e556df6fbbb44f4eed26c9cf9c50359b04ba2222c0601c6740fa47d",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "graph_ir_sha256": "6ef681516f1d250fd3a76c2b9eea3711ab677930962c910163c5404b8316f5ce",
+            "hsaco_sha256": "69349b60f86c4ba4bd9739fd5f2345fe838091aabf0e911ad3eaa8f54974d18f",
+            "image_k": 1024,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mn_fixed_k",
+            "image_whole_m": true,
+            "image_whole_n": true,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "schedule_hash": "8fa464652db43958180ab5a6727445288c8751f777d1c033b268962ae5709d6c",
+            "schedule_ir_sha256": "f691cf03e6d6ab56296ebaeb2eb6369ac2f5653711a9dbc1a0ce7fc63816c98b",
+            "shape": [
+              64,
+              1024
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "5ac877e4ff6062e2320215151439fbbee369267aa0852d343ea5508f65438cd7",
+            "tile_ir_sha256": "fde206165b7b3c8be43a4f60d3bef0da17dcd5a89474b424a2e4ac8a511d1abb",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "descriptor_digest": "533a6b466e1bb9e9e6ec8dde7516d0233b46c0d4dfe462b2659a0f4bca3d73b0",
+          "cache_fingerprint": "941e515133dde33b99781de5cbc7283e08bb0254fdf06da55cc04add50184d80"
+        }
+      ],
+      "rows": [
+        {
+          "active_mnk": [
+            17,
+            64,
+            1024
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 256,
+            "active_m": 17,
+            "allocation_bytes": 435280,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.20702996850013733,
+                0.1469302624464035,
+                0.1464943289756775,
+                0.14682583510875702,
+                0.14622512459754944,
+                0.1470792442560196,
+                0.1471029371023178
+              ],
+              "median_ms": 0.1469302624464035
+            },
+            "consumer": {
+              "samples_ms": [
+                0.025420695543289185,
+                0.025395147502422333,
+                0.02602381259202957,
+                0.02492116391658783,
+                0.025415921583771706,
+                0.025411242619156837,
+                0.024932727217674255
+              ],
+              "median_ms": 0.025411242619156837
+            },
+            "combined": {
+              "samples_ms": [
+                0.1711147129535675,
+                0.171382874250412,
+                0.171608567237854,
+                0.1714111566543579,
+                0.1713898777961731,
+                0.17136900126934052,
+                0.1722746193408966
+              ],
+              "median_ms": 0.1713898777961731
+            }
+          },
+          "public_warm_samples_ms": [
+            12.509068008512259,
+            8.476275019347668,
+            7.600435055792332,
+            7.558934856206179,
+            7.638376904651523,
+            7.730689132586122,
+            7.678563939407468
+          ],
+          "public_warm_median_ms": 7.678563939407468
+        },
+        {
+          "active_mnk": [
+            256,
+            64,
+            1024
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 256,
+            "active_m": 256,
+            "allocation_bytes": 435280,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.14962166547775269,
+                0.14910784363746643,
+                0.14636839926242828,
+                0.1469605565071106,
+                0.14611439406871796,
+                0.14693564176559448,
+                0.14613257348537445
+              ],
+              "median_ms": 0.14693564176559448
+            },
+            "consumer": {
+              "samples_ms": [
+                0.025408102199435234,
+                0.026029976084828377,
+                0.025415843352675438,
+                0.02540154755115509,
+                0.024916155263781548,
+                0.02541474997997284,
+                0.025391312316060066
+              ],
+              "median_ms": 0.025408102199435234
+            },
+            "combined": {
+              "samples_ms": [
+                0.17202427983283997,
+                0.17120206356048584,
+                0.17128512263298035,
+                0.17151346802711487,
+                0.17210374772548676,
+                0.1711343675851822,
+                0.1713525652885437
+              ],
+              "median_ms": 0.1713525652885437
+            }
+          },
+          "public_warm_samples_ms": [
+            18.31497298553586,
+            23.94908806309104,
+            8.690756047144532,
+            8.931891061365604,
+            9.187522809952497,
+            9.270453127101064,
+            8.81883013062179
+          ],
+          "public_warm_median_ms": 9.187522809952497
+        },
+        {
+          "active_mnk": [
+            1,
+            64,
+            1024
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 256,
+            "active_m": 1,
+            "allocation_bytes": 435280,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.15009793639183044,
+                0.14810669422149658,
+                0.14657075703144073,
+                0.1461872011423111,
+                0.14675530791282654,
+                0.14599470794200897,
+                0.1465291529893875
+              ],
+              "median_ms": 0.14657075703144073
+            },
+            "consumer": {
+              "samples_ms": [
+                0.02496863342821598,
+                0.024922695010900497,
+                0.025289803743362427,
+                0.025261281058192253,
+                0.025940891355276108,
+                0.024905819445848465,
+                0.025492383167147636
+              ],
+              "median_ms": 0.025261281058192253
+            },
+            "combined": {
+              "samples_ms": [
+                0.1713281124830246,
+                0.17112599313259125,
+                0.17141912877559662,
+                0.17106077075004578,
+                0.17179718613624573,
+                0.17112821340560913,
+                0.17185500264167786
+              ],
+              "median_ms": 0.1713281124830246
+            }
+          },
+          "public_warm_samples_ms": [
+            8.648559916764498,
+            7.642074022442102,
+            7.519100094214082,
+            7.333795074373484,
+            7.280024001374841,
+            7.175785023719072,
+            7.946914993226528
+          ],
+          "public_warm_median_ms": 7.519100094214082
+        },
+        {
+          "active_mnk": [
+            200,
+            64,
+            1024
+          ],
+          "correctness": "checked_around_every_native_window_and_changed_public_call",
+          "max_abs_error": 0.0,
+          "native_frame": {
+            "capacity_m": 256,
+            "active_m": 200,
+            "allocation_bytes": 435280,
+            "allocation_count": 11
+          },
+          "native_event_stages": {
+            "ingest": {
+              "samples_ms": [
+                0.14983122050762177,
+                0.14928793907165527,
+                0.14625130593776703,
+                0.1473032832145691,
+                0.14639197289943695,
+                0.14699728786945343,
+                0.14624831080436707
+              ],
+              "median_ms": 0.14699728786945343
+            },
+            "consumer": {
+              "samples_ms": [
+                0.02530287578701973,
+                0.02597467228770256,
+                0.02528475783765316,
+                0.025304827839136124,
+                0.02531459368765354,
+                0.024913351982831955,
+                0.025311468169093132
+              ],
+              "median_ms": 0.025304827839136124
+            },
+            "combined": {
+              "samples_ms": [
+                0.17121390998363495,
+                0.17120812833309174,
+                0.17124640941619873,
+                0.1712251603603363,
+                0.17132997512817383,
+                0.17135325074195862,
+                0.17161652445793152
+              ],
+              "median_ms": 0.17124640941619873
+            }
+          },
+          "public_warm_samples_ms": [
+            22.260287078097463,
+            17.529604956507683,
+            18.06646096520126,
+            9.350036038085818,
+            9.33544710278511,
+            9.19308396987617,
+            8.819631999358535
+          ],
+          "public_warm_median_ms": 9.350036038085818
+        }
+      ]
+    }
+  ]
+}

@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-08
+last_updated: 2026-10-09
 audit_role: reference
 ---
 
@@ -11608,4 +11608,35 @@ coverage promotion or weakened closure gate.
 
 Evidence: benchmarks/baselines/mapped_result_axes_foundation_20261008/README.md,
 source-tests.txt, registry-tests.txt, cpu.json, identity.json.
+<!-- entry-fields:end -->
+
+
+### 2026-10-09 — native gfx1201 bounded NVFP4 row replay
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync GFX1201-BOUNDED-NVFP4-ROWS-20261009, follows PR913.
+
+Outcome: Native MLIR capacity export preserves original Graph intent, outlines
+actual conversion/storage/product SSA and packages Schedule/Tile/Target images.
+A checked HIP owner rebinds active M within fixed allocations, retires captured
+graphs before geometry changes and reads only active output. Static v1 replay
+remains compatible. Eight new and 36 existing gfx1201 device cases pass; 421
+focused registry/ABI/audit/native/lifetime checks pass with six explicit skips.
+Ruff and mypy are clean. A source-bound twelve-row packet independently records
+producer, consumer, combined native events and warm public-call latency with
+changed values and compiler-free replay. All four backend queues are assessed.
+
+Native leaf follow-on: separate converted/stored readiness enables immediate
+intermediate numerical receipts and direct/captured per-producer attribution.
+48 gfx1201 device cases and 61 host/native cases pass (three owning-image skips).
+420 graph windows over twelve frames identify conversion as the dominant
+measured ingest stage; no numeric kernel or C ABI symbol is changed.
+
+Remaining: Generic scaled batching/transpose and full-suite green, original
+checkpoint/model quality, broader layouts/policies, composed attention and
+ROCm W8A8/MXFP4 performance obligations. This is the named bounded-row
+envelope, not universal frontend/AD or sibling physical completion.
+
+Evidence: benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/README.md
+and gfx1201.json.
 <!-- entry-fields:end -->

@@ -69,7 +69,7 @@ def _native_nvfp4_plan(text):
     if not isinstance(text, str):
         raise ValueError("native NVFP4 program record must be serialized JSON")
     plan = json.loads(text)
-    if (plan.get("schema") != "tessera.native.nvfp4_program.v1"
+    if (not isinstance(plan,dict) or plan.get("schema") not in {"tessera.native.nvfp4_program.v1","tessera.native.nvfp4_program.v2"}
             or not isinstance(plan.get("source_graph_ir"), str)
             or not isinstance(plan.get("member_graphs"), list)
             or len(plan["member_graphs"]) != 3
@@ -108,6 +108,18 @@ def _native_nvfp4_plan(text):
                 or buffer.get("first_write") != writes[index]
                 or buffer.get("last_read") != reads[index]):
             raise ValueError("native NVFP4 buffer capacity/lifetime record differs")
+    if plan["schema"].endswith(".v2"):
+        active,bound=plan.get("active_m"),plan.get("m_bound")
+        if (type(active) is not int or type(bound) is not int or not 0<active<=bound
+                or not isinstance(plan.get("original_graph_ir"),str)
+                or not plan["original_graph_ir"]
+                or len(plan["buffers"][roles[3]]["shape"])!=2
+                or len(plan["buffers"][roles[0]]["shape"])!=2
+                or plan["buffers"][roles[3]]["shape"][0]!=bound
+                or plan["buffers"][roles[3]]["shape"][1]!=2*plan["buffers"][roles[0]]["shape"][1]
+                or plan["buffers"][roles[4]]["shape"]!=[bound]
+                or plan["buffers"][10]["shape"]!=[bound,plan["buffers"][roles[0]]["shape"][0]]):
+            raise ValueError("native NVFP4 bounded row capacity differs")
     return plan
 
 def _portable_stage(graph, schedule, native):
@@ -294,6 +306,9 @@ class NVFP4ResidentProgram:
                     or [self.ingest.graph_ir, self.storage.graph_ir, self.consumer.graph_ir]
                     != plan["member_graphs"]):
                 raise ValueError("resident program native member lineage changed")
+            if (plan["schema"].endswith(".v2") and
+                    self.consumer.package.descriptor.provenance.get("image_shape_policy")!="runtime_mn_fixed_k"):
+                raise ValueError("bounded NVFP4 rows require a runtime-M/N consumer image")
             roles = plan["role_indices"]
             shapes = [b["shape"] for b in plan["buffers"]]
             if (shapes[roles[3]] != [self.consumer.m,k]

@@ -11866,3 +11866,26 @@ All four backend queues assessed; no sibling architecture evidence transfer.
 
 Evidence: benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-09 — resident SM120 saved-LSE public reverse AD
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-RESIDENT-ATTENTION-VJP-20261009.
+
+Outcome: compact rank-four FP32 public native_backward roots, optional
+broadcast bias and cotangent reach typed Graph IR and native MLIR
+AD/Schedule/Tile/Target/LLVM-PTX products. The structural certificate pins
+the exact target-annotated Graph with zero concrete frontend executions.
+A shared native guard orders primal and cotangent producer streams before
+private snapshots and retains saved output/LSE through backward consumption.
+379 focused host tests, 44 adjacent RTX5070 tests and 19 final resident
+reverse tests pass. Two isolated six-program packets prove maximum error
+below 1.7e-8, with separate forward/backward kernel and completed-call timing.
+Resident/host wall ratios span 1.274–1.423; no speedup is claimed.
+
+Remaining: resident ordinary tuple forward, dynamic/pitched/mixed frames,
+composed/nested AD, GPU gradient output ownership and frontend binding costs.
+All four backend queues assessed; no sibling exact-device evidence transfer.
+
+Evidence: benchmarks/baselines/sm120_resident_attention_vjp_20261009/README.md.
+<!-- entry-fields:end -->

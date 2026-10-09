@@ -1,0 +1,504 @@
+{
+  "schema": "tessera.nvfp4.winner_codes.compare.v1",
+  "architecture": "gfx1201",
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "uuid": "32386439653765666266326566373136",
+    "ordinal": 0
+  },
+  "recorder_sha256": "cf986f385037c3d3d6d8caf4ac64cdc1303b14ff7e4e6d179cbecb8252f83ebb",
+  "selector_promotion": false,
+  "runtime_sha256": "a49d03f3de516459b8f88e0da7791fe8ee7f06d06aabd952f14017e077b36b72",
+  "timing_domain": "HIP events; direct includes host submission gaps; captured window one submission; seven AB/BA rounds, 128 repetitions",
+  "profiles": [
+    {
+      "shape_mnk": [
+        256,
+        64,
+        1024
+      ],
+      "tools": {
+        "control": {
+          "TESSERA_OPT": "4bf2dd9a1748197253debf57c1cfb445aaf08277b218326635ac1a2d1a5a8164",
+          "TESSERA_ROCM_OPT": "69e84b888c3e93a87efee6282978df5465d9d9b5234b3a52c1eb6ea61d2d0af8"
+        },
+        "candidate": {
+          "TESSERA_OPT": "454420afb4009250274cb0d0b6c00adb058a26c9f0d8cedfcc1529eb49920209",
+          "TESSERA_ROCM_OPT": "0293a01985102634b85624e9bbf4ca7284059ca6d1640d1d62a44dd1d259c750"
+        }
+      },
+      "component_images": {
+        "control": [
+          "723e9b232eb91f44bdfcc77c7eb58b030f2cd669f5f7a6118d3546ad97b46bb1",
+          "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ],
+        "candidate": [
+          "ea7f234b9f349c73858502687974e11a31f0961101c5cefd76c23c474e2008b5",
+          "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ]
+      },
+      "resources": {
+        "control": {
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 180,
+          "image_bytes": 135704
+        },
+        "candidate": {
+          "vgpr_count": 212,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 0,
+          "image_bytes": 140440
+        }
+      },
+      "input_sha256": [
+        "02542dffb19a01c121303f1f0c3f47e267cd52e9b98301103214e3786dcc345a",
+        "4d451171d868ee1d196a57070cf625b19398e2e5e706b2ca6df0c3f34b7ab241",
+        "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "8e15f61dd31f0864ecd178d6ee60435b9c48ad13776b845921c66c03a7489e62",
+        "00b06fcc99810dd4097f9056c4c338c6879a13368f67c084bdea88e9a983c70e"
+      ],
+      "correctness": "independent oracle; control/candidate packed, exponents, f64 stats, storage and output bitwise identical",
+      "native_frames": {
+        "control": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 435280,
+          "allocation_count": 11
+        },
+        "candidate": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 435280,
+          "allocation_count": 11
+        }
+      },
+      "samples_ms": {
+        "control": {
+          "converter": {
+            "direct": [
+              0.10028485208749771,
+              0.09174646437168121,
+              0.09584180265665054,
+              0.14382533729076385,
+              0.14333835244178772,
+              0.14313338696956635,
+              0.14302074909210205
+            ],
+            "graph": [
+              0.09510651230812073,
+              0.09666305035352707,
+              0.09668603539466858,
+              0.14428670704364777,
+              0.14417093992233276,
+              0.1439565122127533,
+              0.14389511942863464
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.1710527241230011,
+              0.17013244330883026,
+              0.17033715546131134,
+              0.1698780357837677,
+              0.16996899247169495,
+              0.16959165036678314,
+              0.16950809955596924
+            ],
+            "graph": [
+              0.17072255909442902,
+              0.1703701615333557,
+              0.1701631098985672,
+              0.1705227494239807,
+              0.1697268933057785,
+              0.16950209438800812,
+              0.16925890743732452
+            ]
+          }
+        },
+        "candidate": {
+          "converter": {
+            "direct": [
+              0.09455995261669159,
+              0.09459645301103592,
+              0.09877350926399231,
+              0.14654096961021423,
+              0.14748430252075195,
+              0.14665354788303375,
+              0.14600199460983276
+            ],
+            "graph": [
+              0.09513214975595474,
+              0.09948436915874481,
+              0.1369645595550537,
+              0.14734846353530884,
+              0.14769978821277618,
+              0.14704002439975739,
+              0.14691731333732605
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.17395426332950592,
+              0.1731133759021759,
+              0.17303790152072906,
+              0.1730278730392456,
+              0.17243124544620514,
+              0.17245155572891235,
+              0.17199566960334778
+            ],
+            "graph": [
+              0.17354081571102142,
+              0.17339007556438446,
+              0.17292772233486176,
+              0.1728658527135849,
+              0.172391876578331,
+              0.17230428755283356,
+              0.17206484079360962
+            ]
+          }
+        }
+      },
+      "control_over_candidate": {
+        "converter": {
+          "direct": 0.9795807891138911,
+          "graph": 0.9794292868550327
+        },
+        "combined": {
+          "direct": 0.9823214577292015,
+          "graph": 0.984365085570163
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        512,
+        1024
+      ],
+      "tools": {
+        "control": {
+          "TESSERA_OPT": "4bf2dd9a1748197253debf57c1cfb445aaf08277b218326635ac1a2d1a5a8164",
+          "TESSERA_ROCM_OPT": "69e84b888c3e93a87efee6282978df5465d9d9b5234b3a52c1eb6ea61d2d0af8"
+        },
+        "candidate": {
+          "TESSERA_OPT": "454420afb4009250274cb0d0b6c00adb058a26c9f0d8cedfcc1529eb49920209",
+          "TESSERA_ROCM_OPT": "0293a01985102634b85624e9bbf4ca7284059ca6d1640d1d62a44dd1d259c750"
+        }
+      },
+      "component_images": {
+        "control": [
+          "b3830d56dccac5296fa8c5248b53c800e5fd979a1dd2d9fb90c188b5ed173fe1",
+          "7b990500906ae230efbf06e3dee70100b3b4514f32cf4f679cc154b9e58cbc1e",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ],
+        "candidate": [
+          "d17e6fcbb28cddde8cb33a5c41c821bfeb91791d4164de1e2efc7778b3586d5b",
+          "7b990500906ae230efbf06e3dee70100b3b4514f32cf4f679cc154b9e58cbc1e",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ]
+      },
+      "resources": {
+        "control": {
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 180,
+          "image_bytes": 135704
+        },
+        "candidate": {
+          "vgpr_count": 212,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 0,
+          "image_bytes": 140440
+        }
+      },
+      "input_sha256": [
+        "3954691556c8564f3a3219e8884bf064763dbe636a41b8dd933938572c4e6ea0",
+        "23fd67c68398bef75c102c926e415886d24db5b6368e65a4417bc449f8ae65f2",
+        "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "d29e0646853205e7cd6ff01731aa8a8d37a81661af029c47524e8c720dd15faa",
+        "02f2c5bac00703d33c4e5fe0defba452e5125bf3a29fb2560b4929d2f9baf38c"
+      ],
+      "correctness": "independent oracle; control/candidate packed, exponents, f64 stats, storage and output bitwise identical",
+      "native_frames": {
+        "control": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 1639952,
+          "allocation_count": 11
+        },
+        "candidate": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 1639952,
+          "allocation_count": 11
+        }
+      },
+      "samples_ms": {
+        "control": {
+          "converter": {
+            "direct": [
+              0.23562537133693695,
+              0.12587076425552368,
+              0.1171448677778244,
+              0.1229841411113739,
+              0.12020358443260193,
+              0.11910060048103333,
+              0.11793768405914307
+            ],
+            "graph": [
+              0.11056625843048096,
+              0.11106465011835098,
+              0.11142145097255707,
+              0.11159337311983109,
+              0.11174284666776657,
+              0.11180933564901352,
+              0.11184313893318176
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.13789337873458862,
+              0.15112407505512238,
+              0.1463022530078888,
+              0.14760668575763702,
+              0.1462528109550476,
+              0.1485798954963684,
+              0.14900052547454834
+            ],
+            "graph": [
+              0.13734668493270874,
+              0.13786959648132324,
+              0.13806556165218353,
+              0.13845719397068024,
+              0.13843955099582672,
+              0.13835500180721283,
+              0.1383611261844635
+            ]
+          }
+        },
+        "candidate": {
+          "converter": {
+            "direct": [
+              0.137013778090477,
+              0.14333750307559967,
+              0.14608725905418396,
+              0.1437063068151474,
+              0.1464153677225113,
+              0.14481957256793976,
+              0.14608097076416016
+            ],
+            "graph": [
+              0.1374325007200241,
+              0.14107650518417358,
+              0.1453624665737152,
+              0.14554959535598755,
+              0.14492768049240112,
+              0.14570337533950806,
+              0.14457155764102936
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.17393538355827332,
+              0.1730511486530304,
+              0.1736074537038803,
+              0.17109550535678864,
+              0.17267747223377228,
+              0.17199668288230896,
+              0.17378942668437958
+            ],
+            "graph": [
+              0.17117123305797577,
+              0.17110727727413177,
+              0.1712934523820877,
+              0.17172370851039886,
+              0.17156699299812317,
+              0.17124971747398376,
+              0.17076146602630615
+            ]
+          }
+        }
+      },
+      "control_over_candidate": {
+        "converter": {
+          "direct": 0.8300230576651534,
+          "graph": 0.7699935080771694
+        },
+        "combined": {
+          "direct": 0.8529656515230083,
+          "graph": 0.8079137521977617
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        1024,
+        4096
+      ],
+      "tools": {
+        "control": {
+          "TESSERA_OPT": "4bf2dd9a1748197253debf57c1cfb445aaf08277b218326635ac1a2d1a5a8164",
+          "TESSERA_ROCM_OPT": "69e84b888c3e93a87efee6282978df5465d9d9b5234b3a52c1eb6ea61d2d0af8"
+        },
+        "candidate": {
+          "TESSERA_OPT": "454420afb4009250274cb0d0b6c00adb058a26c9f0d8cedfcc1529eb49920209",
+          "TESSERA_ROCM_OPT": "0293a01985102634b85624e9bbf4ca7284059ca6d1640d1d62a44dd1d259c750"
+        }
+      },
+      "component_images": {
+        "control": [
+          "0a18a637cd0083fc753b26dd399274f0eaf2f9dea918c1253f894ae19c409846",
+          "7ef9d0a6857489083c2ec905367a7b34935d9f431cf09c59e36ff935ef8aba4f",
+          "87b1a1904e90aa7d17a01263869c13dd75b947e5543b741dcb9896f08ea0def6"
+        ],
+        "candidate": [
+          "376ed98751a1058ad36fa05742427e7292cfb7ddf0961252b2a75e212e02be68",
+          "7ef9d0a6857489083c2ec905367a7b34935d9f431cf09c59e36ff935ef8aba4f",
+          "87b1a1904e90aa7d17a01263869c13dd75b947e5543b741dcb9896f08ea0def6"
+        ]
+      },
+      "resources": {
+        "control": {
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 180,
+          "image_bytes": 135704
+        },
+        "candidate": {
+          "vgpr_count": 212,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 0,
+          "image_bytes": 140440
+        }
+      },
+      "input_sha256": [
+        "1330cc0b4b779186e4445098f404a2646a4338dae4f3fd478556214b0e22b95f",
+        "c68ab9b1ca4c97c4f67f0379375dc8bdea9a51ac1542f154776b9f518a725d0c",
+        "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "0a91b64ac01c198e707d54c72c8902c3a045ee6190017aa3738218c76b9056b0",
+        "70db3a5e05ecb1ab8c156e9f142d80a43d88a0972281a174a9666ed7915c539d"
+      ],
+      "correctness": "independent oracle; control/candidate packed, exponents, f64 stats, storage and output bitwise identical",
+      "native_frames": {
+        "control": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 10487824,
+          "allocation_count": 11
+        },
+        "candidate": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 10487824,
+          "allocation_count": 11
+        }
+      },
+      "samples_ms": {
+        "control": {
+          "converter": {
+            "direct": [
+              1.1787358522415161,
+              1.224522590637207,
+              1.2214510440826416,
+              1.2200273275375366,
+              1.14043390750885,
+              1.09604811668396,
+              1.2260020971298218
+            ],
+            "graph": [
+              1.233363151550293,
+              1.1863473653793335,
+              1.235754370689392,
+              1.2352731227874756,
+              1.2374407052993774,
+              1.1524009704589844,
+              0.9481346011161804
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.9640156030654907,
+              0.9160969853401184,
+              0.9167294502258301,
+              0.9335724711418152,
+              0.9165430665016174,
+              0.91518235206604,
+              0.9167796969413757
+            ],
+            "graph": [
+              0.8829026222229004,
+              0.8853926658630371,
+              0.8855301737785339,
+              0.8859670162200928,
+              0.9027220606803894,
+              0.9022605419158936,
+              0.8857575058937073
+            ]
+          }
+        },
+        "candidate": {
+          "converter": {
+            "direct": [
+              0.950895369052887,
+              0.9478108882904053,
+              0.945694625377655,
+              0.9433736205101013,
+              0.8660760521888733,
+              0.9479613304138184,
+              0.9441120028495789
+            ],
+            "graph": [
+              0.8541173338890076,
+              0.9298213124275208,
+              0.9314581751823425,
+              0.9316531419754028,
+              0.9289464354515076,
+              0.9265609979629517,
+              0.9342931509017944
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.9344968199729919,
+              0.9117772579193115,
+              0.9143180847167969,
+              0.9143808484077454,
+              0.9131510853767395,
+              0.9135838747024536,
+              0.9133227467536926
+            ],
+            "graph": [
+              0.8800977468490601,
+              0.8821240067481995,
+              0.8830940127372742,
+              0.8827481865882874,
+              0.8822717070579529,
+              0.8821300268173218,
+              0.8816805481910706
+            ]
+          }
+        }
+      },
+      "control_over_candidate": {
+        "converter": {
+          "direct": 1.2900859271039309,
+          "graph": 1.3264517978516794
+        },
+        "combined": {
+          "direct": 1.0034431162923065,
+          "graph": 1.0041121818395335
+        }
+      }
+    }
+  ]
+}

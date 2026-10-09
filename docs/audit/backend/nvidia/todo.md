@@ -6,6 +6,22 @@ target: nvidia_sm120
 last_updated: 2026-10-08
 ---
 
+
+## ROCM-NVFP4-WINNER-CODES-20261009
+
+Owner ROCM-NVFP4-INGEST-1. Two native converter winner-code candidates were
+measured through ordinary Graph/Schedule/Tile packages on RX 9070 XT/gfx1201.
+Both pass 20 native compiler and 55 owning-device checks; paired packets prove
+codes/exponents/f64 statistics, stored buffers and outputs bitwise equal.
+Reduced private-segment metadata did not ensure program benefit. Candidate
+patches are retained and production lowering is restored.
+Evidence: benchmarks/baselines/gfx1201_nvfp4_winner_codes_20261009/README.md,
+recompute-codes.json and packed-winner.json.
+Recorder: benchmarks/rocm/record_nvfp4_winner_codes.py.
+Broader route/performance and generic frontend/AD closure remain open.
+
+Not applicable to SM120 lowering: ROCm converter patches do not establish NVIDIA NVFP4 scaling or producer/attention lifetime parity.
+
 ## FLOATING-SCALED-MAPS-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.

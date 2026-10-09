@@ -1,0 +1,55 @@
+diff --git a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h
+index ead33f70e..fbc23ee7a 100644
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h
+@@ -152,7 +152,7 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
+   seed = choose(b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, mean, cf(0)), seed, c32(0));
+   Value bestError = cf(std::numeric_limits<double>::infinity());
+   Value bestDistance = c32(99), bestExponent = seed;
+-  SmallVector<Value, 32> bestCodes(32, c32(0));
++  SmallVector<Value, 4> bestWords(4, c32(0));
+   for (int delta = -4; delta <= 4; ++delta) {
+     Value exponent = b.create<arith::AddIOp>(l, seed, c32(delta));
+     Value valid = b.create<arith::AndIOp>(
+@@ -165,7 +165,8 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
+     // by that reciprocal has the same rounding as division by scale, including
+     // midpoint ties and gradual underflow. Keep candidate SSE/reduction order.
+     Value reciprocal = pow2(b.create<arith::SubIOp>(l, c32(0), boundedExponent));
+-    SmallVector<Value, 32> codes, errors;
++    SmallVector<Value, 32> errors;
++    SmallVector<Value, 4> words(4, c32(0));
+     for (int j = 0; j < 32; ++j) {
+       Value normalized = mul(b.create<math::AbsFOp>(l, values[j]), reciprocal);
+       Value magnitude = c32(0);
+@@ -175,7 +176,10 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
+                 l, b.getI32Type(), b.create<arith::CmpFOp>(
+                     l, arith::CmpFPredicate::OGT, normalized, cf(midpoint))));
+       Value negative = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, values[j], cf(0));
+-      codes.push_back(b.create<arith::OrIOp>(l, magnitude, choose(negative, c32(8), c32(0))));
++      Value code = b.create<arith::OrIOp>(
++          l, magnitude, choose(negative, c32(8), c32(0)));
++      Value shifted = b.create<arith::ShLIOp>(l, code, c32((j % 8) * 4));
++      words[j / 8] = b.create<arith::OrIOp>(l, words[j / 8], shifted);
+       Value decoded = mul(choose(negative, b.create<arith::NegFOp>(
+           l, magnitudeValue(magnitude)), magnitudeValue(magnitude)), scale);
+       Value difference = sub(values[j], decoded);
+@@ -195,8 +199,17 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
+     bestError = choose(better, error, bestError);
+     bestDistance = choose(better, c32(std::abs(delta)), bestDistance);
+     bestExponent = choose(better, exponent, bestExponent);
+-    for (int j = 0; j < 32; ++j)
+-      bestCodes[j] = choose(better, codes[j], bestCodes[j]);
++    for (int word = 0; word < 4; ++word)
++      bestWords[word] = choose(better, words[word], bestWords[word]);
++  }
++  // Retain four packed winner words rather than 32 independent code values.
++  // Candidate quantization, SSE reduction and tie-breaking are unchanged;
++  // initial zero words also preserve the no-selected-candidate result.
++  SmallVector<Value, 32> bestCodes;
++  for (int j = 0; j < 32; ++j) {
++    Value shifted = b.create<arith::ShRUIOp>(
++        l, bestWords[j / 8], c32((j % 8) * 4));
++    bestCodes.push_back(b.create<arith::AndIOp>(l, shifted, c32(15)));
+   }
+   Value signalSum = sum32(signal);
+   Value nonzero = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OGT, signalSum, cf(0));

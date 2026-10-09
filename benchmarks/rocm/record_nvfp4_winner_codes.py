@@ -2,6 +2,7 @@
 import argparse
 from contextlib import ExitStack
 import ctypes as c
+from collections import Counter
 import hashlib
 import json
 import os
@@ -10,6 +11,8 @@ import re
 from statistics import median
 import subprocess
 import tempfile
+import time
+from unittest.mock import patch
 
 import numpy as np
 from tessera import runtime as rt
@@ -27,7 +30,14 @@ def resources(payload):
         path.write_bytes(payload)
         notes = subprocess.run(["/opt/rocm/llvm/bin/llvm-readelf", "--notes", str(path)],
                                check=True, capture_output=True, text=True).stdout
-    result = {}
+        assembly = subprocess.run(["/opt/rocm/llvm/bin/llvm-objdump", "--disassemble", str(path)],
+                                  check=True, capture_output=True, text=True).stdout.replace(str(path), "image.hsaco")
+    opcodes = Counter(re.findall(r"^\s*((?:v_|s_|global_|flat_|scratch_|ds_)[a-z0-9_]+)\s", assembly, re.M))
+    if not opcodes or "<unknown>" in assembly:
+        raise RuntimeError("missing/incomplete AMDGPU disassembly")
+    result = {"static_isa_opcodes": dict(sorted(opcodes.items())),
+              "disassembly_sha256": hashlib.sha256(assembly.encode()).hexdigest()}
+
     for key in ("vgpr_count", "sgpr_count", "group_segment_fixed_size", "private_segment_fixed_size"):
         values = re.findall(r"\." + key + r":\s*(\d+)", notes)
         if len(values) != 1:
@@ -73,10 +83,12 @@ def profile(shape, roots):
     m, n, k = shape
     args, _, converted, stored, expected = inputs_and_oracle(m, n, k)
     programs = {}
+    functions = {}
     tools = {}
     for arm, root in roots.items():
         tools[arm] = bind_tools(root)
-        programs[arm] = make_function(n, k).compile_native_nvfp4_program(*args, m_bound=m).native
+        functions[arm] = make_function(n, k)
+        programs[arm] = functions[arm].compile_native_nvfp4_program(*args, m_bound=m).native
     images = {arm: p.receipt["component_image_digests"] for arm, p in programs.items()}
     # Consumer and storage must remain identical; only converter code changes.
     if images["control"][1:] != images["candidate"][1:]:
@@ -114,6 +126,27 @@ def profile(shape, roots):
                             np.testing.assert_array_equal(session.read_output(), initial[arm][2])
         final = {arm: checked(s, converted, stored, expected) for arm, s in sessions.items()}
         identical(final["control"], final["candidate"])
+    public = {arm: [] for arm in programs}
+    with ExitStack() as stack:
+        stack.enter_context(patch.object(subprocess, "run", side_effect=RuntimeError("compiler in warm public call")))
+        for function in functions.values():
+            stack.enter_context(patch.object(function, "_fn", side_effect=RuntimeError("eager public execution")))
+        for round_index in range(7):
+            values = list(args)
+            values[3] = np.roll(args[3], round_index, axis=0).copy()
+            values[4] = np.roll(args[4], round_index, axis=0).copy()
+            wanted = np.roll(expected, round_index, axis=0)
+            order = ("control", "candidate") if round_index % 2 == 0 else ("candidate", "control")
+            results = {}
+            for arm in order:
+                started = time.perf_counter()
+                output = functions[arm](*values)
+                public[arm].append((time.perf_counter() - started) * 1000)
+                if functions[arm].execution_kind != "native_gpu":
+                    raise RuntimeError("public call lost native execution")
+                np.testing.assert_allclose(output.astype("f4"), wanted, rtol=.008, atol=.015625)
+                results[arm] = output
+            np.testing.assert_array_equal(results["control"].view("u1"), results["candidate"].view("u1"))
     ratios = {stage: {mode: median(samples["control"][stage][mode]) /
                       median(samples["candidate"][stage][mode]) for mode in ("direct", "graph")}
               for stage in ("converter", "combined")}
@@ -121,7 +154,9 @@ def profile(shape, roots):
             "resources": {arm: resources(p.ingest.native.image.payload) for arm, p in programs.items()},
             "input_sha256": [hashlib.sha256(a.tobytes()).hexdigest() for a in args],
             "correctness": "independent oracle; control/candidate packed, exponents, f64 stats, storage and output bitwise identical",
-            "native_frames": counts, "samples_ms": samples, "control_over_candidate": ratios}
+            "native_frames": counts, "samples_ms": samples, "control_over_candidate": ratios,
+            "public_warm_samples_ms": public,
+            "public_control_over_candidate": median(public["control"]) / median(public["candidate"])}
 
 
 def main():
@@ -139,10 +174,13 @@ def main():
     if (hip.hipInit(0) or hip.hipGetDevice(c.byref(ordinal)) or
         hip.hipDeviceGetName(name, 256, ordinal.value) or hip.hipDeviceGetUuid(c.byref(uuid), ordinal.value)):
         raise RuntimeError("device identity query failed")
-    packet = {"schema": "tessera.nvfp4.winner_codes.compare.v1", "architecture": "gfx1201",
+    packet = {"schema": "tessera.nvfp4.winner_codes.compare.v3", "architecture": "gfx1201",
               "device": {"name": name.value.decode(), "uuid": bytes(uuid).hex(), "ordinal": ordinal.value},
               "recorder_sha256": digest(__file__), "selector_promotion": False,
+              "objdump_sha256": digest("/opt/rocm/llvm/bin/llvm-objdump"),
+              "isa_domain": "static opcode counts across converter disassembly; not dynamic issue counts or hardware counters",
               "runtime_sha256": digest(os.environ["TESSERA_ROCM_NATIVE_MOVEMENT_LIB"]),
+              "public_domain": "warm ordinary JIT wall time; changed activation rows/scales; checks, input upload, native program, synchronization and readback; compiler/eager forbidden",
               "timing_domain": "HIP events; direct includes host submission gaps; captured window one submission; seven AB/BA rounds, 128 repetitions",
               "profiles": [profile(shape, {"control": options.control, "candidate": options.candidate})
                            for shape in ((256,64,1024), (256,512,1024), (256,1024,4096))]}

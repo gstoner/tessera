@@ -147,7 +147,7 @@ the next action's host requirement; it is not a live fleet-availability claim.
   decoded-weight references exactly. This one projection with synthetic FP8
   activations exposes material added conversion error; broader quality and
   selector promotion remain open.
-- Latest: [native gfx1201 bounded NVFP4 row replay](INTEGRATED_COMPILER_LOG.md#2026-10-09--native-gfx1201-bounded-nvfp4-row-replay)
+- Latest: [2026-10-09 — source-unit NVFP4 midpoint comparisons](INTEGRATED_COMPILER_LOG.md#2026-10-09--source-unit-nvfp4-midpoint-comparisons)
 
 ### ROCM-SPLIT-K-1
 

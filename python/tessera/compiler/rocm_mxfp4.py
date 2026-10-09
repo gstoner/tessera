@@ -315,13 +315,22 @@ def _e8m0_factor(exponents: np.ndarray) -> np.ndarray:
     return np.where(e == 0, np.float32(0.0), np.exp2(e.astype(np.float32) - 127.0))
 
 
-def exact_weights(codes: np.ndarray, scale_exponents: np.ndarray) -> np.ndarray:
-    """Decode MXFP4 to FP32 using its exact per-32 E8M0 scale contract."""
+def exact_weights(codes: np.ndarray, scale_exponents: np.ndarray, *,
+                  dtype=np.float32) -> np.ndarray:
+    """Decode the per-32 scale contract; fp64 preserves oracle energy range.
+
+    The default retains the existing fp32 decoder. The fp64 oracle avoids
+    overflow when an E2M1 value times a valid E8M0 scale exceeds fp32 range;
+    it does not advertise fp64 storage or arithmetic on a target package.
+    """
+    dtype = np.dtype(dtype)
+    if dtype not in (np.dtype(np.float32), np.dtype(np.float64)):
+        raise ValueError("MXFP4 reference decode requires fp32 or fp64")
     c = _as_u8("MXFP4 E2M1 codes", codes, maximum=15)
     s = _as_u8("MXFP4 E8M0 exponents", scale_exponents, maximum=254)
     n, k = _validate_scale_plane(c, s)
-    values = _E2M1[c]
-    scale = _e8m0_factor(s).T.repeat(MXFP4_GROUP_K, axis=1)
+    values = _E2M1[c].astype(dtype, copy=False)
+    scale = _e8m0_factor(s).astype(dtype, copy=False).T.repeat(MXFP4_GROUP_K, axis=1)
     return np.ascontiguousarray(values.reshape(n, k) * scale)
 
 

@@ -11,7 +11,7 @@ from tests.unit.test_native_sm120_tensor_partition import graph
 AXES=[tuple(axis for axis,enabled in zip(("M","N","K"),bits,strict=True) if enabled)
       for bits in itertools.product((False,True),repeat=3)]
 
-def dag_source(dtype="fp16", axes=(), rhs_first=False):
+def dag_module(dtype="fp16", axes=(), rhs_first=False):
     module=graph(dtype=dtype)
     function=module.functions[0]
     lhs,consumer=function.body
@@ -26,7 +26,11 @@ def dag_source(dtype="fp16", axes=(), rhs_first=False):
         capacities={"M":32,"N":24,"K":64}
         module.module_attrs["tessera.native.sm120_tensor_bounds"]="{"+", ".join(
             axis+" = "+str(capacities[axis])+" : i64" for axis in axes)+"}"
-    return module.to_mlir(target="nvidia_sm120",canonical=True)
+    return module
+
+
+def dag_source(dtype="fp16", axes=(), rhs_first=False):
+    return dag_module(dtype,axes,rhs_first).to_mlir(target="nvidia_sm120",canonical=True)
 
 @pytest.mark.compiler_route
 @pytest.mark.usefixtures("production_compiler")

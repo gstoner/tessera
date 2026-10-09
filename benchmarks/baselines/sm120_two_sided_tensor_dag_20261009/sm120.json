@@ -1,0 +1,2167 @@
+{
+  "architecture": "sm_120",
+  "device": "NVIDIA GeForce RTX 5070",
+  "uuid_hex": "cba12639821a7a104cd3f918f9c0a545",
+  "route": "Python frontend->typed Graph->native SSA export->Schedule->Tile views/fragments->NVIDIA Target->LLVM NVPTX->PTX->checked C++ owner",
+  "timing_scope": "CUDA event dispatch windows include ordered stream submission gaps; grouped stage repeats are not additive program time",
+  "public_scope": "Compilation warm wall time includes frontend preparation, host copies and synchronization",
+  "sources": {
+    "src/transforms/lib/NativeSM120TensorProgram.h": "0ec5c54e088284304dee1a52f0818c79da5eaccbfb9b93177f46781a8814bb4a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "e28caf068be62228073673074ae9a7836025edf3feb0008052938b65ba1f9aa4",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "f669c780b1078d6116dab2ca9f622206ffc048f1063cd4bcae246353f43c3f3e",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "9020e9f7ae6b60f18bce3bf27d9030cf6ba2dfe6c0dbea22e7118ed3b0697f3c",
+    "python/tessera/compiler/nvidia_tensor_dag.py": "9f3025813cc30cab22d1f90775b735a75424965b91beca0205eb4d9e4f5bd809",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "5f08d101285dd1f78bc31a4802554724bfee0e5e1b0ba254598b8e7510bc7082",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "a6e3b2cb07b5f19eaebbb9f09353bd860b9240ba2c97a55076105881e40e8d1a",
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "271284f8d70c2760558e53dd0aa6c103475e7186f13fe868815c47e66e03c2b3",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "10221d88cb9f33358bd13967a1774e45f7b3571185ff795a1cdd2ad0c4d7e86b",
+    "python/tessera/compiler/emit/nvidia_cuda.py": "b73d46b4b6f36f4e8144eba76d232f35160f7a4989efb61fe15e8ea4492d2e50",
+    "python/tessera/compiler/jit.py": "a0ba8aca8bba81b518f1cbcab9b5cc64651f51964159602d761ff13b93be49bc",
+    "python/tessera/runtime.py": "361645e2fbc90c70343a86a9ed929877bf0046dddf09ea61c95ad86cf38dbab2",
+    "tests/device/nvidia/test_native_tensor_dag.py": "882f04c32b6f7d71241ef969cdec4e6585a09e41833b69d39304b9f41b58639c",
+    "benchmarks/nvidia/record_two_sided_tensor_dag.py": "3cfbc862d5eeb9d692c75032a487c4d73880edc35cb3655259c3902f2512dfba"
+  },
+  "tools": {
+    "TESSERA_OPT": "5f2da020cb9230dc60c204d01189b0c463acd51dcc193ab65fa403492d73d435",
+    "TESSERA_NVIDIA_OPT": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "04857e04128548029d32ae5908d3ec2e95440ab33fea6b4299918383a360e498"
+  },
+  "rows": [
+    {
+      "dtype": "fp16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "chain_depth": 1,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 1.1920928955078125e-07,
+      "cold_compile_and_call_ms": 1672.068546002265,
+      "device_program_samples_ms": [
+        0.0287027508020401,
+        0.028913499787449837,
+        0.028175000101327896,
+        0.02700825035572052,
+        0.027682499960064888,
+        0.029614999890327454,
+        0.027662750333547592
+      ],
+      "device_program_median_ms": 0.028175000101327896,
+      "grouped_stage_samples_ms": [
+        [
+          0.009477750398218632,
+          0.0106587503105402,
+          0.010443249717354774
+        ],
+        [
+          0.00944374967366457,
+          0.009137500077486038,
+          0.008323750458657742
+        ],
+        [
+          0.009913749992847443,
+          0.009686250239610672,
+          0.010717500001192093
+        ],
+        [
+          0.011756500229239464,
+          0.008853999897837639,
+          0.009051499888300896
+        ],
+        [
+          0.010715999640524387,
+          0.008542999625205994,
+          0.008622749708592892
+        ],
+        [
+          0.009725499898195267,
+          0.009317499585449696,
+          0.009270749986171722
+        ],
+        [
+          0.01087225042283535,
+          0.009078750386834145,
+          0.010421750135719776
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.009913749992847443,
+        0.009137500077486038,
+        0.009270749986171722
+      ],
+      "prepared_host_samples_ms": [
+        0.3478730213828385,
+        0.24188298266381025,
+        0.21739298244938254,
+        3.3103259629569948,
+        0.25031203404068947,
+        0.3618940245360136,
+        0.2480020048096776
+      ],
+      "prepared_host_median_ms": 0.25031203404068947,
+      "public_warm_samples_ms": [
+        1.0544619872234762,
+        0.8555990061722696,
+        0.8504600264132023,
+        0.9380090050399303,
+        0.8189490181393921,
+        0.8787700207903981,
+        0.7864490034990013
+      ],
+      "public_warm_median_ms": 0.8555990061722696,
+      "arena_capacity_bytes": 5632,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "rhs.softmax",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 1190,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": "readonly_input",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1190,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x35xf16>) -> tensor<17x35xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    return %0 : tensor<17x35xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<35x19xf16>) -> tensor<35x19xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    return %0 : tensor<35x19xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n"
+        ],
+        "output": 4,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "public_dag__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "07c490630ced23ff3aa7cf178906078ad5dc368adcd46a3f0c9cf6bf17151e55",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_f16_715d416770",
+          "schedule_digest": "715d41677006d1d7b6ed13a7f8c1645be268bc7343c0e6664c6cf6f404424780",
+          "tile_ir_digest": "6a03cde72d3ea7aca939039ac6b63dba3ce9ef227b2e6fdb5b61982e25338fa5"
+        },
+        {
+          "image_digest": "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+          "entry": "tessera_tile_softmax_f16",
+          "schedule_digest": "c6c165afcc61420516661cb178860ec943fb821eb1d2ce480e37a01736fe3dd8",
+          "tile_ir_digest": "f80a67a63e252856870ba3c7eece97822f51b3287d3f665189f39a0b420bd16c"
+        },
+        {
+          "image_digest": "a10907546952086d8d166e31bade053be53b999d7d741b03882ed7a5923671a0",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "c2370ef556dfdc31ebee1b2fad73fb494876e305e392f901500ce344186dc676",
+          "tile_ir_digest": "bf0029918b9ced55027547af3cf16b7c8545fb700a1c936a149f748ff3d3398c"
+        }
+      ]
+    },
+    {
+      "dtype": "fp16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "chain_depth": 2,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 1.4272518455982208e-05,
+      "cold_compile_and_call_ms": 1558.766610978637,
+      "device_program_samples_ms": [
+        0.05017850175499916,
+        0.04717700183391571,
+        0.04630324989557266,
+        0.07617250084877014,
+        0.04418475180864334,
+        0.07716824859380722,
+        0.04454825073480606
+      ],
+      "device_program_median_ms": 0.04717700183391571,
+      "grouped_stage_samples_ms": [
+        [
+          0.009717750363051891,
+          0.009438250213861465,
+          0.009126500226557255,
+          0.0080960001796484,
+          0.00947325024753809
+        ],
+        [
+          0.009556000120937824,
+          0.009529500268399715,
+          0.008677000179886818,
+          0.007896999828517437,
+          0.008989499881863594
+        ],
+        [
+          0.008879000321030617,
+          0.009219500236213207,
+          0.008647250011563301,
+          0.008013250306248665,
+          0.008724999614059925
+        ],
+        [
+          0.011337249539792538,
+          0.00965024996548891,
+          0.009149249643087387,
+          0.00906550046056509,
+          0.008057749830186367
+        ],
+        [
+          0.008612249977886677,
+          0.010241749696433544,
+          0.008875500410795212,
+          0.00865975022315979,
+          0.009929499588906765
+        ],
+        [
+          0.009489250369369984,
+          0.009422999806702137,
+          0.008545500226318836,
+          0.010053999722003937,
+          0.00808824971318245
+        ],
+        [
+          0.010213250294327736,
+          0.010107750073075294,
+          0.008472500368952751,
+          0.00936300028115511,
+          0.009742500260472298
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.009556000120937824,
+        0.009529500268399715,
+        0.008677000179886818,
+        0.00865975022315979,
+        0.008989499881863594
+      ],
+      "prepared_host_samples_ms": [
+        0.3315539797767997,
+        0.2960829879157245,
+        0.3074629930779338,
+        0.3026430495083332,
+        0.2829129807651043,
+        0.30706299003213644,
+        0.27470296481624246
+      ],
+      "prepared_host_median_ms": 0.3026430495083332,
+      "public_warm_samples_ms": [
+        1.221743004862219,
+        1.214932999573648,
+        1.2138730380684137,
+        1.2560129980556667,
+        1.097861968446523,
+        1.3037839671596885,
+        1.0960620129480958
+      ],
+      "public_warm_median_ms": 1.214932999573648,
+      "arena_capacity_bytes": 5632,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "lhs.softmax",
+        "rhs.softmax",
+        "rhs.layernorm",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 1190,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1190,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1190,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": 3,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 4,
+            "id": 6,
+            "last_read": 5,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x35xf16>) -> tensor<17x35xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    return %0 : tensor<17x35xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x35xf16>) -> tensor<17x35xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    return %0 : tensor<17x35xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<35x19xf16>) -> tensor<35x19xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    return %0 : tensor<35x19xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<35x19xf16>) -> tensor<35x19xf16> {\n    %0 = tessera.layer_norm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    return %0 : tensor<35x19xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n"
+        ],
+        "output": 6,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag_deep",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<17x35xf16>, %arg1: tensor<35x19xf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>) -> tensor<17x35xf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xf16>) -> tensor<35x19xf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xf16>, tensor<35x19xf16>) -> tensor<17x19xf32>\n    return %4 : tensor<17x19xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag_deep__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "member": "public_dag_deep__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag_deep__tensor_member_2",
+            "operation": "tessera.softmax",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "member": "public_dag_deep__tensor_member_3",
+            "operation": "tessera.layer_norm",
+            "outputs": [
+              5
+            ],
+            "step": 3
+          },
+          {
+            "inputs": [
+              3,
+              5
+            ],
+            "member": "public_dag_deep__tensor_member_4",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 4
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "07c490630ced23ff3aa7cf178906078ad5dc368adcd46a3f0c9cf6bf17151e55",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_f16_715d416770",
+          "schedule_digest": "715d41677006d1d7b6ed13a7f8c1645be268bc7343c0e6664c6cf6f404424780",
+          "tile_ir_digest": "6a03cde72d3ea7aca939039ac6b63dba3ce9ef227b2e6fdb5b61982e25338fa5"
+        },
+        {
+          "image_digest": "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+          "entry": "tessera_tile_softmax_f16",
+          "schedule_digest": "63be780d9dc71e51f4b4978e148e74c89f88a389b009995fb53680b915058f65",
+          "tile_ir_digest": "7d3f48e5e43cac725771c52f06e4a9ec8b91c96468bbfd0b57762fa07b997157"
+        },
+        {
+          "image_digest": "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+          "entry": "tessera_tile_softmax_f16",
+          "schedule_digest": "c6c165afcc61420516661cb178860ec943fb821eb1d2ce480e37a01736fe3dd8",
+          "tile_ir_digest": "f80a67a63e252856870ba3c7eece97822f51b3287d3f665189f39a0b420bd16c"
+        },
+        {
+          "image_digest": "85cf684735824e614eb09eab42a69ad3dc45d43e8072bed836057be2e01859e3",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+          "entry": "tessera_tile_norm_layernorm_f16_0af09d3937",
+          "schedule_digest": "0af09d3937894ad379abd5ef2dd970f5c75af663125c7b228df0f800b0757743",
+          "tile_ir_digest": "3c1e39be8bb758bf61d4427bded46a9162ffbb36dfa9be4f41540a5f0e65b3c1"
+        },
+        {
+          "image_digest": "a10907546952086d8d166e31bade053be53b999d7d741b03882ed7a5923671a0",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "c2370ef556dfdc31ebee1b2fad73fb494876e305e392f901500ce344186dc676",
+          "tile_ir_digest": "bf0029918b9ced55027547af3cf16b7c8545fb700a1c936a149f748ff3d3398c"
+        }
+      ]
+    },
+    {
+      "dtype": "fp16",
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "chain_depth": 1,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 4.6726956497877836e-05,
+      "cold_compile_and_call_ms": 1259.3882710207254,
+      "device_program_samples_ms": [
+        0.03486425057053566,
+        0.03277900069952011,
+        0.03557474911212921,
+        0.03527050092816353,
+        0.03298575058579445,
+        0.036428000777959824,
+        0.036132000386714935
+      ],
+      "device_program_median_ms": 0.03527050092816353,
+      "grouped_stage_samples_ms": [
+        [
+          0.009281749837100506,
+          0.016575999557971954,
+          0.030731499195098877
+        ],
+        [
+          0.009576749987900257,
+          0.016544749960303307,
+          0.013895000331103802
+        ],
+        [
+          0.009167250245809555,
+          0.016573749482631683,
+          0.011528500355780125
+        ],
+        [
+          0.009721999987959862,
+          0.016580000519752502,
+          0.012545499950647354
+        ],
+        [
+          0.008217000402510166,
+          0.016820000484585762,
+          0.012168999761343002
+        ],
+        [
+          0.010001000016927719,
+          0.016644500195980072,
+          0.012518749572336674
+        ],
+        [
+          0.008985750377178192,
+          0.016578249633312225,
+          0.01263550017029047
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.009281749837100506,
+        0.016578249633312225,
+        0.012545499950647354
+      ],
+      "prepared_host_samples_ms": [
+        0.36610401002690196,
+        0.3179929917678237,
+        0.31078304164111614,
+        0.320744002237916,
+        0.28193299658596516,
+        0.3170340205542743,
+        0.3031729720532894
+      ],
+      "prepared_host_median_ms": 0.3170340205542743,
+      "public_warm_samples_ms": [
+        1.0006609954871237,
+        0.7913879817351699,
+        0.7637290400452912,
+        0.8625190239399672,
+        0.7170780445449054,
+        4.221866023726761,
+        0.7546879933215678
+      ],
+      "public_warm_median_ms": 0.7913879817351699,
+      "arena_capacity_bytes": 365824,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "rhs.softmax",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xf16>) -> tensor<129x513xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    return %0 : tensor<129x513xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xf16>) -> tensor<513x65xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    return %0 : tensor<513x65xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x513xf16>, %arg1: tensor<513x65xf16>) -> tensor<129x65xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>, tensor<513x65xf16>) -> tensor<129x65xf32>\n    return %0 : tensor<129x65xf32>\n  }\n}\n\n"
+        ],
+        "output": 4,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<129x513xf16>, %arg1: tensor<513x65xf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>, tensor<513x65xf16>) -> tensor<129x65xf32>\n    return %2 : tensor<129x65xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "public_dag__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "7e9e19b95a4377e0d2c1ae8aef2fa262de52ca42cd50975bc8ec8fffc71f45ee",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_f16_cooperative_128_aa789b2472",
+          "schedule_digest": "aa789b2472c5a5c750123397a0b283be57c73c17a0c61c4b89105da379b05bce",
+          "tile_ir_digest": "d557bb799b033469c7c88b935f3763c8a0ecb243358654ecbe03c5fcf77b4281"
+        },
+        {
+          "image_digest": "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+          "entry": "tessera_tile_softmax_f16",
+          "schedule_digest": "870d081850440861c0d9c2312e3cd6cf33f20fc2104be308207e6f911ac6cbb3",
+          "tile_ir_digest": "2b84b1947ef5ab98abff7c60dd4d3358654c5e8f5d901b0b5e26d1e84b33e8ec"
+        },
+        {
+          "image_digest": "f9d4b861a288f62252039f5e2d0bbfc7ebc7eac7dd30513e180707d7d9ba6fb8",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "0ef1e77c302bd7a1f0677fef725c026910f25e2a0ef9515efa8359463493b1e6",
+          "tile_ir_digest": "fc3352780884272308e7282dfd10c2f4dfeec71ec35b2d9a24bd97a465721182"
+        }
+      ]
+    },
+    {
+      "dtype": "fp16",
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "chain_depth": 2,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 7.339594401400973e-05,
+      "cold_compile_and_call_ms": 1571.067985962145,
+      "device_program_samples_ms": [
+        0.18372249603271484,
+        0.18373724818229675,
+        0.18432749807834625,
+        0.18411250412464142,
+        0.1839342564344406,
+        0.1840125024318695,
+        0.18419325351715088
+      ],
+      "device_program_median_ms": 0.1840125024318695,
+      "grouped_stage_samples_ms": [
+        [
+          0.008469999767839909,
+          0.13709774613380432,
+          0.016875000670552254,
+          0.01829100027680397,
+          0.013444250449538231
+        ],
+        [
+          0.008555499836802483,
+          0.13710999488830566,
+          0.016657499596476555,
+          0.017394250258803368,
+          0.013144250027835369
+        ],
+        [
+          0.010264250449836254,
+          0.13711024820804596,
+          0.016820499673485756,
+          0.017395999282598495,
+          0.011847250163555145
+        ],
+        [
+          0.008833000436425209,
+          0.13711175322532654,
+          0.016612499952316284,
+          0.01813575066626072,
+          0.010623250156641006
+        ],
+        [
+          0.008659499697387218,
+          0.13708099722862244,
+          0.01654374971985817,
+          0.017418500036001205,
+          0.011963999830186367
+        ],
+        [
+          0.008280250243842602,
+          0.13709725439548492,
+          0.016564249992370605,
+          0.017485499382019043,
+          0.012145750224590302
+        ],
+        [
+          0.009427499957382679,
+          0.13712699711322784,
+          0.017067499458789825,
+          0.017535500228405,
+          0.011579000391066074
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.008659499697387218,
+        0.13710999488830566,
+        0.016657499596476555,
+        0.017485499382019043,
+        0.011963999830186367
+      ],
+      "prepared_host_samples_ms": [
+        0.5824569961987436,
+        0.5296960007399321,
+        0.5175459664314985,
+        0.501515984069556,
+        0.5035760113969445,
+        0.47893496230244637,
+        0.5153560196049511
+      ],
+      "prepared_host_median_ms": 0.5153560196049511,
+      "public_warm_samples_ms": [
+        1.5305359847843647,
+        1.519547018688172,
+        1.468016009312123,
+        1.557196956127882,
+        1.4640860026702285,
+        1.4960260014049709,
+        1.4919370296411216
+      ],
+      "public_warm_median_ms": 1.4960260014049709,
+      "arena_capacity_bytes": 365824,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "lhs.softmax",
+        "rhs.softmax",
+        "rhs.layernorm",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 3,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "f16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 4,
+            "id": 6,
+            "last_read": 5,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xf16>) -> tensor<129x513xf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    return %0 : tensor<129x513xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xf16>) -> tensor<129x513xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    return %0 : tensor<129x513xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xf16>) -> tensor<513x65xf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    return %0 : tensor<513x65xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xf16>) -> tensor<513x65xf16> {\n    %0 = tessera.layer_norm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    return %0 : tensor<513x65xf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x513xf16>, %arg1: tensor<513x65xf16>) -> tensor<129x65xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>, tensor<513x65xf16>) -> tensor<129x65xf32>\n    return %0 : tensor<129x65xf32>\n  }\n}\n\n"
+        ],
+        "output": 6,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag_deep",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<129x513xf16>, %arg1: tensor<513x65xf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>) -> tensor<129x513xf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xf16>) -> tensor<513x65xf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xf16>, tensor<513x65xf16>) -> tensor<129x65xf32>\n    return %4 : tensor<129x65xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag_deep__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "member": "public_dag_deep__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag_deep__tensor_member_2",
+            "operation": "tessera.softmax",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "member": "public_dag_deep__tensor_member_3",
+            "operation": "tessera.layer_norm",
+            "outputs": [
+              5
+            ],
+            "step": 3
+          },
+          {
+            "inputs": [
+              3,
+              5
+            ],
+            "member": "public_dag_deep__tensor_member_4",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 4
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "7e9e19b95a4377e0d2c1ae8aef2fa262de52ca42cd50975bc8ec8fffc71f45ee",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_f16_cooperative_128_aa789b2472",
+          "schedule_digest": "aa789b2472c5a5c750123397a0b283be57c73c17a0c61c4b89105da379b05bce",
+          "tile_ir_digest": "d557bb799b033469c7c88b935f3763c8a0ecb243358654ecbe03c5fcf77b4281"
+        },
+        {
+          "image_digest": "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+          "entry": "tessera_tile_softmax_f16",
+          "schedule_digest": "2e7e1bf8a29c08b88f1508013313b384e22ded925de657ec9bb1dca2f4d2d360",
+          "tile_ir_digest": "2c860706926bb4b461f7ac376896cd41f28e8be51dd08af562c56c5f157ba2b2"
+        },
+        {
+          "image_digest": "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+          "entry": "tessera_tile_softmax_f16",
+          "schedule_digest": "870d081850440861c0d9c2312e3cd6cf33f20fc2104be308207e6f911ac6cbb3",
+          "tile_ir_digest": "2b84b1947ef5ab98abff7c60dd4d3358654c5e8f5d901b0b5e26d1e84b33e8ec"
+        },
+        {
+          "image_digest": "bddd0c166001bca97f6c79e34fac8c11a27e9d55a874e12b4df9f4adaabdd622",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+          "entry": "tessera_tile_norm_layernorm_f16_3ca42b07e4",
+          "schedule_digest": "3ca42b07e49dab2f608e99279c6632c7e5265f1c98dd5cf93b423107183cae7a",
+          "tile_ir_digest": "d60eb6c5d9866df98f1f1d9f86cfddf52b08c8df85963096caf77069a9c41725"
+        },
+        {
+          "image_digest": "f9d4b861a288f62252039f5e2d0bbfc7ebc7eac7dd30513e180707d7d9ba6fb8",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "0ef1e77c302bd7a1f0677fef725c026910f25e2a0ef9515efa8359463493b1e6",
+          "tile_ir_digest": "fc3352780884272308e7282dfd10c2f4dfeec71ec35b2d9a24bd97a465721182"
+        }
+      ]
+    },
+    {
+      "dtype": "bf16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "chain_depth": 1,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 4.470348358154297e-08,
+      "cold_compile_and_call_ms": 1229.235887993127,
+      "device_program_samples_ms": [
+        0.02874249964952469,
+        0.028405500575900078,
+        0.02847049944102764,
+        0.028600500896573067,
+        0.027149749919772148,
+        0.028088750317692757,
+        0.06273374706506729
+      ],
+      "device_program_median_ms": 0.02847049944102764,
+      "grouped_stage_samples_ms": [
+        [
+          0.009957999922335148,
+          0.00905575044453144,
+          0.008252750150859356
+        ],
+        [
+          0.00982499960809946,
+          0.008886000141501427,
+          0.009838249534368515
+        ],
+        [
+          0.008923999965190887,
+          0.00922049954533577,
+          0.0077207498252391815
+        ],
+        [
+          0.009479749947786331,
+          0.008765749633312225,
+          0.008926750160753727
+        ],
+        [
+          0.009761249646544456,
+          0.008636750280857086,
+          0.00909349974244833
+        ],
+        [
+          0.009043250232934952,
+          0.009159999899566174,
+          0.009188000112771988
+        ],
+        [
+          0.009888499975204468,
+          0.00880349986255169,
+          0.01018850039690733
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.009761249646544456,
+        0.008886000141501427,
+        0.00909349974244833
+      ],
+      "prepared_host_samples_ms": [
+        0.3239329671487212,
+        0.22968201665207744,
+        0.2650229725986719,
+        0.26263296604156494,
+        0.2602430176921189,
+        0.24860200937837362,
+        0.22523297229781747
+      ],
+      "prepared_host_median_ms": 0.2602430176921189,
+      "public_warm_samples_ms": [
+        1.2057129642926157,
+        1.1610829969868064,
+        1.2305930140428245,
+        1.1688119848258793,
+        1.188263006042689,
+        1.1734229628928006,
+        1.1586929904296994
+      ],
+      "public_warm_median_ms": 1.1734229628928006,
+      "arena_capacity_bytes": 5632,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "rhs.softmax",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 1190,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": "readonly_input",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1190,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x35xbf16>) -> tensor<17x35xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    return %0 : tensor<17x35xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<35x19xbf16>) -> tensor<35x19xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    return %0 : tensor<35x19xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n"
+        ],
+        "output": 4,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %2 : tensor<17x19xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "public_dag__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "0a04d0cf99f7ebe9269cebc4ce6abf7c712485797e98c3487b7755439c97f414",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_bf16_39a59cedde",
+          "schedule_digest": "39a59cedded7e2eb62a170bc16502a012588e6ea84840c5f9d9936a2b9683b1b",
+          "tile_ir_digest": "12305acc0eb2507f65e13b5437f5196b1559978d61e54840e6b8393a97db8254"
+        },
+        {
+          "image_digest": "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+          "entry": "tessera_tile_softmax_bf16",
+          "schedule_digest": "b12864d659192be0c6a7e58c2436b4f3bd491438f3a726a0970b39de164b5037",
+          "tile_ir_digest": "5dac55fbc7a4f3eae3e8a22b72aab1488849dd4dab9986895e2c66680c10ce80"
+        },
+        {
+          "image_digest": "9fe153d2de4da3fff63ba644af1d53837c932ba1d0462b9370ec4c4ce8ab735b",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "fa709a526e220f707c069e989805d388d6200454b218be41fc4495ee5f95a960",
+          "tile_ir_digest": "0548471408ab7de5aa4a192a7257d414f1fa96aa412c3a0ac535225d614137e8"
+        }
+      ]
+    },
+    {
+      "dtype": "bf16",
+      "shape_mnk": [
+        17,
+        19,
+        35
+      ],
+      "chain_depth": 2,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 7.078051567077637e-08,
+      "cold_compile_and_call_ms": 1537.902150012087,
+      "device_program_samples_ms": [
+        0.04821375012397766,
+        0.046769749373197556,
+        0.046961501240730286,
+        0.04496200010180473,
+        0.048069000244140625,
+        0.0790022537112236,
+        0.04666449874639511
+      ],
+      "device_program_median_ms": 0.046961501240730286,
+      "grouped_stage_samples_ms": [
+        [
+          0.009245749562978745,
+          0.010815249755978584,
+          0.008230750449001789,
+          0.009053249843418598,
+          0.008388250134885311
+        ],
+        [
+          0.009014000184834003,
+          0.010212750174105167,
+          0.008059999905526638,
+          0.00825824961066246,
+          0.009434250183403492
+        ],
+        [
+          0.010321250185370445,
+          0.009954500012099743,
+          0.008994500152766705,
+          0.00837824959307909,
+          0.008902500383555889
+        ],
+        [
+          0.009248499758541584,
+          0.009525000117719173,
+          0.009062499739229679,
+          0.008695749565958977,
+          0.008577999658882618
+        ],
+        [
+          0.010587750002741814,
+          0.009306499734520912,
+          0.009953250177204609,
+          0.008481750264763832,
+          0.009470250457525253
+        ],
+        [
+          0.009581250138580799,
+          0.009780749678611755,
+          0.008671999908983707,
+          0.009672249667346478,
+          0.00809825025498867
+        ],
+        [
+          0.009166750125586987,
+          0.009507999755442142,
+          0.00848925020545721,
+          0.008823500014841557,
+          0.009119750000536442
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.009248499758541584,
+        0.009780749678611755,
+        0.008671999908983707,
+        0.008695749565958977,
+        0.008902500383555889
+      ],
+      "prepared_host_samples_ms": [
+        0.33014395739883184,
+        0.2666429500095546,
+        0.27556304121389985,
+        0.2729829866439104,
+        0.2570530050434172,
+        0.27206301456317306,
+        0.26943295961245894
+      ],
+      "prepared_host_median_ms": 0.27206301456317306,
+      "public_warm_samples_ms": [
+        1.1840930092148483,
+        0.91433001216501,
+        0.8788090199232101,
+        0.8360189967788756,
+        0.8781699580140412,
+        0.9762610425241292,
+        0.8716589654795825
+      ],
+      "public_warm_median_ms": 0.8788090199232101,
+      "arena_capacity_bytes": 5632,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "lhs.softmax",
+        "rhs.softmax",
+        "rhs.layernorm",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 1190,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1190,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1190,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              17,
+              35
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1330,
+            "first_write": 3,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              35,
+              19
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 1292,
+            "first_write": 4,
+            "id": 6,
+            "last_read": 5,
+            "ownership": "returned_output",
+            "shape": [
+              17,
+              19
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x35xbf16>) -> tensor<17x35xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    return %0 : tensor<17x35xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<17x35xbf16>) -> tensor<17x35xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    return %0 : tensor<17x35xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<35x19xbf16>) -> tensor<35x19xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    return %0 : tensor<35x19xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<35x19xbf16>) -> tensor<35x19xbf16> {\n    %0 = tessera.layer_norm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    return %0 : tensor<35x19xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %0 : tensor<17x19xf32>\n  }\n}\n\n"
+        ],
+        "output": 6,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag_deep",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<17x35xbf16>, %arg1: tensor<35x19xbf16>) -> tensor<17x19xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>) -> tensor<17x35xbf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<35x19xbf16>) -> tensor<35x19xbf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<17x35xbf16>, tensor<35x19xbf16>) -> tensor<17x19xf32>\n    return %4 : tensor<17x19xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag_deep__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "member": "public_dag_deep__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag_deep__tensor_member_2",
+            "operation": "tessera.softmax",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "member": "public_dag_deep__tensor_member_3",
+            "operation": "tessera.layer_norm",
+            "outputs": [
+              5
+            ],
+            "step": 3
+          },
+          {
+            "inputs": [
+              3,
+              5
+            ],
+            "member": "public_dag_deep__tensor_member_4",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 4
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "0a04d0cf99f7ebe9269cebc4ce6abf7c712485797e98c3487b7755439c97f414",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_bf16_39a59cedde",
+          "schedule_digest": "39a59cedded7e2eb62a170bc16502a012588e6ea84840c5f9d9936a2b9683b1b",
+          "tile_ir_digest": "12305acc0eb2507f65e13b5437f5196b1559978d61e54840e6b8393a97db8254"
+        },
+        {
+          "image_digest": "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+          "entry": "tessera_tile_softmax_bf16",
+          "schedule_digest": "d780cce67c483d490c05b9464e5d7e6fda1772170f19d4f4793160a007c832d3",
+          "tile_ir_digest": "ae504d37c68597b7389079c4ec5978196b592fd8709e99d46342f327ba183afc"
+        },
+        {
+          "image_digest": "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+          "entry": "tessera_tile_softmax_bf16",
+          "schedule_digest": "b12864d659192be0c6a7e58c2436b4f3bd491438f3a726a0970b39de164b5037",
+          "tile_ir_digest": "5dac55fbc7a4f3eae3e8a22b72aab1488849dd4dab9986895e2c66680c10ce80"
+        },
+        {
+          "image_digest": "eb422448d15e774f18b58ab1faa2471a04fd53185dafabd6231eebae57f96497",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+          "entry": "tessera_tile_norm_layernorm_bf16_f4c9d21347",
+          "schedule_digest": "f4c9d2134773c19782edb1d2af30817619cc0a2de877e9db1daac1277d54044a",
+          "tile_ir_digest": "c8412374928f93230778a618fe09248167d70b1180606d7cdf82e373ab07b6da"
+        },
+        {
+          "image_digest": "9fe153d2de4da3fff63ba644af1d53837c932ba1d0462b9370ec4c4ce8ab735b",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "fa709a526e220f707c069e989805d388d6200454b218be41fc4495ee5f95a960",
+          "tile_ir_digest": "0548471408ab7de5aa4a192a7257d414f1fa96aa412c3a0ac535225d614137e8"
+        }
+      ]
+    },
+    {
+      "dtype": "bf16",
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "chain_depth": 1,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 0.0001650247722864151,
+      "cold_compile_and_call_ms": 1188.5616279905662,
+      "device_program_samples_ms": [
+        0.032462749630212784,
+        0.03486825153231621,
+        0.0331140011548996,
+        0.03653449937701225,
+        0.03497700020670891,
+        0.036037251353263855,
+        0.03392999991774559
+      ],
+      "device_program_median_ms": 0.03486825153231621,
+      "grouped_stage_samples_ms": [
+        [
+          0.00875999964773655,
+          0.01673850044608116,
+          0.011558500118553638
+        ],
+        [
+          0.008252750150859356,
+          0.01654599979519844,
+          0.013269750401377678
+        ],
+        [
+          0.008224500343203545,
+          0.016593750566244125,
+          0.010699249804019928
+        ],
+        [
+          0.007691250182688236,
+          0.016520999372005463,
+          0.01252024993300438
+        ],
+        [
+          0.008998249657452106,
+          0.01649625040590763,
+          0.0118410000577569
+        ],
+        [
+          0.0076802498660981655,
+          0.0165647491812706,
+          0.01096974965184927
+        ],
+        [
+          0.009579249657690525,
+          0.016781000420451164,
+          0.012796999886631966
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.008252750150859356,
+        0.0165647491812706,
+        0.0118410000577569
+      ],
+      "prepared_host_samples_ms": [
+        0.38130400935187936,
+        0.30354404589161277,
+        0.2734829904511571,
+        0.30978303402662277,
+        0.34394400427117944,
+        0.2981129800900817,
+        0.29558304231613874
+      ],
+      "prepared_host_median_ms": 0.30354404589161277,
+      "public_warm_samples_ms": [
+        0.9196100290864706,
+        0.6188570405356586,
+        0.6415670504793525,
+        0.711627013515681,
+        0.6892179953865707,
+        0.6741670076735318,
+        0.6557769956998527
+      ],
+      "public_warm_median_ms": 0.6741670076735318,
+      "arena_capacity_bytes": 365824,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "rhs.softmax",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 2,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xbf16>) -> tensor<129x513xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    return %0 : tensor<129x513xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xbf16>) -> tensor<513x65xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    return %0 : tensor<513x65xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x513xbf16>, %arg1: tensor<513x65xbf16>) -> tensor<129x65xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>, tensor<513x65xbf16>) -> tensor<129x65xf32>\n    return %0 : tensor<129x65xf32>\n  }\n}\n\n"
+        ],
+        "output": 4,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag(%arg0: tensor<129x513xbf16>, %arg1: tensor<513x65xbf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"e05a51bf0ec46196b09507bb5a43b1869b343cf844ae850f8c9d16e182e3cb54\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    %1 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    %2 = tessera.matmul %0, %1 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>, tensor<513x65xbf16>) -> tensor<129x65xf32>\n    return %2 : tensor<129x65xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              2,
+              3
+            ],
+            "member": "public_dag__tensor_member_2",
+            "operation": "tessera.matmul",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "19699f30bd8bdb118525661d8c4074af83d381bf2d48c4cfa9d18d48054966ec",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_bf16_cooperative_128_9631a227c2",
+          "schedule_digest": "9631a227c219ac893d030b45a86ff1df60e9b0defb603488f861c0c4a20c20b2",
+          "tile_ir_digest": "4abca6e125b7c7c78351db00f572afdb9378016285dc6b943012807e36352ab6"
+        },
+        {
+          "image_digest": "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+          "entry": "tessera_tile_softmax_bf16",
+          "schedule_digest": "9e323c976fad7e2c6ab7e7d6fec2010fe79aae9f8b00e403104adbef638f53cf",
+          "tile_ir_digest": "70818f44e0573718c1bcc05228661fefaad2f3559b038600e0db16f2199aa55b"
+        },
+        {
+          "image_digest": "76019052c9ea405f308926bb730534c2ebb75cbed522f28c4431e0c4180d9f75",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "59d83b4fe86e539ccb5c253a6b8669537a459836ec6597c2b63dce0c5d1e434a",
+          "tile_ir_digest": "13a3bb41a4e3176fdf31fc8f49b6c8e40af195bddcad085a01a2622afe1bf93a"
+        }
+      ]
+    },
+    {
+      "dtype": "bf16",
+      "shape_mnk": [
+        129,
+        65,
+        513
+      ],
+      "chain_depth": 2,
+      "correctness": "passed_before_and_after_every_window",
+      "max_abs_error": 0.00014334306615637615,
+      "cold_compile_and_call_ms": 1555.665471998509,
+      "device_program_samples_ms": [
+        0.18423324823379517,
+        0.1842937469482422,
+        0.18378899991512299,
+        0.18410174548625946,
+        0.1839977502822876,
+        0.18410125374794006,
+        0.18382975459098816
+      ],
+      "device_program_median_ms": 0.18410125374794006,
+      "grouped_stage_samples_ms": [
+        [
+          0.009621749632060528,
+          0.13719774782657623,
+          0.016625750809907913,
+          0.017528250813484192,
+          0.0119827501475811
+        ],
+        [
+          0.009460249915719032,
+          0.13707849383354187,
+          0.016594750806689262,
+          0.017765749245882034,
+          0.01216300018131733
+        ],
+        [
+          0.0092782499268651,
+          0.13713300228118896,
+          0.016623500734567642,
+          0.017730500549077988,
+          0.0119420001283288
+        ],
+        [
+          0.00774300005286932,
+          0.1370762437582016,
+          0.01658174954354763,
+          0.032575249671936035,
+          0.012440250255167484
+        ],
+        [
+          0.010119250044226646,
+          0.13713374733924866,
+          0.01661974936723709,
+          0.0175392497330904,
+          0.012590499594807625
+        ],
+        [
+          0.009200500324368477,
+          0.13710549473762512,
+          0.016995249316096306,
+          0.01763024926185608,
+          0.012780999764800072
+        ],
+        [
+          0.009286999702453613,
+          0.13731999695301056,
+          0.016879750415682793,
+          0.017436500638723373,
+          0.01193500030785799
+        ]
+      ],
+      "grouped_stage_medians_ms": [
+        0.009286999702453613,
+        0.13713300228118896,
+        0.016623500734567642,
+        0.01763024926185608,
+        0.01216300018131733
+      ],
+      "prepared_host_samples_ms": [
+        0.6209060084074736,
+        0.5116850370541215,
+        0.48978603444993496,
+        0.5136660183779895,
+        0.4785049823112786,
+        0.4843749920837581,
+        0.4350150120444596
+      ],
+      "prepared_host_median_ms": 0.48978603444993496,
+      "public_warm_samples_ms": [
+        1.3306839973665774,
+        0.9981000330299139,
+        1.0289110359735787,
+        1.1019820231013,
+        1.0344600304961205,
+        1.0193010093644261,
+        0.9683509706519544
+      ],
+      "public_warm_median_ms": 1.0289110359735787,
+      "arena_capacity_bytes": 365824,
+      "arena_allocation_count": 1,
+      "physical_stage_order": [
+        "lhs.rmsnorm",
+        "lhs.softmax",
+        "rhs.softmax",
+        "rhs.layernorm",
+        "matmul"
+      ],
+      "native_plan": {
+        "buffers": [
+          {
+            "bytes": 132354,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": "readonly_input",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": "readonly_input",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 0,
+            "id": 2,
+            "last_read": 1,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 132354,
+            "first_write": 1,
+            "id": 3,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              129,
+              513
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 2,
+            "id": 4,
+            "last_read": 3,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 66690,
+            "first_write": 3,
+            "id": 5,
+            "last_read": 4,
+            "ownership": "private_scratch",
+            "shape": [
+              513,
+              65
+            ],
+            "storage": "bf16"
+          },
+          {
+            "bytes": 33540,
+            "first_write": 4,
+            "id": 6,
+            "last_read": 5,
+            "ownership": "returned_output",
+            "shape": [
+              129,
+              65
+            ],
+            "storage": "f32"
+          }
+        ],
+        "member_graphs": [
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xbf16>) -> tensor<129x513xbf16> {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    return %0 : tensor<129x513xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<129x513xbf16>) -> tensor<129x513xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    return %0 : tensor<129x513xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xbf16>) -> tensor<513x65xbf16> {\n    %0 = tessera.softmax %arg0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    return %0 : tensor<513x65xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @native_sm120_tensor_producer(%arg0: tensor<513x65xbf16>) -> tensor<513x65xbf16> {\n    %0 = tessera.layer_norm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    return %0 : tensor<513x65xbf16>\n  }\n}\n\n",
+          "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @nvidia_sm120_scheduled_matmul_native_tensor_consumer(%arg0: tensor<129x513xbf16>, %arg1: tensor<513x65xbf16>) -> tensor<129x65xf32> {\n    %0 = tessera.matmul %arg0, %arg1 {output_dtype = \"fp32\", rhs_storage_order = \"row_major\", tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>, tensor<513x65xbf16>) -> tensor<129x65xf32>\n    return %0 : tensor<129x65xf32>\n  }\n}\n\n"
+        ],
+        "output": 6,
+        "role_indices": [
+          0,
+          1
+        ],
+        "root": "public_dag_deep",
+        "schema": "tessera.native.sm120_tensor_program.v5",
+        "source_graph_ir": "module attributes {tessera.arch = \"sm_120\", tessera.frontend.authority = \"tracer\", tessera.ir.version = \"1.0\", tessera.target = \"nvidia_sm120\"} {\n  func.func @public_dag_deep(%arg0: tensor<129x513xbf16>, %arg1: tensor<513x65xbf16>) -> tensor<129x65xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"15eda08afb80a51acb4ff76aa27c18f932c9c1a0b43c25b32416f9f45d3e6c0b\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n    %0 = tessera.rmsnorm %arg0 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    %1 = tessera.softmax %0 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>) -> tensor<129x513xbf16>\n    %2 = tessera.softmax %arg1 {axis = -1 : i64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    %3 = tessera.layer_norm %2 {eps = 1.000000e-05 : f64, tessera.effect_kind = \"pure\"} : (tensor<513x65xbf16>) -> tensor<513x65xbf16>\n    %4 = tessera.matmul %1, %3 {output_dtype = \"fp32\", tessera.effect_kind = \"pure\"} : (tensor<129x513xbf16>, tensor<513x65xbf16>) -> tensor<129x65xf32>\n    return %4 : tensor<129x65xf32>\n  }\n}\n\n",
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "member": "public_dag_deep__tensor_member_0",
+            "operation": "tessera.rmsnorm",
+            "outputs": [
+              2
+            ],
+            "step": 0
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "member": "public_dag_deep__tensor_member_1",
+            "operation": "tessera.softmax",
+            "outputs": [
+              3
+            ],
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "member": "public_dag_deep__tensor_member_2",
+            "operation": "tessera.softmax",
+            "outputs": [
+              4
+            ],
+            "step": 2
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "member": "public_dag_deep__tensor_member_3",
+            "operation": "tessera.layer_norm",
+            "outputs": [
+              5
+            ],
+            "step": 3
+          },
+          {
+            "inputs": [
+              3,
+              5
+            ],
+            "member": "public_dag_deep__tensor_member_4",
+            "operation": "tessera.matmul",
+            "outputs": [
+              6
+            ],
+            "step": 4
+          }
+        ]
+      },
+      "images": [
+        {
+          "image_digest": "19699f30bd8bdb118525661d8c4074af83d381bf2d48c4cfa9d18d48054966ec",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+          "entry": "tessera_tile_norm_rmsnorm_bf16_cooperative_128_9631a227c2",
+          "schedule_digest": "9631a227c219ac893d030b45a86ff1df60e9b0defb603488f861c0c4a20c20b2",
+          "tile_ir_digest": "4abca6e125b7c7c78351db00f572afdb9378016285dc6b943012807e36352ab6"
+        },
+        {
+          "image_digest": "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+          "entry": "tessera_tile_softmax_bf16",
+          "schedule_digest": "f45fe2b3902523ecda1583abb0bda9d74ea6605f19323e501cefce1631c67db2",
+          "tile_ir_digest": "bf55b25519f9f365b411abc9415196df0a3237e331cc256026b531e4fccaa787"
+        },
+        {
+          "image_digest": "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+          "abi_id": "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+          "entry": "tessera_tile_softmax_bf16",
+          "schedule_digest": "9e323c976fad7e2c6ab7e7d6fec2010fe79aae9f8b00e403104adbef638f53cf",
+          "tile_ir_digest": "70818f44e0573718c1bcc05228661fefaad2f3559b038600e0db16f2199aa55b"
+        },
+        {
+          "image_digest": "04176a66bf888de23e4dc27e94f0e1ba6e91474fe630a36a4d50ffcf6923566b",
+          "abi_id": "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+          "entry": "tessera_tile_norm_layernorm_bf16_8d78ff93e4",
+          "schedule_digest": "8d78ff93e40d4bf93d471c10637db95e3aaed2f39034a4df2a388f4031a54de8",
+          "tile_ir_digest": "c8fbb640d8bfdff8c4c7a4f5993d796836d4e4baee7714df7c575a34862a9108"
+        },
+        {
+          "image_digest": "76019052c9ea405f308926bb730534c2ebb75cbed522f28c4431e0c4180d9f75",
+          "abi_id": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_kernel",
+          "schedule_digest": "59d83b4fe86e539ccb5c253a6b8669537a459836ec6597c2b63dce0c5d1e434a",
+          "tile_ir_digest": "13a3bb41a4e3176fdf31fc8f49b6c8e40af195bddcad085a01a2622afe1bf93a"
+        }
+      ]
+    }
+  ]
+}

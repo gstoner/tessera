@@ -32,6 +32,7 @@ struct Scratch {
   unsigned long long identity = 0;
   CUdeviceptr base = 0;
   size_t capacity = 0, allocations = 0;
+  uint64_t generation = 0;
   void *host = nullptr;
   size_t hostCapacity = 0;
   ~Scratch() {
@@ -75,7 +76,7 @@ struct Scratch {
     if (base && !ok(cuMemFree(base), "retire old matmul scratch")) {
       cuMemFree(replacement); return false;
     }
-    base = replacement; capacity = bytes; ++allocations;
+    base = replacement; capacity = bytes; ++allocations; ++generation;
     return true;
   }
 };
@@ -92,8 +93,8 @@ struct Owner {
   CUfunction function = nullptr;
   CUmodule producerModule = nullptr;
   CUfunction producer = nullptr;
-  std::vector<RowProducer> followingProducers;
-  CUdeviceptr producerScratch = 0;
+  std::vector<RowProducer> followingProducers, rhsProducers;
+  CUdeviceptr producerScratch = 0, rhsEdge = 0, rhsScratch = 0, ownedLhsEdge = 0;
   bool cooperativeProducer = false, invoked = false, rowSymbol = false;
   int dynamicAxes = 0, storage = 0;
   bool macro = false;
@@ -105,6 +106,9 @@ struct Owner {
   std::array<TesseraNvidiaMatmulHostView, 5> expected{};
   std::array<int64_t, 3> dims{};
   size_t count = 0;
+  uint64_t hostGeneration = 0;
+  CUdeviceptr hostBase = 0, hostEdge = 0;
+  std::array<int64_t, 3> activeDims{};
   ~Owner() {
     if (getpid() != process || !context || cuCtxPushCurrent(context) != CUDA_SUCCESS) return;
     unsigned long long current = 0;
@@ -112,6 +116,11 @@ struct Owner {
       if (stream) cuStreamSynchronize(stream);
       if (stream) cuStreamDestroy(stream);
       if (producerScratch) cuMemFree(producerScratch);
+      if (rhsEdge) cuMemFree(rhsEdge);
+      if (ownedLhsEdge) cuMemFree(ownedLhsEdge);
+      if (rhsScratch) cuMemFree(rhsScratch);
+      for (auto &stage : rhsProducers)
+        if (stage.module) cuModuleUnload(stage.module);
       for (auto &stage : followingProducers)
         if (stage.module) cuModuleUnload(stage.module);
       if (producerModule) cuModuleUnload(producerModule);
@@ -152,9 +161,30 @@ bool view(Owner &owner, int dtype, int rank, int64_t x, int64_t y, bool column) 
   owner.bytes[index] = expected.bytes;
   return true;
 }
-// Both host-staged and resident execution use the same sealed two-kernel ABI.
+// Host-staged and resident execution share the same sealed member kernel ABIs.
 bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
-            CUdeviceptr edge, std::array<int64_t, 3> dims, CUstream stream, int64_t rhsLeading = 0) {
+            CUdeviceptr edge, std::array<int64_t, 3> dims, CUstream stream, int64_t rhsLeading = 0,
+            int repeats = 1, float *stageTimes = nullptr) {
+  size_t timingIndex = 0;
+  auto launch = [&](CUfunction function, unsigned x, unsigned y, unsigned threads,
+                    void **args, const char *message) {
+    if (!stageTimes)
+      return ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
+    CUevent start = nullptr, end = nullptr;
+    bool status = ok(cuEventCreate(&start,0),"create stage start event") &&
+                  ok(cuEventCreate(&end,0),"create stage end event") &&
+                  ok(cuEventRecord(start,stream),"record stage start");
+    for (int i = 0; status && i < repeats; ++i)
+      status = ok(cuLaunchKernel(function,x,y,1,threads,1,1,0,stream,args,nullptr),message);
+    float elapsed = 0;
+    status = status && ok(cuEventRecord(end,stream),"record stage end") &&
+             ok(cuEventSynchronize(end),"synchronize stage end") &&
+             ok(cuEventElapsedTime(&elapsed,start,end),"stage elapsed time");
+    if (start) cuEventDestroy(start);
+    if (end) cuEventDestroy(end);
+    if (status) stageTimes[timingIndex++] = elapsed / repeats;
+    return status;
+  };
   if (owner.producer) {
     int64_t rows = dims[0], columns = dims[2];
     CUdeviceptr source = buffers[0];
@@ -166,14 +196,30 @@ bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
       CUfunction function = index == 0 ? owner.producer : owner.followingProducers[index - 1].function;
       bool cooperative = index == 0 ? owner.cooperativeProducer : owner.followingProducers[index - 1].cooperative;
       void *producerArgs[] = {&source, &destination, &rows, &columns};
-      if (!ok(cuLaunchKernel(function, unsigned(cooperative ? rows : (rows + 127) / 128),
-          1, 1, 128, 1, 1, 0, stream, producerArgs, nullptr),
-          "launch prepared tensor producer")) return false;
+      if (!launch(function,unsigned(cooperative ? rows : (rows + 127) / 128),
+          1,128,producerArgs,"launch prepared tensor producer")) return false;
       source = destination;
     }
   }
   CUdeviceptr input = owner.producer ? edge : buffers[0];
   std::array<CUdeviceptr, 5> pointers = buffers;
+  if (!owner.rhsProducers.empty()) {
+    int64_t rows = dims[2], columns = dims[1];
+    CUdeviceptr source = buffers[1];
+    const size_t stages = owner.rhsProducers.size();
+    for (size_t index = 0; index < stages; ++index) {
+      CUdeviceptr destination = ((stages - 1 - index) % 2 == 0) ? owner.rhsEdge : owner.rhsScratch;
+      if (!destination || source == destination)
+        return bad("prepared RHS chain lost disjoint scratch"), false;
+      auto &stage = owner.rhsProducers[index];
+      void *producerArgs[] = {&source, &destination, &rows, &columns};
+      if (!launch(stage.function,unsigned(stage.cooperative ? rows : (rows + 127) / 128),
+          1,128,producerArgs,"launch prepared RHS tensor producer")) return false;
+      source = destination;
+    }
+    pointers[1] = owner.rhsEdge;
+    rhsLeading = dims[1];
+  }
   void *args[11] = {}; size_t arg = 0;
   args[arg++] = &input;
   for (size_t i = 1; i < owner.count; ++i) args[arg++] = &pointers[i];
@@ -181,10 +227,9 @@ bool submit(Owner &owner, const std::array<CUdeviceptr, 5> &buffers,
   std::array<int64_t, 3> leading{dims[2], rhsLeading ? rhsLeading : owner.rowB ? dims[1] : dims[2], dims[1]};
   if (owner.dynamicAxes)
     for (auto &dimension : leading) args[arg++] = &dimension;
-  return ok(cuLaunchKernel(owner.function, unsigned((dims[1] + (owner.macro ? 31 : 7)) / (owner.macro ? 32 : 8)),
+  return launch(owner.function,unsigned((dims[1] + (owner.macro ? 31 : 7)) / (owner.macro ? 32 : 8)),
       unsigned((dims[0] + (owner.macro ? 31 : 15)) / (owner.macro ? 32 : 16)),
-      1, owner.macro ? 128 : 32, 1, 1, 0, stream, args, nullptr),
-      "launch prepared matmul");
+      owner.macro ? 128 : 32,args,"launch prepared matmul");
 }
 
 }
@@ -244,7 +289,7 @@ extern "C" int tessera_nvidia_matmul_set_dynamic_axes(uint64_t handle, int axes)
   if (found == owners.end() || axes <= 0 || axes > 7)
     return bad("invalid dynamic matmul axes");
   Owner &owner = *found->second;
-  if (owner.invoked || owner.producer || owner.dynamicAxes)
+  if (owner.invoked || owner.producer || !owner.rhsProducers.empty() || owner.dynamicAxes)
     return bad("dynamic axes require an unused owner");
   if (owner.macro) return bad("dynamic axes require a strided typed consumer");
   if (owner.rowB != owner.rowSymbol)
@@ -267,7 +312,7 @@ extern "C" int tessera_nvidia_matmul_set_dynamic_axes(uint64_t handle, int axes)
 // Attach exactly one compiler-owned shape-preserving row producer before use.
 // Both pointer ABIs are retained by one synchronous owner; no edge escapes.
 static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
-    const char *entry, int cooperative, bool append) {
+    const char *entry, int cooperative, bool append, bool rhs = false) {
   error.clear();
   if (getpid() != process) return bad("prepared tensor edge cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);
@@ -276,11 +321,18 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
       (cooperative != 0 && cooperative != 1))
     return bad("invalid prepared tensor producer");
   Owner &owner = *found->second;
-  if (!append && owner.producer)
-    return bad("prepared tensor producer already attached");
-  if (append && !owner.producer)
-    return bad("prepared tensor producer attachment order differs");
-  if (append && owner.followingProducers.size() >= 62)
+  if (rhs) {
+    if (!owner.rowB || owner.macro)
+      return bad("RHS producers require a row-major typed matmul consumer");
+    if ((!append && !owner.rhsProducers.empty()) || (append && owner.rhsProducers.empty()))
+      return bad("prepared RHS producer attachment order differs");
+  } else {
+    if (!append && owner.producer)
+      return bad("prepared tensor producer already attached");
+    if (append && !owner.producer)
+      return bad("prepared tensor producer attachment order differs");
+  }
+  if (size_t(bool(owner.producer)) + owner.followingProducers.size() + owner.rhsProducers.size() >= 63)
     return bad("prepared tensor producer chain exceeds its bound");
   if (owner.invoked) return bad("tensor producer must attach before first invocation");
   const bool f16 = owner.expected[0].dtype == 2;
@@ -297,7 +349,7 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
       : softmaxCooperative;
   if ((!norm && !softmaxSerial && !softmaxCooperative) ||
       expectedCooperative != bool(cooperative) ||
-      owner.dims[0] > (1LL << 31) / owner.dims[2])
+      (rhs ? owner.dims[2] : owner.dims[0]) > (1LL << 31) / (rhs ? owner.dims[1] : owner.dims[2]))
     return bad("prepared tensor producer ABI or geometry mismatch");
   CUcontext context = nullptr; unsigned long long identity = 0;
   if (!ok(cuCtxGetCurrent(&context), "get producer context")) return 1;
@@ -312,7 +364,44 @@ static int attachProducer(uint64_t handle, const void *image, size_t imageBytes,
     if (!ok(cuModuleGetFunction(&function, module, entry), "resolve compiler producer")) {
       cuModuleUnload(module); return 1;
     }
-    if (append) {
+    if (rhs) {
+      // RHS row kernels use KxN, independently of the LHS MxK frame.
+      // Two disjoint capacity buffers permit a chain without overwriting roots.
+      if (!append && owner.dynamicAxes) {
+        size_t total = 0;
+        for (size_t i = 0; i < owner.count; ++i) {
+          if (owner.bytes[i] > SIZE_MAX - total - 255) {
+            cuModuleUnload(module); return bad("bounded DAG staging overflow");
+          }
+          total = (total + owner.bytes[i] + 255) & ~size_t(255);
+        }
+        const size_t hostBytes = total;
+        if (owner.producer) {
+          if (owner.bytes[0] > SIZE_MAX - total - 255) {
+            cuModuleUnload(module); return bad("bounded DAG LHS edge overflow");
+          }
+          total = (total + owner.bytes[0] + 255) & ~size_t(255);
+        }
+        if (!owner.arena->grow(total) || !owner.arena->growHost(hostBytes)) {
+          cuModuleUnload(module); return 1;
+        }
+      }
+      CUdeviceptr replacement = 0;
+      bool needsScratch = append && !owner.rhsScratch;
+      bool needsEdge = !append;
+      if ((needsScratch || needsEdge) && !ok(cuMemAlloc(&replacement, owner.bytes[1]),
+                                            "allocate RHS producer capacity")) {
+        cuModuleUnload(module); return 1;
+      }
+      try {
+        owner.rhsProducers.push_back(RowProducer{module,function,bool(cooperative)});
+      } catch (...) {
+        if (replacement) cuMemFree(replacement);
+        throw;
+      }
+      if (needsEdge) owner.rhsEdge = replacement;
+      if (needsScratch) owner.rhsScratch = replacement;
+    } else if (append) {
       // Bounded chains retain their maximum input/output staging frame from
       // the first attachment. A smaller first invocation must not introduce
       // a new allocation when the active shape later reaches its capacity.
@@ -362,6 +451,12 @@ extern "C" int tessera_nvidia_matmul_attach_producer(
 extern "C" int tessera_nvidia_matmul_append_producer(
     uint64_t handle, const void *image, size_t imageBytes, const char *entry, int cooperative) {
   return attachProducer(handle, image, imageBytes, entry, cooperative, true);
+}
+extern "C" int tessera_nvidia_matmul_attach_rhs_producer(
+    uint64_t handle, const void *image, size_t imageBytes, const char *entry,
+    int cooperative, int append) {
+  if (append != 0 && append != 1) return bad("invalid RHS append mode");
+  return attachProducer(handle,image,imageBytes,entry,cooperative,bool(append),true);
 }
 extern "C" int tessera_nvidia_matmul_context_identity(uint64_t *identity) {
   error.clear(); if (identity) *identity = 0;
@@ -437,6 +532,8 @@ extern "C" int tessera_nvidia_matmul_invoke(
     offset = (offset + frame.bytes[i] + 255) & ~size_t(255);
   }
   owner.invoked = true;
+  owner.hostGeneration = 0;
+  ++owner.arena->generation;
   // Retained pinned staging is leased with device scratch. All transfers and
   // both kernels use the owner's stream; no default-stream copy can race the
   // producer. Copy all host inputs before any caller output is written.
@@ -466,22 +563,88 @@ extern "C" int tessera_nvidia_matmul_invoke(
   if (!submitted) { error = launchError; return 1; }
   if (!completed) return 1;
   std::memcpy(views[count - 1].data, host + hostOffsets[count - 1], frame.bytes[count - 1]);
+  owner.hostGeneration = owner.arena->generation;
+  owner.hostBase = owner.arena->base;
+  owner.hostEdge = owner.producer ? owner.arena->base + edgeOffset : owner.buffers[0];
+  owner.activeDims = frame.dims;
+  return 0;
+}
+
+extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
+    float *stageMs, size_t stageCount, float *programMs,
+    TesseraNvidiaMatmulHostView *output) {
+  error.clear();
+  if (getpid() != process) return bad("prepared profiling cannot cross fork");
+  std::lock_guard<std::mutex> lock(mutex);
+  auto found = owners.find(handle);
+  if (found == owners.end()) return bad("prepared profiling owner is closed");
+  Owner &owner = *found->second;
+  const size_t stages = size_t(bool(owner.producer)) + owner.followingProducers.size() +
+                        owner.rhsProducers.size() + 1;
+  if (!stageMs || !programMs || !output || repeats <= 0 || repeats > 1000000 || stageCount != stages)
+    return bad("prepared profiling stage/count ABI mismatch");
+  if (!owner.hostGeneration || owner.hostGeneration != owner.arena->generation ||
+      owner.hostBase != owner.arena->base)
+    return bad("prepared profiling shared arena lease is stale");
+  const size_t width = owner.halfOutput ? 2 : 4;
+  const auto m = owner.activeDims[0], n = owner.activeDims[1];
+  const size_t bytes = size_t(m)*size_t(n)*width;
+  if (!output->data || reinterpret_cast<uintptr_t>(output->data) % width ||
+      output->dtype != (owner.halfOutput ? 2 : 1) || output->rank != 2 ||
+      output->shape[0] != m || output->shape[1] != n || output->bytes != bytes ||
+      (m > 1 && output->strides[0] != int64_t(n*width)) ||
+      (n > 1 && output->strides[1] != int64_t(width)))
+    return bad("prepared profiling output shape/stride/storage mismatch");
+  CUcontext context = nullptr; unsigned long long identity = 0;
+  if (!ok(cuCtxGetCurrent(&context),"get profiling context")) return 1;
+  if (!context && !ok(cuCtxSetCurrent(owner.context),"restore profiling context")) return 1;
+  if ((context && context != owner.context) ||
+      !ok(cuCtxGetId(owner.context,&identity),"profiling context identity") || identity != owner.identity)
+    return bad("prepared profiling context changed");
+  CUevent start = nullptr, end = nullptr;
+  bool status = ok(cuEventCreate(&start,0),"create program start event") &&
+                ok(cuEventCreate(&end,0),"create program end event") &&
+                ok(cuEventRecord(start,owner.stream),"record program start");
+  for (int i = 0; status && i < repeats; ++i)
+    status = submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream);
+  float elapsed = 0;
+  status = status && ok(cuEventRecord(end,owner.stream),"record program end") &&
+           ok(cuEventSynchronize(end),"synchronize program end") &&
+           ok(cuEventElapsedTime(&elapsed,start,end),"program elapsed time");
+  if (start) cuEventDestroy(start);
+  if (end) cuEventDestroy(end);
+  if (status) {
+    *programMs = elapsed / repeats;
+    status = submit(owner,owner.buffers,owner.hostEdge,owner.activeDims,owner.stream,
+                    0,repeats,stageMs);
+  }
+  if (status)
+    status = ok(cuMemcpyDtoH(output->data,owner.buffers[owner.count-1],bytes),
+                "copy profiled output");
+  if (!status) {
+    const std::string saved = error;
+    cuStreamSynchronize(owner.stream);
+    owner.hostGeneration = 0;
+    error = saved;
+    return 1;
+  }
   return 0;
 }
 
 // The final view is the caller's private edge allocation; the earlier views
 // follow the consumer ABI with source replacing its LHS. Native completion
 // retires all reads/writes before allocations may be released or reused.
-extern "C" int tessera_nvidia_matmul_invoke_resident(
+static int invokeResident(
     uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
-    void *launchStream) {
+    void *launchStream, bool ownedEdge) {
   error.clear();
   if (getpid() != process) return bad("prepared resident tensor cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);
   auto found = owners.find(handle);
   if (found == owners.end()) return bad("prepared resident tensor is closed or unknown");
   Owner &owner = *found->second;
-  if (!owner.producer || !views || count != owner.count + 1 || !launchStream)
+  if (!owner.producer || !views || count != owner.count + (ownedEdge ? 0 : 1) || !launchStream ||
+      (ownedEdge && owner.rhsProducers.empty()))
     return bad("prepared resident tensor buffer/stream arity");
   CUcontext context = nullptr, streamContext = nullptr;
   unsigned long long identity = 0;
@@ -505,6 +668,15 @@ extern "C" int tessera_nvidia_matmul_invoke_resident(
       (owner.residual && !view(frame, 1, 2, m, n, false)) ||
       !view(frame, owner.halfOutput ? 2 : 1, 2, m, n, false))
     return bad("prepared resident frame capacity overflow");
+  std::array<TesseraNvidiaMatmulHostView, 6> ownedViews{};
+  if (ownedEdge) {
+    if (!owner.ownedLhsEdge && !ok(cuMemAlloc(&owner.ownedLhsEdge,owner.bytes[0]),
+                                  "allocate owned resident LHS capacity")) return 1;
+    for (size_t i = 0; i < count; ++i) ownedViews[i] = views[i];
+    ownedViews[count] = frame.expected[0];
+    ownedViews[count].data = reinterpret_cast<void *>(owner.ownedLhsEdge);
+    views = ownedViews.data(); ++count;
+  }
   std::array<CUdeviceptr, 6> pointers{};
   std::array<size_t, 6> spans{};
   int64_t rhsLeading = owner.rowB ? n : k;
@@ -514,7 +686,7 @@ extern "C" int tessera_nvidia_matmul_invoke_resident(
     const size_t width = expected.dtype == 1 ? 4 : 2;
     // The row producer and private edge retain their compact ABI. Only a
     // strided consumer RHS may vary pitch; its minor dimension stays dense.
-    const bool pitchedRhs = i == 1 && owner.dynamicAxes;
+    const bool pitchedRhs = i == 1 && owner.dynamicAxes && owner.rhsProducers.empty();
     if (!actual.data || reinterpret_cast<uintptr_t>(actual.data) % width ||
         actual.bytes != expected.bytes || actual.dtype != expected.dtype ||
         actual.rank != expected.rank || actual.shape[0] != expected.shape[0] ||
@@ -570,6 +742,14 @@ extern "C" int tessera_nvidia_matmul_invoke_resident(
   const bool completed = ok(cuStreamSynchronize(stream), "complete resident tensor/matmul");
   if (!submitted) { error = launchError; return 1; }
   return completed ? 0 : 1;
+}
+extern "C" int tessera_nvidia_matmul_invoke_resident(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count, void *stream) {
+  return invokeResident(handle,views,count,stream,false);
+}
+extern "C" int tessera_nvidia_matmul_invoke_dag_resident(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count, void *stream) {
+  return invokeResident(handle,views,count,stream,true);
 }
 extern "C" int tessera_nvidia_matmul_close(uint64_t handle) {
   error.clear();

@@ -81,6 +81,11 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
       (!source.getElementType().isF16() && !source.getElementType().isBF16()))
     return root.emitError("SM120 tensor producer requires static rank-two matching f16/bf16 storage");
   const bool dag = rhsValue.getDefiningOp() != nullptr;
+  if (dag) {
+    auto order = consumer->getAttrOfType<StringAttr>("rhs_storage_order");
+    if (order && order.getValue() != "row_major")
+      return consumer->emitError("computed RHS requires native row-major materialization");
+  }
   SmallVector<Value> roles{origins.lookup(lhsValue),origins.lookup(rhsValue)};
   for (Value value : consumer->getOperands().drop_front(2)) roles.push_back(value);
   llvm::SmallDenseSet<unsigned> seen;
@@ -270,6 +275,8 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     }
     auto cloned = body.clone(*op,mapping);
     cloned->getResult(0).setType(outputType);
+    if (dag && index == producerCount)
+      cloned->setAttr("rhs_storage_order",b.getStringAttr("row_major"));
     if (dynamic && index == producerCount)
       cloned->setAttr("shape_bounds",b.getI64ArrayAttr({capacities[0],capacities[1],capacities[2]}));
     body.create<func::ReturnOp>(op->getLoc(),cloned->getResults());

@@ -14338,5 +14338,7 @@ first-write/last-read ownership. v5/v6 manifests explicitly distinguish this
 DAG from existing v1-v4 linear LHS envelopes.
 94 compiler/package checks passed, covering static/bounded fp16/bf16 frames,
 both orders, all M/N/K bound combinations and forged SSA/lifetime records.
-This is compiler evidence; resident execution and benchmarks are pending.
-Native Graph/Schedule/Tile parity validated on the compiler host. The runtime still admits linear LHS chains; two-sided CUDA ownership, public JIT execution and exact RTX 5070 timings remain follow-up required.
+Named native runtime integration passes 146 exact RTX 5070 numerical/lifetime and legacy route checks.
+Recorder: benchmarks/nvidia/record_two_sided_tensor_dag.py; evidence: benchmarks/baselines/sm120_two_sided_tensor_dag_20261009/README.md and sm120.json.
+C++ owns both chains' intermediates; public JIT/portable replay preserve native members and bounded capacities.
+Parity validated for normalized fp16/bf16 static/bounded two-sided chains on sm_120, including public JIT and device-result lifetime. Follow-up required: external CUDA roots, general producer/layout/AD migration, and FP8/MXFP8/MXFP4 evaluation before promotion.

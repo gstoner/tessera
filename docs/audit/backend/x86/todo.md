@@ -10330,5 +10330,7 @@ first-write/last-read ownership. v5/v6 manifests explicitly distinguish this
 DAG from existing v1-v4 linear LHS envelopes.
 94 compiler/package checks passed, covering static/bounded fp16/bf16 frames,
 both orders, all M/N/K bound combinations and forged SSA/lifetime records.
-This is compiler evidence; resident execution and benchmarks are pending.
+Named native runtime integration passes 146 exact RTX 5070 numerical/lifetime and legacy route checks.
+Recorder: benchmarks/nvidia/record_two_sided_tensor_dag.py; evidence: benchmarks/baselines/sm120_two_sided_tensor_dag_20261009/README.md and sm120.json.
+C++ owns both chains' intermediates; public JIT/portable replay preserve native members and bounded capacities.
 Not applicable to x86 lowering: the exporter selects nvidia_sm120 exclusively. No CPU producer-DAG execution claim is made.

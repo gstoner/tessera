@@ -28,7 +28,8 @@ producer-consumer regressions pass. Host WSL: 18 compiled production-body tests
 prove serial versus batched completion counts, pre-enqueue refusal and failure
 quarantine; 149 binding/ABI/artifact integration tests pass.
 Delivery gates: 325 drift/lifecycle and 14 recorder census checks pass; CI-scope
-Ruff and zero-error mypy pass. Full CI unit selection: 19,919 passed, 9,559
+Ruff and zero-error mypy pass. All 32 generated documents are in sync;
+compiler-plan ownership/log/start-view validation passes. Full CI unit selection: 19,919 passed, 9,559
 skipped, two existing generic scaled_matmul batching/transpose closure failures
 in 350.22 seconds. No closure state or assertion is weakened.
 The host shim is not GPU evidence. Owning pytest emits an existing unknown

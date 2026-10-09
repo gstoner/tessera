@@ -15,6 +15,8 @@ Schedule dispatch routes the actual isolated Graph transpose to the existing
 Tile/GPU movement consumer. No Python numerical backend or Tile constructor
 is introduced. Public reverse maps admit nonleading and nested result axes.
 Storage derivatives, dynamic shapes and general AD/layout closure remain open.
+Evidence: benchmarks/baselines/public_mapped_reverse_20261008/README.md.
+Owning device packet: benchmarks/baselines/public_mapped_reverse_20261008/gfx1201.json.
 
 Parity validated on gfx1201: 26 public numerical cases cover three sharing policies, selected/reordered gradients, nonuniform seeds, warm changed-seed reuse, nested maps and N=129 scale columns. gfx1151 follow-up required; this FP8 physical consumer is RDNA4-specific.
 

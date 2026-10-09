@@ -16,6 +16,8 @@ Schedule dispatch routes the actual isolated Graph transpose to the existing
 Tile/GPU movement consumer. No Python numerical backend or Tile constructor
 is introduced. Public reverse maps admit nonleading and nested result axes.
 Storage derivatives, dynamic shapes and general AD/layout closure remain open.
+Evidence: benchmarks/baselines/public_mapped_reverse_20261008/README.md.
+Owning device packet: benchmarks/baselines/public_mapped_reverse_20261008/gfx1201.json.
 
 Follow-up required: inverse-cotangent packages currently target gfx1201. SM120 physical scheduling and broader producer/AD integration require separate native lowering and exact-device proof.
 

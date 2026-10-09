@@ -43,6 +43,13 @@ Public timings include ordinary input preparation, checked cache admission,
 native execution and copied outputs. The cold measurement also includes
 frontend certification and compilation. These scopes must be compared separately.
 
+The two output-axis cases record inverse-movement medians 0.002212/0.002268 ms,
+LHS-scale reduction medians 0.288767/0.288894 ms and RHS-scale reduction
+medians 3.986274/3.985425 ms. Warm public medians are 5.676308/5.681118 ms.
+The shortest captured windows exceed 36 ms. These values characterize this
+small serial reduction envelope; device/member and public times are separate
+scopes, not a speedup comparison.
+
 No speedup, default-route promotion, dynamic-shape closure or general AD
 closure is claimed. Encoded/storage derivatives and sibling native consumers
 remain follow-up work. SM120 attention JVP regression evidence does not prove

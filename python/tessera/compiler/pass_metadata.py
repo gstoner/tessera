@@ -564,6 +564,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         output_dialects=("tessera", "tessera_attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
         required_attrs=("tessera.autodiff",),
         preserved_attrs=("tessera.autodiff.scaled_program", "tessera.autodiff.scaled_program_json",
+            "tessera.autodiff.cotangent_capture", "tessera.autodiff.scale_adjoint",
             "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness",
             "tessera.autodiff.product_abi", "tessera.autodiff.product_pair",
             "tessera.attention_ad_pair", "tessera.native_vjp_pair", "tessera.native_vjp_inputs",

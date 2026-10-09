@@ -392,9 +392,9 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
             if len(op.operands) != 4:
                 return False
             computed = any(v.removeprefix("%") not in names for v in op.operands)
-            # Native primal/JVP export already retains SSA lifetimes. Reverse
-            # reductions still require their explicit input/cotangent frame.
-            if computed and not (primal and floating_reverse):
+            # Native exports retain computed continuous coefficients and their
+            # residual/cotangent dependencies. Encoded producers stay separate.
+            if computed and not floating_reverse:
                 return False
             member = copy.deepcopy(module)
             member_fn = member.functions[0]

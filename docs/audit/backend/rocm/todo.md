@@ -5,6 +5,22 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## CONTINUOUS-SCALED-REVERSE-RESIDUALS-20261009
+
+Owner AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1.
+Native reverse export retains the requested residual/cotangent dependency
+closure, with explicit seed bindings and checked lifetimes. 105 native and
+567 frontend/projection tests pass; 70 exact gfx1201 device cases pass.
+The nine-member ragged chain records native and public times separately.
+85 adjacent gfx1201 FP8 scale-gradient/composed/permutation cases also pass;
+full host unit has 20,448 passes and two generic closure failures.
+Mapped chains, aliases, dynamic/save-policy and generic closure remain open.
+Evidence: benchmarks/baselines/gfx1201_continuous_reverse_residuals_20261009/README.md.
+Recorder: benchmarks/rocm/record_continuous_scaled_reverse.py.
+
+Parity validated for gfx1201 continuous chained primal/JVP/VJP, including 70 device checks. gfx1151 needs separate physical lowering and device proof; existing FP8 scale-adjoint native export is regression-validated on the host, not new gfx1151 evidence.
+
+
 ## CONTINUOUS-SCALED-SSA-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.

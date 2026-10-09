@@ -7,6 +7,21 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## CONTINUOUS-SCALED-REVERSE-RESIDUALS-20261009
+
+Owner AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1 / LAYOUT-ALG-1.
+Native reverse export retains the requested residual/cotangent dependency
+closure, with explicit seed bindings and checked lifetimes. 105 native and
+567 frontend/projection tests pass; 70 exact gfx1201 device cases pass.
+The nine-member ragged chain records native and public times separately.
+85 adjacent gfx1201 FP8 scale-gradient/composed/permutation cases also pass;
+full host unit has 20,448 passes and two generic closure failures.
+Mapped chains, aliases, dynamic/save-policy and generic closure remain open.
+Evidence: benchmarks/baselines/gfx1201_continuous_reverse_residuals_20261009/README.md.
+
+Follow-up required for AVX-512 continuous residual consumers. Shared Graph AD seed metadata is preserved; x86 physical compound reverse execution is not proved here.
+
+
 ## CONTINUOUS-SCALED-SSA-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.

@@ -51,8 +51,9 @@ promoted and encoded storage still has no implicit straight-through rule.
   generated-doc registry/audit gates: 83 passed; AST Graphify completed.
 - Initial exact CI unit marker lane: 3 failed, 19,900 passed, 9,559 skipped.
   The extra recorder census failure came from starting before this README was
-  tracked; its final delivery gate passes. The committed snapshot is rerunning.
-  Generic batching/transpose zero-open guards remain unchanged and open.
+  tracked; its final delivery gate passes. The committed-source rerun ends at
+  2 failed, 19,901 passed, 9,559 skipped (343.06 s): only the generic
+  batching/transpose zero-open guards remain. Assertions/states are unchanged.
 
 ## Benchmark and source identities
 

@@ -1,0 +1,1930 @@
+{
+  "architecture": "sm120",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "rows": [
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "bias_shape": null,
+      "correctness": "independent_fp64_gradients_before_timing",
+      "max_abs_error": 2.491990901826169e-10,
+      "public_completed_call_samples_ms": {
+        "resident": [
+          1.4278139569796622,
+          1.3986330013722181,
+          1.3578830403275788,
+          1.4321829658001661,
+          1.4289440005086362,
+          1.373373030219227,
+          1.367013028357178,
+          1.3795829727314413,
+          1.3620329555124044
+        ],
+        "host": [
+          1.0845999931916595,
+          1.076569955330342,
+          1.0306300246156752,
+          0.9944200282916427,
+          0.9168590186163783,
+          1.094321021810174,
+          0.9820889681577682,
+          1.0476700263097882,
+          0.9540890459902585
+        ]
+      },
+      "public_completed_call_medians_ms": {
+        "resident": 1.3795829727314413,
+        "host": 1.0306300246156752
+      },
+      "native_forward_backward_event_samples_ms": {
+        "resident": [
+          [
+            0.011455999687314034,
+            0.02179200015962124
+          ],
+          [
+            0.013088000006973743,
+            0.026623999699950218
+          ],
+          [
+            0.012864000163972378,
+            0.01017600018531084
+          ],
+          [
+            0.042208001017570496,
+            0.041728001087903976
+          ],
+          [
+            0.013376000337302685,
+            0.04044799879193306
+          ],
+          [
+            0.012512000277638435,
+            0.012319999746978283
+          ],
+          [
+            0.012799999676644802,
+            0.01206399966031313
+          ],
+          [
+            0.012160000391304493,
+            0.012575999833643436
+          ],
+          [
+            0.012000000104308128,
+            0.010688000358641148
+          ]
+        ],
+        "host": [
+          [
+            0.01897599920630455,
+            0.0197759997099638
+          ],
+          [
+            0.034912001341581345,
+            0.007360000163316727
+          ],
+          [
+            0.026335999369621277,
+            0.010975999757647514
+          ],
+          [
+            0.05135999992489815,
+            0.004511999897658825
+          ],
+          [
+            0.015936000272631645,
+            0.011136000044643879
+          ],
+          [
+            0.053279999643564224,
+            0.006240000016987324
+          ],
+          [
+            0.05740800127387047,
+            0.004095999989658594
+          ],
+          [
+            0.05142400041222572,
+            0.04281599819660187
+          ],
+          [
+            0.022911999374628067,
+            0.011839999817311764
+          ]
+        ]
+      },
+      "native_forward_backward_event_medians_ms": {
+        "resident": [
+          0.012799999676644802,
+          0.012575999833643436
+        ],
+        "host": [
+          0.034912001341581345,
+          0.010975999757647514
+        ]
+      },
+      "resident_over_host": 1.3385821679762255,
+      "compiler_receipt": {
+        "compiler_path": "nvidia_sm120_attention_vjp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "implementation": "family_plugin",
+        "family": "attention_backward",
+        "graph_consumer": "tessera.flash_attn",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.attention_backward_kernel",
+        "target_consumer": "nvidia.sm120_saved_lse_vjp",
+        "residual_policy": "save",
+        "source_graph_ir_digest": "6bca09b81e320d1c3035e37a7fe3fa74969455443a538c82981dd10a39e49271",
+        "schedule_artifact_hash": "71bdf62d4722615c23a6bbe77f48f62ccd2e3b700b4429e00347d8a12ca17746",
+        "tile_program_digest": "12bd4ffc3f5e3a956b702a81beeba31561944a1b9d73ae2ffa3a38eee57e7272",
+        "state_lineage_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+        "program_digest": "d50b424704850ce97cd3e4ccd3cc3729fde84c0c244efb31eb2ed19135ce6404",
+        "artifact_hash": "8eeb90fb0e753a990752bb251f1e332d186f9f50752e0a8072221ac7f57429c6",
+        "frontend_authority": "tracer",
+        "host_preparation": "native_ordered_resident_snapshot",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120",
+          "device_arch": "sm_120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "artifact_hash": "8eeb90fb0e753a990752bb251f1e332d186f9f50752e0a8072221ac7f57429c6",
+          "digest": "3d9a286f58b90c18b4e52f08550c5ee1aeadbd19c73dd032192a397b518531cb"
+        },
+        "kernel_elapsed_ms": null,
+        "proof_mode": "abstract_metadata_structural",
+        "execution_certificate_schema": "tessera.native_vjp_execution.v1",
+        "execution_certificate_digest": "9643889ea61f4f67e9e3a24e838a65d3c8ccc0f87441e3545d22e86dc50d7694",
+        "execution_certificate": {
+          "schema": "tessera.native_vjp_execution.v1",
+          "family": "attention_backward",
+          "graph_consumer": "tessera.flash_attn",
+          "schedule_consumer": "schedule.artifact",
+          "tile_consumer": "tile.attention_backward_kernel",
+          "target_consumer": "nvidia.sm120_saved_lse_vjp",
+          "target": "nvidia_sm120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "evidence_target": "nvidia_sm120",
+          "evidence_scope": "exact_device",
+          "physical_attestation": {
+            "schema": "tessera.runtime_physical_execution.v1",
+            "target": "nvidia_sm120",
+            "device_arch": "sm_120",
+            "execution_kind": "native_gpu",
+            "execution_mode": "cuda_runtime",
+            "artifact_hash": "8eeb90fb0e753a990752bb251f1e332d186f9f50752e0a8072221ac7f57429c6",
+            "digest": "3d9a286f58b90c18b4e52f08550c5ee1aeadbd19c73dd032192a397b518531cb"
+          },
+          "proof_mode": "abstract_metadata_structural",
+          "topology": "not_applicable",
+          "algorithm": "not_applicable",
+          "input_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                5,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                5,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                3
+              ]
+            }
+          ],
+          "gradient_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                4
+              ]
+            }
+          ],
+          "frontend_certificate_digest": "c5f570bb8e8471ff859f05d913e3e8a161ce6f14fbf7557355bb3d1a3586e8bd",
+          "artifact_identities": {
+            "source_graph_ir_digest": "6bca09b81e320d1c3035e37a7fe3fa74969455443a538c82981dd10a39e49271",
+            "schedule_artifact_hash": "71bdf62d4722615c23a6bbe77f48f62ccd2e3b700b4429e00347d8a12ca17746",
+            "state_lineage_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+            "tile_program_digest": "12bd4ffc3f5e3a956b702a81beeba31561944a1b9d73ae2ffa3a38eee57e7272",
+            "artifact_hash": "8eeb90fb0e753a990752bb251f1e332d186f9f50752e0a8072221ac7f57429c6"
+          },
+          "source_reexecution": "prohibited",
+          "status": "executed",
+          "digest": "9643889ea61f4f67e9e3a24e838a65d3c8ccc0f87441e3545d22e86dc50d7694"
+        }
+      },
+      "resident_frontend_certificate": {
+        "schema": "tessera.frontend_resident_structural.v1",
+        "proof_mode": "abstract_metadata_structural",
+        "concrete_executions": 0,
+        "numerical_authority": "physical_package_required",
+        "metadata_signature": [
+          [
+            "float32",
+            [
+              1,
+              2,
+              3,
+              4
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              1,
+              5,
+              4
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              1,
+              5,
+              3
+            ]
+          ]
+        ],
+        "graph_consumers": [
+          "tessera.flash_attn"
+        ],
+        "legacy_graph_digest": "ddde77f392554fffc23208bac5b7380ff1097a7f5a3c01627ab9c5384d24a94c",
+        "tracer_graph_digest": "ddde77f392554fffc23208bac5b7380ff1097a7f5a3c01627ab9c5384d24a94c",
+        "structural_match": true,
+        "typed_graph_digest": "6bca09b81e320d1c3035e37a7fe3fa74969455443a538c82981dd10a39e49271",
+        "digest": "c5f570bb8e8471ff859f05d913e3e8a161ce6f14fbf7557355bb3d1a3586e8bd"
+      }
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "bias_shape": null,
+      "correctness": "independent_fp64_gradients_before_timing",
+      "max_abs_error": 7.247625992412576e-09,
+      "public_completed_call_samples_ms": {
+        "resident": [
+          1.639355963561684,
+          1.5239950153045356,
+          1.5569960232824087,
+          1.540154975373298,
+          1.5307239955291152,
+          1.516855030786246,
+          1.4715550350956619,
+          1.6439859755337238,
+          1.5351349720731378
+        ],
+        "host": [
+          1.267993007786572,
+          1.1439920053817332,
+          1.2099220184609294,
+          1.195622025988996,
+          1.1302309576421976,
+          1.12967099994421,
+          1.1690919636748731,
+          1.1416220222599804,
+          1.1148510384373367
+        ]
+      },
+      "public_completed_call_medians_ms": {
+        "resident": 1.5351349720731378,
+        "host": 1.1439920053817332
+      },
+      "native_forward_backward_event_samples_ms": {
+        "resident": [
+          [
+            0.041120000183582306,
+            0.014431999996304512
+          ],
+          [
+            0.012608000077307224,
+            0.016992000862956047
+          ],
+          [
+            0.012384000234305859,
+            0.01548799965530634
+          ],
+          [
+            0.014208000153303146,
+            0.01820800080895424
+          ],
+          [
+            0.020320000126957893,
+            0.02579200081527233
+          ],
+          [
+            0.03033600002527237,
+            0.017023999243974686
+          ],
+          [
+            0.012640000320971012,
+            0.01228800043463707
+          ],
+          [
+            0.044576000422239304,
+            0.017535999417304993
+          ],
+          [
+            0.010528000071644783,
+            0.047648001462221146
+          ]
+        ],
+        "host": [
+          [
+            0.040352001786231995,
+            0.03126399964094162
+          ],
+          [
+            0.05398400127887726,
+            0.008320000022649765
+          ],
+          [
+            0.023264000192284584,
+            0.1324159950017929
+          ],
+          [
+            0.017952000722289085,
+            0.04729599878191948
+          ],
+          [
+            0.03788800165057182,
+            0.010751999914646149
+          ],
+          [
+            0.03145600110292435,
+            0.018783999606966972
+          ],
+          [
+            0.05375999957323074,
+            0.008320000022649765
+          ],
+          [
+            0.05564799904823303,
+            0.009375999681651592
+          ],
+          [
+            0.04831999912858009,
+            0.008224000222980976
+          ]
+        ]
+      },
+      "native_forward_backward_event_medians_ms": {
+        "resident": [
+          0.014208000153303146,
+          0.017023999243974686
+        ],
+        "host": [
+          0.040352001786231995,
+          0.010751999914646149
+        ]
+      },
+      "resident_over_host": 1.3419105770419137,
+      "compiler_receipt": {
+        "compiler_path": "nvidia_sm120_attention_vjp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "implementation": "family_plugin",
+        "family": "attention_backward",
+        "graph_consumer": "tessera.flash_attn",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.attention_backward_kernel",
+        "target_consumer": "nvidia.sm120_saved_lse_vjp",
+        "residual_policy": "save",
+        "source_graph_ir_digest": "da048e3603714bbb7110b7bbdc7c55823182ccbd28b446443c432fbdfa829bc4",
+        "schedule_artifact_hash": "8c804b96b320ae16cef0a59f14b15ec624a6c3023a7b473e30200e85fd2f1db0",
+        "tile_program_digest": "48d6fe8283d6c2195a5a15e3c4bee984cd48525bae26e5a7e2d97563485bc854",
+        "state_lineage_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+        "program_digest": "5dfb2bfbbfecc605beba8b487c38511172b746832458840e40d57d62eacc6317",
+        "artifact_hash": "8aae70e128fb697ea1c8e077195123f9b940032b0262b583b600dec5343a75b3",
+        "frontend_authority": "tracer",
+        "host_preparation": "native_ordered_resident_snapshot",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120",
+          "device_arch": "sm_120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "artifact_hash": "8aae70e128fb697ea1c8e077195123f9b940032b0262b583b600dec5343a75b3",
+          "digest": "22a14567eb4bfbd0abf7abb1d8d49e17a5b7aa4c8820837882ac78fdd9dc2e8a"
+        },
+        "kernel_elapsed_ms": null,
+        "proof_mode": "abstract_metadata_structural",
+        "execution_certificate_schema": "tessera.native_vjp_execution.v1",
+        "execution_certificate_digest": "6482f6a93dbaa848df740f73acf885547e434d845dd74bea9443cba27ccd6a88",
+        "execution_certificate": {
+          "schema": "tessera.native_vjp_execution.v1",
+          "family": "attention_backward",
+          "graph_consumer": "tessera.flash_attn",
+          "schedule_consumer": "schedule.artifact",
+          "tile_consumer": "tile.attention_backward_kernel",
+          "target_consumer": "nvidia.sm120_saved_lse_vjp",
+          "target": "nvidia_sm120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "evidence_target": "nvidia_sm120",
+          "evidence_scope": "exact_device",
+          "physical_attestation": {
+            "schema": "tessera.runtime_physical_execution.v1",
+            "target": "nvidia_sm120",
+            "device_arch": "sm_120",
+            "execution_kind": "native_gpu",
+            "execution_mode": "cuda_runtime",
+            "artifact_hash": "8aae70e128fb697ea1c8e077195123f9b940032b0262b583b600dec5343a75b3",
+            "digest": "22a14567eb4bfbd0abf7abb1d8d49e17a5b7aa4c8820837882ac78fdd9dc2e8a"
+          },
+          "proof_mode": "abstract_metadata_structural",
+          "topology": "not_applicable",
+          "algorithm": "not_applicable",
+          "input_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                5,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                5,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                3
+              ]
+            }
+          ],
+          "gradient_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                5,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                5,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                4
+              ]
+            }
+          ],
+          "frontend_certificate_digest": "0e6215548c3a8cef4ba36c7a7a0992f8dc745474d5fd2f67021b7d3ecf5ff9b0",
+          "artifact_identities": {
+            "source_graph_ir_digest": "da048e3603714bbb7110b7bbdc7c55823182ccbd28b446443c432fbdfa829bc4",
+            "schedule_artifact_hash": "8c804b96b320ae16cef0a59f14b15ec624a6c3023a7b473e30200e85fd2f1db0",
+            "state_lineage_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+            "tile_program_digest": "48d6fe8283d6c2195a5a15e3c4bee984cd48525bae26e5a7e2d97563485bc854",
+            "artifact_hash": "8aae70e128fb697ea1c8e077195123f9b940032b0262b583b600dec5343a75b3"
+          },
+          "source_reexecution": "prohibited",
+          "status": "executed",
+          "digest": "6482f6a93dbaa848df740f73acf885547e434d845dd74bea9443cba27ccd6a88"
+        }
+      },
+      "resident_frontend_certificate": {
+        "schema": "tessera.frontend_resident_structural.v1",
+        "proof_mode": "abstract_metadata_structural",
+        "concrete_executions": 0,
+        "numerical_authority": "physical_package_required",
+        "metadata_signature": [
+          [
+            "float32",
+            [
+              1,
+              1,
+              5,
+              3
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              2,
+              3,
+              4
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              1,
+              5,
+              4
+            ]
+          ]
+        ],
+        "graph_consumers": [
+          "tessera.flash_attn"
+        ],
+        "legacy_graph_digest": "ee2830d583d2caa4b3cc903e6afef9077710efaa371f8a400c2036eeece7fff5",
+        "tracer_graph_digest": "ee2830d583d2caa4b3cc903e6afef9077710efaa371f8a400c2036eeece7fff5",
+        "structural_match": true,
+        "typed_graph_digest": "da048e3603714bbb7110b7bbdc7c55823182ccbd28b446443c432fbdfa829bc4",
+        "digest": "0e6215548c3a8cef4ba36c7a7a0992f8dc745474d5fd2f67021b7d3ecf5ff9b0"
+      }
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "bias_shape": null,
+      "correctness": "independent_fp64_gradients_before_timing",
+      "max_abs_error": 1.5158646573219803e-09,
+      "public_completed_call_samples_ms": {
+        "resident": [
+          1.4794949674978852,
+          1.358793000690639,
+          1.3319620047695935,
+          1.349223020952195,
+          1.4747449895367026,
+          1.3304830063134432,
+          1.3262929860502481,
+          1.3728829799219966,
+          1.343843003269285
+        ],
+        "host": [
+          1.0273900115862489,
+          0.9767599985934794,
+          0.9697600034996867,
+          1.1080910335294902,
+          1.0052600409835577,
+          0.952670001424849,
+          0.9511399548500776,
+          0.9704389958642423,
+          0.921169004868716
+        ]
+      },
+      "public_completed_call_medians_ms": {
+        "resident": 1.349223020952195,
+        "host": 0.9704389958642423
+      },
+      "native_forward_backward_event_samples_ms": {
+        "resident": [
+          [
+            0.0551999993622303,
+            0.005696000065654516
+          ],
+          [
+            0.05663999915122986,
+            0.005760000087320805
+          ],
+          [
+            0.05539200082421303,
+            0.004544000141322613
+          ],
+          [
+            0.054655998945236206,
+            0.004255999810993671
+          ],
+          [
+            0.052639998495578766,
+            0.004255999810993671
+          ],
+          [
+            0.05087999999523163,
+            0.0044479998759925365
+          ],
+          [
+            0.0541439987719059,
+            0.005663999821990728
+          ],
+          [
+            0.05251200124621391,
+            0.004255999810993671
+          ],
+          [
+            0.05395200103521347,
+            0.005696000065654516
+          ]
+        ],
+        "host": [
+          [
+            0.08716800063848495,
+            0.004352000076323748
+          ],
+          [
+            0.06623999774456024,
+            0.006335999816656113
+          ],
+          [
+            0.05721599981188774,
+            0.004896000027656555
+          ],
+          [
+            0.10063999891281128,
+            0.004352000076323748
+          ],
+          [
+            0.07878399640321732,
+            0.004255999810993671
+          ],
+          [
+            0.05859199911355972,
+            0.006207999773323536
+          ],
+          [
+            0.05584000051021576,
+            0.004575999919325113
+          ],
+          [
+            0.05862399935722351,
+            0.006207999773323536
+          ],
+          [
+            0.056703999638557434,
+            0.004800000227987766
+          ]
+        ]
+      },
+      "native_forward_backward_event_medians_ms": {
+        "resident": [
+          0.0541439987719059,
+          0.004544000141322613
+        ],
+        "host": [
+          0.05862399935722351,
+          0.004800000227987766
+        ]
+      },
+      "resident_over_host": 1.3903223455593101,
+      "compiler_receipt": {
+        "compiler_path": "nvidia_sm120_attention_vjp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "implementation": "family_plugin",
+        "family": "attention_backward",
+        "graph_consumer": "tessera.flash_attn",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.attention_backward_kernel",
+        "target_consumer": "nvidia.sm120_saved_lse_vjp",
+        "residual_policy": "save",
+        "source_graph_ir_digest": "6fce4373e2acc2f343f37ebccd6857ab02c4ab3be3dafa99f9ed18e0efdf19a8",
+        "schedule_artifact_hash": "4d72d46210f2d60a9d1e5dbd67a76b4a95857e2f3bf4af54c2b6372b2baf21ca",
+        "tile_program_digest": "160a7a356c753740e0fb24d77bdd11328c05f7c966a6be33863b5dcf6eb526b7",
+        "state_lineage_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+        "program_digest": "7013158346856f52d1bc0f6ce1a85d60f7ce9501c64be8fda04398c93cddfa8c",
+        "artifact_hash": "6e8a9c6af95233146e7431f122db033ced760d401f01ad34fac6c6d3f05e9460",
+        "frontend_authority": "tracer",
+        "host_preparation": "native_ordered_resident_snapshot",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120",
+          "device_arch": "sm_120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "artifact_hash": "6e8a9c6af95233146e7431f122db033ced760d401f01ad34fac6c6d3f05e9460",
+          "digest": "5f994d8a7b56c67a9615b6868ac1de6c4b013600840b75615eca6e5d801fa8e3"
+        },
+        "kernel_elapsed_ms": null,
+        "proof_mode": "abstract_metadata_structural",
+        "execution_certificate_schema": "tessera.native_vjp_execution.v1",
+        "execution_certificate_digest": "52067068bb76f04a563b76398c0df8f538ae846db6946c750ed7418e64e54c56",
+        "execution_certificate": {
+          "schema": "tessera.native_vjp_execution.v1",
+          "family": "attention_backward",
+          "graph_consumer": "tessera.flash_attn",
+          "schedule_consumer": "schedule.artifact",
+          "tile_consumer": "tile.attention_backward_kernel",
+          "target_consumer": "nvidia.sm120_saved_lse_vjp",
+          "target": "nvidia_sm120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "evidence_target": "nvidia_sm120",
+          "evidence_scope": "exact_device",
+          "physical_attestation": {
+            "schema": "tessera.runtime_physical_execution.v1",
+            "target": "nvidia_sm120",
+            "device_arch": "sm_120",
+            "execution_kind": "native_gpu",
+            "execution_mode": "cuda_runtime",
+            "artifact_hash": "6e8a9c6af95233146e7431f122db033ced760d401f01ad34fac6c6d3f05e9460",
+            "digest": "5f994d8a7b56c67a9615b6868ac1de6c4b013600840b75615eca6e5d801fa8e3"
+          },
+          "proof_mode": "abstract_metadata_structural",
+          "topology": "not_applicable",
+          "algorithm": "not_applicable",
+          "input_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                129,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                129,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                3
+              ]
+            }
+          ],
+          "gradient_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                129,
+                3
+              ]
+            }
+          ],
+          "frontend_certificate_digest": "5b7245ad7c666344ccf374c9d09a901004b72dfdf7239b7bd486d6ceef93629d",
+          "artifact_identities": {
+            "source_graph_ir_digest": "6fce4373e2acc2f343f37ebccd6857ab02c4ab3be3dafa99f9ed18e0efdf19a8",
+            "schedule_artifact_hash": "4d72d46210f2d60a9d1e5dbd67a76b4a95857e2f3bf4af54c2b6372b2baf21ca",
+            "state_lineage_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+            "tile_program_digest": "160a7a356c753740e0fb24d77bdd11328c05f7c966a6be33863b5dcf6eb526b7",
+            "artifact_hash": "6e8a9c6af95233146e7431f122db033ced760d401f01ad34fac6c6d3f05e9460"
+          },
+          "source_reexecution": "prohibited",
+          "status": "executed",
+          "digest": "52067068bb76f04a563b76398c0df8f538ae846db6946c750ed7418e64e54c56"
+        }
+      },
+      "resident_frontend_certificate": {
+        "schema": "tessera.frontend_resident_structural.v1",
+        "proof_mode": "abstract_metadata_structural",
+        "concrete_executions": 0,
+        "numerical_authority": "physical_package_required",
+        "metadata_signature": [
+          [
+            "float32",
+            [
+              1,
+              1,
+              129,
+              4
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              1,
+              129,
+              3
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              2,
+              3,
+              4
+            ]
+          ]
+        ],
+        "graph_consumers": [
+          "tessera.flash_attn"
+        ],
+        "legacy_graph_digest": "7650e35ac54b94ce394e50b32b43533a6b348c94a85ce3538155ae13692f8200",
+        "tracer_graph_digest": "7650e35ac54b94ce394e50b32b43533a6b348c94a85ce3538155ae13692f8200",
+        "structural_match": true,
+        "typed_graph_digest": "6fce4373e2acc2f343f37ebccd6857ab02c4ab3be3dafa99f9ed18e0efdf19a8",
+        "digest": "5b7245ad7c666344ccf374c9d09a901004b72dfdf7239b7bd486d6ceef93629d"
+      }
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "bias_shape": null,
+      "correctness": "independent_fp64_gradients_before_timing",
+      "max_abs_error": 1.5158646573219803e-09,
+      "public_completed_call_samples_ms": {
+        "resident": [
+          1.6487259999848902,
+          1.747756963595748,
+          1.542244979646057,
+          1.5714149922132492,
+          1.6070349956862628,
+          1.5788549790158868,
+          1.5778449596837163,
+          1.550404995214194,
+          1.5281360247172415
+        ],
+        "host": [
+          1.2773129856213927,
+          1.2153710122220218,
+          1.2460629804991186,
+          1.1650620144791901,
+          1.1886919965036213,
+          1.4117140090093017,
+          1.1988719925284386,
+          1.1999309645034373,
+          1.2016420369036496
+        ]
+      },
+      "public_completed_call_medians_ms": {
+        "resident": 1.5778449596837163,
+        "host": 1.2016420369036496
+      },
+      "native_forward_backward_event_samples_ms": {
+        "resident": [
+          [
+            0.08937600255012512,
+            0.04662400111556053
+          ],
+          [
+            0.08934400230646133,
+            0.04665600135922432
+          ],
+          [
+            0.052000001072883606,
+            0.047359999269247055
+          ],
+          [
+            0.055135998874902725,
+            0.04761600121855736
+          ],
+          [
+            0.07587199658155441,
+            0.04732799902558327
+          ],
+          [
+            0.054336000233888626,
+            0.04729599878191948
+          ],
+          [
+            0.054207999259233475,
+            0.04732799902558327
+          ],
+          [
+            0.05392000079154968,
+            0.04758400097489357
+          ],
+          [
+            0.0562559999525547,
+            0.047520000487565994
+          ]
+        ],
+        "host": [
+          [
+            0.06915199756622314,
+            0.04761600121855736
+          ],
+          [
+            0.06659200042486191,
+            0.04745600000023842
+          ],
+          [
+            0.11558400094509125,
+            0.047168001532554626
+          ],
+          [
+            0.07503999769687653,
+            0.047807998955249786
+          ],
+          [
+            0.07843200117349625,
+            0.04745600000023842
+          ],
+          [
+            0.10553599894046783,
+            0.04732799902558327
+          ],
+          [
+            0.09513600170612335,
+            0.04739199951291084
+          ],
+          [
+            0.06732799857854843,
+            0.04732799902558327
+          ],
+          [
+            0.05929600074887276,
+            0.04758400097489357
+          ]
+        ]
+      },
+      "native_forward_backward_event_medians_ms": {
+        "resident": [
+          0.055135998874902725,
+          0.04732799902558327
+        ],
+        "host": [
+          0.07503999769687653,
+          0.04745600000023842
+        ]
+      },
+      "resident_over_host": 1.3130740363822937,
+      "compiler_receipt": {
+        "compiler_path": "nvidia_sm120_attention_vjp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "implementation": "family_plugin",
+        "family": "attention_backward",
+        "graph_consumer": "tessera.flash_attn",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.attention_backward_kernel",
+        "target_consumer": "nvidia.sm120_saved_lse_vjp",
+        "residual_policy": "save",
+        "source_graph_ir_digest": "5aadf67d46a6cde31b525f57498c2710a296c6cc609503790d4e584cf8775c4d",
+        "schedule_artifact_hash": "bf700bd3211ffe1b0da3fe615891e0a1b0ca9ad7a5e45994f4858a9db0db5dd2",
+        "tile_program_digest": "fa7091d05d716e68890fcb0aa6597cc22527d616dd548eafe7ac842a56b4879c",
+        "state_lineage_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+        "program_digest": "8d07b2c8a1f05dd1be904b9044a7358961f1fb5852e4b1089a07ea599fc98f09",
+        "artifact_hash": "439f159cd648fa9ecdbd2e58cf4e774a2088a136d4ecc4fcdf08ab78406e307e",
+        "frontend_authority": "tracer",
+        "host_preparation": "native_ordered_resident_snapshot",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120",
+          "device_arch": "sm_120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "artifact_hash": "439f159cd648fa9ecdbd2e58cf4e774a2088a136d4ecc4fcdf08ab78406e307e",
+          "digest": "cd06abc307335df09a00bdce697cb8f32e6363902d6dab7ccf550e12ee006582"
+        },
+        "kernel_elapsed_ms": null,
+        "proof_mode": "abstract_metadata_structural",
+        "execution_certificate_schema": "tessera.native_vjp_execution.v1",
+        "execution_certificate_digest": "bccbae4c8d156a60b95d7a82577f6c2bae888bd6c037b00e3a34badef7d59b19",
+        "execution_certificate": {
+          "schema": "tessera.native_vjp_execution.v1",
+          "family": "attention_backward",
+          "graph_consumer": "tessera.flash_attn",
+          "schedule_consumer": "schedule.artifact",
+          "tile_consumer": "tile.attention_backward_kernel",
+          "target_consumer": "nvidia.sm120_saved_lse_vjp",
+          "target": "nvidia_sm120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "evidence_target": "nvidia_sm120",
+          "evidence_scope": "exact_device",
+          "physical_attestation": {
+            "schema": "tessera.runtime_physical_execution.v1",
+            "target": "nvidia_sm120",
+            "device_arch": "sm_120",
+            "execution_kind": "native_gpu",
+            "execution_mode": "cuda_runtime",
+            "artifact_hash": "439f159cd648fa9ecdbd2e58cf4e774a2088a136d4ecc4fcdf08ab78406e307e",
+            "digest": "cd06abc307335df09a00bdce697cb8f32e6363902d6dab7ccf550e12ee006582"
+          },
+          "proof_mode": "abstract_metadata_structural",
+          "topology": "not_applicable",
+          "algorithm": "not_applicable",
+          "input_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                129,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                129,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                3
+              ]
+            }
+          ],
+          "gradient_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                2,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                129,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                1,
+                129,
+                3
+              ]
+            }
+          ],
+          "frontend_certificate_digest": "6d9bca4f7bae368c228d5e5d657a9fe90b580f75fc36fe43e6c4d924d6b7e6c7",
+          "artifact_identities": {
+            "source_graph_ir_digest": "5aadf67d46a6cde31b525f57498c2710a296c6cc609503790d4e584cf8775c4d",
+            "schedule_artifact_hash": "bf700bd3211ffe1b0da3fe615891e0a1b0ca9ad7a5e45994f4858a9db0db5dd2",
+            "state_lineage_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+            "tile_program_digest": "fa7091d05d716e68890fcb0aa6597cc22527d616dd548eafe7ac842a56b4879c",
+            "artifact_hash": "439f159cd648fa9ecdbd2e58cf4e774a2088a136d4ecc4fcdf08ab78406e307e"
+          },
+          "source_reexecution": "prohibited",
+          "status": "executed",
+          "digest": "bccbae4c8d156a60b95d7a82577f6c2bae888bd6c037b00e3a34badef7d59b19"
+        }
+      },
+      "resident_frontend_certificate": {
+        "schema": "tessera.frontend_resident_structural.v1",
+        "proof_mode": "abstract_metadata_structural",
+        "concrete_executions": 0,
+        "numerical_authority": "physical_package_required",
+        "metadata_signature": [
+          [
+            "float32",
+            [
+              1,
+              1,
+              129,
+              3
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              1,
+              129,
+              4
+            ]
+          ],
+          [
+            "float32",
+            [
+              1,
+              2,
+              3,
+              4
+            ]
+          ]
+        ],
+        "graph_consumers": [
+          "tessera.flash_attn"
+        ],
+        "legacy_graph_digest": "008d61d441526d3be64df2f7c19f988852862fdbeb250b1c2ece263d77468b9d",
+        "tracer_graph_digest": "008d61d441526d3be64df2f7c19f988852862fdbeb250b1c2ece263d77468b9d",
+        "structural_match": true,
+        "typed_graph_digest": "5aadf67d46a6cde31b525f57498c2710a296c6cc609503790d4e584cf8775c4d",
+        "digest": "6d9bca4f7bae368c228d5e5d657a9fe90b580f75fc36fe43e6c4d924d6b7e6c7"
+      }
+    },
+    {
+      "order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "bias",
+        "v",
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "correctness": "independent_fp64_gradients_before_timing",
+      "max_abs_error": 1.6923607570884514e-08,
+      "public_completed_call_samples_ms": {
+        "resident": [
+          1.817677984945476,
+          1.756667043082416,
+          1.759457984007895,
+          1.689135970082134,
+          1.7190780490636826,
+          1.7601880244910717,
+          1.7004560213536024,
+          1.7148660263046622,
+          1.7527469899505377
+        ],
+        "host": [
+          1.350723032373935,
+          1.3870240072719753,
+          1.2924529728479683,
+          1.3133830507285893,
+          1.4059339882805943,
+          1.3685239828191698,
+          1.466104993596673,
+          1.2900330475531518,
+          1.2741420068778098
+        ]
+      },
+      "public_completed_call_medians_ms": {
+        "resident": 1.7527469899505377,
+        "host": 1.350723032373935
+      },
+      "native_forward_backward_event_samples_ms": {
+        "resident": [
+          [
+            0.012191999703645706,
+            0.02409599907696247
+          ],
+          [
+            0.010111999697983265,
+            0.021344000473618507
+          ],
+          [
+            0.012480000033974648,
+            0.023840000852942467
+          ],
+          [
+            0.012608000077307224,
+            0.021215999498963356
+          ],
+          [
+            0.020447999238967896,
+            0.024512000381946564
+          ],
+          [
+            0.012160000391304493,
+            0.02131200022995472
+          ],
+          [
+            0.008671999908983707,
+            0.021888000890612602
+          ],
+          [
+            0.011168000288307667,
+            0.023264000192284584
+          ],
+          [
+            0.011231999844312668,
+            0.02473600022494793
+          ]
+        ],
+        "host": [
+          [
+            0.03788800165057182,
+            0.027264000847935677
+          ],
+          [
+            0.05984000116586685,
+            0.017855999991297722
+          ],
+          [
+            0.055456001311540604,
+            0.01894400082528591
+          ],
+          [
+            0.055456001311540604,
+            0.01849599927663803
+          ],
+          [
+            0.0533440001308918,
+            0.019519999623298645
+          ],
+          [
+            0.049056001007556915,
+            0.05580800026655197
+          ],
+          [
+            0.016704000532627106,
+            0.03094400092959404
+          ],
+          [
+            0.019168000668287277,
+            0.03519999980926514
+          ],
+          [
+            0.04912000149488449,
+            0.018432000651955605
+          ]
+        ]
+      },
+      "native_forward_backward_event_medians_ms": {
+        "resident": [
+          0.012160000391304493,
+          0.023264000192284584
+        ],
+        "host": [
+          0.04912000149488449,
+          0.019519999623298645
+        ]
+      },
+      "resident_over_host": 1.2976361163176686,
+      "compiler_receipt": {
+        "compiler_path": "nvidia_sm120_attention_vjp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "implementation": "family_plugin",
+        "family": "attention_backward",
+        "graph_consumer": "tessera.flash_attn",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.attention_backward_kernel",
+        "target_consumer": "nvidia.sm120_saved_lse_vjp",
+        "residual_policy": "save",
+        "source_graph_ir_digest": "bbd6494df3b72ff813e659ae934d22e50e6b6bbcd73568df0a42b1b4aa187c78",
+        "schedule_artifact_hash": "6c9ec224a7e84d095a7f1264045814501f0641da96b57da8eda2bb06ffeb0219",
+        "tile_program_digest": "2bf46d7464b647693889bae1a8172bd178707545aff28c8beddd8571ddfbfc70",
+        "state_lineage_digest": "2cdf1b91fc96a12cd28358655462d232aeada26dbeddabffb5def38583e8cd27",
+        "program_digest": "274f7b4eb7bc2e577bb8f8d08e8dcc3ac78286b1767d92bb15981719f125dce2",
+        "artifact_hash": "9769e526c5da5f96f59f6ea1eb67c7281b1d16441d323fed56871e2ca5e76d39",
+        "frontend_authority": "tracer",
+        "host_preparation": "native_ordered_resident_snapshot",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120",
+          "device_arch": "sm_120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "artifact_hash": "9769e526c5da5f96f59f6ea1eb67c7281b1d16441d323fed56871e2ca5e76d39",
+          "digest": "cb0bd2908aba3c20d7d4ee2b16c1fd96565e6b73ba0a836acc5152761380a5a4"
+        },
+        "kernel_elapsed_ms": null,
+        "proof_mode": "abstract_metadata_structural",
+        "execution_certificate_schema": "tessera.native_vjp_execution.v1",
+        "execution_certificate_digest": "e9a38165154090b563550fda99dd5bb8cff7df2b2ee591376f12732e2bc2d937",
+        "execution_certificate": {
+          "schema": "tessera.native_vjp_execution.v1",
+          "family": "attention_backward",
+          "graph_consumer": "tessera.flash_attn",
+          "schedule_consumer": "schedule.artifact",
+          "tile_consumer": "tile.attention_backward_kernel",
+          "target_consumer": "nvidia.sm120_saved_lse_vjp",
+          "target": "nvidia_sm120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "evidence_target": "nvidia_sm120",
+          "evidence_scope": "exact_device",
+          "physical_attestation": {
+            "schema": "tessera.runtime_physical_execution.v1",
+            "target": "nvidia_sm120",
+            "device_arch": "sm_120",
+            "execution_kind": "native_gpu",
+            "execution_mode": "cuda_runtime",
+            "artifact_hash": "9769e526c5da5f96f59f6ea1eb67c7281b1d16441d323fed56871e2ca5e76d39",
+            "digest": "cb0bd2908aba3c20d7d4ee2b16c1fd96565e6b73ba0a836acc5152761380a5a4"
+          },
+          "proof_mode": "abstract_metadata_structural",
+          "topology": "not_applicable",
+          "algorithm": "not_applicable",
+          "input_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                4,
+                1,
+                1
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                4,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                4,
+                3,
+                3
+              ]
+            }
+          ],
+          "gradient_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                4,
+                1,
+                1
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                4,
+                3,
+                4
+              ]
+            }
+          ],
+          "frontend_certificate_digest": "0b2072cfc43dcffb873f3cad45026d8e9bb76581fb7afc491cba9e4d37a0a183",
+          "artifact_identities": {
+            "source_graph_ir_digest": "bbd6494df3b72ff813e659ae934d22e50e6b6bbcd73568df0a42b1b4aa187c78",
+            "schedule_artifact_hash": "6c9ec224a7e84d095a7f1264045814501f0641da96b57da8eda2bb06ffeb0219",
+            "state_lineage_digest": "2cdf1b91fc96a12cd28358655462d232aeada26dbeddabffb5def38583e8cd27",
+            "tile_program_digest": "2bf46d7464b647693889bae1a8172bd178707545aff28c8beddd8571ddfbfc70",
+            "artifact_hash": "9769e526c5da5f96f59f6ea1eb67c7281b1d16441d323fed56871e2ca5e76d39"
+          },
+          "source_reexecution": "prohibited",
+          "status": "executed",
+          "digest": "e9a38165154090b563550fda99dd5bb8cff7df2b2ee591376f12732e2bc2d937"
+        }
+      },
+      "resident_frontend_certificate": {
+        "schema": "tessera.frontend_resident_structural.v1",
+        "proof_mode": "abstract_metadata_structural",
+        "concrete_executions": 0,
+        "numerical_authority": "physical_package_required",
+        "metadata_signature": [
+          [
+            "float32",
+            [
+              1,
+              4,
+              1,
+              1
+            ]
+          ],
+          [
+            "float32",
+            [
+              2,
+              2,
+              5,
+              3
+            ]
+          ],
+          [
+            "float32",
+            [
+              2,
+              4,
+              3,
+              4
+            ]
+          ],
+          [
+            "float32",
+            [
+              2,
+              2,
+              5,
+              4
+            ]
+          ]
+        ],
+        "graph_consumers": [
+          "tessera.flash_attn"
+        ],
+        "legacy_graph_digest": "a4136b2f6d32bde5f57e1cc68181ae8bfcefcc5a93a1de30f06e8d6f9d13dec2",
+        "tracer_graph_digest": "a4136b2f6d32bde5f57e1cc68181ae8bfcefcc5a93a1de30f06e8d6f9d13dec2",
+        "structural_match": true,
+        "typed_graph_digest": "bbd6494df3b72ff813e659ae934d22e50e6b6bbcd73568df0a42b1b4aa187c78",
+        "digest": "0b2072cfc43dcffb873f3cad45026d8e9bb76581fb7afc491cba9e4d37a0a183"
+      }
+    },
+    {
+      "order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "bias",
+        "k",
+        "q",
+        "v"
+      ],
+      "sk": 5,
+      "causal": true,
+      "bias_shape": [
+        1,
+        4,
+        1,
+        1
+      ],
+      "correctness": "independent_fp64_gradients_before_timing",
+      "max_abs_error": 1.0684225851265161e-08,
+      "public_completed_call_samples_ms": {
+        "resident": [
+          1.7546370509080589,
+          1.7920579994097352,
+          1.8362190457992256,
+          1.713756995741278,
+          1.7187760095112026,
+          1.7132569919340312,
+          1.7247970099560916,
+          1.7400960205122828,
+          1.7021269886754453
+        ],
+        "host": [
+          1.3906140229664743,
+          1.3505429960787296,
+          1.3896329910494387,
+          1.3538530329242349,
+          1.2950520031154156,
+          1.4945649891160429,
+          1.3476339518092573,
+          1.3481330242939293,
+          1.3664430007338524
+        ]
+      },
+      "public_completed_call_medians_ms": {
+        "resident": 1.7247970099560916,
+        "host": 1.3538530329242349
+      },
+      "native_forward_backward_event_samples_ms": {
+        "resident": [
+          [
+            0.010623999871313572,
+            0.02598400041460991
+          ],
+          [
+            0.02006400004029274,
+            0.029823999851942062
+          ],
+          [
+            0.012415999546647072,
+            0.02687999978661537
+          ],
+          [
+            0.012992000207304955,
+            0.023840000852942467
+          ],
+          [
+            0.013024000450968742,
+            0.02502400055527687
+          ],
+          [
+            0.010591999627649784,
+            0.024320000782608986
+          ],
+          [
+            0.014560000039637089,
+            0.02454400062561035
+          ],
+          [
+            0.010688000358641148,
+            0.024480000138282776
+          ],
+          [
+            0.011615999974310398,
+            0.02457600086927414
+          ]
+        ],
+        "host": [
+          [
+            0.06828799843788147,
+            0.02751999907195568
+          ],
+          [
+            0.05206400156021118,
+            0.03161599859595299
+          ],
+          [
+            0.04335999861359596,
+            0.029152000322937965
+          ],
+          [
+            0.06124800071120262,
+            0.03824000060558319
+          ],
+          [
+            0.05798399820923805,
+            0.024320000782608986
+          ],
+          [
+            0.06716799736022949,
+            0.030271999537944794
+          ],
+          [
+            0.06108799949288368,
+            0.029343999922275543
+          ],
+          [
+            0.06220800057053566,
+            0.027648000046610832
+          ],
+          [
+            0.03340800106525421,
+            0.051263999193906784
+          ]
+        ]
+      },
+      "native_forward_backward_event_medians_ms": {
+        "resident": [
+          0.012415999546647072,
+          0.02457600086927414
+        ],
+        "host": [
+          0.06108799949288368,
+          0.029343999922275543
+        ]
+      },
+      "resident_over_host": 1.2739913181201372,
+      "compiler_receipt": {
+        "compiler_path": "nvidia_sm120_attention_vjp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "implementation": "family_plugin",
+        "family": "attention_backward",
+        "graph_consumer": "tessera.flash_attn",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.attention_backward_kernel",
+        "target_consumer": "nvidia.sm120_saved_lse_vjp",
+        "residual_policy": "save",
+        "source_graph_ir_digest": "0711c01913fa980a5760ed1d17aaebf804bdcafee6750c002af3e1e405fd8b32",
+        "schedule_artifact_hash": "1baf3825544467d31f6f84fe942181f27f1e6fd4e80927331087ec1b3c95c31d",
+        "tile_program_digest": "b8ce05c4e2154c5e2686990c32e38f0a6937fd1697f2be1541fee3a36b5b7e73",
+        "state_lineage_digest": "0a7cc3011271483a0858b84afd7d9e44b7706d8620279de8b46881e3d87ad82b",
+        "program_digest": "08ea4f9e1b0cb337087aca8856cd68c5e98c67caa68b785f11cb1799dabf22c0",
+        "artifact_hash": "e9efb24664595c6e0b44585a9c5f28562f260cdea55daea63733ccb5f0213803",
+        "frontend_authority": "tracer",
+        "host_preparation": "native_ordered_resident_snapshot",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "nvidia_sm120",
+          "device_arch": "sm_120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "artifact_hash": "e9efb24664595c6e0b44585a9c5f28562f260cdea55daea63733ccb5f0213803",
+          "digest": "b31022490571424022c247a1f305c9413adacfffcb0f1268ed7a0d0d4d1f316d"
+        },
+        "kernel_elapsed_ms": null,
+        "proof_mode": "abstract_metadata_structural",
+        "execution_certificate_schema": "tessera.native_vjp_execution.v1",
+        "execution_certificate_digest": "2a0a1065afc60ca0b0ebeb348e190da2edbc9d29aff862e27c28419bef3374fb",
+        "execution_certificate": {
+          "schema": "tessera.native_vjp_execution.v1",
+          "family": "attention_backward",
+          "graph_consumer": "tessera.flash_attn",
+          "schedule_consumer": "schedule.artifact",
+          "tile_consumer": "tile.attention_backward_kernel",
+          "target_consumer": "nvidia.sm120_saved_lse_vjp",
+          "target": "nvidia_sm120",
+          "execution_kind": "native_gpu",
+          "execution_mode": "cuda_runtime",
+          "evidence_target": "nvidia_sm120",
+          "evidence_scope": "exact_device",
+          "physical_attestation": {
+            "schema": "tessera.runtime_physical_execution.v1",
+            "target": "nvidia_sm120",
+            "device_arch": "sm_120",
+            "execution_kind": "native_gpu",
+            "execution_mode": "cuda_runtime",
+            "artifact_hash": "e9efb24664595c6e0b44585a9c5f28562f260cdea55daea63733ccb5f0213803",
+            "digest": "b31022490571424022c247a1f305c9413adacfffcb0f1268ed7a0d0d4d1f316d"
+          },
+          "proof_mode": "abstract_metadata_structural",
+          "topology": "not_applicable",
+          "algorithm": "not_applicable",
+          "input_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                4,
+                1,
+                1
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                3
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                4,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                4,
+                3,
+                3
+              ]
+            }
+          ],
+          "gradient_signature": [
+            {
+              "dtype": "float32",
+              "shape": [
+                1,
+                4,
+                1,
+                1
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                4,
+                3,
+                4
+              ]
+            },
+            {
+              "dtype": "float32",
+              "shape": [
+                2,
+                2,
+                5,
+                3
+              ]
+            }
+          ],
+          "frontend_certificate_digest": "b295ff29734cab2b21c753ffbb3cf33011282d2a5e32a0c2011752c56cd08d59",
+          "artifact_identities": {
+            "source_graph_ir_digest": "0711c01913fa980a5760ed1d17aaebf804bdcafee6750c002af3e1e405fd8b32",
+            "schedule_artifact_hash": "1baf3825544467d31f6f84fe942181f27f1e6fd4e80927331087ec1b3c95c31d",
+            "state_lineage_digest": "0a7cc3011271483a0858b84afd7d9e44b7706d8620279de8b46881e3d87ad82b",
+            "tile_program_digest": "b8ce05c4e2154c5e2686990c32e38f0a6937fd1697f2be1541fee3a36b5b7e73",
+            "artifact_hash": "e9efb24664595c6e0b44585a9c5f28562f260cdea55daea63733ccb5f0213803"
+          },
+          "source_reexecution": "prohibited",
+          "status": "executed",
+          "digest": "2a0a1065afc60ca0b0ebeb348e190da2edbc9d29aff862e27c28419bef3374fb"
+        }
+      },
+      "resident_frontend_certificate": {
+        "schema": "tessera.frontend_resident_structural.v1",
+        "proof_mode": "abstract_metadata_structural",
+        "concrete_executions": 0,
+        "numerical_authority": "physical_package_required",
+        "metadata_signature": [
+          [
+            "float32",
+            [
+              1,
+              4,
+              1,
+              1
+            ]
+          ],
+          [
+            "float32",
+            [
+              2,
+              2,
+              5,
+              3
+            ]
+          ],
+          [
+            "float32",
+            [
+              2,
+              4,
+              3,
+              4
+            ]
+          ],
+          [
+            "float32",
+            [
+              2,
+              2,
+              5,
+              4
+            ]
+          ]
+        ],
+        "graph_consumers": [
+          "tessera.flash_attn"
+        ],
+        "legacy_graph_digest": "4174fb728a73f2f6a8c7ff082c85080a27818c5a4331a1587921945c4d28263f",
+        "tracer_graph_digest": "4174fb728a73f2f6a8c7ff082c85080a27818c5a4331a1587921945c4d28263f",
+        "structural_match": true,
+        "typed_graph_digest": "0711c01913fa980a5760ed1d17aaebf804bdcafee6750c002af3e1e405fd8b32",
+        "digest": "b295ff29734cab2b21c753ffbb3cf33011282d2a5e32a0c2011752c56cd08d59"
+      }
+    }
+  ],
+  "fingerprints": {
+    "python/tessera/compiler/jit.py": "f7bf69c828d8e4c1f96d45c3f4c3e4f2e3bb7f753013b593f73a503bd43da6d4",
+    "python/tessera/compiler/native_vjp_plugins.py": "fc8574bd6cf2837e30cc8a7856f5b4458807f8c9a732cc280b5f9bb24c0ab6e3",
+    "python/tessera/compiler/native_attention_vjp_runtime.py": "23fb9ff13070b56640a96c8dfa64e20f1de3ee556d14ecdb32792d225b1ec88c",
+    "python/tessera/compiler/prepared_attention_vjp.py": "18c5d059b234cc53be3fac5724c222db9d85b377484f1642cfa35a702c769e1a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "25d2cbdf394d9fd67a6b7ce4623804ddba570c5854a17a7c202aae1efc28ec47",
+    "benchmarks/nvidia/record_resident_attention_vjp.py": "4cf2cd31dbb991da814fa2ac52c8b62d13bc647e6404c0b1023ee3d99e4abf2e"
+  },
+  "compiler_sha256": "39d59eee080a6b0d44edaefae009a0947982a7e1c28aeb44f68d897c9011aa56",
+  "native_provider_sha256": "50ad0a17b3b4171cf56a3da3923a125b0465232d4cbfab0b4e3d80b48af2e5c9",
+  "timing_scope": "forward/backward device events exclude producer waits/snapshots; public completed calls include snapshots and host gradient downloads",
+  "resident_storage": "compact rank-four fp32 roots/cotangent; native private saved-LSE generation"
+}

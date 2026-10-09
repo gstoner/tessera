@@ -227,6 +227,13 @@ int tessera_nvidia_attention_vjp_invoke(
     uint64_t handle, const void* const* inputs, const size_t* input_bytes,
     size_t input_count, void* const* outputs, const size_t* output_bytes,
     size_t output_count, float* device_milliseconds);
+// Ordered borrowed FP32 roots and cotangent are snapshotted before saved-LSE
+// forward/backward. Requested host gradients complete independently on return.
+int tessera_nvidia_attention_vjp_invoke_resident_ordered(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, size_t output_count,
+    float* device_milliseconds);
 int tessera_nvidia_attention_vjp_close(uint64_t handle);
 const char* tessera_nvidia_attention_vjp_last_error(void);
 

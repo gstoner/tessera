@@ -111,6 +111,10 @@ def _canonical_digest(value: Mapping[str, Any]) -> str:
 def _value_signature(value: Any) -> Mapping[str, Any]:
     import numpy as np
 
+    if hasattr(value,"__cuda_array_interface__"):
+        from .resident_nvidia_tensor import cuda_frontend_specs
+        shape,dtype=cuda_frontend_specs((value,),ranks=(1,2,3,4))[0]
+        return {"dtype":str(dtype),"shape":list(shape)}
     array = np.asarray(value)
     return {
         "dtype": str(array.dtype),
@@ -224,6 +228,12 @@ def _record_execution_certificate(
         else (out_cotangents,)
     )
     execution = dict(result.execution)
+    frontend_contract=getattr(frontend_certificate,"contract",{})
+    resident_proof=(isinstance(frontend_contract,Mapping)
+                    and frontend_contract.get("schema")=="tessera.frontend_resident_structural.v1")
+    if resident_proof and frontend_certificate is not None:
+        frontend_certificate.validate()
+        execution["proof_mode"]="abstract_metadata_structural"
     attestation = execution.get("physical_attestation")
     expected_arch = {
         "x86": "x86_avx512",
@@ -280,7 +290,7 @@ def _record_execution_certificate(
         ),
         "artifact_identities": identities,
         "source_reexecution": "prohibited"
-        if declaration.differential_policy == "non_reexecuting_state_lineage"
+        if declaration.differential_policy == "non_reexecuting_state_lineage" or resident_proof
         else "policy_permitted",
         "status": "executed",
     }

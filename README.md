@@ -191,3 +191,13 @@ snapshots are numerically proved on RTX5070. Structural frontend certification
 performs zero concrete tensor executions; numerical authority is the native
 package. This is not full resident attention AD or a general performance claim.
 See [the exact-device packet](benchmarks/baselines/sm120_resident_attention_jvp_20261009/README.md).
+
+### Resident attention backward on NVIDIA SM120
+
+Static compact FP32 native_backward now accepts CUDA Q/K/V, optional broadcast
+bias and cotangent through typed Graph and native MLIR AD/Schedule/Tile/Target/
+LLVM-PTX packages. Native stream ordering and private saved-LSE lifetime are
+proved on RTX5070. Structural certification performs zero concrete tensor
+executions and pins the exact Graph consumed by native backward.
+See [the exact-device packet](benchmarks/baselines/sm120_resident_attention_vjp_20261009/README.md).
+Dynamic/composed resident AD and binding performance remain open.

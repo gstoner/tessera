@@ -190,6 +190,9 @@ def test_owner_diagnostic_mutation_cannot_rewrite_checked_storage(independent_pr
     owner.package=independent_primal_package
     owner._binding=native._scaled_abi_binding(independent_primal_package)
     owner._program=None
+    # A compact-input owner still has its runtime provider before admission.
+    from types import SimpleNamespace
+    owner.lib=SimpleNamespace()
     values=[]
     for spec in owner._binding.storage[:owner._binding.argument_count]:
         dtype=np.float32 if spec.storage=="f32" else np.uint8

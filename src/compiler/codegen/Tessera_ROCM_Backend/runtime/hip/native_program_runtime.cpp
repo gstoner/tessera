@@ -43,6 +43,8 @@ struct Program {
   std::vector<Stage> stages;
   std::vector<unsigned char> readback;
   std::vector<hipEvent_t> events;
+  std::vector<hipGraph_t> graphs;
+  std::vector<hipGraphExec_t> graphExecutables;
   uint64_t generation = 0;
   bool poisoned = true, ready = false, output = false;
 };
@@ -96,6 +98,14 @@ bool identity(const Program &p) {
 }
 int clean(Program &p) {
   if (p.stream && hipStreamSynchronize(p.stream) != hipSuccess) return 7;
+  while (!p.graphExecutables.empty()) {
+    if (hipGraphExecDestroy(p.graphExecutables.back()) != hipSuccess) return 9;
+    p.graphExecutables.pop_back();
+  }
+  while (!p.graphs.empty()) {
+    if (hipGraphDestroy(p.graphs.back()) != hipSuccess) return 9;
+    p.graphs.pop_back();
+  }
   while (!p.events.empty()) {
     if (hipEventDestroy(p.events.back()) != hipSuccess) return 9;
     p.events.pop_back();
@@ -422,6 +432,71 @@ extern "C" int tessera_rocm_program_invoke(
   return 0;
 } catch (...) { return 12; }
 
+// Diagnostic member windows run the immutable SSA members in prefix order.
+// Repetition of a pure member writes the same fresh output; consumers only run
+// after producer completion. Captured launch groups remove CPU enqueue gaps;
+// windows still include device graph dispatch, not instruction-counter time.
+extern "C" int tessera_rocm_program_profile_members(
+    uint64_t handle, uint32_t repeats, uint32_t members,
+    uint64_t *generation, float *elapsed) try {
+  if (generation) *generation = 0;
+  if (!generation || !elapsed || !repeats || repeats > 65536) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (p.poisoned || !p.ready || p.generation == UINT64_MAX) return 10;
+  if (members != p.stages.size()) return 1;
+  p.graphs.reserve(1); p.graphExecutables.reserve(1);
+  p.events.reserve(2);
+  p.output = false;
+  // Quarantine on any operation failure or exception. Only complete successful
+  // profiling publishes a fresh output generation and restores a usable owner.
+  p.poisoned = true;
+  for (uint32_t member = 0; member < members; ++member) {
+    auto &s = p.stages[member];
+    if (hipStreamBeginCapture(p.stream, hipStreamCaptureModeThreadLocal) != hipSuccess)
+      return 6;
+    int status = 0;
+    for (uint32_t i = 0; i < repeats; ++i)
+      if (hipModuleLaunchKernel(s.function, s.geometry[0], s.geometry[1], s.geometry[2],
+          s.geometry[3], s.geometry[4], s.geometry[5], 0, p.stream, s.argv.data(),
+          nullptr) != hipSuccess) { status = 6; break; }
+    hipGraph_t graph{};
+    auto ended = hipStreamEndCapture(p.stream, &graph);
+    if (graph) p.graphs.push_back(graph);
+    if (status || ended != hipSuccess || !graph) return 6;
+    hipGraphExec_t executable{};
+    auto instantiated = hipGraphInstantiate(&executable, graph, nullptr, nullptr, 0);
+    if (executable) p.graphExecutables.push_back(executable);
+    if (instantiated != hipSuccess || !executable) return 4;
+    hipEvent_t begin{}, end{};
+    if (hipEventCreate(&begin) != hipSuccess) return 4;
+    p.events.push_back(begin);
+    if (hipEventCreate(&end) != hipSuccess) return 4;
+    p.events.push_back(end);
+    if (hipEventRecord(begin, p.stream) != hipSuccess ||
+        hipGraphLaunch(executable, p.stream) != hipSuccess ||
+        hipEventRecord(end, p.stream) != hipSuccess) return 6;
+    if (hipStreamSynchronize(p.stream) != hipSuccess) return 7;
+    if (hipEventElapsedTime(&elapsed[member], begin, end) != hipSuccess) return 7;
+    elapsed[member] /= repeats;
+    // clean first synchronizes, then releases graph/event resources. Here
+    // release only these resources; immutable buffers/image leases stay owned.
+    if (hipGraphExecDestroy(executable) != hipSuccess) return 9;
+    p.graphExecutables.pop_back();
+    if (hipGraphDestroy(graph) != hipSuccess) return 9;
+    p.graphs.pop_back();
+    while (!p.events.empty()) {
+      if (hipEventDestroy(p.events.back()) != hipSuccess) return 9;
+      p.events.pop_back();
+    }
+  }
+  p.poisoned = false; p.output = true; *generation = ++p.generation;
+  return 0;
+} catch (...) { return 12; }
+
 extern "C" int tessera_rocm_program_read(
     uint64_t handle, uint32_t slot, uint64_t generation, void *output,
     uint64_t bytes) try {
@@ -455,7 +530,8 @@ extern "C" int tessera_rocm_program_close(uint64_t handle) try {
   // Completion and identity precede reuse. A closed handle is always removed;
   // a later acquire gets a fresh handle and retains its generation counter.
   const uint64_t idleLimit = uint64_t(128) << 20;
-  if (!p.poisoned && cacheEnabled() && p.events.empty() &&
+  if (!p.poisoned && cacheEnabled() && p.events.empty() && p.graphs.empty() &&
+      p.graphExecutables.empty() &&
       p.allocationBytes <= idleLimit) {
     if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
     // Close appends and acquire removes, so the first idle owner is least

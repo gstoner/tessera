@@ -51,6 +51,13 @@ int tessera_rocm_program_update(uint64_t handle, const void *const *inputs,
 // stream. Optional HIP event interval includes native enqueue gaps, not Python.
 int tessera_rocm_program_invoke(uint64_t handle, uint32_t repeats,
                                uint64_t *generation, float *elapsed_ms);
+// Per-member captured HIP graph windows, averaged over repeats (1..65536).
+// Profiling groups repetitions of each pure SSA member in dependency order.
+// Includes device graph dispatch; excludes capture/instantiate and host copies.
+// Failure quarantines the owner until close. Success publishes a generation.
+int tessera_rocm_program_profile_members(
+    uint64_t handle, uint32_t repeats, uint32_t member_count,
+    uint64_t *generation, float *elapsed_ms);
 int tessera_rocm_program_read(uint64_t handle, uint32_t slot,
                              uint64_t generation, void *output, uint64_t bytes);
 int tessera_rocm_program_close(uint64_t handle);

@@ -101,6 +101,9 @@ class NativeScaledProgram:
             if step["operation"] == "tessera.scaled_matmul":
                 if len(step["inputs"]) != 4 or len(member["scalars"]) != 3:
                     raise ValueError("native scaled product has an invalid scalar ABI")
+            elif step["operation"] == "tessera.transpose":
+                if len(step["inputs"]) != 1 or len(member["scalars"]) != 1:
+                    raise ValueError("native result permutation has an invalid scalar ABI")
             elif step["operation"] == "tessera.add":
                 if len(step["inputs"]) != 2 or len(member["scalars"]) != 1:
                     raise ValueError("native scaled sum has an invalid scalar ABI")
@@ -200,6 +203,19 @@ class NativeScaledProgram:
                         ["f32", "f32", "f8E4M3FN", "f8E4M3FN"] or
                     member["geometry"] != geometry):
                     raise ValueError("native scale reduction storage/count/geometry differs")
+            elif step["operation"] == "tessera.transpose":
+                source = buffers[step["inputs"][0]]
+                axes = step.get("permutation")
+                rank = len(source["shape"])
+                if (not isinstance(axes, list) or not 1 <= rank <= 8 or
+                    len(axes) != rank or any(type(axis) is not int for axis in axes) or
+                    sorted(axes) != list(range(rank)) or
+                    source["storage"] != "f32" or output_buffer["storage"] != "f32" or
+                    output_buffer["shape"] != [source["shape"][axis] for axis in axes] or
+                    source["bytes"] != output_buffer["bytes"] or
+                    member["scalars"] != [output_buffer["elements"]] or
+                    member["geometry"] != [(output_buffer["elements"]-1)//256+1,1,1,256,1,1]):
+                    raise ValueError("native result permutation axes/storage/count/geometry differ")
             elif (member["scalars"] != [output_buffer["elements"]] or
                   any(buffers[slot]["shape"] != output_buffer["shape"] or
                       buffers[slot]["storage"] != "f32" for slot in step["inputs"])):
@@ -273,7 +289,8 @@ def _package_native_scaled(graph_ir: str, *, target: str = "rocm_gfx1201", prima
     from .rocm_native import _extract_hsaco
     for step in program["steps"]:
         family = ("matmul" if step["operation"] == "tessera.scaled_matmul" else
-                  "reduction" if step["operation"] == "tensor.generate" else "scalar_binary")
+                  "reduction" if step["operation"] == "tensor.generate" else
+                  "scalar_unary" if step["operation"] == "tessera.transpose" else "scalar_binary")
         index = step["step"]
         selection = "select-scaled-transpose-member" if transpose else "select-scaled-member"
         prefix = ("builtin.module(" + native_pass + "{" + export + "=true "
@@ -504,6 +521,24 @@ class PreparedScaledProgram:
         _status(self.lib.tessera_rocm_program_invoke(
             self.handle,repeats,c.byref(generation),c.byref(elapsed) if timed else None))
         return generation.value, float(elapsed.value) if timed else None
+
+    def profile_members(self, *, repeats=1024):
+        """Return generation and captured device-window ms per member.
+
+        Includes device graph dispatch; capture, instantiation and host copies
+        are outside the events. This is diagnostic grouped SSA execution,
+        rather than the timing of the ordinary interleaved program.
+        """
+        if type(repeats) is not int or not 0 < repeats <= 65536:
+            raise ValueError("native member repetition count is invalid")
+        profile = self.lib.tessera_rocm_program_profile_members
+        profile.argtypes = [c.c_uint64, c.c_uint32, c.c_uint32,
+                            c.POINTER(c.c_uint64), c.POINTER(c.c_float)]
+        members = len(self._binding.steps)
+        elapsed = (c.c_float * members)()
+        generation = c.c_uint64()
+        _status(profile(self.handle, repeats, members, c.byref(generation), elapsed))
+        return generation.value, tuple(float(value) for value in elapsed)
 
     def read(self, generation):
         outputs = []

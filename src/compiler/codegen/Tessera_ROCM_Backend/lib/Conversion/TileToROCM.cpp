@@ -35,6 +35,7 @@
 #include "llvm/ADT/StringExtras.h"
 
 using namespace mlir;
+#include "ROCMResultPermutation.h"
 
 namespace {
 
@@ -2694,6 +2695,8 @@ struct LowerTileToROCMPass
 
   void runOnOperation() override {
     StringRef arch = archOpt;
+    if (failed(lowerROCMResultPermutations(getOperation(), arch)))
+      return signalPassFailure();
 
     SmallVector<LLVM::LLVMFuncOp> mathFunctions;
     getOperation().walk([&](LLVM::LLVMFuncOp fn) {

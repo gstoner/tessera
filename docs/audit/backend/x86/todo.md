@@ -9972,3 +9972,28 @@ static general-rank Linalg materialization are integrated.
 Evidence: benchmarks/baselines/mapped_result_axes_foundation_20261008/README.md.
 
 Native CPU JIT numerical primal, inverse adjoint and ordinary-source replay are validated on Threadripper3970X. This diagnostic Linalg/LLVM materialization gate does not prove a new Zen5 AVX512 package route or GPU parity.
+
+## Native result permutation — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Sync MAP-RESULT-PERMUTATION-20261008.
+
+Native scaled SSA export now admits a computed compact static f32 transpose.
+Graph-to-Schedule seals shapes, permutation and source bindings;
+Schedule-to-Tile verifies replay; Tile-to-ROCm emits native GPU load/store
+arithmetic with the existing checked member ABI. Private producer and returned
+permutation storage have distinct lifetime intervals. No Python numerical
+backend or Python Tile constructor is introduced.
+
+Owning gfx1201 RX 9070 XT: five ragged/partial-K shapes pass numerical checks,
+serialized replay, changed-scale warm reuse, stale-generation rejection and
+retained output checks. Captured native member profiling preserves results.
+Three packets separate producer/movement device windows from ordinary program
+events and upload/execute/readback time. Captured windows include device graph
+dispatch, not instruction-counter time.
+Evidence: benchmarks/baselines/native_result_permutation_20261008/README.md.
+
+Public nonleading mapped-output JIT, inverse-cotangent program integration,
+dynamic/strided results and generic batching closure remain open.
+
+Follow-up required: scaled-program result-permutation member packaging. Existing CPU Graph/linalg transpose does not prove this GPU program contract.

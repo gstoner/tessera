@@ -1,0 +1,269 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "uuid_hex": "32386439653765666266326566373136",
+  "route": "Python frontend->Graph->native program->Schedule->Tile->ROCm Target->LLVM->HSACO->checked HIP ABI",
+  "input_shapes": [
+    [
+      2,
+      9
+    ],
+    [
+      9,
+      5
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      1
+    ]
+  ],
+  "max_abs_error": 3.4924596548080444e-10,
+  "correctness": "independent scalar oracle checked before and after all timing windows",
+  "cold_compile_and_call_ms": 382.8504860866815,
+  "native_program_samples_ms": [
+    0.004087437409907579,
+    0.00423512514680624,
+    0.003922304604202509,
+    0.003930593840777874,
+    0.003932859282940626,
+    0.003931218758225441,
+    0.004165976773947477
+  ],
+  "native_program_median_ms": 0.003932859282940626,
+  "public_compile_warm_samples_ms": [
+    12.038683984428644,
+    1.7286480870097876,
+    1.7502580303698778,
+    1.8540259916335344,
+    1.728967996314168,
+    1.773493131622672,
+    1.7215041443705559
+  ],
+  "public_compile_warm_median_ms": 1.7502580303698778,
+  "member_samples_ms": [
+    [
+      0.0019002812914550304,
+      0.0020312187261879444
+    ],
+    [
+      0.001871859421953559,
+      0.002015601610764861
+    ],
+    [
+      0.0018752968171611428,
+      0.0020143594592809677
+    ],
+    [
+      0.0018734218319877982,
+      0.0020140467677265406
+    ],
+    [
+      0.0018709218129515648,
+      0.0020246717613190413
+    ],
+    [
+      0.0018640469061210752,
+      0.0020277968142181635
+    ],
+    [
+      0.0018646718235686421,
+      0.0020334217697381973
+    ]
+  ],
+  "member_medians_ms": [
+    0.001871859421953559,
+    0.0020246717613190413
+  ],
+  "member_timing_scope": "Grouped repeated member HIP graph event windows, including device dispatch; not additive interleaved program timings.",
+  "public_scope": "Compilation warm; frame allocation/cache preparation may occur. No universal performance claim.",
+  "steps": [
+    {
+      "continuous_contract": {
+        "scale_k": 4,
+        "scale_n": 4,
+        "transposeA": false,
+        "transposeB": false
+      },
+      "inputs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "lowering": "structured_f32_scaled_product",
+      "member": "chained__member_0",
+      "operation": "tessera.scaled_matmul",
+      "output": 7,
+      "step": 0
+    },
+    {
+      "continuous_contract": {
+        "scale_k": 4,
+        "scale_n": 4,
+        "transposeA": false,
+        "transposeB": false
+      },
+      "inputs": [
+        7,
+        4,
+        5,
+        6
+      ],
+      "lowering": "structured_f32_scaled_product",
+      "member": "chained__member_1",
+      "operation": "tessera.scaled_matmul",
+      "output": 8,
+      "step": 1
+    }
+  ],
+  "buffers": [
+    {
+      "bytes": 72,
+      "elements": 18,
+      "first_write": -1,
+      "id": 0,
+      "last_read": 0,
+      "ownership": 0,
+      "shape": [
+        2,
+        9
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 180,
+      "elements": 45,
+      "first_write": -1,
+      "id": 1,
+      "last_read": 0,
+      "ownership": 0,
+      "shape": [
+        9,
+        5
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": -1,
+      "id": 2,
+      "last_read": 0,
+      "ownership": 0,
+      "shape": [
+        2,
+        3
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": -1,
+      "id": 3,
+      "last_read": 0,
+      "ownership": 0,
+      "shape": [
+        3,
+        2
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 60,
+      "elements": 15,
+      "first_write": -1,
+      "id": 4,
+      "last_read": 1,
+      "ownership": 0,
+      "shape": [
+        5,
+        3
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 16,
+      "elements": 4,
+      "first_write": -1,
+      "id": 5,
+      "last_read": 1,
+      "ownership": 0,
+      "shape": [
+        2,
+        2
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 8,
+      "elements": 2,
+      "first_write": -1,
+      "id": 6,
+      "last_read": 1,
+      "ownership": 0,
+      "shape": [
+        2,
+        1
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 40,
+      "elements": 10,
+      "first_write": 0,
+      "id": 7,
+      "last_read": 1,
+      "ownership": 1,
+      "shape": [
+        2,
+        5
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": 1,
+      "id": 8,
+      "last_read": 2,
+      "ownership": 2,
+      "shape": [
+        2,
+        3
+      ],
+      "storage": "f32"
+    }
+  ],
+  "image_sha256": [
+    "110e88735f98ef1cb0bf03e6cae715fa4110ac13f051d2897292db33c78fff14",
+    "7badec615f5f35e343e589b46485d3180c7128082d8def45e6bbf23c0fee596a"
+  ],
+  "sources": {
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "4187f635dd86a4adff8daf3723d4dda72c7c1b8a4c5781a1b44d56050c1a3f13",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "51649f0da5f95ebcca55a0832f1c646b80395c3ff00cac57ae909a02c65cdec7",
+    "src/transforms/lib/NativeFloatingScaledProduct.h": "c7642a4a5af99f713e6570e09d2041e4ce1800475e2a6bbaaa575e349ab91fc6",
+    "tests/device/rocm/test_continuous_scaled_ssa_chain.py": "1efe08d56b0b6994c34db4b453e17b1e5197eac7e375590e431e42721dd1204b",
+    "benchmarks/rocm/record_continuous_scaled_ssa_chain.py": "bf6d31969d67af10a3dd1a5ad4b7984d51479c2c501b518cd6f52831e9421d01"
+  },
+  "tools": {
+    "TESSERA_OPT": "4680b4b9db75600fa0172a2b64786a1adbce73029e5034febe9090320b0ae391",
+    "TESSERA_ROCM_OPT": "26795b00b4052c1db8dd8dde7f462c4d38130255397bbf928565a7c85f1deed4"
+  }
+}

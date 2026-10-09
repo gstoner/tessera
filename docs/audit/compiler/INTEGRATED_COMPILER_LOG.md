@@ -11668,3 +11668,25 @@ nvfp4-threshold-comparison.json, nvfp4-threshold-isa-public.json,
 nvfp4-threshold-sources.json, nvfp4-threshold-device-tests.txt,
 nvfp4-threshold-format-device-tests.txt.
 <!-- entry-fields:end -->
+
+### 2026-10-09 — continuous scaled-product SSA dependency integration
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync CONTINUOUS-SCALED-SSA-20261009.
+
+Outcome: Continuous FP32 products consume preceding computed values through
+existing native buffer lifetime export and Schedule/Tile/LLVM images.
+Six native checks and 566 frontend/AD regressions pass; owning gfx1201 primal
+and JVP execute numerically, with changed inputs, retained outputs and warm
+compiler/eager refusal. No Python arithmetic/compiler bypass is introduced.
+
+Measurements: tiny ragged frame native program 3.933 us; diagnostic grouped
+producer/consumer 1.872/2.025 us; public compile-warm 1.750 ms. Distinct timing
+scopes, no additive or speedup claim. All four backend queues assessed.
+
+Remaining: reverse residual capture, mapped chains, generic scaled closure,
+dynamic layouts and original backend performance obligations.
+
+Evidence: benchmarks/baselines/gfx1201_continuous_ssa_chain_20261009/README.md
+and gfx1201.json.
+<!-- entry-fields:end -->

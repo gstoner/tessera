@@ -14220,3 +14220,12 @@ device time, and no speedup or selector promotion is claimed.
 Evidence: benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md.
 Arbitrary producer kinds, external asynchronous ownership and generic scaled
 batching/transpose closure remain open.
+
+## GFX1201-BOUNDED-NVFP4-ROWS-20261009
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Shared native export, portable replay and JIT admission assessment: not applicable to nvidia execution.
+SM120 NVFP4 physical scaling and CUDA allocation ownership differ from the ROCm ingest pipeline.
+The new active-row C ABI is HIP-specific; existing static v1 replay remains compatible.
+No sibling physical schedule or exact-device evidence is transferred.
+See ../rocm/todo.md, native bounded NVFP4 row capacity.

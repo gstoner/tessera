@@ -47,3 +47,16 @@ Generic scaled-matmul batching/transpose closure, wider W1.1 composition,
 ROCm performance obligations, final generated-doc/graph gates, fresh full-suite
 green and publication remain open. Do not weaken coverage states or transfer
 physical proof across architectures to make those gates appear complete.
+
+## Subsequent bounded-row ingest envelope — 2026-10-09
+
+The dependent GFX1201-BOUNDED-NVFP4-ROWS-20261009 slice now proves native MLIR
+capacity export through Schedule/Tile/Target packaging and ordinary/portable
+changing-row replay on RX 9070 XT. Eight new device cases, 36 existing static
+cases and a final source-bound twelve-row timing packet establish that named
+envelope. HIP capacity allocations remain fixed while active M changes.
+See ../gfx1201_bounded_nvfp4_rows_20261009/README.md for timing domains and limits.
+
+This is subsequent evidence, not a replacement for this historical snapshot.
+Generic scaled batching/transpose, whole-model ingest quality, broader W1.1
+composition, composed attention and ROCm performance obligations remain open.

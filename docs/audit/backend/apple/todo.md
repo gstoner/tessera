@@ -13806,3 +13806,12 @@ Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
 Shared native export/replay and pass metadata are assessed. Not applicable to Metal physical schedules or ABI: the new native projection selects only nvidia_sm120/sm_120 roots. Mac producer-chain execution still requires an Apple-owned consumer and proof.
 See ../nvidia/todo.md, bounded native producer chains, and
 benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md.
+
+## GFX1201-BOUNDED-NVFP4-ROWS-20261009
+
+Owner ROCM-NVFP4-INGEST-1 / FRONTEND-IR-MEDIUM-1.
+Shared native export, portable replay and JIT admission assessment: not applicable to apple execution.
+Metal has no consumer for this named gfx1201 ingest/storage/product ABI.
+The new active-row C ABI is HIP-specific; existing static v1 replay remains compatible.
+No sibling physical schedule or exact-device evidence is transferred.
+See ../rocm/todo.md, native bounded NVFP4 row capacity.

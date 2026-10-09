@@ -16607,3 +16607,47 @@ Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
 Shared native export/replay and pass metadata are assessed. Not applicable to HIP physical schedules or ABI: native outlining selects only nvidia_sm120/sm_120 roots and the new staging reservation uses CUDA ownership. gfx1151/gfx1201 evidence does not change.
 See ../nvidia/todo.md, bounded native producer chains, and
 benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md.
+
+## Native bounded NVFP4 row capacity — 2026-10-09
+
+Owner ROCM-NVFP4-INGEST-1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Sync GFX1201-BOUNDED-NVFP4-ROWS-20261009; follows PR913.
+
+Native MLIR export retains the original five-input Graph, derives activation,
+row-scale and output capacities from an explicit i64 row bound, and partitions
+the actual conversion/storage/product SSA operations. V2 records retain original
+and capacity Graph witnesses; static v1 remains compatible. Schedule/Tile/Target
+members and native images are built once at capacity. The checked portable
+reader validates active/capacity counts, buffer spans and runtime-M image policy.
+
+The HIP owner allocates eleven capacity buffers once. Active-row preparation and
+rebinding validate actual host spans, retire completed captured graphs before
+changing launch geometry, and read back only active output rows. Cache keys bind
+capacity and compiled images, not active M. Failed retirement poisons the owner;
+failure-injection tests preserve quarantine and leases until cleanup succeeds.
+No runtime numerical kernel or Python Graph/Tile reconstruction is introduced.
+
+On Tajasaurus RX 9070 XT/gfx1201, eight new device cases prove ordinary JIT and
+serialized portable replay without tracing, compiler processes or eager work;
+row sequences include shrink/grow/shrink, reordered input roles and changed
+weights. Same-owner tests retain eleven allocations and constant capacity bytes.
+Thirty-six existing static/resident cases also pass on the owning device.
+Sixty-one native/frontend/lifetime host cases pass (three owning-image skips).
+A matching full LLVM/MLIR 23.1.1 core/ROCm build supplies both native tools.
+The capacity projection signature repair uses actual projected block arguments.
+
+The final source-bound twelve-row packet covers capacities (M,N,K) =
+(257,32,64), (513,80,256), (256,64,1024) and active M = 17, capacity, 1, 200.
+All measured outputs match the decoded post-ingest oracle (max absolute error
+zero). Independent HIP event windows report ingest 90.826–146.997 us,
+consumer 18.614–25.411 us and the three-stage program 116.891–171.390 us.
+Warm public-call medians are 2.405–9.350 ms, including checks/packing, uploads,
+native execution, synchronization and readback; changed values and compiler-free
+replay are checked. These are separate timing domains, not an A/B speedup.
+See benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/README.md.
+Recorded by benchmarks/rocm/record_bounded_nvfp4_rows.py.
+
+This closes the named bounded-row execution envelope. Whole-model checkpoint
+quality, generic layouts/batching/transpose, broader ingest policies, W8A8 and
+MXFP4 performance obligations remain open. No gfx1151 or sibling physical proof
+is transferred.

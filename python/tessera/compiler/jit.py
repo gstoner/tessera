@@ -1012,6 +1012,13 @@ class JitFn:
             if _cr.active_sink_is_capturing():
                 _cr.emit_compile_report(self.compile_report())
             return prepared_matmul
+        # Explicit bounded compilation already captured and verified the
+        # frontend Graph. Replay binds that immutable native program, as the
+        # prepared matmul route above does, instead of re-running the tracer.
+        if getattr(self,"_rocm_nvfp4_bounded_program",None) is not None:
+            native_ingest=self._try_rocm_nvfp4_program_call(args,kwargs)
+            if native_ingest is not _JIT_FALLBACK:
+                return native_ingest
         self._establish_tracer_authority(args, kwargs)
         if self.differentiation_request is not None:
             self._specialized_autodiff_module(args, kwargs)
@@ -2179,6 +2186,18 @@ class JitFn:
         ordered=tuple(bound.arguments[name] for name in self.arg_names)
         if len(ordered)!=5 or not all(isinstance(value,np.ndarray) for value in ordered):
             raise TypeError("resident checkpoint JIT requires five explicit host tensors")
+        bounded=getattr(self,"_rocm_nvfp4_bounded_program",None)
+        if bounded is not None:
+            program,artifact=bounded
+            from tessera import runtime as rt
+            receipt=rt.launch(artifact,ordered)
+            if receipt.get("ok") is not True or receipt.get("execution_kind")!="native_gpu":
+                raise RuntimeError(f"bounded checkpoint native execution failed: {receipt}")
+            self._rocm_nvfp4_last_program=program
+            self._rocm_nvfp4_last_receipts=tuple(receipt["component_receipts"])
+            self._cached_artifact=None
+            self.last_fallback_reason=None
+            return receipt["output"]
         module,_=self._trace_frontend_capture(ordered,{})
         if not supports_resident_trace(module):
             raise ValueError("resident checkpoint trace differs from its declared Graph")
@@ -2204,7 +2223,8 @@ class JitFn:
         self.last_fallback_reason=None
         return receipt["output"]
 
-    def compile_native_nvfp4_program(self,*args,**kwargs):
+    def compile_native_nvfp4_program(self,*args,m_bound=None,**kwargs):
+        from copy import deepcopy
         from dataclasses import replace
         from .rocm_nvfp4_program import package_traced_resident
         if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
@@ -2213,7 +2233,18 @@ class JitFn:
         bound.apply_defaults()
         ordered=tuple(bound.arguments[name] for name in self.arg_names)
         module,_=self._trace_frontend_capture(ordered,{})
-        return replace(package_traced_resident(module),argument_names=tuple(self.arg_names))
+        if m_bound is not None:
+            if type(m_bound) is not int or m_bound<=0:
+                raise ValueError("native NVFP4 row bound must be a positive integer")
+            module.module_attrs["tessera.native.nvfp4_m_bound"]=f"{m_bound} : i64"
+        program=replace(package_traced_resident(module),argument_names=tuple(self.arg_names))
+        if m_bound is not None:
+            from .rocm_nvfp4_program import runtime_artifact
+            self.graph_ir=deepcopy(module)
+            self.frontend_authority="tracer"
+            self.frontend_authority_error=None
+            self._rocm_nvfp4_bounded_program=(program,runtime_artifact(program))
+        return program
 
     def native_nvfp4_packages(self):
         program=self._rocm_nvfp4_last_program

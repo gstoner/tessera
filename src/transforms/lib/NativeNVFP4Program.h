@@ -77,6 +77,53 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
       return root.emitError("NVFP4 native program argument metadata needs its own contract");
     roleIndices.push_back(arg.getArgNumber());
   }
+  // A bounded activation-row request changes only the consumer's capacity
+  // frame. Retain the original Graph witness; conversion/storage SSA and
+  // numerical policy are cloned verbatim by the ordinary native partition.
+  constexpr StringLiteral rowBoundKey = "tessera.native.nvfp4_m_bound";
+  auto rowBoundAttr = module->getAttrOfType<IntegerAttr>(rowBoundKey);
+  bool boundedRows = module->hasAttr(rowBoundKey);
+  int64_t activeRows = 0, rowBound = 0;
+  std::string originalIR;
+  if (boundedRows) {
+    auto activation = dyn_cast<RankedTensorType>(roles[3].getType());
+    auto scale = dyn_cast<RankedTensorType>(roles[4].getType());
+    auto output = dyn_cast<RankedTensorType>(ops[2]->getResult(0).getType());
+    if (!rowBoundAttr || !rowBoundAttr.getType().isInteger(64) ||
+        !activation || activation.getRank() != 2 ||
+        !activation.hasStaticShape() || activation.getEncoding() ||
+        !scale || scale.getRank() != 1 || !scale.hasStaticShape() ||
+        scale.getEncoding() || !output || output.getRank() != 2 ||
+        !output.hasStaticShape() || output.getEncoding())
+      return root.emitError("NVFP4 bounded rows require static unencoded capacity types and an i64 bound");
+    activeRows = activation.getDimSize(0);
+    rowBound = rowBoundAttr.getInt();
+    if (activeRows <= 0 || rowBound < activeRows ||
+        activation.getDimSize(1) <= 0 ||
+        rowBound > INT64_MAX / activation.getDimSize(1) ||
+        output.getDimSize(1) <= 0 ||
+        rowBound > INT64_MAX / output.getDimSize(1) / 2 ||
+        rowBound > INT64_MAX / 4)
+      return root.emitError("NVFP4 bounded rows exceed their checked storage capacity");
+    llvm::raw_string_ostream originalStream(originalIR);
+    module.print(originalStream); originalStream.flush();
+    auto capacityType = [&](RankedTensorType type) {
+      SmallVector<int64_t> shape(type.getShape());
+      shape[0] = rowBound;
+      return RankedTensorType::get(shape, type.getElementType());
+    };
+    root.getArgument(roleIndices[3]).setType(capacityType(activation));
+    root.getArgument(roleIndices[4]).setType(capacityType(scale));
+    Type result = capacityType(output);
+    ops[2]->getResult(0).setType(result);
+    SmallVector<Type> capacityInputs;
+    for (auto argument : root.getArguments())
+      capacityInputs.push_back(argument.getType());
+    root.setFunctionType(FunctionType::get(module.getContext(),
+        capacityInputs, TypeRange{result}));
+    module->removeAttr(rowBoundKey);
+    if (failed(verify(module))) return failure();
+  }
   llvm::DenseMap<Value, int64_t> ids;
   SmallVector<Value> values;
   SmallVector<int64_t> writes, reads;
@@ -166,11 +213,16 @@ static mlir::LogicalResult emitNativeNVFP4Program(mlir::ModuleOp module) {
   for (int64_t index : roleIndices) roleJSON.push_back(index);
   std::string rootIR; llvm::raw_string_ostream rootStream(rootIR);
   root.print(rootStream); rootStream.flush();
-  llvm::json::Object plan{{"schema", "tessera.native.nvfp4_program.v1"},
+  llvm::json::Object plan{{"schema", boundedRows ? "tessera.native.nvfp4_program.v2" : "tessera.native.nvfp4_program.v1"},
       {"root", root.getSymName().str()}, {"root_ir", rootIR},
       {"source_graph_ir", sourceIR + "\n"}, {"member_graphs", std::move(memberGraphs)},
       {"role_indices", std::move(roleJSON)}, {"buffers", std::move(bufferJSON)},
       {"steps", std::move(stepJSON)}, {"output", ids.lookup(ret.getOperand(0))}};
+  if (boundedRows) {
+    plan["active_m"] = activeRows;
+    plan["m_bound"] = rowBound;
+    plan["original_graph_ir"] = originalIR + "\n";
+  }
   std::string json; llvm::raw_string_ostream stream(json);
   stream << llvm::json::Value(std::move(plan)); stream.flush();
   module->setAttr("tessera.native.nvfp4_program_json",

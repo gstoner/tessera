@@ -25,6 +25,9 @@ missing/singleton batch axes into the original operand shape.
 - Existing public NVIDIA attention-JVP regression: 4 passed on RTX 5070.
   This is sibling regression evidence, not four-f32 NVIDIA execution.
 - Ruff passes; mypy ratchet remains zero.
+- Exact required CI unit marker lane reproduced in host WSL: 19,619 passed,
+  9,559 skipped, 2 failed in 315.18 s. Both failures are the existing generic
+  scaled_matmul batching/transpose closure assertions.
 - The generic batching/transpose zero-open assertions still fail for
   scaled_matmul (2 failures, 4 passes). Their partial/planned coverage states
   remain unchanged. This slice does not claim generic AD closure.

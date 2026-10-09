@@ -20,6 +20,7 @@ Generic batching/transpose statuses remain partial/planned; dynamic, broader
 dtype/layout and general transformation closure are still open.
 Evidence: benchmarks/baselines/floating_scaled_adjoint_20261009/README.md.
 Owning packet: benchmarks/baselines/floating_scaled_adjoint_20261009/gfx1201.json.
+Sibling SM120 test-fixture repair is not applicable to rocm kernels or ABI. Shared validation build/fixture assumptions are assessed; no architecture-specific execution claim changes.
 
 Parity validated on gfx1201: 80 continuous f32 cases cover unbatched/batched sharing, broadcast prefixes, both matrix transposes, role ordering, changed inputs and retained outputs. Eight composed and 26 public mapped FP8 regressions also pass. gfx1151 requires its own consumer/device follow-up; no sibling physical claim is made.
 

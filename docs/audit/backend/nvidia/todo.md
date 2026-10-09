@@ -21,6 +21,7 @@ Generic batching/transpose statuses remain partial/planned; dynamic, broader
 dtype/layout and general transformation closure are still open.
 Evidence: benchmarks/baselines/floating_scaled_adjoint_20261009/README.md.
 Owning packet: benchmarks/baselines/floating_scaled_adjoint_20261009/gfx1201.json.
+SM120 bias-JVP test inputs are now self-contained typed Graphs; native fixture gates pass without depending on missing benchmark packets. This is structural validation, not new physical execution evidence.
 
 Shared native Graph recipe is assessed; SM120 physical four-f32 adjoint packaging requires a separate consumer and exact-device follow-up. Four existing public native attention-JVP numerical regressions pass on RTX 5070; this is regression evidence, not four-f32 parity.
 

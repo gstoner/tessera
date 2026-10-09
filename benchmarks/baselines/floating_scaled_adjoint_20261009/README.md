@@ -39,6 +39,23 @@ indexing recipe. Encoded matrix/scale storage receives no implicit STE.
 Dynamic shapes, wider storage/layouts, public Python JIT integration for this
 continuous domain, and Apple/x86/SM120 physical consumers remain follow-ups.
 
+## Expanded native validation
+
+A separate expanded native-tool run included hardware/performance/compiler
+rows outside the CI unit marker lane: 609 failed, 22,576 passed, 7,973 skipped,
+38 errors, 874 deselected. It used a GPU-focused compiler configuration with
+x86/EBM/Clifford disabled and lacked ROCm serializer linker layout. This result
+is not green and is not reported as the required CI lane.
+
+Restoring those build components and matched LLVM/CUDA tools yielded 628
+passes and 514 skips in a representative rerun; 21 failures/4 errors remained.
+The remaining selected cases were traced to the LLVM23 llvm/bin/ld.lld
+serialization path and absent bias-JVP benchmark JSON inputs. The tests now
+use self-contained typed Graph fixtures instead of optional packets, and a
+focused rerun passes all 63 checks. The earlier recorder naming failure was
+from a pre-staging README; the tracked naming gate now passes. These focused
+repairs do not assert that every expanded-run case has been rerun.
+
 ## Timing evidence
 
 The packet records the observed gfx1201 architecture, rocminfo inventory,

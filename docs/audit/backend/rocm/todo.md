@@ -16360,7 +16360,7 @@ Parity validated on owning gfx1201: 36 numerical cases. gfx1151 typed FP8 WMMA i
 ### Mapped result-axis foundation (2026-10-08)
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1;
-synchronization MAP-RESULT-AXES-FOUNDATION-20261008, dependent on PR902.
+synchronization MAP-RESULT-AXES-FOUNDATION-20261008, PR903 dependent on PR902.
 Exact Graph permutation verification, ordinary-source axis normalization,
 axis-ordered symbolic constraints/SSA propagation, inverse native AD and
 static general-rank Linalg materialization are integrated.

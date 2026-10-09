@@ -6,7 +6,7 @@ audit_role: reference
 # Five compiler slices after PR 892: completion evidence
 
 This is an evidence ledger, not a closure declaration. The coordinated source
-is the published draft PR895–902 stack, with dependent engineering
+is the published draft PR895–903 stack, with dependent engineering
 checkpoints on Super-Bear. GPU evidence remains architecture-specific. Individual packets
 bind their actual dirty source and compiler/runtime binaries; an older packet
 is not proof of every later source change.

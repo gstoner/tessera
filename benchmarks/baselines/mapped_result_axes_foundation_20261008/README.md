@@ -2,7 +2,8 @@
 
 Owner: FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
 Synchronization: MAP-RESULT-AXES-FOUNDATION-20261008.
-Dependent on PR902; this is a prerequisite, not GPU map-output closure.
+Published as [PR903](https://github.com/gstoner/tessera/pull/903), dependent on
+PR902; this is a prerequisite, not GPU map-output closure.
 
 ## Architectural change
 

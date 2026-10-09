@@ -11588,7 +11588,8 @@ delivery.json, scaled-jvp-frame-paired-final.json, host-tests.txt, sm120-tests.t
 ### 2026-10-08 — mapped result-axis semantic foundation
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
-PRs: pending dependent checkpoint; sync MAP-RESULT-AXES-FOUNDATION-20261008.
+PRs: [#903](https://github.com/gstoner/tessera/pull/903), dependent on #902;
+sync MAP-RESULT-AXES-FOUNDATION-20261008.
 
 Outcome: Exact Graph transpose axes replace multiset-only verification.
 Keyword/positional/negative frontend axes carry canonical permutations.

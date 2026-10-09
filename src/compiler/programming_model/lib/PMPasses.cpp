@@ -3145,6 +3145,9 @@ struct GraphToSchedulePass
   Option<bool> scaleTransposeWave{*this, "scale-transpose-wave",
       llvm::cl::desc("Use one 32-lane wave per scale-adjoint element"),
       llvm::cl::init(false)};
+  Option<bool> scaleTransposeAuto{*this, "scale-transpose-auto",
+      llvm::cl::desc("Select a bounded gfx1201 FP8 scale-adjoint recipe from native reduction SSA"),
+      llvm::cl::init(false)};
   StringRef getArgument() const override { return "tessera-graph-to-schedule"; }
   StringRef getDescription() const override {
     return "Create a content-addressed mixed-level schedule.matmul SSA edge "
@@ -3164,7 +3167,13 @@ struct GraphToSchedulePass
       return;
     }
     bool scaleTransposeSelected = false;
-    if (failed(scheduleNativeScaleTranspose(mod, scaleTransposeSelected, scaleTransposeWave))) return signalPassFailure();
+    if (scaleTransposeWave && scaleTransposeAuto) {
+      mod.emitError("scale transpose cannot request both explicit wave and automatic schedules");
+      return signalPassFailure();
+    }
+    if (failed(scheduleNativeScaleTranspose(mod, scaleTransposeSelected,
+                                           scaleTransposeWave, scaleTransposeAuto)))
+      return signalPassFailure();
     if (scaleTransposeSelected) return;
     OpBuilder builder(mod.getContext());
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();

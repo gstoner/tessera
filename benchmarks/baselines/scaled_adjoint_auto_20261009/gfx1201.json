@@ -1,0 +1,2080 @@
+{
+  "architecture": "gfx1201",
+  "device_inventory": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "identity_sha256": {
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.build-auto/tools/tessera-opt/tessera-opt": "32a2d181904fef2b8d65484538536f464bc4f87bf68ac8fc833b77058c5b5336",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.build-auto/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "c048e2267afd30da922663abd5a04fec088c4109ef8cd7565656ef694812f4e4",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.transfer/libtessera_rocm_batched_readback.so": "040f9dc1247d66c6f6879a89d3778c26d5f05658fc21c136ab80577a3b40c202",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/ir/LinearTransposeInterface.cpp": "ec1b5f51ce7dd0680b1e963681faf9836e36cd718970393054d49a0223bd10df",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/programming_model/lib/NativeScaleTranspose.h": "38ad696c7ae9c024f89fc4bef2db33604d7f0da0385595445394de7f36545c24",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/programming_model/lib/PMPasses.cpp": "76ed9da52131cac623121f23194eccc2acc9f0ebbdd008c7cac6ad4aa8e60d4f",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/native_vjp_plugins.py": "a3399f2ca25f54aa9c742f8cd841a7784fa4faa800a587225661a8862e40e7c8",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/pass_metadata.py": "6d0b2c168d55b988e672f39dcdf1e8da3081e0878dd2d60db58394182bc9bbad",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/transforms/lib/NativeScaledMatmulProgram.h": "ecc83ec15941d4a19d490ee0795b440c865b1eb53422ff4835ed36228d693029",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/native_scaled_program.py": "0b8585dcbd37cb299c5d8268de972a63a158c6096203d822f5f9148c81a33a49",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/unit/test_native_typed_scaled_vmap.py": "77734168ab9e23b1f481de0950b36041987c1e8cddb177ff0b67d7fbe0d28903",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/device/rocm/test_public_mapped_scale_vjp.py": "eee722f1f16054d5bccd34ac2e1305bb1082950774c295ace7235e85386e0eec",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/benchmarks/rocm/record_scaled_adjoint_members.py": "b25295f46c55e6a46a70a5415d8bee7ef9c24147c7cc0d6307a3eaef85432ee0"
+  },
+  "cases": [
+    {
+      "roles": [
+        "sa"
+      ],
+      "shape_bmnk": [
+        2,
+        3,
+        5,
+        37
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          0.05457586050033569,
+          0.02049200050532818,
+          0.02253502421081066,
+          0.02216939814388752,
+          0.020613187924027443,
+          0.02050115540623665,
+          0.020646117627620697
+        ],
+        "wave": [
+          0.00555983604863286,
+          0.005531648639589548,
+          0.005520476493984461,
+          0.005588671658188105,
+          0.005590156186372042,
+          0.005594679620116949,
+          0.0059406328946352005
+        ],
+        "auto": [
+          0.0056510078720748425,
+          0.005529210902750492,
+          0.005254070274531841,
+          0.005646171979606152,
+          0.005675461143255234,
+          0.00558858597651124,
+          0.005917351692914963
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 0.020646117627620697,
+        "wave": 0.005588671658188105,
+        "auto": 0.005646171979606152
+      },
+      "wave_over_serial": 0.2706887444403345,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.03129946440458298
+          ],
+          [
+            0.020259343087673187
+          ],
+          [
+            0.022249573841691017
+          ],
+          [
+            0.021932657808065414
+          ],
+          [
+            0.020506272092461586
+          ],
+          [
+            0.02024662308394909
+          ],
+          [
+            0.020257916301488876
+          ]
+        ],
+        "wave": [
+          [
+            0.0053677852265536785
+          ],
+          [
+            0.005338636692613363
+          ],
+          [
+            0.005241546779870987
+          ],
+          [
+            0.005598853342235088
+          ],
+          [
+            0.005316460970789194
+          ],
+          [
+            0.005334996152669191
+          ],
+          [
+            0.0055707888677716255
+          ]
+        ],
+        "auto": [
+          [
+            0.005325031466782093
+          ],
+          [
+            0.005268089938908815
+          ],
+          [
+            0.005629576276987791
+          ],
+          [
+            0.005428345873951912
+          ],
+          [
+            0.005312183406203985
+          ],
+          [
+            0.005364271346479654
+          ],
+          [
+            0.005566177889704704
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.020506272092461586
+        ],
+        "wave": [
+          0.005338636692613363
+        ],
+        "auto": [
+          0.005364271346479654
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "a6b3952102a501262e7e14997fe6e90a4cc9e7041b120cdc0b660e2f0f61d1d2"
+        ],
+        "wave": [
+          "cb4c2635d0c9198cbf3faa027f894999eb7aa63f0d81158d2840bc420f936889"
+        ],
+        "auto": [
+          "cb4c2635d0c9198cbf3faa027f894999eb7aa63f0d81158d2840bc420f936889"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "ad5b4b1d63c0024f0be72f64ed50241f7403344bfee834411c7d936690457c60",
+        "wave": "ad5b4b1d63c0024f0be72f64ed50241f7403344bfee834411c7d936690457c60",
+        "auto": "ad5b4b1d63c0024f0be72f64ed50241f7403344bfee834411c7d936690457c60"
+      }
+    },
+    {
+      "roles": [
+        "sb"
+      ],
+      "shape_bmnk": [
+        2,
+        3,
+        5,
+        37
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          0.215024933218956,
+          0.13799676299095154,
+          0.13649345934391022,
+          0.13768234848976135,
+          0.136511892080307,
+          0.13731426000595093,
+          0.13735739886760712
+        ],
+        "wave": [
+          0.01311902329325676,
+          0.013068539090454578,
+          0.013123085722327232,
+          0.013092468492686749,
+          0.013083398342132568,
+          0.013365663588047028,
+          0.012961562722921371
+        ],
+        "auto": [
+          0.01353371050208807,
+          0.013257905840873718,
+          0.013507210649549961,
+          0.013519258238375187,
+          0.013240586034953594,
+          0.013518007472157478,
+          0.013660077936947346
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 0.13735739886760712,
+        "wave": 0.013092468492686749,
+        "auto": 0.013518007472157478
+      },
+      "wave_over_serial": 0.09531680565170002,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.13819481432437897
+          ],
+          [
+            0.137320876121521
+          ],
+          [
+            0.13793906569480896
+          ],
+          [
+            0.13754822313785553
+          ],
+          [
+            0.13794872164726257
+          ],
+          [
+            0.13795045018196106
+          ],
+          [
+            0.1378667801618576
+          ]
+        ],
+        "wave": [
+          [
+            0.013142361305654049
+          ],
+          [
+            0.013049318455159664
+          ],
+          [
+            0.013263048604130745
+          ],
+          [
+            0.013115431182086468
+          ],
+          [
+            0.013118480332195759
+          ],
+          [
+            0.012976913712918758
+          ],
+          [
+            0.01315866969525814
+          ]
+        ],
+        "auto": [
+          [
+            0.013262380845844746
+          ],
+          [
+            0.01325345877557993
+          ],
+          [
+            0.013330470770597458
+          ],
+          [
+            0.013254259712994099
+          ],
+          [
+            0.013204105198383331
+          ],
+          [
+            0.013141367584466934
+          ],
+          [
+            0.013197751715779305
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.13793906569480896
+        ],
+        "wave": [
+          0.013118480332195759
+        ],
+        "auto": [
+          0.01325345877557993
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "5a1d8b17bc4e06a2801dc1ca1cc7f0e101b76769200c9dcf271ce8d248306ffe"
+        ],
+        "wave": [
+          "bed0f2d4e0cc2a81f9e25737cf9cd313931063b5b10749ccca51dcdd4d1cd1f4"
+        ],
+        "auto": [
+          "bed0f2d4e0cc2a81f9e25737cf9cd313931063b5b10749ccca51dcdd4d1cd1f4"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "958a87a7664247703e97798989f6ea804c92f5bd1dd975736628458d455c0eaa",
+        "wave": "958a87a7664247703e97798989f6ea804c92f5bd1dd975736628458d455c0eaa",
+        "auto": "958a87a7664247703e97798989f6ea804c92f5bd1dd975736628458d455c0eaa"
+      }
+    },
+    {
+      "roles": [
+        "sa",
+        "sb"
+      ],
+      "shape_bmnk": [
+        2,
+        3,
+        5,
+        37
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          0.26017072796821594,
+          0.1595562994480133,
+          0.1596948504447937,
+          0.15939128398895264,
+          0.15856266021728516,
+          0.15720805525779724,
+          0.15817122161388397
+        ],
+        "wave": [
+          0.0198189839720726,
+          0.0197373665869236,
+          0.019667133688926697,
+          0.019544946029782295,
+          0.019390413537621498,
+          0.019496578723192215,
+          0.0195535309612751
+        ],
+        "auto": [
+          0.019430555403232574,
+          0.019830109551548958,
+          0.020903773605823517,
+          0.01959947682917118,
+          0.0197979137301445,
+          0.01960260234773159,
+          0.02021360956132412
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 0.15939128398895264,
+        "wave": 0.0195535309612751,
+        "auto": 0.0197979137301445
+      },
+      "wave_over_serial": 0.12267628738488831,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.021293049678206444,
+            0.13786736130714417
+          ],
+          [
+            0.0214003287255764,
+            0.1381230503320694
+          ],
+          [
+            0.021387066692113876,
+            0.1376374512910843
+          ],
+          [
+            0.0213396605104208,
+            0.1371283233165741
+          ],
+          [
+            0.0212408434599638,
+            0.13738977909088135
+          ],
+          [
+            0.021382858976721764,
+            0.14162802696228027
+          ],
+          [
+            0.02112111635506153,
+            0.13740839064121246
+          ]
+        ],
+        "wave": [
+          [
+            0.005854353308677673,
+            0.013052296824753284
+          ],
+          [
+            0.0058613126166164875,
+            0.013095902279019356
+          ],
+          [
+            0.00585982808843255,
+            0.013061527162790298
+          ],
+          [
+            0.005965492222458124,
+            0.013047310523688793
+          ],
+          [
+            0.005827716551721096,
+            0.012997303158044815
+          ],
+          [
+            0.005808261688798666,
+            0.012941050343215466
+          ],
+          [
+            0.005771464668214321,
+            0.012872614897787571
+          ]
+        ],
+        "auto": [
+          [
+            0.0059134941548109055,
+            0.013295109383761883
+          ],
+          [
+            0.005846468731760979,
+            0.013200667686760426
+          ],
+          [
+            0.005841859150677919,
+            0.013192621059715748
+          ],
+          [
+            0.0058091250248253345,
+            0.013131840154528618
+          ],
+          [
+            0.005920468829572201,
+            0.013093085959553719
+          ],
+          [
+            0.005759593565016985,
+            0.012997700832784176
+          ],
+          [
+            0.0058772871270775795,
+            0.012972461059689522
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.0213396605104208,
+          0.1376374512910843
+        ],
+        "wave": [
+          0.005854353308677673,
+          0.013047310523688793
+        ],
+        "auto": [
+          0.005846468731760979,
+          0.013131840154528618
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "a6b3952102a501262e7e14997fe6e90a4cc9e7041b120cdc0b660e2f0f61d1d2",
+          "5a1d8b17bc4e06a2801dc1ca1cc7f0e101b76769200c9dcf271ce8d248306ffe"
+        ],
+        "wave": [
+          "cb4c2635d0c9198cbf3faa027f894999eb7aa63f0d81158d2840bc420f936889",
+          "bed0f2d4e0cc2a81f9e25737cf9cd313931063b5b10749ccca51dcdd4d1cd1f4"
+        ],
+        "auto": [
+          "cb4c2635d0c9198cbf3faa027f894999eb7aa63f0d81158d2840bc420f936889",
+          "bed0f2d4e0cc2a81f9e25737cf9cd313931063b5b10749ccca51dcdd4d1cd1f4"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element",
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "2b5678f1d0fe0b197d9a19406a72ca399318ed8d99fa9aae36bfdcb7bc3946af",
+        "wave": "2b5678f1d0fe0b197d9a19406a72ca399318ed8d99fa9aae36bfdcb7bc3946af",
+        "auto": "2b5678f1d0fe0b197d9a19406a72ca399318ed8d99fa9aae36bfdcb7bc3946af"
+      }
+    },
+    {
+      "roles": [
+        "sb",
+        "sa"
+      ],
+      "shape_bmnk": [
+        2,
+        3,
+        5,
+        37
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          0.24988968670368195,
+          0.1580485999584198,
+          0.15817506611347198,
+          0.15611934661865234,
+          0.1559174656867981,
+          0.15668287873268127,
+          0.1551201492547989
+        ],
+        "wave": [
+          0.01955205388367176,
+          0.020192671567201614,
+          0.019586514681577682,
+          0.0202452652156353,
+          0.019299805164337158,
+          0.019241265952587128,
+          0.020163297653198242
+        ],
+        "auto": [
+          0.01922963187098503,
+          0.019372913986444473,
+          0.019338851794600487,
+          0.01926901564002037,
+          0.01935207098722458,
+          0.019250961020588875,
+          0.019188616424798965
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 0.15668287873268127,
+        "wave": 0.019586514681577682,
+        "auto": 0.01926901564002037
+      },
+      "wave_over_serial": 0.12500737055638667,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.021091178059577942,
+            0.1368047446012497
+          ],
+          [
+            0.021123914048075676,
+            0.13670796155929565
+          ],
+          [
+            0.02109416387975216,
+            0.1374330222606659
+          ],
+          [
+            0.021036598831415176,
+            0.13666532933712006
+          ],
+          [
+            0.020988699048757553,
+            0.1367538720369339
+          ],
+          [
+            0.02102067694067955,
+            0.1362202763557434
+          ],
+          [
+            0.020866576582193375,
+            0.13541193306446075
+          ]
+        ],
+        "wave": [
+          [
+            0.005754122976213694,
+            0.012983633205294609
+          ],
+          [
+            0.005899474490433931,
+            0.012996837496757507
+          ],
+          [
+            0.0057520936243236065,
+            0.012976058758795261
+          ],
+          [
+            0.00583308981731534,
+            0.012985221110284328
+          ],
+          [
+            0.005825318396091461,
+            0.012935908511281013
+          ],
+          [
+            0.00570568535476923,
+            0.0128591014072299
+          ],
+          [
+            0.005811349488794804,
+            0.012875213287770748
+          ]
+        ],
+        "auto": [
+          [
+            0.0059068575501441956,
+            0.012881914153695107
+          ],
+          [
+            0.005793031305074692,
+            0.012903634458780289
+          ],
+          [
+            0.005789357237517834,
+            0.012918263673782349
+          ],
+          [
+            0.005771859548985958,
+            0.012846216559410095
+          ],
+          [
+            0.0057570175267755985,
+            0.012801767326891422
+          ],
+          [
+            0.005733810365200043,
+            0.012724258005619049
+          ],
+          [
+            0.005729299038648605,
+            0.012697226367890835
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.021036598831415176,
+          0.13670796155929565
+        ],
+        "wave": [
+          0.005811349488794804,
+          0.012976058758795261
+        ],
+        "auto": [
+          0.005771859548985958,
+          0.012846216559410095
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "a6b3952102a501262e7e14997fe6e90a4cc9e7041b120cdc0b660e2f0f61d1d2",
+          "5a1d8b17bc4e06a2801dc1ca1cc7f0e101b76769200c9dcf271ce8d248306ffe"
+        ],
+        "wave": [
+          "cb4c2635d0c9198cbf3faa027f894999eb7aa63f0d81158d2840bc420f936889",
+          "bed0f2d4e0cc2a81f9e25737cf9cd313931063b5b10749ccca51dcdd4d1cd1f4"
+        ],
+        "auto": [
+          "cb4c2635d0c9198cbf3faa027f894999eb7aa63f0d81158d2840bc420f936889",
+          "bed0f2d4e0cc2a81f9e25737cf9cd313931063b5b10749ccca51dcdd4d1cd1f4"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element",
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "1db92e79cafb230ea89d2a52dd8bd60959d5944b6b3b7b16e310f541c21431eb",
+        "wave": "1db92e79cafb230ea89d2a52dd8bd60959d5944b6b3b7b16e310f541c21431eb",
+        "auto": "1db92e79cafb230ea89d2a52dd8bd60959d5944b6b3b7b16e310f541c21431eb"
+      }
+    },
+    {
+      "roles": [
+        "sa"
+      ],
+      "shape_bmnk": [
+        2,
+        7,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          0.32922443747520447,
+          0.3108169436454773,
+          0.30963757634162903,
+          0.3072779178619385,
+          0.3080630600452423,
+          0.30731236934661865,
+          0.3075296878814697
+        ],
+        "wave": [
+          0.01125721912831068,
+          0.01122535951435566,
+          0.0108443358913064,
+          0.010846219025552273,
+          0.010982632637023926,
+          0.010733094066381454,
+          0.010851523838937283
+        ],
+        "auto": [
+          0.011570421978831291,
+          0.012878327630460262,
+          0.011547625064849854,
+          0.011202773079276085,
+          0.01130903884768486,
+          0.011051843874156475,
+          0.011052148416638374
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 0.3080630600452423,
+        "wave": 0.010851523838937283,
+        "auto": 0.01130903884768486
+      },
+      "wave_over_serial": 0.03522500827377233,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.3103047013282776
+          ],
+          [
+            0.310596227645874
+          ],
+          [
+            0.3098869323730469
+          ],
+          [
+            0.3123897910118103
+          ],
+          [
+            0.30862629413604736
+          ],
+          [
+            0.30818337202072144
+          ],
+          [
+            0.3082323372364044
+          ]
+        ],
+        "wave": [
+          [
+            0.010909312404692173
+          ],
+          [
+            0.01087559387087822
+          ],
+          [
+            0.010854105465114117
+          ],
+          [
+            0.010855509899556637
+          ],
+          [
+            0.010781087912619114
+          ],
+          [
+            0.010819345712661743
+          ],
+          [
+            0.010793421417474747
+          ]
+        ],
+        "auto": [
+          [
+            0.011315267533063889
+          ],
+          [
+            0.01137563120573759
+          ],
+          [
+            0.011386570520699024
+          ],
+          [
+            0.011151799000799656
+          ],
+          [
+            0.011037865653634071
+          ],
+          [
+            0.011073661968111992
+          ],
+          [
+            0.011076800525188446
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.3098869323730469
+        ],
+        "wave": [
+          0.010854105465114117
+        ],
+        "auto": [
+          0.011151799000799656
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "6652e9db2951cb25abf7794e3ef880a0ceeff18f5162e4ff1b99c1ce6efb8200"
+        ],
+        "wave": [
+          "f9222e9dd2e41e8cf5e7a7f1e6452d1906a4d29cb66209ea0247b68aef916da4"
+        ],
+        "auto": [
+          "f9222e9dd2e41e8cf5e7a7f1e6452d1906a4d29cb66209ea0247b68aef916da4"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "33c1e965a27a9737c6a6a6e1bacbd8eefe36177ebb2a19cfa59d91a8fd902dc4",
+        "wave": "33c1e965a27a9737c6a6a6e1bacbd8eefe36177ebb2a19cfa59d91a8fd902dc4",
+        "auto": "33c1e965a27a9737c6a6a6e1bacbd8eefe36177ebb2a19cfa59d91a8fd902dc4"
+      }
+    },
+    {
+      "roles": [
+        "sb"
+      ],
+      "shape_bmnk": [
+        2,
+        7,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          1.713160753250122,
+          1.6274281740188599,
+          1.6260555982589722,
+          1.6268024444580078,
+          1.629561424255371,
+          1.6461774110794067,
+          1.6460027694702148
+        ],
+        "wave": [
+          0.05087227374315262,
+          0.050606708973646164,
+          0.051109228283166885,
+          0.050824061036109924,
+          0.05106035992503166,
+          0.050862960517406464,
+          0.05076257884502411
+        ],
+        "auto": [
+          0.05057891458272934,
+          0.050817959010601044,
+          0.05090397596359253,
+          0.05096163973212242,
+          0.05056793615221977,
+          0.05060044676065445,
+          0.050873905420303345
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 1.629561424255371,
+        "wave": 0.050862960517406464,
+        "auto": 0.050817959010601044
+      },
+      "wave_over_serial": 0.031212668488791895,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            1.630225658416748
+          ],
+          [
+            1.6326795816421509
+          ],
+          [
+            1.629370927810669
+          ],
+          [
+            1.6325711011886597
+          ],
+          [
+            1.6280763149261475
+          ],
+          [
+            1.6297693252563477
+          ],
+          [
+            1.6308282613754272
+          ]
+        ],
+        "wave": [
+          [
+            0.05077321082353592
+          ],
+          [
+            0.050641436129808426
+          ],
+          [
+            0.050597116351127625
+          ],
+          [
+            0.05066826567053795
+          ],
+          [
+            0.05063774064183235
+          ],
+          [
+            0.050633154809474945
+          ],
+          [
+            0.050626952201128006
+          ]
+        ],
+        "auto": [
+          [
+            0.050616975873708725
+          ],
+          [
+            0.050591304898262024
+          ],
+          [
+            0.05081167072057724
+          ],
+          [
+            0.050738681107759476
+          ],
+          [
+            0.05059918761253357
+          ],
+          [
+            0.05061778798699379
+          ],
+          [
+            0.05060224235057831
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          1.630225658416748
+        ],
+        "wave": [
+          0.05063774064183235
+        ],
+        "auto": [
+          0.050616975873708725
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "f533809840b67fc1d82c32b2b54377c32dceedbff48efa16a7719d0c7d748949"
+        ],
+        "wave": [
+          "409d9fa4e305b1eac5d6595f9343cae3d63e74c55454b84c04fd1d48c636791e"
+        ],
+        "auto": [
+          "409d9fa4e305b1eac5d6595f9343cae3d63e74c55454b84c04fd1d48c636791e"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "6fd02b4b25b14029cf35a83f2bb4284504bc5ca215fe5dc42bdd4cbf5a99491c",
+        "wave": "6fd02b4b25b14029cf35a83f2bb4284504bc5ca215fe5dc42bdd4cbf5a99491c",
+        "auto": "6fd02b4b25b14029cf35a83f2bb4284504bc5ca215fe5dc42bdd4cbf5a99491c"
+      }
+    },
+    {
+      "roles": [
+        "sa",
+        "sb"
+      ],
+      "shape_bmnk": [
+        2,
+        7,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          2.056520700454712,
+          1.9382091760635376,
+          1.9357270002365112,
+          1.938942551612854,
+          1.9376555681228638,
+          1.9378420114517212,
+          1.9349124431610107
+        ],
+        "wave": [
+          0.0626363530755043,
+          0.06277047842741013,
+          0.06283743679523468,
+          0.06258103251457214,
+          0.06262901425361633,
+          0.06249065697193146,
+          0.06257743388414383
+        ],
+        "auto": [
+          0.06201041489839554,
+          0.061994701623916626,
+          0.0619010403752327,
+          0.06229674071073532,
+          0.06206800043582916,
+          0.06256822496652603,
+          0.06187548488378525
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 1.9378420114517212,
+        "wave": 0.06262901425361633,
+        "auto": 0.06201041489839554
+      },
+      "wave_over_serial": 0.03231894751146314,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.30866509675979614,
+            1.6328080892562866
+          ],
+          [
+            0.3083455264568329,
+            1.633259892463684
+          ],
+          [
+            0.30902284383773804,
+            1.6297359466552734
+          ],
+          [
+            0.3109268248081207,
+            1.6294511556625366
+          ],
+          [
+            0.3084051012992859,
+            1.6342898607254028
+          ],
+          [
+            0.30878663063049316,
+            1.6329690217971802
+          ],
+          [
+            0.3084421455860138,
+            1.628415822982788
+          ]
+        ],
+        "wave": [
+          [
+            0.01134419720619917,
+            0.051149819046258926
+          ],
+          [
+            0.011444064788520336,
+            0.05115193873643875
+          ],
+          [
+            0.011357870884239674,
+            0.05125167965888977
+          ],
+          [
+            0.011352754198014736,
+            0.051294781267642975
+          ],
+          [
+            0.011452378705143929,
+            0.05140573903918266
+          ],
+          [
+            0.011360724456608295,
+            0.05121992900967598
+          ],
+          [
+            0.011340408585965633,
+            0.051219116896390915
+          ]
+        ],
+        "auto": [
+          [
+            0.010845591314136982,
+            0.05072453245520592
+          ],
+          [
+            0.010857382789254189,
+            0.05075731873512268
+          ],
+          [
+            0.010844709351658821,
+            0.05066777765750885
+          ],
+          [
+            0.010938498191535473,
+            0.050581078976392746
+          ],
+          [
+            0.010883070528507233,
+            0.050598420202732086
+          ],
+          [
+            0.010867875069379807,
+            0.050658248364925385
+          ],
+          [
+            0.01086670346558094,
+            0.05063250660896301
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.30866509675979614,
+          1.6328080892562866
+        ],
+        "wave": [
+          0.011357870884239674,
+          0.05121992900967598
+        ],
+        "auto": [
+          0.01086670346558094,
+          0.050658248364925385
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "6652e9db2951cb25abf7794e3ef880a0ceeff18f5162e4ff1b99c1ce6efb8200",
+          "f533809840b67fc1d82c32b2b54377c32dceedbff48efa16a7719d0c7d748949"
+        ],
+        "wave": [
+          "f9222e9dd2e41e8cf5e7a7f1e6452d1906a4d29cb66209ea0247b68aef916da4",
+          "409d9fa4e305b1eac5d6595f9343cae3d63e74c55454b84c04fd1d48c636791e"
+        ],
+        "auto": [
+          "f9222e9dd2e41e8cf5e7a7f1e6452d1906a4d29cb66209ea0247b68aef916da4",
+          "409d9fa4e305b1eac5d6595f9343cae3d63e74c55454b84c04fd1d48c636791e"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element",
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "262e2c219bc9cb19d973920986ea536efc359df073083a609722aa24f5412d98",
+        "wave": "262e2c219bc9cb19d973920986ea536efc359df073083a609722aa24f5412d98",
+        "auto": "262e2c219bc9cb19d973920986ea536efc359df073083a609722aa24f5412d98"
+      }
+    },
+    {
+      "roles": [
+        "sb",
+        "sa"
+      ],
+      "shape_bmnk": [
+        2,
+        7,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          2.0495707988739014,
+          1.956168293952942,
+          1.9388238191604614,
+          1.937177062034607,
+          1.954524040222168,
+          1.9362728595733643,
+          1.9381511211395264
+        ],
+        "wave": [
+          0.06197978928685188,
+          0.061999477446079254,
+          0.06203627213835716,
+          0.06190486624836922,
+          0.06192393600940704,
+          0.06189370155334473,
+          0.06182924285531044
+        ],
+        "auto": [
+          0.06239541247487068,
+          0.06299353390932083,
+          0.06271807104349136,
+          0.06265916675329208,
+          0.06268026679754257,
+          0.06257400661706924,
+          0.06253361701965332
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 1.9388238191604614,
+        "wave": 0.06192393600940704,
+        "auto": 0.06265916675329208
+      },
+      "wave_over_serial": 0.031938918532691124,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.309030681848526,
+            1.6349362134933472
+          ],
+          [
+            0.30869707465171814,
+            1.6333775520324707
+          ],
+          [
+            0.30882012844085693,
+            1.6343270540237427
+          ],
+          [
+            0.3081863522529602,
+            1.6288820505142212
+          ],
+          [
+            0.3082521855831146,
+            1.6302589178085327
+          ],
+          [
+            0.3082810342311859,
+            1.6348663568496704
+          ],
+          [
+            0.3084213137626648,
+            1.6340304613113403
+          ]
+        ],
+        "wave": [
+          [
+            0.010817384347319603,
+            0.05080193653702736
+          ],
+          [
+            0.011089826002717018,
+            0.05064859986305237
+          ],
+          [
+            0.010821759700775146,
+            0.05070604011416435
+          ],
+          [
+            0.010930451564490795,
+            0.050657618790864944
+          ],
+          [
+            0.011107970960438251,
+            0.05065464228391647
+          ],
+          [
+            0.010933168232440948,
+            0.05065406858921051
+          ],
+          [
+            0.010856974869966507,
+            0.050607096403837204
+          ]
+        ],
+        "auto": [
+          [
+            0.011327208951115608,
+            0.051220860332250595
+          ],
+          [
+            0.011346990242600441,
+            0.05120798572897911
+          ],
+          [
+            0.01127511728554964,
+            0.05123036727309227
+          ],
+          [
+            0.011330724693834782,
+            0.05121640861034393
+          ],
+          [
+            0.011559199541807175,
+            0.051211919635534286
+          ],
+          [
+            0.011340898461639881,
+            0.051220860332250595
+          ],
+          [
+            0.011278791353106499,
+            0.051200903952121735
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.3084213137626648,
+          1.6340304613113403
+        ],
+        "wave": [
+          0.010930451564490795,
+          0.05065464228391647
+        ],
+        "auto": [
+          0.011330724693834782,
+          0.05121640861034393
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "6652e9db2951cb25abf7794e3ef880a0ceeff18f5162e4ff1b99c1ce6efb8200",
+          "f533809840b67fc1d82c32b2b54377c32dceedbff48efa16a7719d0c7d748949"
+        ],
+        "wave": [
+          "f9222e9dd2e41e8cf5e7a7f1e6452d1906a4d29cb66209ea0247b68aef916da4",
+          "409d9fa4e305b1eac5d6595f9343cae3d63e74c55454b84c04fd1d48c636791e"
+        ],
+        "auto": [
+          "f9222e9dd2e41e8cf5e7a7f1e6452d1906a4d29cb66209ea0247b68aef916da4",
+          "409d9fa4e305b1eac5d6595f9343cae3d63e74c55454b84c04fd1d48c636791e"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element",
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "38e1e6bc82f6563b6eac9ab98b92ba784bfb9cb18329911833c1c9c53a42fb75",
+        "wave": "38e1e6bc82f6563b6eac9ab98b92ba784bfb9cb18329911833c1c9c53a42fb75",
+        "auto": "38e1e6bc82f6563b6eac9ab98b92ba784bfb9cb18329911833c1c9c53a42fb75"
+      }
+    },
+    {
+      "roles": [
+        "sa"
+      ],
+      "shape_bmnk": [
+        2,
+        17,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          0.30761316418647766,
+          0.28671106696128845,
+          0.28688153624534607,
+          0.28673914074897766,
+          0.2858518660068512,
+          0.2864326238632202,
+          0.28624722361564636
+        ],
+        "wave": [
+          0.010830273851752281,
+          0.011234265752136707,
+          0.01117668766528368,
+          0.011018319986760616,
+          0.010785593651235104,
+          0.010749030858278275,
+          0.010781531222164631
+        ],
+        "auto": [
+          0.010856211185455322,
+          0.011136523447930813,
+          0.011219648644328117,
+          0.01125472690910101,
+          0.011217148043215275,
+          0.01112332008779049,
+          0.011886515654623508
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 0.28671106696128845,
+        "wave": 0.010830273851752281,
+        "auto": 0.011217148043215275
+      },
+      "wave_over_serial": 0.03777417442074037,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.2878614366054535
+          ],
+          [
+            0.2871140241622925
+          ],
+          [
+            0.2871919274330139
+          ],
+          [
+            0.2914084792137146
+          ],
+          [
+            0.28710395097732544
+          ],
+          [
+            0.2873256504535675
+          ],
+          [
+            0.287422239780426
+          ]
+        ],
+        "wave": [
+          [
+            0.01079793181270361
+          ],
+          [
+            0.010783067904412746
+          ],
+          [
+            0.010764261707663536
+          ],
+          [
+            0.010755687020719051
+          ],
+          [
+            0.01075728889554739
+          ],
+          [
+            0.01094265840947628
+          ],
+          [
+            0.010751310735940933
+          ]
+        ],
+        "auto": [
+          [
+            0.010842014104127884
+          ],
+          [
+            0.010848907753825188
+          ],
+          [
+            0.010817189700901508
+          ],
+          [
+            0.010814594104886055
+          ],
+          [
+            0.010825784876942635
+          ],
+          [
+            0.010807208716869354
+          ],
+          [
+            0.010840197093784809
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.2873256504535675
+        ],
+        "wave": [
+          0.010764261707663536
+        ],
+        "auto": [
+          0.010825784876942635
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "8cd9ef33aa68791c441ae5e7f982cd99e5ce6f61279f2744282c6185ad09ea5d"
+        ],
+        "wave": [
+          "85dc07149aceb4b1f43a5ed723d1edabf43cd91a150decc2ef482b8743bdb35a"
+        ],
+        "auto": [
+          "85dc07149aceb4b1f43a5ed723d1edabf43cd91a150decc2ef482b8743bdb35a"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "d7d59a5f6e41702ecad109e7ba95cca70d03cf43ae24c72c115f9f9eef988848",
+        "wave": "d7d59a5f6e41702ecad109e7ba95cca70d03cf43ae24c72c115f9f9eef988848",
+        "auto": "d7d59a5f6e41702ecad109e7ba95cca70d03cf43ae24c72c115f9f9eef988848"
+      }
+    },
+    {
+      "roles": [
+        "sb"
+      ],
+      "shape_bmnk": [
+        2,
+        17,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          4.070908546447754,
+          3.9840803146362305,
+          3.97228741645813,
+          3.9768033027648926,
+          3.985241651535034,
+          3.992295503616333,
+          3.976107597351074
+        ],
+        "wave": [
+          0.11545868217945099,
+          0.1157134473323822,
+          0.11527054756879807,
+          0.11564664542675018,
+          0.11571510136127472,
+          0.11538682132959366,
+          0.11561275273561478
+        ],
+        "auto": [
+          0.11543892323970795,
+          0.11549250036478043,
+          0.11541672050952911,
+          0.1155679002404213,
+          0.11556502431631088,
+          0.11596978455781937,
+          0.11500369012355804
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 3.9840803146362305,
+        "wave": 0.11561275273561478,
+        "auto": 0.11549250036478043
+      },
+      "wave_over_serial": 0.029018680248711525,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            3.9823591709136963
+          ],
+          [
+            3.983468532562256
+          ],
+          [
+            3.9793195724487305
+          ],
+          [
+            3.9826066493988037
+          ],
+          [
+            3.981060266494751
+          ],
+          [
+            3.983846664428711
+          ],
+          [
+            3.9838407039642334
+          ]
+        ],
+        "wave": [
+          [
+            0.11515532433986664
+          ],
+          [
+            0.11521097272634506
+          ],
+          [
+            0.1151922196149826
+          ],
+          [
+            0.11526971310377121
+          ],
+          [
+            0.11522779613733292
+          ],
+          [
+            0.11539885401725769
+          ],
+          [
+            0.1155179813504219
+          ]
+        ],
+        "auto": [
+          [
+            0.11510391533374786
+          ],
+          [
+            0.11511868983507156
+          ],
+          [
+            0.11504039913415909
+          ],
+          [
+            0.11498259007930756
+          ],
+          [
+            0.11520306020975113
+          ],
+          [
+            0.11501095443964005
+          ],
+          [
+            0.11512526869773865
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          3.9826066493988037
+        ],
+        "wave": [
+          0.11522779613733292
+        ],
+        "auto": [
+          0.11510391533374786
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "8f81568e327d67999ea5456e366a210532fc7d5b1d8ee17655dffffee1c7c228"
+        ],
+        "wave": [
+          "d89e25182f5271a1818bd46b2817cd14ce79c43fe98a7d3fc678a0667212d585"
+        ],
+        "auto": [
+          "d89e25182f5271a1818bd46b2817cd14ce79c43fe98a7d3fc678a0667212d585"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "ecaee9baa09dfb2820e17d5089e0f643a48685dc00e70dd14eb40450c568bec4",
+        "wave": "ecaee9baa09dfb2820e17d5089e0f643a48685dc00e70dd14eb40450c568bec4",
+        "auto": "ecaee9baa09dfb2820e17d5089e0f643a48685dc00e70dd14eb40450c568bec4"
+      }
+    },
+    {
+      "roles": [
+        "sa",
+        "sb"
+      ],
+      "shape_bmnk": [
+        2,
+        17,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          4.339583396911621,
+          4.253080368041992,
+          4.252449035644531,
+          4.246283054351807,
+          4.254062175750732,
+          4.24621057510376,
+          4.2649126052856445
+        ],
+        "wave": [
+          0.12678568065166473,
+          0.1266598403453827,
+          0.1266486644744873,
+          0.1266920268535614,
+          0.12655523419380188,
+          0.12673687934875488,
+          0.1271418184041977
+        ],
+        "auto": [
+          0.12589935958385468,
+          0.12582488358020782,
+          0.12595662474632263,
+          0.12590788304805756,
+          0.1259402334690094,
+          0.12666265666484833,
+          0.12577524781227112
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 4.253080368041992,
+        "wave": 0.1266920268535614,
+        "auto": 0.12590788304805756
+      },
+      "wave_over_serial": 0.02978829833678575,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.2875436842441559,
+            3.977076530456543
+          ],
+          [
+            0.29138216376304626,
+            3.9894628524780273
+          ],
+          [
+            0.28743892908096313,
+            3.979990243911743
+          ],
+          [
+            0.28753164410591125,
+            3.995375871658325
+          ],
+          [
+            0.28717175126075745,
+            3.9936492443084717
+          ],
+          [
+            0.2875049114227295,
+            3.9943127632141113
+          ],
+          [
+            0.28727036714553833,
+            3.9929025173187256
+          ]
+        ],
+        "wave": [
+          [
+            0.011577489785850048,
+            0.11523773521184921
+          ],
+          [
+            0.011529864743351936,
+            0.1152205616235733
+          ],
+          [
+            0.01150166429579258,
+            0.11498800665140152
+          ],
+          [
+            0.011469105258584023,
+            0.1151985451579094
+          ],
+          [
+            0.011483576148748398,
+            0.11514715105295181
+          ],
+          [
+            0.01152273640036583,
+            0.11519087105989456
+          ],
+          [
+            0.011544732376933098,
+            0.11517180502414703
+          ]
+        ],
+        "auto": [
+          [
+            0.01070020068436861,
+            0.1150076761841774
+          ],
+          [
+            0.010774845257401466,
+            0.11514510214328766
+          ],
+          [
+            0.01071207970380783,
+            0.11520703136920929
+          ],
+          [
+            0.0109683433547616,
+            0.11492942273616791
+          ],
+          [
+            0.010767427273094654,
+            0.11531838029623032
+          ],
+          [
+            0.010766823776066303,
+            0.11510660499334335
+          ],
+          [
+            0.010744890198111534,
+            0.1151089072227478
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.2875049114227295,
+          3.9929025173187256
+        ],
+        "wave": [
+          0.01152273640036583,
+          0.11519087105989456
+        ],
+        "auto": [
+          0.010766823776066303,
+          0.1151089072227478
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "8cd9ef33aa68791c441ae5e7f982cd99e5ce6f61279f2744282c6185ad09ea5d",
+          "8f81568e327d67999ea5456e366a210532fc7d5b1d8ee17655dffffee1c7c228"
+        ],
+        "wave": [
+          "85dc07149aceb4b1f43a5ed723d1edabf43cd91a150decc2ef482b8743bdb35a",
+          "d89e25182f5271a1818bd46b2817cd14ce79c43fe98a7d3fc678a0667212d585"
+        ],
+        "auto": [
+          "85dc07149aceb4b1f43a5ed723d1edabf43cd91a150decc2ef482b8743bdb35a",
+          "d89e25182f5271a1818bd46b2817cd14ce79c43fe98a7d3fc678a0667212d585"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element",
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "8602f25396a96ef5f08b8a9012ee04494b6c359e44e4ebf8245a31cab7a5fe45",
+        "wave": "8602f25396a96ef5f08b8a9012ee04494b6c359e44e4ebf8245a31cab7a5fe45",
+        "auto": "8602f25396a96ef5f08b8a9012ee04494b6c359e44e4ebf8245a31cab7a5fe45"
+      }
+    },
+    {
+      "roles": [
+        "sb",
+        "sa"
+      ],
+      "shape_bmnk": [
+        2,
+        17,
+        19,
+        256
+      ],
+      "ordinary_samples_ms": {
+        "serial": [
+          4.366254806518555,
+          4.249319076538086,
+          4.244096755981445,
+          4.250758647918701,
+          4.265841007232666,
+          4.271054267883301,
+          4.263200759887695
+        ],
+        "wave": [
+          0.12632526457309723,
+          0.1267249435186386,
+          0.12577717006206512,
+          0.1258801817893982,
+          0.12587550282478333,
+          0.1257891058921814,
+          0.1264449656009674
+        ],
+        "auto": [
+          0.12674172222614288,
+          0.12775814533233643,
+          0.1269032210111618,
+          0.12655869126319885,
+          0.12734024226665497,
+          0.12656362354755402,
+          0.12669043242931366
+        ]
+      },
+      "ordinary_median_ms": {
+        "serial": 4.263200759887695,
+        "wave": 0.1258801817893982,
+        "auto": 0.12674172222614288
+      },
+      "wave_over_serial": 0.02952715316008581,
+      "captured_member_samples_ms": {
+        "serial": [
+          [
+            0.2870124280452728,
+            3.9894566535949707
+          ],
+          [
+            0.28755074739456177,
+            3.9867939949035645
+          ],
+          [
+            0.2872562110424042,
+            3.987478256225586
+          ],
+          [
+            0.2874639332294464,
+            3.986326217651367
+          ],
+          [
+            0.2874112129211426,
+            3.9879214763641357
+          ],
+          [
+            0.28722724318504333,
+            3.987230062484741
+          ],
+          [
+            0.2874380946159363,
+            3.9889590740203857
+          ]
+        ],
+        "wave": [
+          [
+            0.010710437782108784,
+            0.1153532862663269
+          ],
+          [
+            0.010706843808293343,
+            0.11520333588123322
+          ],
+          [
+            0.010931318625807762,
+            0.11545263230800629
+          ],
+          [
+            0.010709187015891075,
+            0.11514054983854294
+          ],
+          [
+            0.010763250291347504,
+            0.11516030877828598
+          ],
+          [
+            0.010926765389740467,
+            0.11512743681669235
+          ],
+          [
+            0.01080260705202818,
+            0.11516761034727097
+          ]
+        ],
+        "auto": [
+          [
+            0.011575511656701565,
+            0.1152975857257843
+          ],
+          [
+            0.01157420501112938,
+            0.11524108797311783
+          ],
+          [
+            0.011555513367056847,
+            0.115263432264328
+          ],
+          [
+            0.011482855305075645,
+            0.11529912054538727
+          ],
+          [
+            0.011475123465061188,
+            0.11526796966791153
+          ],
+          [
+            0.011537449434399605,
+            0.11524306982755661
+          ],
+          [
+            0.011527176015079021,
+            0.1152474507689476
+          ]
+        ]
+      },
+      "captured_member_median_ms": {
+        "serial": [
+          0.2874112129211426,
+          3.987478256225586
+        ],
+        "wave": [
+          0.010763250291347504,
+          0.11516761034727097
+        ],
+        "auto": [
+          0.011537449434399605,
+          0.115263432264328
+        ]
+      },
+      "correctness": "independent_before_and_after_each_alternating_arm",
+      "image_sha256": {
+        "serial": [
+          "8cd9ef33aa68791c441ae5e7f982cd99e5ce6f61279f2744282c6185ad09ea5d",
+          "8f81568e327d67999ea5456e366a210532fc7d5b1d8ee17655dffffee1c7c228"
+        ],
+        "wave": [
+          "85dc07149aceb4b1f43a5ed723d1edabf43cd91a150decc2ef482b8743bdb35a",
+          "d89e25182f5271a1818bd46b2817cd14ce79c43fe98a7d3fc678a0667212d585"
+        ],
+        "auto": [
+          "85dc07149aceb4b1f43a5ed723d1edabf43cd91a150decc2ef482b8743bdb35a",
+          "d89e25182f5271a1818bd46b2817cd14ce79c43fe98a7d3fc678a0667212d585"
+        ]
+      },
+      "member_algorithms": {
+        "serial": [
+          "serial_per_scale_element",
+          "serial_per_scale_element"
+        ],
+        "wave": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ],
+        "auto": [
+          "wave_per_scale_element",
+          "wave_per_scale_element"
+        ]
+      },
+      "program_sha256": {
+        "serial": "839bcaffe392b1bd7c4e5db07c603c4dfcfa9a625854ba0203c080f60c1929f8",
+        "wave": "839bcaffe392b1bd7c4e5db07c603c4dfcfa9a625854ba0203c080f60c1929f8",
+        "auto": "839bcaffe392b1bd7c4e5db07c603c4dfcfa9a625854ba0203c080f60c1929f8"
+      }
+    }
+  ],
+  "scope": "captured pure SSA member graph windows include device graph dispatch; ordinary whole-program events include host dispatch gaps; neither includes host transfers or compilation"
+}

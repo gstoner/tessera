@@ -16767,3 +16767,21 @@ Broadcasted scalar/mapped sums, aliases, dynamic shapes and generic closure
 remain open. Sibling frontend parity requires owning native consumers.
 Recorder: benchmarks/rocm/record_continuous_scaled_mapped_ssa.py.
 Evidence: benchmarks/baselines/gfx1201_continuous_mapped_ssa_20261009/README.md.
+
+## NATIVE-SCALED-BROADCAST-SSA-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Active integration: explicit Broadcast Graph nodes preserve strict Add semantics
+for shared/mapped intermediate sums. Native outlining materializes the carrier;
+native reverse AD reduces the output seed over broadcast dimensions. A named
+one-input serial_tensor_carrier Schedule/Tile/Target ABI is checked explicitly.
+The existing four-input scaled-reduction algorithm retains its original checks.
+24 frontend/native package checks and three forged-ABI rejection cases pass.
+Matching core/ROCm LLVM/MLIR 23.1.1 build and 915 adjacent gates pass.
+Twelve owning gfx1201 numerical/replay/ownership cases pass, with independent
+per-plane oracles and shared gradient sums. Six tiny-frame native medians:
+primal 30.020–35.068 us, JVP 104.756–105.151 us, reverse 647.870–648.017 us.
+Public wall time is separate; no speedup/promotion claim.
+Recorder: benchmarks/rocm/record_scaled_broadcast_ssa.py.
+Evidence: benchmarks/baselines/gfx1201_scaled_broadcast_ssa_20261009/README.md.
+General aliases, dynamic shapes and generic scaled closure remain open.

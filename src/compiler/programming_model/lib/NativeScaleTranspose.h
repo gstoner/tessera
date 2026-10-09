@@ -53,9 +53,12 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
   auto target = mod->getAttrOfType<StringAttr>("tessera.target");
   auto arch = mod->getAttrOfType<StringAttr>("tessera.arch");
   auto funcs = llvm::to_vector(mod.getOps<func::FuncOp>());
+  auto first = funcs.size()==1 && !funcs[0].getBody().empty()
+      ? dyn_cast<tensor::GenerateOp>(funcs[0].getBody().front().front()) : tensor::GenerateOp{};
+  bool carrier = first && first->hasAttrOfType<StringAttr>("tessera.native.scaled_carrier");
   if (!target || target.getValue() != "rocm" || !arch || arch.getValue() != "gfx1201" ||
       funcs.size() != 1 || !funcs[0].getBody().hasOneBlock() ||
-      funcs[0].getNumArguments() != 4 || funcs[0].getNumResults() != 1 ||
+      funcs[0].getNumArguments() != (carrier ? 1 : 4) || funcs[0].getNumResults() != 1 ||
       funcs[0].getBody().front().getOperations().size() != 2)
     return mod.emitError("native scale transpose needs one isolated gfx1201 reduction member"), failure();
   auto generator = dyn_cast<tensor::GenerateOp>(funcs[0].getBody().front().front());
@@ -65,9 +68,9 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
                         : StringAttr{};
   auto type = generator ? dyn_cast<RankedTensorType>(generator.getType()) : RankedTensorType{};
   if (!generator ||
-      (product ? !generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product")
+      (!carrier && (product ? !generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product")
                : (!role || (role.getValue() != "lhs_scale" && role.getValue() != "rhs_scale" &&
-                             role.getValue() != "lhs_matrix" && role.getValue() != "rhs_matrix"))) ||
+                             role.getValue() != "lhs_matrix" && role.getValue() != "rhs_matrix")))) ||
       !type || !type.hasStaticShape() || !type.getElementType().isF32() ||
       type.getNumElements() <= 0 || type.getNumElements() > INT32_MAX)
     return mod.emitError("native scale transpose lost its static f32 generated reduction"), failure();
@@ -79,8 +82,8 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
     bytes += isa<Float8E4M3FNType>(tensor.getElementType());
     floats += tensor.getElementType().isF32();
   }
-  bool matrix = product || role.getValue() == "lhs_matrix" || role.getValue() == "rhs_matrix";
-  if ((matrix && floats != 4) || (!matrix && !((bytes == 2 && floats == 2) || floats == 4)))
+  bool matrix = !carrier && (product || role.getValue() == "lhs_matrix" || role.getValue() == "rhs_matrix");
+  if ((carrier && floats != 1) || (!carrier && ((matrix && floats != 4) || (!matrix && !((bytes == 2 && floats == 2) || floats == 4)))))
     return mod.emitError("native scaled adjoint captured storage differs from its matrix/scale role"), failure();
   bool valid = true;
   generator.getBody().walk([&](Operation *op) {
@@ -160,7 +163,8 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
     return generator.emitError("native scale transpose is already scheduled");
   OpBuilder b(mod.getContext());
   int64_t width = wave ? 32 : 128;
-  StringRef algorithm = wave ? "wave_per_scale_element" : "serial_per_scale_element";
+  bool carrier = generator->hasAttrOfType<StringAttr>("tessera.native.scaled_carrier");
+  StringRef algorithm = carrier ? "serial_tensor_carrier" : wave ? "wave_per_scale_element" : "serial_per_scale_element";
   generator->setAttr("schedule.workgroup_size", b.getI64IntegerAttr(width));
   generator->setAttr("schedule.algorithm", b.getStringAttr(algorithm));
   generator->setAttr("schedule.outer_accumulation", b.getStringAttr("compensated_fp32"));
@@ -172,7 +176,7 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
   state.addAttribute("arch", b.getStringAttr("gfx1201"));
   bool product = generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product");
   state.addAttribute("shape_key", b.getStringAttr(
-      std::string(product ? "family=continuous_scaled_product;count=" : "family=scale_adjoint;count=") +
+      std::string(carrier ? "family=scaled_tensor_carrier;count=" : product ? "family=continuous_scaled_product;count=" : "family=scale_adjoint;count=") +
       std::to_string(cast<RankedTensorType>(generator.getType()).getNumElements())));
   state.addAttribute("tile", b.getDictionaryAttr({
       b.getNamedAttr("workgroup_size", b.getI64IntegerAttr(width)),
@@ -183,7 +187,8 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
     auto tensor = dyn_cast<RankedTensorType>(type);
     return tensor && tensor.getElementType().isF32();
   });
-  state.addAttribute("numeric_policy", b.getStringAttr(product
+  state.addAttribute("numeric_policy", b.getStringAttr(carrier
+      ? "f32 carrier;exact broadcast or compensated_fp32 sum" : product
       ? "f32 coefficients;fp32 scaled product;exact_per_block"
       : floating ? "f32 coefficients;fp32 scaled adjoint;exact_per_block"
       : "E4M3FN coefficients;fp32 scale adjoint;exact_per_block"));
@@ -313,7 +318,8 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
       generator->getAttrOfType<StringAttr>("schedule.outer_accumulation") != accumulation ||
       !width || width.getInt() != threads.getInt() || !algorithm ||
       generator->getAttrOfType<StringAttr>("schedule.algorithm") != algorithm ||
-      (!wave && algorithm.getValue() != "serial_per_scale_element") ||
+      (!wave && algorithm.getValue() != "serial_per_scale_element" &&
+       algorithm.getValue() != "serial_tensor_carrier") ||
       width.getInt() != (wave ? 32 : 128))
     return generator.emitError("native scale transpose physical Schedule knobs differ");
 
@@ -322,13 +328,14 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   OpBuilder b(mod.getContext());
   b.setInsertionPointToEnd(mod.getBody());
   std::string name = std::string(
-      generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product")
+      generator->hasAttrOfType<StringAttr>("tessera.native.scaled_carrier")
+          ? "tessera_scaled_carrier_" : generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product")
           ? "tessera_scaled_product_" : "tessera_scale_transpose_") + digest.substr(0, 24);
   OperationState state(generator.getLoc(), "tile.structured_reduction_kernel");
   state.addAttribute("name", b.getStringAttr(name));
   state.addAttribute("arch", b.getStringAttr("gfx1201"));
   state.addAttribute("count", b.getI64IntegerAttr(count));
-  state.addAttribute("input_count", b.getI64IntegerAttr(4));
+  state.addAttribute("input_count", b.getI64IntegerAttr(func.getNumArguments()));
   state.addAttribute("workgroup_size", width);
   state.addAttribute("algorithm", algorithm);
   state.addAttribute("artifact_hash", hash);
@@ -355,7 +362,7 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   Value block = gpu::BlockIdOp::create(b, loc, gpu::Dimension::x);
   Value linear = wave ? block : arith::AddIOp::create(b, loc,
       arith::MulIOp::create(b, loc, block, c128), thread).getResult();
-  Value extent = arith::IndexCastOp::create(b, loc, b.getIndexType(), kernel.getArgument(5));
+  Value extent = arith::IndexCastOp::create(b, loc, b.getIndexType(), kernel.getArgument(func.getNumArguments()+1));
   auto inBounds = arith::CmpIOp::create(b, loc, arith::CmpIPredicate::ult, linear, extent);
   auto branch = scf::IfOp::create(b, loc, inBounds, false);
   b.setInsertionPointToStart(branch.thenBlock());
@@ -373,6 +380,9 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   for (Operation &op : body.without_terminator()) b.clone(op, mapping);
   auto yield = cast<tensor::YieldOp>(body.getTerminator());
   Value value = mapping.lookup(yield.getValue());
+  auto carrierKind = generator->getAttrOfType<StringAttr>("tessera.native.scaled_carrier");
+  bool broadcastCarrier = carrierKind && carrierKind.getValue()=="broadcast";
+  if (!broadcastCarrier) {
   auto reduction = value.getDefiningOp<scf::ForOp>();
   auto zero = reduction && reduction.getNumResults() == 1
       ? reduction.getInitArgs()[0].getDefiningOp<arith::ConstantOp>()
@@ -403,6 +413,7 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
   reduction.erase();
   value = compensated.getResult(0);
   b.setInsertionPointAfter(compensated);
+  }
   if (wave) {
     Value shuffleWidth = arith::ConstantIntOp::create(b, loc, 32, 32);
     for (int64_t offset = 16; offset > 0; offset >>= 1) {
@@ -415,7 +426,7 @@ static LogicalResult lowerNativeScaleTranspose(ModuleOp mod, bool &selected) {
     auto store = scf::IfOp::create(b, loc, firstLane, false);
     b.setInsertionPointToStart(store.thenBlock());
   }
-  memref::StoreOp::create(b, loc, value, kernel.getArgument(4), ValueRange{linear});
+  memref::StoreOp::create(b, loc, value, kernel.getArgument(func.getNumArguments()), ValueRange{linear});
   b.setInsertionPointToEnd(&kernel.getBody().front());
   gpu::ReturnOp::create(b, loc);
 

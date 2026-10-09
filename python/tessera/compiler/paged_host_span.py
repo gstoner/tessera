@@ -25,7 +25,11 @@ def checked_host_span(array: np.ndarray, *, label: str = "tensor") -> tuple[int,
     if any(stride <= 0 or stride % itemsize for stride in array.strides):
         raise ValueError(f"strided {label}s require positive whole-element strides")
     strides = tuple(array.strides)
-    span = itemsize + sum((extent-1)*stride for extent, stride in zip(array.shape, array.strides, strict=True))
+    # Dense C/F views span exactly their logical bytes; the backing-owner
+    # walk below still proves their capacity, including forged dense views.
+    span = (array.nbytes if array.flags.c_contiguous or array.flags.f_contiguous
+            else itemsize + sum((extent-1)*stride for extent, stride in
+                                zip(array.shape, array.strides, strict=True)))
     if span > 2**63-1:
         raise ValueError(f"strided {label} physical span exceeds the signed native extent")
 
@@ -59,10 +63,11 @@ def checked_host_span(array: np.ndarray, *, label: str = "tensor") -> tuple[int,
         # that is neither C nor F contiguous. OWNDATA certifies the allocation;
         # its actual positive-stride span, not logical nbytes, bounds storage.
         lower = owner.ctypes.data
-        capacity = owner.itemsize + sum(
-            (extent - 1) * stride for extent, stride in
-            zip(owner.shape, owner.strides, strict=True)
-        )
+        capacity = (owner.nbytes if owner.flags.c_contiguous or owner.flags.f_contiguous
+                    else owner.itemsize + sum(
+                        (extent - 1) * stride for extent, stride in
+                        zip(owner.shape, owner.strides, strict=True)
+                    ))
 
     address = array.ctypes.data
     if address % itemsize or address < lower or span > capacity or address-lower > capacity-span:

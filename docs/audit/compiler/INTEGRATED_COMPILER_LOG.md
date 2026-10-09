@@ -11564,3 +11564,23 @@ parity remain open. No primitive coverage promotion or weakened closure gate.
 Evidence: benchmarks/baselines/scaled_map_axes_20261008/README.md, device.json,
 owning-tests.txt, host-tests.txt, mypy.txt, native-build.txt.
 <!-- entry-fields:end -->
+
+### 2026-10-08 — native scaled JVP frame preparation
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: #902; sync SCALED-MAP-AXIS-INTEGRATION-20261008.
+
+Outcome: Checked native C++ byte packing replaces Python compact-copy frame
+preparation for the admitted gfx1201 scaled JVP program. Pre-certification
+backing checks reject unsafe views; row-block copies retain the checked ABI.
+368 host, 36 gfx1201 and four RTX5070 attention JVP regression cases pass.
+Matched same-package control records a 2.3–4.5% remaining public-call cost;
+the original large-case 42% gap is reduced without changing GPU arithmetic.
+
+Remaining: Native host preparation cost, generic batching/transpose closure,
+dynamic/nonzero output axes, wider storage AD and sibling execution integration.
+No primitive coverage promotion or weakened zero-open gate.
+
+Evidence: benchmarks/baselines/native_scaled_jvp_frame_20261008/README.md,
+delivery.json, scaled-jvp-frame-paired-final.json, host-tests.txt, sm120-tests.txt.
+<!-- entry-fields:end -->

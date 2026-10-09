@@ -1,0 +1,14 @@
+{
+  "all_final_source_hashes_match": true,
+  "checks": {
+    "python/tessera/compiler/jit.py": true,
+    "python/tessera/compiler/native_vmap.py": true,
+    "python/tessera/compiler/paged_host_span.py": true,
+    "python/tessera/compiler/native_scaled_program.py": true,
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": true,
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": true,
+    "tests/unit/test_native_scaled_jvp_frame.py": true,
+    "tests/device/rocm/test_native_scaled_jvp_frame.py": true,
+    "benchmarks/rocm/benchmark_native_scaled_jvp_frame.py": true
+  }
+}

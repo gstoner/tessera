@@ -2637,6 +2637,22 @@ class JitFn:
         tangent_values = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
         if len(tangent_values) != len(request.wrt_indices):
             raise TesseraJitError("native_jvp requires one tangent per active input")
+        from .rocm_typed_scaled_native import (
+            requests_typed_scaled, requests_composed_typed_scaled,
+        )
+        native_scaled_frame = (
+            normalize_target_kind(self.target) in {"rocm", "rocm_gfx1201"}
+            and (requests_typed_scaled(self.graph_ir)
+                 or requests_composed_typed_scaled(self.graph_ir))
+        )
+        if native_scaled_frame:
+            from .paged_host_span import checked_host_span
+            # Prove storage before tracing/certification can evaluate a borrowed
+            # view. Native preparation later packs bytes and checks its ABI.
+            for value in (*ordered, *tangent_values):
+                checked_host_span(value)
+            if any(value.dtype != np.dtype("float32") for value in tangent_values):
+                raise TesseraJitError("native scaled JVP tangents require fp32 storage")
         traced_module = self._specialized_autodiff_module(args, kwargs)
         from dataclasses import replace
         if normalize_target_kind(self.target) == "nvidia_sm120":
@@ -2676,11 +2692,19 @@ class JitFn:
                 seed_values[index] = value
             normalized_seeds = normalize_mixed_batch_inputs(seed_values, self._frontend_batch_policies)
             tangent_values = tuple(normalized_seeds[index] for index in request.wrt_indices)
-        primal_inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
-        tangent_inputs = {
-            index: np.ascontiguousarray(np.asarray(value))
-            for index, value in zip(request.wrt_indices, tangent_values)
-        }
+        # The scaled program's checked native owner materializes primal and
+        # tangent bytes. Keep alias views at this binding layer; other family
+        # ABIs retain their existing compact host-frame contract.
+        if native_scaled_frame:
+            # checked_host_span has already established ndarray storage.
+            primal_inputs = list(ordered)
+            tangent_inputs = dict(zip(request.wrt_indices, tangent_values, strict=True))
+        else:
+            primal_inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
+            tangent_inputs = {
+                index: np.ascontiguousarray(np.asarray(value))
+                for index, value in zip(request.wrt_indices, tangent_values)
+            }
         for index, tangent in tangent_inputs.items():
             if index >= len(primal_inputs) or primal_inputs[index].shape != tangent.shape:
                 raise TesseraJitError("native JVP primal and tangent shapes must match")
@@ -2787,6 +2811,8 @@ class JitFn:
             "tile_program_digest": package.contract["tile_program"]["digest"],
             "frontend_authority": "tracer",
             "family": family,
+            "host_preparation": ("native_checked_view_pack" if native_scaled_frame
+                                 else "compact_host_frame"),
         }
         primal, tangent = result["output"]
         return primal, tangent

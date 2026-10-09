@@ -1,0 +1,11 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5070, 12.0, 610.88",
+  "sha256": {
+    "jit.py": "361a5952e31caea45c53567ad564ec5e78623d77447b95400f537e50a654fc36",
+    "core": "2d40aa3e23704fa92a087a672728f66fbbc3c97177cdeb4286757f78937c29b4",
+    "nvidia_opt": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+    "nvidia_runtime": "8d685c33da88f5384ffae5d99a1ea02a988068e88a88e899ed972bc26f53897a"
+  },
+  "reference_file_verified_against_git_commit": "747c3364e4c20a55c57b112c3032a08838ee60c1",
+  "scope": "four existing attention JVP device cases; no scaled-product parity"
+}

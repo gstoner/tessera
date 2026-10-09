@@ -13541,3 +13541,17 @@ CI assertions are unchanged. Dynamic maps, nonzero output axes, wider storage
 derivatives and sibling physical execution remain follow-up required.
 
 Follow-up required for Metal non-leading scaled-map primal/AD execution; no Apple kernel, image or allocation API changes and no Metal parity claim.
+
+### Native scaled JVP frame follow-up (2026-10-08)
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization
+SCALED-MAP-AXIS-INTEGRATION-20261008; PR902.
+Typed gfx1201 JVP binding retains checked positive-stride primal/seed views;
+native C++ owns byte packing. Cold backing validation precedes numerical
+certification. Row-block copies remove most of the measured 42% large-case
+packing gap, but matched public calls remain 2.3–4.5% slower than the frozen
+Python preparation control. Arithmetic stays in the same MLIR/native program.
+Evidence: benchmarks/baselines/native_scaled_jvp_frame_20261008/README.md.
+Generic scaled_matmul batching/transpose closure remains open.
+
+Follow-up required for native Metal scaled-product execution/AD; no Metal runtime or physical schedule changes. Host byte-packer tests do not prove Apple GPU parity.

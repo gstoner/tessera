@@ -23,7 +23,7 @@ def library(tmp_path_factory):
     end = text.index('extern "C" int tessera_rocm_program_prepare(', begin)
     folder = tmp_path_factory.mktemp("native-host-view")
     cpp = folder / "pack.cpp"
-    cpp.write_text("#include <cstdint>\n#include <cstring>\n" + text[begin:end])
+    cpp.write_text("#include <cstdint>\n#include <cstring>\n#include <type_traits>\n" + text[begin:end])
     output = folder / "pack.so"
     subprocess.run([compiler, "-O2", "-std=c++17", "-shared", "-fPIC",
                     str(cpp), "-o", str(output)], check=True, capture_output=True)

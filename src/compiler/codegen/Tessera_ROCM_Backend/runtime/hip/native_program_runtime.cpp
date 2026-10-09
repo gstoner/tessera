@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <unistd.h>
 extern "C" int tessera_rocm_image_acquire(const void *, size_t, const char *,
@@ -183,13 +184,45 @@ extern "C" int tessera_rocm_program_pack_host_view(
       (src < dst + destinationBytes && dst < src + sourceSpan)) return 1;
   const auto *input = static_cast<const unsigned char *>(source);
   auto *output = static_cast<unsigned char *>(destination);
-  for (uint64_t index = 0; index < count; ++index) {
-    uint64_t remaining = index, offset = 0;
-    for (uint32_t axis = rank; axis-- > 0;) {
+  // Collapse an actually contiguous suffix; singleton axes contribute no
+  // offset. The validated total byte count bounds every block multiplication.
+  uint32_t prefix = rank;
+  uint64_t blockBytes = itemBytes;
+  while (prefix && (shape[prefix-1] == 1 || strides[prefix-1] == blockBytes)) {
+    blockBytes *= shape[--prefix];
+  }
+  if (!prefix) {
+    std::memcpy(output, input, destinationBytes);
+    return 0;
+  }
+  const uint64_t columns = shape[prefix-1];
+  const uint64_t rows = destinationBytes / blockBytes / columns;
+  for (uint64_t row = 0; row < rows; ++row) {
+    uint64_t remaining = row, offset = 0;
+    for (uint32_t axis = prefix-1; axis-- > 0;) {
       offset += (remaining % shape[axis]) * strides[axis];
       remaining /= shape[axis];
     }
-    std::memcpy(output + index * itemBytes, input + offset, itemBytes);
+    auto *outRow = output + row * columns * blockBytes;
+    const auto *inRow = input + offset;
+    // Fixed-width memcpy keeps unaligned byte inputs legal while avoiding a
+    // dynamic libc call for each interleaved scalar. Only storage is moved.
+    auto fixed = [&](auto width) {
+      constexpr size_t bytes = decltype(width)::value;
+      for (uint64_t column = 0; column < columns; ++column)
+        std::memcpy(outRow + column * bytes,
+                    inRow + column * strides[prefix-1], bytes);
+    };
+    switch (blockBytes) {
+    case 1: fixed(std::integral_constant<size_t, 1>{}); break;
+    case 2: fixed(std::integral_constant<size_t, 2>{}); break;
+    case 4: fixed(std::integral_constant<size_t, 4>{}); break;
+    case 8: fixed(std::integral_constant<size_t, 8>{}); break;
+    default:
+      for (uint64_t column = 0; column < columns; ++column)
+        std::memcpy(outRow + column * blockBytes,
+                    inRow + column * strides[prefix-1], blockBytes);
+    }
   }
   return 0;
 }

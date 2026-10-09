@@ -1,0 +1,180 @@
+def native_jvp(
+        self, *args: Any, tangents: Any, **kwargs: Any
+    ) -> tuple[Any, Any]:
+        """Execute a compiler-owned native primal/JVP product package.
+
+        The initial product envelope covers single-input linear reductions and
+        FFT-family transforms plus non-affine normalization.  Unsupported
+        graphs and architectures fail closed; in particular a generic ROCm
+        target may not silently run the gfx1151 package on gfx1200/gfx1250.
+        """
+        import numpy as np
+        from tessera.runtime import RuntimeArtifact, launch
+        from .native_jvp_plugins import build_native_jvp_family_artifact
+
+        self.last_jvp_execution = None
+        request = self.differentiation_request
+        if request is None or request.mode != "forward":
+            raise TesseraJitError(
+                "native_jvp requires @jit(autodiff='forward' or 'jvp')"
+            )
+        self._enforce_call_time_constraints(args, kwargs)
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None:
+            raise TesseraJitError("native_jvp could not bind the compiled inputs")
+        tangent_values = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
+        if len(tangent_values) != len(request.wrt_indices):
+            raise TesseraJitError("native_jvp requires one tangent per active input")
+        traced_module = self._specialized_autodiff_module(args, kwargs)
+        from dataclasses import replace
+        if normalize_target_kind(self.target) == "nvidia_sm120":
+            traced_module = replace(traced_module,module_attrs={**traced_module.module_attrs,
+                "tessera.target": '"nvidia_sm120"', "tessera.arch": '"sm_120"'})
+        elif normalize_target_kind(self.target) in {"rocm", "rocm_gfx1201"}:
+            from tessera import runtime as _runtime
+            if (normalize_target_kind(self.target) == "rocm_gfx1201"
+                    and _runtime._rocm_chip() != "gfx1201"):
+                raise TesseraJitError("native JVP target requires gfx1201")
+            traced_module = replace(traced_module,module_attrs={**traced_module.module_attrs,
+                "tessera.target": '"rocm"', "tessera.arch": '"' + _runtime._rocm_chip() + '"'})
+        graph_ops = [op for fn in traced_module.functions for op in fn.body]
+        permitted_effect_ops: tuple[str, ...] = ()
+        if len(graph_ops) == 1 and graph_ops[0].op_name == "tessera.dropout":
+            dropout = graph_ops[0]
+            if (not bool(dropout.kwargs.get("training", True)) or
+                    float(dropout.kwargs.get("p", 0.5)) == 0.0 or
+                    dropout.kwargs.get("seed") is not None):
+                permitted_effect_ops = ("tessera.dropout",)
+        if len(graph_ops)==1 and graph_ops[0].op_name=="tessera.flash_attn":
+            policy=graph_ops[0].kwargs
+            if float(policy.get("dropout_p",0.0))==0.0:
+                permitted_effect_ops=("tessera.flash_attn",)
+        self.frontend_differential(
+            *args, _permitted_effect_ops=permitted_effect_ops, **kwargs
+        )
+        from .native_vmap import mixed_batch_policies, normalize_mixed_batch_inputs
+        if mixed_batch_policies(self):
+            raw_seed_values = self._ordered_inputs(args, kwargs, normalize_batch=False)
+            if raw_seed_values is None:
+                raise TesseraJitError("native JVP requires all primal arguments")
+            seed_values = list(raw_seed_values)
+            for index, value in zip(request.wrt_indices, tangent_values, strict=True):
+                if tuple(value.shape) != tuple(seed_values[index].shape):
+                    raise TesseraJitError("native JVP primal and tangent shapes must match")
+                seed_values[index] = value
+            normalized_seeds = normalize_mixed_batch_inputs(seed_values, self._frontend_batch_policies)
+            tangent_values = tuple(normalized_seeds[index] for index in request.wrt_indices)
+        primal_inputs = [np.ascontiguousarray(np.asarray(value)) for value in ordered]
+        tangent_inputs = {
+            index: np.ascontiguousarray(np.asarray(value))
+            for index, value in zip(request.wrt_indices, tangent_values)
+        }
+        for index, tangent in tangent_inputs.items():
+            if index >= len(primal_inputs) or primal_inputs[index].shape != tangent.shape:
+                raise TesseraJitError("native JVP primal and tangent shapes must match")
+        if len(graph_ops) != 1:
+            from .rocm_typed_scaled_native import supports_composed_scale_jvp
+            if (normalize_target_kind(self.target) not in {"rocm", "rocm_gfx1201"}
+                    or not supports_composed_scale_jvp(traced_module, request.wrt_indices)):
+                raise TesseraJitError("native JVP requires one operation or an admitted scaled product/sum Graph")
+        source = graph_ops[0]
+        target = normalize_target_kind(self.target)
+        if target == "rocm_gfx1201":
+            target = "rocm"
+        if target not in {"x86", "rocm", "nvidia_sm120"}:
+            raise TesseraJitError(
+                "native JVP is currently packaged for x86, ROCm, and exact sm120 only"
+            )
+        architecture = "zen5_avx512"
+        execution_mode = "cpu_avx512"
+        if target == "rocm":
+            from tessera import runtime as _runtime
+            from .native_jvp import architecture_admits
+            from .native_jvp_plugins import native_jvp_plugin_declarations
+
+            chip = _runtime._rocm_chip()
+            declaration = native_jvp_plugin_declarations().get(
+                source.op_name.removeprefix("tessera.")
+            )
+            family = declaration.family if declaration is not None else ""
+            # Admission is per family and exact architecture; gfx1151 does
+            # not inherit the gfx1201 scaled-product FP8 program.
+            if not architecture_admits("rocm", chip, family):
+                raise TesseraJitError(
+                    f"native ROCm JVP requires exact gfx1151; detected {chip!r} "
+                    f"(gfx1201 requires an exact family admission; rejected "
+                    f"{family or source.op_name!r})"
+                )
+            architecture = chip
+            execution_mode = "hip_runtime"
+        elif target == "nvidia_sm120":
+            architecture = "sm120"
+            execution_mode = "cuda_runtime"
+
+        launch_names = tuple(f"primal_{index}" for index in range(len(primal_inputs))) + tuple(
+            f"tangent_{index}" for index in request.wrt_indices
+        )
+        launch_values = tuple(primal_inputs) + tuple(
+            tangent_inputs[index] for index in request.wrt_indices
+        )
+        # Every member of a composed Graph participates in package identity;
+        # the first product's policy alone cannot identify the native program.
+        composed_graph_ir = traced_module.to_mlir(target=target) if len(graph_ops) > 1 else None
+        package_key = (
+            target,
+            architecture,
+            source.op_name,
+            composed_graph_ir,
+            tuple((str(value.dtype), tuple(int(dim) for dim in value.shape)) for value in primal_inputs),
+            tuple((index, str(tangent_inputs[index].dtype)) for index in request.wrt_indices),
+            repr(sorted(source.kwargs.items())),
+        )
+        package_cache = getattr(self, "_native_jvp_packages", None)
+        if package_cache is None:
+            package_cache = {}
+            self._native_jvp_packages = package_cache
+        package = package_cache.get(package_key)
+        if package is None:
+            paired_ir = self._compile_jvp_module(traced_module)
+            try:
+                _, package = build_native_jvp_family_artifact(
+                    source=source,
+                    primal_inputs=primal_inputs,
+                    target=target,
+                    architecture=architecture,
+                    execution_mode=execution_mode,
+                    source_graph_ir=composed_graph_ir if composed_graph_ir is not None else traced_module.to_mlir(target=target),
+                    paired_jvp_ir=paired_ir,
+                    wrt_indices=request.wrt_indices,
+                    arg_names=launch_names,
+                    input_names=tuple(inspect.signature(self._fn).parameters),
+                )
+            except ValueError as exc:
+                raise TesseraJitError(str(exc)) from exc
+            package_cache[package_key] = package
+        family = str(package.contract["family"])
+        result = launch(
+            RuntimeArtifact(metadata=package.runtime_metadata()),
+            launch_values,
+        )
+        if not result.get("ok") or result.get("execution_mode") != execution_mode:
+            raise TesseraJitError(
+                f"native {target} JVP launch failed: {result.get('reason')}"
+            )
+        self.last_jvp_execution = {
+            "compiler_path": f"{target}_jvp_compiled",
+            "execution_kind": "native_cpu" if target == "x86" else "native_gpu",
+            "execution_mode": execution_mode,
+            "evidence_target": ("x86_avx512" if target == "x86" else
+                                "nvidia_sm120" if target == "nvidia_sm120" else
+                                f"rocm_{_rocm_chip()}"),
+            "artifact_hash": package.artifact_hash,
+            "paired_jvp_ir_digest": package.contract["paired_jvp_ir_digest"],
+            "source_graph_ir_digest": package.contract["source_graph_ir_digest"],
+            "schedule_program_digest": package.contract["schedule_program"]["digest"],
+            "tile_program_digest": package.contract["tile_program"]["digest"],
+            "frontend_authority": "tracer",
+            "family": family,
+        }
+        primal, tangent = result["output"]
+        return primal, tangent

@@ -75,6 +75,12 @@ class NativeScaledProgram:
         outputs = program["outputs"]
         kind = program.get("kind", "paired_jvp")
         roles = program.get("gradient_roles", [])
+        dependency_policy = program.get("dependency_policy")
+        if dependency_policy not in (None, "native_recompute_prefix_v1"):
+            raise ValueError("native reverse dependency policy differs")
+        dependencies = dependency_policy is not None
+        if dependencies and kind != "scale_vjp":
+            raise ValueError("native reverse dependencies require a VJP program")
         if kind == "scale_vjp":
             if (not 5 <= arguments <= 128 or not isinstance(roles, list) or not 1 <= len(roles) < arguments or
                 any(type(role) is not int or not 0 <= role < arguments - 1 for role in roles) or
@@ -110,24 +116,30 @@ class NativeScaledProgram:
                 if len(step["inputs"]) != 2 or len(member["scalars"]) != 1:
                     raise ValueError("native scaled sum has an invalid scalar ABI")
             elif step["operation"] == "tensor.generate" and kind == "scale_vjp":
-                if (len(step["inputs"]) != 4 or len(member["scalars"]) != 1 or
+                role = step.get("gradient_argument")
+                inputs = step["inputs"]
+                if (len(inputs) != 4 or len(member["scalars"]) != 1 or
                     step.get("gradient_role") not in {"lhs_scale", "rhs_scale", "lhs_matrix", "rhs_matrix"} or
-                    type(step.get("gradient_argument")) is not int or
-                    step["gradient_argument"] not in roles or
-                    step["inputs"] != sorted(set(step["inputs"])) or
-                    any(type(slot) is not int or not 0 <= slot < step["output"] for slot in step["inputs"]) or
-                    any(slot >= arguments for slot in step["inputs"][:-1]) or
-                    step["inputs"][-1] not in cotangent_slots or
-                    step["gradient_argument"] in step["inputs"]):
+                    (role is not None and (type(role) is not int or role not in roles)) or
+                    (not dependencies and role is None) or
+                    inputs != sorted(set(inputs)) or
+                    any(type(slot) is not int or not 0 <= slot < step["output"] for slot in inputs) or
+                    (role is not None and role in inputs)):
+                    raise ValueError("native scale reduction has an invalid captured-input ABI")
+                seed = step.get("seed_input") if dependencies else inputs[-1]
+                if (type(seed) is not int or seed not in inputs or seed not in cotangent_slots or
+                    (not dependencies and any(slot >= arguments for slot in inputs[:-1])) or
+                    (dependencies and any(slot != seed and slot in cotangent_slots for slot in inputs))):
                     raise ValueError("native scale reduction has an invalid captured-input ABI")
             else:
                 raise ValueError("native scaled program contains an unadmitted member")
             if kind == "scale_vjp" and step["operation"] == "tessera.add":
                 role = step.get("gradient_argument")
-                if (type(role) is not int or role not in roles or
-                    any(type(slot) is not int or not arguments <= slot < step["output"] or
-                        steps[slot-arguments].get("gradient_argument") != role
-                        for slot in step["inputs"])):
+                if ((role is not None or not dependencies) and
+                    (type(role) is not int or role not in roles or
+                     any(type(slot) is not int or not arguments <= slot < step["output"] or
+                         steps[slot-arguments].get("gradient_argument") != role
+                         for slot in step["inputs"]))):
                     raise ValueError("native scale sum lost its gradient contribution lineage")
             for slot in step["inputs"]:
                 if type(slot) is not int or not 0 <= slot < step["output"]:
@@ -168,7 +180,8 @@ class NativeScaledProgram:
                     k != kb or output_buffer["shape"] != prefix+[m,n] or
                     sa[-2:] != [m,groups] or sb[-2:] != [groups,columns]):
                     raise ValueError("native continuous product shape differs from block semantics")
-                if (kind not in {"primal", "paired_jvp"} or
+                if ((kind not in {"primal", "paired_jvp"} and not
+                     (kind == "scale_vjp" and dependencies)) or
                     any(row["storage"] != "f32" for row in captured) or
                     output_buffer["storage"] != "f32" or
                     member["scalars"] != [count] or
@@ -251,12 +264,16 @@ class NativeScaledProgram:
                     raise ValueError("native scale reduction storage/count/geometry differs")
             elif step["operation"] == "tessera.transpose":
                 if kind == "scale_vjp":
-                    if (type(step.get("cotangent_source")) is not int or
-                            step["cotangent_source"] != arguments - 1 or
-                            step["inputs"][0] not in cotangent_slots or
-                            "gradient_argument" in step):
+                    seeded = step["inputs"][0] in cotangent_slots
+                    if ((not dependencies or seeded) and
+                        (type(step.get("cotangent_source")) is not int or
+                         step["cotangent_source"] != arguments - 1 or
+                         not seeded or "gradient_argument" in step)):
                         raise ValueError("native inverse permutation lost its output-cotangent lineage")
-                    cotangent_slots.add(step["output"])
+                    if dependencies and not seeded and "cotangent_source" in step:
+                        raise ValueError("native residual permutation claims a cotangent")
+                    if seeded:
+                        cotangent_slots.add(step["output"])
                 source = buffers[step["inputs"][0]]
                 axes = step.get("permutation")
                 rank = len(source["shape"])
@@ -273,6 +290,25 @@ class NativeScaledProgram:
                   any(buffers[slot]["shape"] != output_buffer["shape"] or
                       buffers[slot]["storage"] != "f32" for slot in step["inputs"])):
                 raise ValueError("native sum runtime count differs from typed storage")
+            if dependencies:
+                operation = step["operation"]
+                if operation == "tessera.scaled_matmul":
+                    seeded = False
+                    if any(slot in cotangent_slots for slot in step["inputs"]):
+                        raise ValueError("native residual product captures a cotangent")
+                elif operation == "tensor.generate":
+                    seeded = True
+                elif operation == "tessera.add":
+                    flags = [slot in cotangent_slots for slot in step["inputs"]]
+                    if any(flags) and not all(flags):
+                        raise ValueError("native reverse sum mixes residual and cotangent roles")
+                    seeded = all(flags)
+                else:
+                    seeded = step["inputs"][0] in cotangent_slots
+                if step.get("dependency_kind") != ("cotangent" if seeded else "residual"):
+                    raise ValueError("native reverse dependency lineage differs")
+                if seeded:
+                    cotangent_slots.add(step["output"])
         if kind == "scale_vjp":
             for role, output in zip(roles, outputs, strict=True):
                 if (type(output) is not int or not arguments <= output < len(buffers) or

@@ -59,6 +59,8 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
       funcs[0].getBody().front().getOperations().size() != 2)
     return mod.emitError("native scale transpose needs one isolated gfx1201 reduction member"), failure();
   auto generator = dyn_cast<tensor::GenerateOp>(funcs[0].getBody().front().front());
+  // Reverse programs may recompute a continuous primal residual as a member.
+  product |= generator && generator->hasAttrOfType<UnitAttr>("tessera.native.scaled_product");
   auto role = generator ? generator->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint")
                         : StringAttr{};
   auto type = generator ? dyn_cast<RankedTensorType>(generator.getType()) : RankedTensorType{};

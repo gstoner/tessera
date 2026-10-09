@@ -6,7 +6,9 @@ Sync GFX1201-BOUNDED-NVFP4-ROWS-20261009. Depends on PR913.
 The final packet records active HIP device RX 9070 XT, ordinal 0, UUID bytes
 32386439653765666266326566373136 (HIP's 16-byte identity). Source, recorder,
 core/target compiler and both native runtime provider identities are separate.
-Imported source/recorder/compiler hashes match the PR worktree.
+Original packet source/compiler hashes match this worktree; its recorder hash
+binds the initial PR914 revision 768ba4263. The subsequent paired packet binds
+the current recorder and the same native source/compiler/runtime images.
 Recorded by benchmarks/rocm/record_bounded_nvfp4_rows.py.
 
 ## Numerical and lifecycle proof
@@ -73,3 +75,24 @@ the device receipts do not establish plugin-enforced test timeouts.
 Whole-model quality, generic layouts/batching/transpose, broader ingest policies
 and ROCm W8A8/MXFP4 optimization remain separate obligations. No sibling backend
 physical evidence is transferred.
+
+
+## Paired direct/captured dispatch attribution
+
+dispatch_attribution.json adds seven interleaved direct/graph rounds for each
+stage and each of the same twelve active-row frames. Each graph window records
+one host submission and exactly 128, 256 or 384 kernel nodes for consumer,
+ingest or combined execution. Actual producer codes/scales/statistics/storage
+and output are checked around every arm. All rows have zero output error;
+capacity buffers retain eleven allocations while rows and graph geometry change.
+
+Direct/captured median ratios range 0.9820–1.0032 across the measured stages.
+No material graph replay benefit is established; no default dispatch changes.
+This compares submission policies for identical images, not kernel algorithms.
+Absolute medians from the earlier packet are not a paired comparison with this
+later run. Generic batching/transpose and checkpoint quality remain open.
+
+Next attribution gate: independent converter/storage readiness and measurement.
+The current runtime's weights-ready bit bundles both ingest producers, so
+leaf converter timing cannot yet carry a separate checked intermediate receipt.
+That requires a native readiness/lifetime change before widening attribution.

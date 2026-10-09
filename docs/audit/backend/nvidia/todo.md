@@ -14229,3 +14229,9 @@ SM120 NVFP4 physical scaling and CUDA allocation ownership differ from the ROCm 
 The new active-row C ABI is HIP-specific; existing static v1 replay remains compatible.
 No sibling physical schedule or exact-device evidence is transferred.
 See ../rocm/todo.md, native bounded NVFP4 row capacity.
+
+
+Bounded-ingest dispatch attribution update (GFX1201-BOUNDED-NVFP4-ROWS-20261009):
+the packet schema adds optional captured-stage event windows alongside existing
+direct fields. Not applicable to this backend's physical scheduling: these are
+gfx1201 HIP image/node-count measurements, with no sibling execution claim.

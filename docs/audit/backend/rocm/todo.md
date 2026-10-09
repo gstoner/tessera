@@ -16651,3 +16651,18 @@ This closes the named bounded-row execution envelope. Whole-model checkpoint
 quality, generic layouts/batching/transpose, broader ingest policies, W8A8 and
 MXFP4 performance obligations remain open. No gfx1151 or sibling physical proof
 is transferred.
+
+
+### Bounded-ingest paired dispatch attribution
+
+Same GFX1201-BOUNDED-NVFP4-ROWS-20261009 owner/sync. Twelve gfx1201 frames
+compare seven interleaved direct/captured rounds per stage with identical images.
+All 252 graph windows check node counts, one host submission and numerical
+producer/output results. Direct/captured median ratios span 0.9820–1.0032:
+no material benefit or selector promotion is established. This does not isolate
+hardware instruction cost or transfer earlier-run absolute timings.
+
+Independent converter/storage attribution remains required. Runtime readiness
+currently bundles both ingest producers; split native readiness and checked
+intermediate readback must precede trustworthy leaf timing.
+Evidence: benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/dispatch_attribution.json.

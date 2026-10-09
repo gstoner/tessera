@@ -53,17 +53,35 @@ def profile(bound,n,k):
             error=check_output(session.read_output(),expected)
             check_producer(session,converted,stored)
             stage_samples={}
+            graph_samples={}
             for stage in ("ingest","consumer","combined"):
                 samples=[]
-                for _ in range(7):
-                    if stage=="ingest":
-                        session.ingest();check_producer(session,converted,stored)
-                    else:
-                        session.run_combined();check_output(session.read_output(),expected)
-                    samples.extend(session.measure(stage,samples=1,repeats=128))
-                    if stage=="ingest":check_producer(session,converted,stored)
-                    else:error=max(error,check_output(session.read_output(),expected))
+                captured=[]
+                windows=[]
+                # Alternate ordering in matched rounds to reduce clock/order bias.
+                for round_index in range(7):
+                    modes=("direct","graph") if round_index%2==0 else ("graph","direct")
+                    for mode in modes:
+                        session.run_combined()
+                        error=max(error,check_output(session.read_output(),expected))
+                        check_producer(session,converted,stored)
+                        if mode=="direct":
+                            samples.extend(session.measure(stage,samples=1,repeats=128))
+                        else:
+                            window=session.measure_graph(stage,samples=1,repeats=128)[0]
+                            nodes=128*{"ingest":2,"consumer":1,"combined":3}[stage]
+                            if (window["graph_nodes"]!=nodes or window["repeats"]!=128
+                                    or window["host_graph_submissions"]!=1):
+                                raise RuntimeError("captured window differs from declared stage/repetitions")
+                            captured.append(window["per_iteration_ms"])
+                            windows.append(window)
+                        check_producer(session,converted,stored)
+                        if stage!="ingest":
+                            error=max(error,check_output(session.read_output(),expected))
                 stage_samples[stage]={"samples_ms":samples,"median_ms":median(samples)}
+                graph_samples[stage]={"samples_ms":captured,"median_ms":median(captured),
+                                     "windows":windows,
+                                     "direct_over_graph_median":median(samples)/median(captured)}
             stats=session.frame_stats()
             assert session.handle==handle
             assert stats["allocation_bytes"]==capacity["allocation_bytes"]
@@ -88,6 +106,7 @@ def profile(bound,n,k):
                          "correctness":"checked_around_every_native_window_and_changed_public_call",
                          "max_abs_error":error,"native_frame":stats,
                          "native_event_stages":stage_samples,
+                         "native_graph_event_stages":graph_samples,
                          "public_warm_samples_ms":latency,"public_warm_median_ms":median(latency)})
     return {"bounds_mnk":[bound,n,k],"compile_ms":compile_ms,
             "plan_sha256":hashlib.sha256(program.native.native_plan_json.encode()).hexdigest(),
@@ -123,9 +142,9 @@ def main():
             "image_runtime_sha256":digest(os.environ["TESSERA_ROCM_NATIVE_IMAGE_LIB"]),
             "source_sha256":{name:digest(name) for name in sources},"recorder_sha256":digest(__file__),
             "numeric_policy":"explicit NVFP4 requantization and folded-row approximate product; no original-BF16/model quality claim",
-            "native_domain":"HIP events; 128 repetitions/window; ingest is conversion plus storage; consumer and three-stage program timed independently",
+            "native_domain":"HIP events; seven interleaved direct/captured rounds per stage; 128 repetitions/window; direct includes repeated host dispatch gaps; captured has one graph submission; ingest is conversion plus storage; consumer and three-stage program timed independently",
             "public_domain":"warm ordinary JIT call: host checks/packing, all-input upload, native program, synchronization and readback; changed values; compiler forbidden",
-            "claim":"bounded-row correctness and latency characterization; no selector promotion or A/B speedup",
+            "claim":"bounded-row correctness and matched native dispatch attribution; identical images/operands; graph/direct ratio is submission-policy characterization, not a kernel algorithm speedup or selector promotion",
             "profiles":[profile(*shape) for shape in ((257,32,64),(513,80,256),(256,64,1024))]}
     options.output.parent.mkdir(parents=True,exist_ok=True)
     options.output.write_text(json.dumps(packet,indent=2)+"\n")

@@ -6,6 +6,25 @@ target: apple_gpu
 last_updated: 2026-10-08
 ---
 
+## PUBLIC-FLOATING-REVERSE-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+The public Python/textual reverse owner now traces f32 scaled-product matrices
+and scales into the native Graph/AD/Schedule/Tile/Target/LLVM/HSACO program.
+Python named-batch shape inference matches the native logical transpose rules.
+Frontend differential certification reuses the existing semantic reference;
+returned gradients are computed by native MLIR, with no Python AD backend.
+The capability model separates graph_only_dtypes from declared physical
+storage: Graph-only dtype queries are artifact_only and do not advertise a
+ready primal kernel. The dtype-flow view now includes the existing gfx1201
+target while preserving physical manifest negatives.
+Evidence: benchmarks/baselines/public_floating_reverse_20261009/README.md.
+Owning packet: benchmarks/baselines/public_floating_reverse_20261009/gfx1201.json.
+Generic transforms, f32 vmap wrappers, dynamic/storage/layout widening,
+ordinary f32 primal packaging and sibling consumers remain follow-ups.
+
+Shared Graph shape semantics and default-empty Graph-only dtype metadata are assessed. Metal f32 scaled-product primal/adjoint execution is not added; an Apple-owned consumer and Mac proof remain follow-up required.
+
 ## FLOATING-SCALED-ADJOINT-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

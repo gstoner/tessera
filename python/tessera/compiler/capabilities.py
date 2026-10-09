@@ -25,6 +25,8 @@ class OpCapability:
     reason: str = ""
     dtypes_derived: bool = False
     min_rank: int | None = None
+    graph_only_dtypes: tuple[str, ...] = ()
+    """Additional semantic Graph storage; no executable primal kernel claim."""
     """True when `dtypes` came from `policy accumulator ∩ target dtypes` rather
     than from an explicit backend declaration.
 
@@ -122,7 +124,8 @@ def supports_op(
     target_name = normalize_target(target)
     cap = TARGET_CAPABILITIES[target_name]
     op_cap = cap.op(op)
-    dtype_ok = dtype is None or not op_cap.dtypes or dtype in op_cap.dtypes
+    graph_only_dtype = dtype is not None and dtype in op_cap.graph_only_dtypes
+    dtype_ok = dtype is None or not op_cap.dtypes or dtype in op_cap.dtypes or graph_only_dtype
     rank_ok = rank is None or (
         (not op_cap.ranks or rank in op_cap.ranks)
         and (op_cap.min_rank is None or rank >= op_cap.min_rank)
@@ -137,7 +140,8 @@ def supports_op(
         target=target_name,
         op_name=op_cap.op_name,
         supported=supported,
-        runtime_status=op_cap.runtime_status if supported else "unsupported",
+        runtime_status=("artifact_only" if graph_only_dtype else op_cap.runtime_status)
+            if supported else "unsupported",
         reason=reason,
     )
 
@@ -910,9 +914,12 @@ TARGET_CAPABILITIES: dict[str, TargetCapability] = {
                        "package and exact gfx1201 oracle. General cache layouts remain gated"),
             "tessera.scaled_matmul": OpCapability(
                 "tessera.scaled_matmul","ready",dtypes=("uint8","fp8_e4m3"),min_rank=2,
+                graph_only_dtypes=("fp32",),
                 reason="Named static packed folded gfx1201 checkpoint consumer; typed E4M3FN "
                        "exact fp32 block-scale products, static shared-RHS/independent-RHS/shared-LHS leading-prefix batches "
-                       "and f32 scale JVP native programs. "
+                       "and f32 scale JVP native programs. f32 matrices are admitted as typed Graph "
+                       "storage for native matrix/scale reverse programs only; ordinary f32 primal "
+                       "packaging remains artifact-only. "
                        "Other dtype/layout/dynamic and general AD profiles require separate proof"),
             "tessera.mxfp4_folded_storage": OpCapability(
                 "tessera.mxfp4_folded_storage","ready",dtypes=("uint8",),ranks=(2,),

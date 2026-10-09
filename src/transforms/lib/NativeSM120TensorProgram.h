@@ -52,25 +52,37 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
       consumer->getNumOperands() != root.getNumArguments() ||
       !ret || ret.getNumOperands() != 1 || ret.getOperand(0) != consumer->getResult(0))
     return root.emitError("SM120 tensor program lost its original producer/consumer SSA edge");
-  Value edge;
-  for (auto [index, producer] : llvm::enumerate(ArrayRef<Operation *>(ops).drop_back())) {
+  // Track each producer's actual root and retain topological SSA order.
+  // The two operand chains may have different shapes and may be interleaved.
+  llvm::DenseMap<Value,Value> origins;
+  for (Value arg : root.getArguments()) origins[arg] = arg;
+  for (Operation *producer : ArrayRef<Operation *>(ops).drop_back()) {
     auto name = producer->getName().getStringRef();
+    Value input = producer->getNumOperands() == 1 ? producer->getOperand(0) : Value{};
     if ((name != "tessera.rmsnorm" && name != "tessera.layer_norm" && name != "tessera.softmax") ||
-        producer->getNumOperands() != 1 || producer->getNumResults() != 1 ||
-        producer->getOperand(0).getType() != producer->getResult(0).getType() ||
-        (index && producer->getOperand(0) != edge))
-      return root.emitError("SM120 tensor producer chain must preserve storage and SSA lineage");
-    edge = producer->getResult(0);
+        !input || producer->getNumResults() != 1 ||
+        input.getType() != producer->getResult(0).getType() || !origins.count(input))
+      return root.emitError("SM120 tensor producers must preserve storage and topological SSA lineage");
+    origins[producer->getResult(0)] = origins.lookup(input);
   }
-  if (consumer->getOperand(0) != edge)
-    return root.emitError("SM120 tensor program lost its original producer/consumer SSA edge");
-  auto source = dyn_cast<RankedTensorType>(ops[0]->getOperand(0).getType());
+  Value lhsValue = consumer->getOperand(0), rhsValue = consumer->getOperand(1);
+  if (!origins.count(lhsValue) || !origins.count(rhsValue))
+    return root.emitError("SM120 tensor matmul operands lost their producer lineage");
+  llvm::SmallDenseSet<Operation *> live;
+  for (Value value : {lhsValue,rhsValue})
+    while (auto *producer = value.getDefiningOp()) {
+      live.insert(producer);
+      value = producer->getOperand(0);
+    }
+  if (live.size() != producerCount)
+    return root.emitError("SM120 tensor program lost its original producer/consumer SSA edge: producer outside matmul dependency closure");
+  auto source = dyn_cast<RankedTensorType>(lhsValue.getType());
   if (!source || source.getRank() != 2 || !source.hasStaticShape() ||
-      (!source.getElementType().isF16() && !source.getElementType().isBF16()) ||
-      ops[0]->getResult(0).getType() != source)
+      (!source.getElementType().isF16() && !source.getElementType().isBF16()))
     return root.emitError("SM120 tensor producer requires static rank-two matching f16/bf16 storage");
-  SmallVector<Value> roles{ops[0]->getOperand(0)};
-  for (Value value : consumer->getOperands().drop_front()) roles.push_back(value);
+  const bool dag = rhsValue.getDefiningOp() != nullptr;
+  SmallVector<Value> roles{origins.lookup(lhsValue),origins.lookup(rhsValue)};
+  for (Value value : consumer->getOperands().drop_front(2)) roles.push_back(value);
   llvm::SmallDenseSet<unsigned> seen;
   llvm::json::Array roleJSON;
   for (Value value : roles) {
@@ -132,7 +144,7 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
   capacityTypes[roles[0]] = RankedTensorType::get({capacities[0],capacities[2]},source.getElementType());
   capacityTypes[roles[1]] = RankedTensorType::get({capacities[2],capacities[1]},rhs.getElementType());
   for (Operation *producer : ArrayRef<Operation *>(ops).drop_back())
-    capacityTypes[producer->getResult(0)] = capacityTypes[roles[0]];
+    capacityTypes[producer->getResult(0)] = capacityTypes[origins.lookup(producer->getResult(0))];
   capacityTypes[consumer->getResult(0)] = RankedTensorType::get({capacities[0],capacities[1]},out.getElementType());
   for (unsigned index = 2; index < roles.size(); ++index) {
     auto type = dyn_cast<RankedTensorType>(roles[index].getType());
@@ -149,13 +161,11 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     auto type = capacityTypes.lookup(value);
     if (!dynamic || !consumer) return type;
     SmallVector<int64_t> shape(type.getShape());
-    bool producedRow = value == roles[0];
-    for (Operation *producer : ArrayRef<Operation *>(ops).drop_back())
-      producedRow |= value == producer->getResult(0);
+    bool producedRow = origins.lookup(value) == roles[0];
     if (producedRow) {
       if (varying[0]) shape[0] = ShapedType::kDynamic;
       if (varying[2]) shape[1] = ShapedType::kDynamic;
-    } else if (value == roles[1]) {
+    } else if (origins.lookup(value) == roles[1]) {
       if (varying[2]) shape[0] = ShapedType::kDynamic;
       if (varying[1]) shape[1] = ShapedType::kDynamic;
     } else if (bias && value == roles[2]) {
@@ -220,9 +230,8 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     for (auto [old,arg] : llvm::zip(root.getArguments(),fn.getArguments())) {
       Type type = memberType(old,true); arg.setType(type); inputs.push_back(type);
     }
-    // Every producer carries the same active row/storage frame. Project all
-    // results, preserving the original SSA chain instead of assuming one
-    // producer followed by a consumer.
+    // Project each producer through its own operand-root capacity frame,
+    // preserving both chains and the original topological SSA order.
     for (auto [original, cloned] :
          llvm::zip(ops, fn.getBody().front().without_terminator()))
       cloned.getResult(0).setType(memberType(original->getResult(0),true));
@@ -277,7 +286,9 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
       {"member",symbol},{"inputs",std::move(inputs)},
       {"outputs",llvm::json::Array{ids.lookup(op->getResult(0))}}});
   }
-  llvm::json::Object plan{{"schema",dynamic ? (producerCount > 1 ?
+  llvm::json::Object plan{{"schema",dag ? (dynamic ?
+          "tessera.native.sm120_tensor_program.v6" : "tessera.native.sm120_tensor_program.v5") :
+          dynamic ? (producerCount > 1 ?
           "tessera.native.sm120_tensor_program.v4" : "tessera.native.sm120_tensor_program.v2") :
           producerCount > 1 ? "tessera.native.sm120_tensor_program.v3" : "tessera.native.sm120_tensor_program.v1"},
       {"source_graph_ir",sourceIR+"\n"},{"root",root.getSymName().str()},

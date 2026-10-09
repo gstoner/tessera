@@ -13914,3 +13914,15 @@ Sibling outcome: follow-up required for owning native broadcast consumers.
 The named carrier selects gfx1201 HIP structured kernels, so this backend has
 no new physical schedule or execution evidence from this change.
 Evidence: benchmarks/baselines/gfx1201_scaled_broadcast_ssa_20261009/README.md.
+
+## SM120-TWO-SIDED-PRODUCER-DAG-20261009
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Native export follows both operand roots and actual topological producer order,
+projects M/K and K/N capacities independently, and retains private scratch
+first-write/last-read ownership. v5/v6 manifests explicitly distinguish this
+DAG from existing v1-v4 linear LHS envelopes.
+94 compiler/package checks passed, covering static/bounded fp16/bf16 frames,
+both orders, all M/N/K bound combinations and forged SSA/lifetime records.
+This is compiler evidence; resident execution and benchmarks are pending.
+Not applicable to Metal lowering: the exporter selects nvidia_sm120 exclusively. Apple producer-DAG bufferization and native execution remain separate obligations.

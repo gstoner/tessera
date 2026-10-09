@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-10-08
+last_updated: 2026-10-09
 audit_role: plan
 plan_state: open
 owner: x86 backend
@@ -7,6 +7,25 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+
+## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
+
+Owner ROCM-NVFP4-INGEST-1. Native MLIR compares absolute source values against
+exact scaled midpoints, preserving candidate SSE/reduction order and tie rules.
+The ordinary Graph/Schedule/Tile/Target/LLVM/HSACO program passes 60 gfx1201
+converter/public/bounded/resident and 153 adjacent FP8/MXFP8/MXFP4 device checks.
+Both packets prove bitwise codes/exponents/f64 stats/storage/output parity;
+native program gains repeat around 6–9%, while public wall results are mixed.
+Static FP64 multiply counts fall 1065 -> 831 and private-segment metadata
+180 -> 128 bytes; these are not hardware counters or unique attribution.
+An explicit fp64 reference decode fixes energy/SQNR overflow while preserving
+the fp32 default; no target dtype, runtime ABI or selector contract is added.
+Evidence: benchmarks/baselines/gfx1201_nvfp4_source_midpoints_20261009/README.md,
+nvfp4-threshold-comparison.json and nvfp4-threshold-isa-public.json.
+Recorder: benchmarks/rocm/record_nvfp4_winner_codes.py.
+General route/performance and frontend/AD closure remain open.
+
+Not applicable to AVX-512 physical lowering: no x86 package uses this gfx1201 leaf. Shared reference precision is host-validated, with the existing fp32 reference default retained.
 
 ## ROCM-NVFP4-WINNER-CODES-20261009
 

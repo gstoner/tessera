@@ -1,0 +1,4 @@
+=========================== short test summary info ============================
+FAILED tests/unit/test_batching_rule_closure.py::test_batching_axis_has_zero_open
+FAILED tests/unit/test_batching_rule_closure.py::test_transpose_axis_has_zero_open
+2 failed, 20444 passed, 9583 skipped, 14 warnings in 356.54s (0:05:56)

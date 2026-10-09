@@ -274,7 +274,7 @@ def requantize_nvfp4_projection(
             has_scale, converted_exponents + 127, 0
         ).T.astype(np.uint8)
     packed_destination = mx.pack_e2m1_codes(destination_codes)
-    reconstructed = mx.exact_weights(destination_codes, exponents)
+    reconstructed = mx.exact_weights(destination_codes, exponents, dtype=np.float64)
     signal = float(np.square(source.astype(np.float64)).sum())
     error = float(np.square(
         source.astype(np.float64) - reconstructed.astype(np.float64)

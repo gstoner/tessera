@@ -1,4 +1,4 @@
-"""Exact-device proof of the physical ingest leaf; Graph integration is pending."""
+"""Exact-device ingest numerics, boundary cases and native Graph pipeline proof."""
 import ctypes as C
 import hashlib
 import time
@@ -152,7 +152,7 @@ def run_leaf(projections, *, timing=False, graph_route=False):
         levels = np.asarray([0, .5, 1, 1.5, 2, 3, 4, 6, -0., -.5, -1, -1.5, -2, -3, -4, -6])
         source = levels[codes] * (p.e4m3_scales.astype(np.float64) * p.global_scale).repeat(16, axis=1)
         decoded = mx.exact_weights(
-            mx.unpack_e2m1_codes(arrays[3][start:end]), arrays[4][:, start:end]).astype(np.float64)
+            mx.unpack_e2m1_codes(arrays[3][start:end]), arrays[4][:, start:end], dtype=np.float64)
         stats = arrays[5][start:end]
         np.testing.assert_allclose(stats[..., 0].sum(), np.square(source).sum(), rtol=1e-13)
         np.testing.assert_allclose(stats[..., 1].sum(), np.square(source-decoded).sum(), rtol=1e-13, atol=1e-30)
@@ -217,3 +217,22 @@ def test_candidate_power_of_two_normalization_keeps_extreme_scales(global_scale)
     run_leaf([ingest.NVFP4Projection(
         "extreme", mx.pack_e2m1_codes(codes),
         scales.astype(ml_dtypes.float8_e4m3fn), global_scale)])
+
+
+@pytest.mark.parametrize("exponent", [-126, -64, 0, 64, 120])
+def test_native_midpoint_adjacent_projection_globals(exponent):
+    """Independent oracle at/below/above all strict quantization midpoints."""
+    projections = []
+    codes = np.tile(np.arange(16, dtype=np.uint8), (2, 2))
+    codes[1] = np.roll(codes[1], 5)
+    # The larger K16 scale keeps the whole K32 block inside the declared
+    # E8M0 source envelope even at the smallest midpoint-adjacent global.
+    scales = np.asarray([[4., 1.], [1., 4.]], dtype=ml_dtypes.float8_e4m3fn)
+    for index, midpoint in enumerate((.25, .75, 1.25, 1.75, 2.5, 3.5, 5.)):
+        center = np.ldexp(np.float64(2 * midpoint), exponent)
+        for side, global_scale in enumerate((np.nextafter(center, 0.), center,
+                                             np.nextafter(center, np.inf))):
+            projections.append(ingest.NVFP4Projection(
+                f"midpoint_{index}_{side}", mx.pack_e2m1_codes(codes), scales,
+                float(global_scale)))
+    run_leaf(projections)

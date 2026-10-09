@@ -10152,3 +10152,56 @@ Evidence: benchmarks/baselines/scaled_adjoint_auto_20261009/README.md.
 Generic batching/transpose closure and the original five-slice goal remain open.
 
 Not applicable to CPU physical recipes: the selector requires isolated gfx1201 scale-adjoint members. x86 vector reduction and output ABI are unchanged.
+
+## Continuous native scaled-product integration — 2026-10-09
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Sync CONTINUOUS-SCALED-PRODUCT-20261009; dependent on PR911.
+
+Native export retains the original semantic scaled product as its Graph witness
+and expands only the isolated continuous f32 member into tensor/scf reductions.
+Each original K group starts a fresh dot; its two scales apply before joining
+the outer accumulator. Both logical matrix orientations and independently
+broadcast operand prefixes remain compiler-owned. The product member uses an
+explicit generated-product launch contract, without adjoint role annotations.
+Existing native multilinear JVP terms share this product consumer.
+
+Matching full LLVM/MLIR 23.1.1 compiler build passes. 44 native image/ABI
+cases, 426 native adjoint/map/auto regressions and 307 drift gates pass.
+gfx1201 proves 40 numerical/lifetime cases, including all four operand JVP
+terms. Sixteen correctness-gated profiles separate compilation, ordinary
+native program events and warm prepared update/invoke/read timings:
+primal 0.00221–0.00448 ms native versus 0.336–0.589 ms warm;
+paired JVP 0.02019–0.03096 ms native versus 0.513–0.741 ms warm.
+These are characterization baselines, without a performance promotion.
+Evidence: benchmarks/baselines/continuous_scaled_product_20261009/README.md.
+Public frontend primal/JVP admission and generic primitive closure remain open.
+
+Not applicable to this gfx1201 product expansion: CPU lowering does not consume the new isolated member. x86 physical primal/JVP proof remains separate.
+
+## Public continuous scaled-product frontend integration — 2026-10-09
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Sync CONTINUOUS-SCALED-PRODUCT-20261009; dependent on PR911.
+
+The textual frontend now admits ordinary continuous f32 scaled-product calls
+and paired JVP through compiler-owned Graph/Schedule/Tile programs on gfx1201.
+Ordinary calls on an AD-enabled owner project a separate primal Graph while
+retaining the original AD request as provenance; the caller-owned Graph and
+its numerical policies remain unchanged. Native MLIR owns the product and
+derivative arithmetic. Python handles frontend intent, certificates and checked
+host spans only.
+
+Owning gfx1201: 504 public device cases pass, covering four logical matrix
+orientations, all fifteen sharing masks, nested maps, mixed positive/negative
+input axes, nonleading outputs and four continuous JVP roles. Warm changed
+operands/seeds run with compiler subprocesses forbidden; retained outputs
+remain unchanged. Sixteen source-bound public profiles pass before/after-round
+numerical checks: primal 1.27–1.71 ms and paired JVP 1.79–2.53 ms warm public
+latency. These include host preparation/upload/readback and are separate from
+the native event packet; no speedup or default promotion is claimed.
+Evidence: benchmarks/baselines/public_continuous_scaled_product_20261009/README.md.
+Generic primitive batching/transpose closure, dynamic shapes and wider physical
+routes remain follow-up required.
+
+Not applicable to this exact gfx1201 admission. CPU product lowering remains unchanged; x86 primal/JVP physical proof remains separate.

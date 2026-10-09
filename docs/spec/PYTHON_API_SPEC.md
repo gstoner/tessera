@@ -2350,3 +2350,45 @@ geometry, image and checked runtime ABI still determine admission/execution.
 Encoded scale storage gains no differentiation or implicit straight-through
 rule. This experimental explicit request does not change default selection or
 establish generic batching/AD, dynamic shapes or sibling backend execution.
+
+### Continuous native scaled-product packages
+
+The compiler package API admits static unencoded f32 matrices and scales for
+the exact per-block scaled product on gfx1201. The original Graph product is
+retained as the semantic witness; native export expands only its isolated
+member into structured tensor/SCF arithmetic. The multilinear native JVP uses
+the same product consumer for every active continuous operand.
+
+The native manifest explicitly binds block sizes, A/B orientations,
+independent broadcast prefixes, output count and the generated-product launch
+ABI. This is distinct from scale-adjoint roles. Checked native ownership
+retains returned outputs across changed inputs/seeds.
+Evidence: benchmarks/baselines/continuous_scaled_product_20261009/README.md.
+
+This package-level proof does not admit ordinary public f32 @jit primal/JVP
+calls yet. Wider/dynamic layouts, sibling backend execution and generic
+scaled-product coverage closure remain separate obligations.
+
+### Public continuous scaled-product calls
+
+On `rocm_gfx1201`, textual frontend ordinary calls and explicit forward JVP
+admit the isolated static f32 block-scaled product, including independently
+shared operand prefixes and nested mixed-axis maps. The scale layout must be
+block/fp32 with exact-per-block fp32 accumulation; all four continuous operands
+may be active JVP roles. Encoded FP8/FP4 codes remain outside this continuous
+derivative contract.
+
+An ordinary call on an AD-enabled owner projects a copied primal Graph and
+retains its request under `tessera.primal_call.requested_autodiff`. It leaves
+the owner Graph, arithmetic and subsequent differentiation request unchanged.
+Native MLIR expands only the isolated product member and builds the paired
+derivative program. Python frontend certificates are references, not execution
+backends. Warm calls reuse their compiled images through the checked native ABI.
+
+Owning gfx1201 proof covers 504 public cases and sixteen correctness-gated
+public profiles. See
+`benchmarks/baselines/public_continuous_scaled_product_20261009/README.md`.
+The public timing domain includes host checks/map packing, upload, dispatch and
+readback. Native events are recorded separately in the continuous native
+product packet. Generic batching/transpose, dynamic-shape and sibling-backend
+closure remain open.

@@ -37,6 +37,10 @@ Native event program and grouped member timings are separate from warm public
 wall times. Grouped repeated members are not additive interleaved program time.
 This is functional characterization without a speedup/default-promotion claim.
 
+Full CPU CI selection: 20,887 passed, 9,631 skipped, two failures in
+358.39 seconds. Only the existing generic scaled batching/transpose closure
+checks fail; no test, contract state or fan-in gate was weakened.
+
 ## Remaining
 
 Generic scaled batching/transpose closure, dynamic shapes, encoded byte

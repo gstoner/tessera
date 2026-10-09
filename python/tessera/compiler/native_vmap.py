@@ -9,7 +9,7 @@ from __future__ import annotations
 import copy
 from typing import Any, Sequence
 
-from .graph_ir import GraphIRModule, tensor_ir_type
+from .graph_ir import GraphIRModule, IROp, tensor_ir_type
 from .nvfp4_tensor import NVFP4Tensor
 
 
@@ -121,6 +121,41 @@ def batch_specs(values: Sequence[Any], axes: Sequence[int | None], *, depth: int
     if not broadcast_prefix and len(set(sizes)) != 1:
         raise ValueError("native NVFP4 vmap batch extents differ")
     return tuple(specs)
+
+
+def project_result_axes(module, permutation):
+    """Express mapped result placement as semantic Graph IR, never execution."""
+    if permutation is None:
+        return module
+    if len(module.functions) != 1:
+        raise ValueError("native mapped result requires one function")
+    function = module.functions[0]
+    if len(function.result_types) != 1 or len(function.return_values) != 1:
+        raise ValueError("native mapped result requires one tensor")
+    source_type = function.result_types[0]
+    if (len(permutation) != source_type.rank or
+            any(type(axis) is not int for axis in permutation) or
+            sorted(permutation) != list(range(source_type.rank))):
+        raise ValueError("native mapped result axes must permute the result rank")
+    if tuple(permutation) == tuple(range(source_type.rank)):
+        return module
+    result = copy.deepcopy(module)
+    function = result.functions[0]
+    output_type = tensor_ir_type(tuple(source_type.shape[i] for i in permutation),
+                                 source_type.dtype)
+    names = {arg.name for arg in function.args}
+    names.update(name for op in function.body for name in op.result_names)
+    name = "__mapped_result"
+    while name in names:
+        name += "_"
+    function.body.append(IROp(
+        result=name, op_name="tessera.transpose",
+        operands=list(function.return_values), operand_types=[str(source_type)],
+        result_type=str(output_type), kwargs={"permutation": list(permutation)},
+        inferred_type=output_type, inferred_types=(output_type,)))
+    function.return_values = ["%" + name]
+    function.result_types = [output_type]
+    return result
 
 
 def project_batch(module: GraphIRModule, values: Sequence[Any], axes: Sequence[int | None], *, depth: int = 1, scale_transpose: bool = False, broadcast_prefix: bool = False) -> GraphIRModule:
@@ -264,8 +299,10 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
             or (request is not None and not forward_scales)
             or getattr(fn, "_bounded_lhs", None) is not None):
         raise ValueError(f"native scaled vmap requires a primal or admitted scale-JVP {target} JIT")
-    if type(out_axes) is not int or out_axes != 0:
+    if target != "rocm_gfx1201" and (type(out_axes) is not int or out_axes != 0):
         raise ValueError("native NVFP4 vmap currently requires out_axes=0")
+    if type(out_axes) is not int:
+        raise ValueError("native scaled result axis must be an integer")
     if isinstance(in_axes, bool):
         raise ValueError("native NVFP4 vmap axes must be integers or None")
     axes = (in_axes,) * len(arguments) if type(in_axes) is int else tuple(in_axes) if in_axes is not None else (None,) * len(arguments)
@@ -287,6 +324,18 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
             not coupled or any(policy != axes for policy in parent_policies)):
         raise ValueError("native NVFP4 nested maps require matching coupled leading policies")
     depth = parent_depth + 1
+    rank = depth + 2
+    if not -rank <= out_axes < rank:
+        raise ValueError("native scaled result axis is outside the result rank")
+    parent_permutation = getattr(fn, "_frontend_output_permutation", None)
+    if parent_permutation is None:
+        parent_permutation = tuple(range(parent_depth + 2))
+    permutation = [axis + 1 for axis in parent_permutation]
+    permutation.insert(out_axes % rank, 0)
+    if rank > 8 and tuple(permutation) != tuple(range(rank)):
+        raise ValueError("native mapped result exceeds the verified permutation rank")
+    if request is not None and request.mode == "reverse" and tuple(permutation) != tuple(range(rank)):
+        raise ValueError("mapped AD result placement requires its native cotangent integration")
     owner = JitFn(fn._fn, copy.deepcopy(fn._legacy_graph_ir or fn.graph_ir),
                   fn.inferred_effect, copy.deepcopy(fn.constraints),
                   deterministic=fn.deterministic, seed=fn.seed, target=fn.target,
@@ -324,6 +373,7 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
     owner._frontend_batch_policies = policies
     owner._frontend_batch_axes = tuple(0 if any(policy[role] is not None for policy in policies) else None for role in range(len(arguments)))
     owner._frontend_batch_depth = depth
+    owner._frontend_output_permutation = tuple(permutation)
     return owner
 
 
@@ -349,7 +399,9 @@ def certify_typed_batch_frontends(owner, values, *, rtol, atol):
     from .rocm_typed_scaled_native import requests_composed_typed_scaled, supports_composed_scale_jvp
     composed=requests_composed_typed_scaled(tracer_module)
     scale_roles=tuple(i for i,arg in enumerate(tracer_module.functions[0].args) if arg.ir_type.dtype=="fp32")
-    if not (supports_composed_scale_jvp(tracer_module,scale_roles) if composed else admission(tracer_module)):
+    from .rocm_typed_scaled_native import supports_composed_scaled_primal
+    if not ((supports_composed_scaled_primal(tracer_module) if request is None else
+             supports_composed_scale_jvp(tracer_module,scale_roles)) if composed else admission(tracer_module)):
         raise ValueError("mapped frontend differential requires exact typed scaled Graph")
     batch_shape = np.broadcast_shapes(*(value.shape[:depth] for value, axis in zip(values, axes, strict=True) if axis is not None)) if mixed else values[next(i for i, axis in enumerate(axes) if axis is not None)].shape[:depth]
     # This loop is the explicit independent eager map oracle, evaluated once
@@ -367,17 +419,26 @@ def certify_typed_batch_frontends(owner, values, *, rtol, atol):
     legacy = specialize_module_from_values(
         owner._ensure_legacy_graph_ir(), dict(zip(owner.arg_names, first, strict=True)))
     legacy = project_batch(legacy, values, axes, depth=depth, scale_transpose=scale_transpose, broadcast_prefix=mixed)
+    permutation = getattr(owner, "_frontend_output_permutation", None)
+    legacy = project_result_axes(legacy, permutation)
     op = tracer_module.functions[0].body[0]
     if composed:
         semantic={("%"+arg.name):value for arg,value in zip(tracer_module.functions[0].args,values,strict=True)}
         for operation in tracer_module.functions[0].body:
             operands=[semantic[name] for name in operation.operands]
-            computed=(reference_typed_scaled_matmul(*operands,**operation.kwargs)
-                      if operation.op_name=="tessera.scaled_matmul" else operands[0]+operands[1])
+            if operation.op_name == "tessera.scaled_matmul":
+                computed = reference_typed_scaled_matmul(*operands, **operation.kwargs)
+            elif operation.op_name == "tessera.transpose":
+                computed = np.transpose(operands[0], operation.kwargs["permutation"])
+            else:
+                computed = operands[0] + operands[1]
             semantic["%"+operation.result_names[0]]=computed
         oracle=semantic[tracer_module.functions[0].return_values[0]]
     else:oracle = reference_typed_scaled_matmul(*values, **op.kwargs)
+    eager = np.stack(outputs).reshape(*batch_shape, *outputs[0].shape)
+    if permutation is not None:
+        eager = np.transpose(eager, permutation)
     return certify_frontends(
         legacy_module=legacy, tracer_module=tracer_module,
-        legacy_outputs=(np.stack(outputs).reshape(*batch_shape, *outputs[0].shape),), tracer_outputs=(oracle,),
+        legacy_outputs=(eager,), tracer_outputs=(oracle,),
         rtol=rtol, atol=atol)

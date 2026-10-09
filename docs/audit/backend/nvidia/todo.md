@@ -13986,3 +13986,29 @@ Public nonleading mapped-output JIT, inverse-cotangent program integration,
 dynamic/strided results and generic batching closure remain open.
 
 Follow-up required: SM120 result-permutation package and public mapped-output parity. CUDA schedules/resident ABI are unchanged.
+
+## Public mapped result execution — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Sync MAPPED-RESULT-EXECUTION-20261008; dependent on PR904.
+
+Public typed gfx1201 maps carry nonleading out_axes as a semantic Graph
+transpose, including composition of nested output placements. Native verified
+Graph/Schedule/Tile/GPU lowering and checked HIP ownership execute the result
+movement. Independent FP8/MXFP8 primal and floating-scale JVP calls reuse the
+same packages with changed values/seeds; frontend certificates are numerical
+oracles, not execution backends.
+
+605 focused map/registry gates pass. gfx1201 RX9070XT: 20 public numerical
+cases pass, including shared/independent operands, negative output axes,
+nested primal/JVP placement, native receipts and warm compiler exclusion.
+Six correctness-gated profiles separate captured member device windows from
+ordinary public-call latency. Existing SM120 attention JVP passes four cases.
+Evidence: benchmarks/baselines/public_mapped_result_axes_20261008/README.md.
+
+Nonleading reverse AD still needs native inverse-cotangent program integration.
+Dynamic/strided result layouts, encoded-scale derivatives, storage derivatives,
+wider NVFP4 maps and generic primitive closure remain open. No speedup or
+default-route promotion is claimed.
+
+Existing SM120 attention JVP parity is validated. Nonleading SM120 scaled-result maps require follow-up; existing NVIDIA out_axes admission/diagnostics are preserved.

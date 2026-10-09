@@ -448,6 +448,7 @@ class JitFn:
         self._fn = fn
         self._frontend_batch_axes: tuple[int | None, ...] | None = None
         self._frontend_batch_depth: int = 0
+        self._frontend_output_permutation: tuple[int, ...] | None = None
         self.graph_ir = graph_ir
         # Decoration-time AST capture is a differential/compatibility oracle,
         # never the post-specialization compiler authority.  The first concrete
@@ -1388,6 +1389,8 @@ class JitFn:
                     scale_transpose=(self.differentiation_request is not None
                                      and self.differentiation_request.mode == "reverse"),
                     broadcast_prefix=mixed_batch_policies(self))
+                from .native_vmap import project_result_axes
+                module = project_result_axes(module, self._frontend_output_permutation)
             if self.differentiation_request is not None:
                 intent = self.differentiation_request.module_intent_attrs()
                 module.module_attrs.update(intent)
@@ -2104,8 +2107,11 @@ class JitFn:
         """Compile the full semantic product/sum Graph; native HIP owns execution."""
         if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
             return _JIT_FALLBACK
-        from .rocm_typed_scaled_native import requests_composed_typed_scaled, supports_composed_scale_jvp
-        if not requests_composed_typed_scaled(self.graph_ir):return _JIT_FALLBACK
+        from .rocm_typed_scaled_native import requests_composed_typed_scaled
+        if not (requests_composed_typed_scaled(self.graph_ir) or
+                (self._frontend_output_permutation is not None and
+                 self._frontend_output_permutation != tuple(range(len(self._frontend_output_permutation))))):
+            return _JIT_FALLBACK
         from .native_scaled_program import package_native_scaled_primal
         from .scheduled_matmul import find_tessera_opt
         from .rocm_native import _tool_digest
@@ -2117,9 +2123,9 @@ class JitFn:
             raise ValueError("native composed scaled primal requires explicit host tensors")
         self.frontend_differential(*args,**kwargs)
         module=self._traced_autodiff_module(args,kwargs)
-        roles=tuple(i for i,arg in enumerate(module.functions[0].args) if arg.ir_type.dtype=="fp32")
-        if not supports_composed_scale_jvp(module,roles):
-            raise ValueError("native composed scaled primal requires its exact product/sum contract")
+        from .rocm_typed_scaled_native import supports_composed_scaled_primal
+        if not supports_composed_scaled_primal(module):
+            raise ValueError("native composed scaled primal requires its exact product/sum/permutation contract")
         from dataclasses import replace
         module=replace(module,module_attrs={**module.module_attrs,
                        "tessera.target":json.dumps("rocm"),"tessera.arch":json.dumps("gfx1201")})

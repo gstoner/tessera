@@ -14315,3 +14315,16 @@ Sibling outcome: follow-up required for equivalent native mapped chains.
 CUDA fragment/storage consumers differ from this continuous scaled HIP ABI.
 No physical schedule or exact-device evidence is transferred.
 Evidence: benchmarks/baselines/gfx1201_continuous_mapped_ssa_20261009/README.md.
+
+## NATIVE-SCALED-BROADCAST-SSA-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Active integration: explicit Broadcast Graph nodes preserve strict Add semantics
+for shared/mapped intermediate sums. Native outlining materializes the carrier;
+native reverse AD reduces the output seed over broadcast dimensions. A named
+one-input serial_tensor_carrier Schedule/Tile/Target ABI is checked explicitly.
+The existing four-input scaled-reduction algorithm retains its original checks.
+Sibling outcome: follow-up required for owning native broadcast consumers.
+The named carrier selects gfx1201 HIP structured kernels, so this backend has
+no new physical schedule or execution evidence from this change.
+Evidence: benchmarks/baselines/gfx1201_scaled_broadcast_ssa_20261009/README.md.

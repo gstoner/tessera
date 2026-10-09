@@ -1545,3 +1545,19 @@ not arbitrary W1.1 producer kinds/async composition. NVFP4 checkpoint model
 quality, wider attention multi-result composition, generic closure and ROCm
 W8A8/MXFP4 broader attribution still need their own engineering and proof.
 The original five-slice objective remains incomplete.
+
+## Native mapped computed-result sums — 2026-10-09
+
+PR919 proves per-SSA mapped continuous product chains. The next integration
+adds explicit Broadcast Graph nodes for shared/mapped computed-result sums.
+Native MLIR materializes those values and the reverse sum-axis seed reduction;
+Add keeps its same-shape contract. Twelve exact gfx1201 primal/JVP/VJP cases
+pass numerical/replay/ownership checks; 24 frontend/native checks and 915
+adjacent gates pass. The six-row source-bound packet separates native-program
+HIP timing, grouped member diagnostics and public wall latency:
+benchmarks/baselines/gfx1201_scaled_broadcast_ssa_20261009/README.md.
+
+This closes the named shared-result sum boundary. Dynamic/alias and singleton
+prefix shapes, generic scaled closure, NVIDIA two-sided producer DAGs and the
+original broader backend obligations remain open. No sibling device proof
+or physical schedule is inferred.

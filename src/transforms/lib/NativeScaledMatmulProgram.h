@@ -15,6 +15,7 @@
 #include "NativeNVFP4Program.h"
 #include "NativeSM120TensorProgram.h"
 #include "NativeFloatingScaledProduct.h"
+#include "NativeScaledCarrier.h"
 
 namespace tessera {
 static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, bool primal = false, bool reverse = false) {
@@ -103,7 +104,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
         adjointSeeds[definition]=used[seed.getInt()];
       } else if (isNativeFloatingScaledProduct(definition) || isScaleSum(definition)) {
         llvm::append_range(captures,definition->getOperands());
-      } else if (isa<TransposeOp>(definition) && transposePermutation(definition)) {
+      } else if (isNativeScaledCarrier(definition) ||
+                 (isa<TransposeOp>(definition) && transposePermutation(definition))) {
         llvm::append_range(captures,definition->getOperands());
       } else return root.emitError("scaled transpose captured an unsupported native dependency");
       for (Value capture:captures)
@@ -123,9 +125,9 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
               return cotangentLineage.lookup(capture);
             }))
           return root.emitError("scaled transpose sum mixes residual and cotangent roles");
-      } else if (isa<TransposeOp>(definition)) {
+      } else if (isNativeScaledCarrier(definition) || isa<TransposeOp>(definition)) {
         cotangent=cotangentLineage.lookup(captures.front());
-        if (cotangent) cotangentPermutations.insert(definition);
+        if (cotangent && isa<TransposeOp>(definition)) cotangentPermutations.insert(definition);
       }
       cotangentLineage[value]=cotangent;
       return success();
@@ -188,7 +190,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       }
       hasScaledProduct |= isa<ScaledMatmulOp, tensor::GenerateOp>(&op);
     } else {
-      if (!isa<ScaledMatmulOp, AddOp, TransposeOp>(op) || op.getNumResults() != 1)
+      if (!isa<ScaledMatmulOp, AddOp, TransposeOp, BroadcastOp, ReduceOp>(op) || op.getNumResults() != 1)
         return op.emitError("scaled JVP program needs scaled products, native sums and result permutations");
       if (isa<TransposeOp>(op)) {
         auto type = dyn_cast<RankedTensorType>(op.getOperand(0).getType());
@@ -316,6 +318,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
     if (isNativeFloatingScaledProduct(cloned) &&
         failed(expandNativeFloatingScaledProduct(cloned)))
       return failure();
+    if (isNativeScaledCarrier(cloned) && failed(expandNativeScaledCarrier(cloned)))
+      return failure();
     steps.push_back(b.getDictionaryAttr({
         b.getNamedAttr("member", FlatSymbolRefAttr::get(member)),
         b.getNamedAttr("inputs", b.getDenseI64ArrayAttr(inputs)),
@@ -365,6 +369,15 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           {"scale_k", cast<IntegerAttr>(block[1]).getInt()},
           {"transposeA", bool(product.getTransposeA())},
           {"transposeB", bool(product.getTransposeB())}};
+    }
+    if (isNativeScaledCarrier(ops[index])) {
+      manifestStep["lowering"] = "structured_f32_carrier";
+      if (auto reduce = dyn_cast<ReduceOp>(ops[index])) {
+        auto input = cast<RankedTensorType>(reduce->getOperand(0).getType());
+        int64_t axis = reduce.getAxisAttr().getInt();
+        manifestStep["axis"] = axis < 0 ? axis+input.getRank() : axis;
+        manifestStep["reduction"] = "sum";
+      }
     }
     if (isa<TransposeOp>(ops[index])) {
       llvm::json::Array axes;

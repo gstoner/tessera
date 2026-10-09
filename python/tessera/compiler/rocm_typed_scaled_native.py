@@ -24,7 +24,7 @@ def requests_composed_typed_scaled(module):
     products=0
     permutations=0
     for op in fn.body:
-        if op.op_name=="tessera.add":continue
+        if op.op_name in {"tessera.add", "tessera.broadcast"}:continue
         if op.op_name=="tessera.transpose":
             permutations+=1
             continue
@@ -43,7 +43,7 @@ def requests_floating_scaled(module):
     args = {arg.name: arg.ir_type for arg in fn.args}
     products = 0
     for op in fn.body:
-        if op.op_name in {"tessera.add", "tessera.transpose"}:
+        if op.op_name in {"tessera.add", "tessera.transpose", "tessera.broadcast"}:
             if len(op.result_names) == 1 and op.inferred_type is not None:
                 args[op.result_names[0]] = op.inferred_type
             continue
@@ -418,6 +418,16 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
         elif op.op_name == "tessera.add":
             if (len(op.operands) != 2 or op.kwargs or op.numeric_policy is not None
                     or any(str(values[v]) != str(result) for v in op.operands)):
+                return False
+        elif op.op_name == "tessera.broadcast":
+            if len(op.operands) != 1 or op.kwargs or op.numeric_policy is not None:
+                return False
+            source = values[op.operands[0]]
+            offset = result.rank-source.rank
+            if (op.operands[0].removeprefix("%") in names or offset < 0
+                    or not 1 <= result.rank <= 8 or source.dtype != "fp32"
+                    or any(int(dim) != 1 and int(dim) != int(result.shape[axis+offset])
+                           for axis, dim in enumerate(source.shape))):
                 return False
         elif op.op_name == "tessera.transpose":
             if len(op.operands) != 1 or set(op.kwargs) != {"permutation"} or op.numeric_policy is not None:

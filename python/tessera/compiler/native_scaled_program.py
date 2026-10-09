@@ -112,6 +112,10 @@ class NativeScaledProgram:
             elif step["operation"] == "tessera.transpose":
                 if len(step["inputs"]) != 1 or len(member["scalars"]) != 1:
                     raise ValueError("native result permutation has an invalid scalar ABI")
+            elif step["operation"] in {"tessera.broadcast", "tessera.reduce"}:
+                if (step.get("lowering") != "structured_f32_carrier"
+                        or len(step["inputs"]) != 1 or len(member["scalars"]) != 1):
+                    raise ValueError("native scaled carrier has an invalid scalar ABI")
             elif step["operation"] == "tessera.add":
                 if len(step["inputs"]) != 2 or len(member["scalars"]) != 1:
                     raise ValueError("native scaled sum has an invalid scalar ABI")
@@ -286,6 +290,26 @@ class NativeScaledProgram:
                     member["scalars"] != [output_buffer["elements"]] or
                     member["geometry"] != [(output_buffer["elements"]-1)//256+1,1,1,256,1,1]):
                     raise ValueError("native result permutation axes/storage/count/geometry differ")
+            elif step["operation"] in {"tessera.broadcast", "tessera.reduce"}:
+                source = buffers[step["inputs"][0]]
+                shape, result_shape = source["shape"], output_buffer["shape"]
+                if (source["storage"] != "f32" or output_buffer["storage"] != "f32"
+                        or member.get("scale_adjoint_schedule") != "serial_tensor_carrier"
+                        or not 1 <= len(shape) <= 8 or not 1 <= len(result_shape) <= 8
+                        or member["scalars"] != [output_buffer["elements"]]
+                        or member["geometry"] != [(output_buffer["elements"]-1)//128+1,1,1,128,1,1]):
+                    raise ValueError("native scaled carrier storage/count/geometry differs")
+                if step["operation"] == "tessera.broadcast":
+                    offset = len(result_shape)-len(shape)
+                    if offset < 0 or any(dim != 1 and dim != result_shape[axis+offset]
+                                         for axis, dim in enumerate(shape)):
+                        raise ValueError("native scaled broadcast dimensions differ")
+                else:
+                    axis = step.get("axis")
+                    if (type(axis) is not int or not 0 <= axis < len(shape)
+                            or step.get("reduction") != "sum"
+                            or result_shape != shape[:axis]+shape[axis+1:]):
+                        raise ValueError("native scaled reduction axis/shape differs")
             elif (member["scalars"] != [output_buffer["elements"]] or
                   any(buffers[slot]["shape"] != output_buffer["shape"] or
                       buffers[slot]["storage"] != "f32" for slot in step["inputs"])):
@@ -377,7 +401,7 @@ def _package_native_scaled(graph_ir: str, *, target: str = "rocm_gfx1201", prima
     images, members = [], []
     from .rocm_native import _extract_hsaco
     for step in program["steps"]:
-        family = ("reduction" if step.get("lowering") == "structured_f32_scaled_product" else
+        family = ("reduction" if step.get("lowering") in {"structured_f32_scaled_product", "structured_f32_carrier"} else
                   "matmul" if step["operation"] == "tessera.scaled_matmul" else
                   "reduction" if step["operation"] == "tensor.generate" else
                   "scalar_unary" if step["operation"] == "tessera.transpose" else "scalar_binary")

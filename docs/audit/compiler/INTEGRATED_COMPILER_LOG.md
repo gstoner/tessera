@@ -11741,3 +11741,30 @@ generic scaled batching/transpose and cross-backend route/performance closure.
 Evidence: benchmarks/baselines/gfx1201_continuous_mapped_ssa_20261009/README.md
 and gfx1201.json.
 <!-- entry-fields:end -->
+
+### 2026-10-09 — native broadcasted scaled-result SSA
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+PRs: pending; sync NATIVE-SCALED-BROADCAST-SSA-20261009.
+
+Outcome: explicit typed computed-result broadcasts retain strict Add semantics.
+Native MLIR outlines broadcast materialization and reverse sum-axis seed
+reductions with one-input serial carrier Schedule/Tile/Target contracts;
+four-input scaled reductions retain their original verifier. Buffer lifetimes,
+AD arithmetic and numerical lowering remain native.
+
+Validation: matching core/ROCm build, 24 frontend/native package checks,
+three forged ABI rejections, 915 adjacent registry/native/audit checks and
+twelve exact gfx1201 independent-oracle/replay/ownership cases. Ruff/mypy pass.
+Six source-bound tiny-frame native medians: primal 30.020–35.068 us,
+JVP 104.756–105.151 us, reverse 647.870–648.017 us. Public wall costs remain
+separate; no speedup, throughput or selector promotion claim.
+Final CPU gate: 20,871 passed, 9,619 skipped, 11 warnings; only the two existing generic scaled_matmul batching/transpose closure failures remain (393.21 seconds). No test or contract state was weakened.
+
+Remaining: dynamic/alias envelopes, singleton-prefix reshapes, generic scaled
+batching/transpose and the original cross-backend five-slice obligations.
+All four architecture queues assessed; sibling physical proof is separate.
+
+Evidence: benchmarks/baselines/gfx1201_scaled_broadcast_ssa_20261009/README.md
+and gfx1201.json.
+<!-- entry-fields:end -->

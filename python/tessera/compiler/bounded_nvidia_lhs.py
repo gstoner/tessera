@@ -168,8 +168,9 @@ class BoundedLhsDispatcher:
                 if self.roles is not None and roles!=self.roles:
                     raise ValueError("bounded LHS frontend role certificate changed")
                 key=specialization_key(roles,ordered,bounds)
-                graph=lhs._semantic_graph(program.edge.m,program.edge.k,program.edge.n,
-                                         program.edge.dtype,program.semantics,tuple(bounds))
+                graph=module if program.rhs_chain else lhs._semantic_graph(
+                    program.edge.m,program.edge.k,program.edge.n,
+                    program.edge.dtype,program.semantics,tuple(bounds))
                 if len(self.programs)>=24:
                     oldest,_=self.programs.popitem(last=False)
                     self.graphs.pop(oldest)

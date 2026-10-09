@@ -3495,6 +3495,10 @@ class CudaOwnedDeviceBuffer:
         self._owns = owns
         self._closed = False
 
+    def _ensure_open(self) -> None:
+        if self._closed or not self._session.stream:
+            raise RuntimeError("CUDA device buffer is closed")
+
     @property
     def tessera_layout(self) -> str:
         """Logical layout label used by native launch binding validation."""
@@ -3503,8 +3507,7 @@ class CudaOwnedDeviceBuffer:
     @property
     def __cuda_array_interface__(self) -> dict[str, Any]:
         import numpy as np
-        if self._closed:
-            raise RuntimeError("CUDA device buffer is closed")
+        self._ensure_open()
         strides = None
         if self.storage_order == "col_major" and len(self.shape) == 2:
             strides = (np.dtype(self.dtype).itemsize,
@@ -3527,6 +3530,7 @@ class CudaOwnedDeviceBuffer:
     def view(self, offset_bytes: int, shape: tuple[int, ...],
              dtype: Any, *, layout: str | None = None) -> "CudaOwnedDeviceBuffer":
         import numpy as np
+        self._ensure_open()
         nbytes = int(np.prod(shape)) * np.dtype(dtype).itemsize
         if offset_bytes < 0 or offset_bytes + nbytes > self.nbytes:
             raise ValueError("CUDA device view exceeds its parent allocation")
@@ -3635,6 +3639,9 @@ class NvidiaDeviceSession:
 
     def download(self, buffer: CudaOwnedDeviceBuffer) -> Any:
         import numpy as np
+        buffer._ensure_open()
+        if buffer._session is not self:
+            raise ValueError("CUDA download buffer belongs to another session")
         host = np.empty(
             buffer.shape, dtype=buffer.dtype,
             order="F" if buffer.storage_order == "col_major" else "C",

@@ -241,19 +241,22 @@ def lower_scheduled_kernel(
                 _X86_GRAPH_CACHE.move_to_end(cache_key)
                 return cached
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
-    if contract[5] == "norm" and contract[0] == "nvidia_sm120":
+    if contract[5] in {"norm", "softmax"} and contract[0] == "nvidia_sm120":
         # Read the compiler-owned physical decision; no Python shape selector.
-        rows = re.findall(r"(?m)^\s*%[^=]+ = schedule\.norm[^\n]+", schedule_ir)
+        rows = re.findall(rf"(?m)^\s*%[^=]+ = schedule\.{contract[5]}[^\n]+", schedule_ir)
         if len(rows) != 1:
-            raise RuntimeError("native normalization needs one Schedule decision")
+            raise RuntimeError("native semantic kernel needs one Schedule decision")
         decision = re.search(r'\bschedule = "([^"]+)"', rows[0])
         mode = decision[1] if decision is not None else "serial"
         if mode not in {"serial","cooperative_128"}:
-            raise RuntimeError("native normalization Schedule policy is unsupported")
+            raise RuntimeError("native semantic kernel Schedule policy is unsupported")
         if ("schedule" in module.functions[0].body[0].kwargs
                 and mode != contract[20]):
-            raise RuntimeError("native normalization ignored an explicit Schedule policy")
+            raise RuntimeError("native semantic kernel ignored an explicit Schedule policy")
         contract = (*contract[:20], mode, *contract[21:])
+        if contract[5] == "softmax":
+            entry = f"tessera_tile_softmax_{contract[10]}" + ("_cooperative_128" if mode == "cooperative_128" else "")
+            contract = (*contract[:2], entry, *contract[3:])
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     hashes = _HASH_RE.findall(tile_ir)
     if len(hashes) != 1:

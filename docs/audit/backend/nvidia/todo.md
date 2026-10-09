@@ -14388,3 +14388,23 @@ skips). Host contract gates pass (525 tests). Public package execution accepts
 resident roots; ordinary public JIT CUDA-root tracing, mixed host/device roots,
 padded layouts, general AD and third-party provider execution remain follow-ups.
 The full CPU lane still exposes scaled-matmul batching/transpose closure gaps.
+
+## SM120-SOFTMAX-ROW-POLICY-20261009
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Native Graph-to-Schedule selects cooperative_128 for SM120 softmax rows with
+a compiled column extent of at least 256; shorter static rows remain serial.
+Explicit Schedule requests remain authoritative. Python reads the resulting
+Schedule policy and entry symbol; it makes no shape-dependent backend choice.
+No operation, dtype, numerical policy, public ABI or pass registration is added.
+Evidence: benchmarks/baselines/sm120_native_softmax_row_policy_20261009/README.md;
+recorder benchmarks/nvidia/record_native_softmax_row_policy_ab.py.
+Parity validated on RTX5070: 181 device checks pass with four static-envelope
+skips; 451 compiler/registry checks pass with 17 skips. Eighteen ordinary
+public JIT softmax/safe alias cases also pass. Separate
+bounded short/long/short lifetime proof is retained in the packet. Two fresh
+alternating A/B runs show named long-row DAG device-program gains around
+3.04–4.60x. Grouped stages and prepared wall calls remain separate timing scopes.
+General producer composition, attention/AD closure and quantized-family
+obligations remain open; this row policy does not establish FP8/MXFP8/MXFP4
+performance or a green full unit lane.

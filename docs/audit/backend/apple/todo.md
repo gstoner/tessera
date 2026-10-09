@@ -13971,3 +13971,18 @@ Not applicable to Apple physical execution: CUDA allocation/context/event
 semantics do not establish Metal command-buffer ownership. Follow-up required
 for an equivalent borrowed Metal-root contract; Apple JIT execution and general
 AD obligations remain open. No Apple exact-device proof is transferred.
+
+## SM120-SOFTMAX-ROW-POLICY-20261009
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Native Graph-to-Schedule selects cooperative_128 for SM120 softmax rows with
+a compiled column extent of at least 256; shorter static rows remain serial.
+Explicit Schedule requests remain authoritative. Python reads the resulting
+Schedule policy and entry symbol; it makes no shape-dependent backend choice.
+No operation, dtype, numerical policy, public ABI or pass registration is added.
+Evidence: benchmarks/baselines/sm120_native_softmax_row_policy_20261009/README.md;
+recorder benchmarks/nvidia/record_native_softmax_row_policy_ab.py.
+Not applicable to Metal physical scheduling: the native selector is
+explicitly SM120-only. Host compiler parity keeps Apple softmax policy serial.
+No Apple device proof is transferred. Existing compiler-owned JIT execution
+and wider AD/composition obligations remain required follow-ups.

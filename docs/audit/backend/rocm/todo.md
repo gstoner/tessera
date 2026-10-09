@@ -16844,3 +16844,18 @@ Not applicable to ROCm physical execution: CUDA contexts, producer streams
 and event ownership belong to sm_120. Follow-up required before adopting an
 equivalent borrowed HIP-root contract. No gfx1151/gfx1201 parity or performance
 claim is transferred; existing ROCm route and shape-key obligations remain open.
+
+## SM120-SOFTMAX-ROW-POLICY-20261009
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Native Graph-to-Schedule selects cooperative_128 for SM120 softmax rows with
+a compiled column extent of at least 256; shorter static rows remain serial.
+Explicit Schedule requests remain authoritative. Python reads the resulting
+Schedule policy and entry symbol; it makes no shape-dependent backend choice.
+No operation, dtype, numerical policy, public ABI or pass registration is added.
+Evidence: benchmarks/baselines/sm120_native_softmax_row_policy_20261009/README.md;
+recorder benchmarks/nvidia/record_native_softmax_row_policy_ab.py.
+Not applicable to gfx1151/gfx1201 physical scheduling: the native selector is
+explicitly SM120-only. Host compiler parity keeps the ROCm softmax policy serial.
+No HIP numerical or performance result is transferred. ROCm W8A8/MXFP4,
+paged-KV and wider image-key work remain required follow-ups.

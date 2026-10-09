@@ -1668,6 +1668,9 @@ static FailureOr<SemanticKernelSchedule> getSemanticKernelSchedule(Operation *op
     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
     schedule.columns = input.getShape().back();
     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
+    // Native row policy; explicit physical schedules remain authoritative.
+    schedule.reductionSchedule =
+        nvidia && schedule.columns >= 256 ? "cooperative_128" : "serial";
     if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
       schedule.reductionSchedule = mode.getValue();
     if (schedule.reductionSchedule != "serial" &&

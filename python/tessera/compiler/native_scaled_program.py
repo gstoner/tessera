@@ -84,6 +84,7 @@ class NativeScaledProgram:
             len(outputs) != (len(roles) if kind == "scale_vjp" else 1 if kind == "primal" else 2) or
             len(set(outputs)) != len(outputs)):
             raise ValueError("native scaled output ownership differs from program kind")
+        cotangent_slots = {arguments - 1} if kind == "scale_vjp" else set()
         reads = [-1] * arguments + list(range(len(steps)))
         for i, (step, raw, image) in enumerate(zip(steps, self.members_json, self.images)):
             member = json.loads(raw)
@@ -113,8 +114,9 @@ class NativeScaledProgram:
                     type(step.get("gradient_argument")) is not int or
                     step["gradient_argument"] not in roles or
                     step["inputs"] != sorted(set(step["inputs"])) or
-                    any(type(slot) is not int or not 0 <= slot < arguments for slot in step["inputs"]) or
-                    step["inputs"][-1] != arguments - 1 or
+                    any(type(slot) is not int or not 0 <= slot < step["output"] for slot in step["inputs"]) or
+                    any(slot >= arguments for slot in step["inputs"][:-1]) or
+                    step["inputs"][-1] not in cotangent_slots or
                     step["gradient_argument"] in step["inputs"]):
                     raise ValueError("native scale reduction has an invalid captured-input ABI")
             else:
@@ -204,6 +206,13 @@ class NativeScaledProgram:
                     member["geometry"] != geometry):
                     raise ValueError("native scale reduction storage/count/geometry differs")
             elif step["operation"] == "tessera.transpose":
+                if kind == "scale_vjp":
+                    if (type(step.get("cotangent_source")) is not int or
+                            step["cotangent_source"] != arguments - 1 or
+                            step["inputs"][0] not in cotangent_slots or
+                            "gradient_argument" in step):
+                        raise ValueError("native inverse permutation lost its output-cotangent lineage")
+                    cotangent_slots.add(step["output"])
                 source = buffers[step["inputs"][0]]
                 axes = step.get("permutation")
                 rank = len(source["shape"])

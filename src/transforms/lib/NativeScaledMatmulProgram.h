@@ -6,6 +6,7 @@
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/SetVector.h"
+#include "llvm/ADT/SmallPtrSet.h"
 #include <limits>
 #include <functional>
 #include "llvm/Support/JSON.h"
@@ -38,6 +39,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
   SmallVector<Value> returned;
   SmallVector<int64_t> gradientRoles;
   llvm::DenseMap<Value, int64_t> gradientForValue;
+  llvm::SmallPtrSet<Operation *, 8> cotangentPermutations;
   auto isScaleSum = [](Operation *op) {
     if (isa<AddOp>(op)) return true;
     auto sum = dyn_cast<arith::AddFOp>(op);
@@ -64,6 +66,23 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           scaleArguments.insert(argument.getArgNumber());
       }
     });
+    std::function<LogicalResult(Value)> visitCotangent =
+        [&](Value value) -> LogicalResult {
+      auto argument = dyn_cast<BlockArgument>(value);
+      if (argument && argument.getOwner() == &root.getBody().front() &&
+          argument.getArgNumber() == root.getNumArguments() - 1)
+        return success();
+      Operation *definition = value.getDefiningOp();
+      auto type = dyn_cast<RankedTensorType>(value.getType());
+      if (!definition || definition->getBlock() != &root.getBody().front() ||
+          !isa<TransposeOp>(definition) || definition->getNumOperands() != 1 ||
+          !type || !type.hasStaticShape() || !type.getElementType().isF32() ||
+          type.getEncoding() || type.getRank() < 1 || type.getRank() > 8 ||
+          !transposePermutation(definition))
+        return root.emitError("scale adjoint computed capture must be a native output-cotangent permutation");
+      if (!cotangentPermutations.insert(definition).second) return success();
+      return visitCotangent(definition->getOperand(0));
+    };
     std::function<LogicalResult(Value, int64_t)> visit =
         [&](Value value, int64_t role) -> LogicalResult {
       auto found = gradientForValue.find(value);
@@ -76,9 +95,18 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           (!isa<tensor::GenerateOp>(definition) && !isScaleSum(definition)))
         return root.emitError("scaled transpose needs native scale reductions and their sums");
       gradientForValue[value] = role;
-      if (isScaleSum(definition))
+      if (isScaleSum(definition)) {
         for (Value operand : definition->getOperands())
           if (failed(visit(operand, role))) return failure();
+      } else {
+        llvm::SetVector<Value> captures;
+        getUsedValuesDefinedAbove(definition->getRegions(), captures);
+        for (Value capture : captures) {
+          auto argument = dyn_cast<BlockArgument>(capture);
+          if (argument && argument.getOwner() == &root.getBody().front()) continue;
+          if (failed(visitCotangent(capture))) return failure();
+        }
+      }
       return success();
     };
     for (auto attr : request) {
@@ -104,6 +132,11 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
     if (reverse) {
       // Select requested actual reductions, preserving the complete backward
       // root as witness. Unreturned matrix-storage zeros are not members.
+      if (cotangentPermutations.contains(&op)) {
+        llvm::append_range(capturedInputs[&op], op.getOperands());
+        ops.push_back(&op);
+        continue;
+      }
       if (op.getNumResults() != 1 || !gradientForValue.contains(op.getResult(0)))
         continue;
       if (isScaleSum(&op)) {
@@ -122,8 +155,13 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       // order in which the scalar reduction body happens to read its inputs.
       for (Value argument : root.getArguments())
         if (captures.contains(argument)) capturedInputs[&op].push_back(argument);
+      // Computed seed permutations follow root arguments in stable SSA order.
+      for (Operation &producer : root.getBody().front().without_terminator())
+        if (cotangentPermutations.contains(&producer) &&
+            captures.contains(producer.getResult(0)))
+          capturedInputs[&op].push_back(producer.getResult(0));
       if (capturedInputs[&op].size() != captures.size())
-        return op.emitError("scaled transpose captured a value outside its native input frame");
+        return op.emitError("scaled transpose captured a value outside its native input/cotangent frame");
       hasScaledProduct = true;
     } else {
       if (!isa<ScaledMatmulOp, AddOp, TransposeOp>(op) || op.getNumResults() != 1)
@@ -306,8 +344,10 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
     if (auto role = ops[index]->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint")) {
       manifestStep["gradient_role"] = role.getValue().str();
     }
-    if (reverse)
+    if (reverse && gradientForValue.contains(ops[index]->getResult(0)))
       manifestStep["gradient_argument"] = gradientForValue.lookup(ops[index]->getResult(0));
+    if (reverse && cotangentPermutations.contains(ops[index]))
+      manifestStep["cotangent_source"] = int64_t(root.getNumArguments() - 1);
     manifestSteps.push_back(std::move(manifestStep));
   }
   for (int64_t id : outputs) manifestOutputs.push_back(id);

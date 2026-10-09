@@ -6,6 +6,20 @@ target: apple_gpu
 last_updated: 2026-10-08
 ---
 
+## MAPPED-INVERSE-COTANGENT-20261008
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Shared contract: native reverse export now retains output-seed transpose chains
+as private SSA buffers before scale reductions. The checked program manifest
+records output-cotangent lineage and first-write/last-read lifetimes; native
+Schedule dispatch routes the actual isolated Graph transpose to the existing
+Tile/GPU movement consumer. No Python numerical backend or Tile constructor
+is introduced. Public reverse maps admit nonleading and nested result axes.
+Storage derivatives, dynamic shapes and general AD/layout closure remain open.
+
+Follow-up required: inverse-cotangent packages currently target gfx1201. Metal private-buffer movement/reduction integration needs an Apple-owned consumer and device proof.
+
+
 
 
 ## ROCM-LINKED-TOOL-IDENTITY-2026-10-07

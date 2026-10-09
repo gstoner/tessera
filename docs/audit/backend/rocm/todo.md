@@ -16666,3 +16666,22 @@ Independent converter/storage attribution remains required. Runtime readiness
 currently bundles both ingest producers; split native readiness and checked
 intermediate readback must precede trustworthy leaf timing.
 Evidence: benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/dispatch_attribution.json.
+
+
+### Native ingest leaf readiness and attribution — 2026-10-09
+
+Same GFX1201-BOUNDED-NVFP4-ROWS-20261009 ownership. Converted and stored
+weights now have distinct native readiness; direct/graph paths invalidate and
+admit only actual produced buffers. Full updates/cache reuse reset both; active
+row changes retain weight readiness when only activations change. No new
+numerical kernel, physical schedule or C ABI symbol.
+
+61 host/native cases pass (three owning-image skips); 48 exact gfx1201 device
+cases pass, including four new independent converter/storage numerical cases.
+The final source/runtime-bound twelve-frame packet checks all 420 graph windows
+and separate producer receipts around timing. Captured converter medians
+93.537–143.072 us versus storage 2.481–2.866 us identify conversion as the
+dominant measured ingest stage. No hardware-instruction or promotion claim.
+Next: optimize native candidate search/reduction while preserving codes, scale
+choice, stats and final numerics. Generic batching/transpose and model quality
+remain open. Evidence: benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/leaf_attribution.json.

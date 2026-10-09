@@ -138,6 +138,8 @@ class NativeResidentNVFP4:
             if rc:raise RuntimeError(f"native NVFP4 invocation failed rc={rc}")
             self.generation=generation.value
             return elapsed.value
+    def convert(self):self._invoke(0)
+    def store(self):self._invoke(1)
     def ingest(self):self._invoke(3)
     def launch_matmul(self):self._invoke(2)
     def run_combined(self):self._invoke(4)
@@ -185,6 +187,10 @@ class NativeResidentNVFP4:
             if rc:raise RuntimeError(f"native NVFP4 read failed rc={rc}")
         return output
     def read_output(self):return self._download("output")
+    def conversion_diagnostics(self):
+        return {name:self._download(name) for name in ("packed","exponents","stats")}
+    def storage_diagnostics(self):
+        return {name:self._download(name) for name in ("fragment","plane")}
     def diagnostics(self):
         return {name:self._download(name) for name in self._specs if name!="output"}
     def measure(self,stage,*,samples=3,repeats=10):
@@ -207,6 +213,10 @@ class NativeResidentNVFP4:
             return dict(stage=stage,repeats=repeats,graph_nodes=nodes.value,
                         host_graph_submissions=1,window_ms=elapsed.value,
                         per_iteration_ms=elapsed.value/repeats)
+    def run_conversion_graph(self):
+        self._graph(0,1,timed=False)
+    def run_storage_graph(self):
+        self._graph(1,1,timed=False)
     def run_combined_graph(self):
         self._graph(4,1,timed=False)
     def launch_matmul_graph(self):

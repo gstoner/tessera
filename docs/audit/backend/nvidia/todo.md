@@ -14235,3 +14235,8 @@ Bounded-ingest dispatch attribution update (GFX1201-BOUNDED-NVFP4-ROWS-20261009)
 the packet schema adds optional captured-stage event windows alongside existing
 direct fields. Not applicable to this backend's physical scheduling: these are
 gfx1201 HIP image/node-count measurements, with no sibling execution claim.
+
+Native leaf-readiness update (GFX1201-BOUNDED-NVFP4-ROWS-20261009):
+not applicable to this backend's ownership. Separate converter/storage
+readiness and intermediate receipts belong to the private HIP program;
+no sibling numeric, dtype, scheduling or ABI support is inferred.

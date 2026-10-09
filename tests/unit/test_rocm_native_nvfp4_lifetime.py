@@ -100,6 +100,34 @@ int main() {
  auto prepare=[&](uint64_t &h){return tessera_rocm_nvfp4_prepare(images,lengths,entries,dims,
    geometry,inputs,sizes,&h);};
  uint64_t handle=0,generation=0;float elapsed=0;
+ // Readiness follows actual leaf edges, in both direct and captured execution.
+ for(bool graph:{false,true}) {
+   assert(prepare(handle)==0);uint64_t nodes=0;
+   auto step=[&](int stage) {
+     return graph ? tessera_rocm_nvfp4_graph(handle,stage,1,&generation,&nodes,nullptr)
+                  : tessera_rocm_nvfp4_invoke(handle,stage,1,&generation,nullptr);
+   };
+   unsigned char packed[1024]{},fragment[1024]{},result[8192]{};
+   assert(step(1)==10 && step(2)==10);
+   assert(tessera_rocm_nvfp4_read(handle,5,0,packed,sizeof(packed))==10);
+   assert(step(0)==0);
+   assert(tessera_rocm_nvfp4_read(handle,5,0,packed,sizeof(packed))==0);
+   assert(tessera_rocm_nvfp4_read(handle,8,0,fragment,sizeof(fragment))==10);
+   assert(step(2)==10);
+   assert(step(1)==0);
+   assert(tessera_rocm_nvfp4_read(handle,8,0,fragment,sizeof(fragment))==0);
+   assert(step(2)==0);
+   assert(tessera_rocm_nvfp4_read(handle,10,generation,result,sizeof(result))==0);
+   assert(step(0)==0);
+   assert(tessera_rocm_nvfp4_read(handle,10,generation,result,sizeof(result))==10);
+   assert(tessera_rocm_nvfp4_update_inputs(handle,inputs,sizes)==0);
+   assert(tessera_rocm_nvfp4_read(handle,5,0,packed,sizeof(packed))==10);
+   assert(step(1)==10);
+   assert(tessera_rocm_nvfp4_close(handle)==0);
+   assert(allocations.empty() && leases==0 && graphObjects.empty() && graphExecObjects.empty());
+ }
+ launchCount=0;
+
  sizes[3]--;assert(prepare(handle)==1&&handle==0&&allocations.empty());sizes[3]++;
  assert(prepare(handle)==0&&handle&&allocations.size()==11&&leases==3);
  assert(tessera_rocm_nvfp4_invoke(handle,2,1,&generation,&elapsed)==10);

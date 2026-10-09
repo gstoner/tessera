@@ -2443,3 +2443,11 @@ Eight exact gfx1201 device cases and twelve source-bound timing rows establish
 this named envelope; the oracle uses decoded post-ingest operands, not original
 BF16 checkpoint or model quality. See
 `benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/README.md`.
+
+Native session leaf diagnostics follow the actual converter/storage edges:
+convert()/run_conversion_graph() produce packed/exponent/statistic receipts;
+store()/run_storage_graph() require conversion and produce fragment/plane
+receipts. conversion_diagnostics() and storage_diagnostics() check native
+readiness and completion. Re-running a producer invalidates dependent weights
+and output. These are native session methods, not frontend arithmetic or
+new generic operation support.

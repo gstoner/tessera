@@ -6,9 +6,11 @@ Sync GFX1201-BOUNDED-NVFP4-ROWS-20261009. Depends on PR913.
 The final packet records active HIP device RX 9070 XT, ordinal 0, UUID bytes
 32386439653765666266326566373136 (HIP's 16-byte identity). Source, recorder,
 core/target compiler and both native runtime provider identities are separate.
-Original packet source/compiler hashes match this worktree; its recorder hash
-binds the initial PR914 revision 768ba4263. The subsequent paired packet binds
-the current recorder and the same native source/compiler/runtime images.
+Original gfx1201.json binds initial PR914 revision 768ba4263. Paired
+dispatch_attribution.json binds revision 0ebe04981. The subsequent
+leaf_attribution.json binds the current native readiness source, fresh runtime
+provider, checked binding, device tests and final recorder. Native numerical
+images are unchanged; these historical packets retain their own source identities.
 Recorded by benchmarks/rocm/record_bounded_nvfp4_rows.py.
 
 ## Numerical and lifecycle proof
@@ -96,3 +98,33 @@ Next attribution gate: independent converter/storage readiness and measurement.
 The current runtime's weights-ready bit bundles both ingest producers, so
 leaf converter timing cannot yet carry a separate checked intermediate receipt.
 That requires a native readiness/lifetime change before widening attribution.
+
+
+## Native leaf readiness and independent attribution
+
+The runtime now tracks converted storage separately from stored consumer
+weights. Conversion invalidates its dependents; storage requires converted
+input; matmul requires stored weights. Intermediate readback admits only the
+produced buffers. Full input updates/cache checkout reset both producers;
+activation-only updates retain weight readiness. Direct and captured execution
+share the same transitions and existing poisoning/completion/cleanup rules.
+No numerical kernel, physical schedule or exported C ABI symbol is added.
+
+The real C++ failure-injection probe now checks these transitions, stale output
+and cache/cleanup safety. Sixty-one host/native regression cases pass (three
+owning-image skips); 48 gfx1201 device cases pass, including four new independent
+leaf numerical cases over changing rows with fixed capacity allocations.
+
+leaf_attribution.json records seven interleaved direct/captured rounds for five
+stages and twelve frames: 420 checked graph windows. Conversion codes,
+exponents and statistics are read and compared immediately after the measured
+converter, before storage executes. Stored fragment/plane and consumer outputs
+are checked at their own boundaries. All output errors are zero.
+
+Captured converter medians are 93.537–143.072 us; storage 2.481–2.866 us.
+The converter dominates measured ingest-stage latency in these frames. This
+isolates the stage, not a particular hardware instruction; no stage medians are
+summed to infer combined latency. Next optimization target is the native
+converter candidate-search/reduction implementation, with unchanged rounding,
+scale choice and diagnostic statistics as numerical gates. Generic closure and
+whole-model quality remain open.

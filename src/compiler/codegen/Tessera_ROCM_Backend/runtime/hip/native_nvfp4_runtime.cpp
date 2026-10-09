@@ -1,4 +1,4 @@
-// Native lifecycle for the compiler-owned static NVFP4 three-stage program.
+// Native lifecycle for the compiler-owned NVFP4 three-stage program.
 // No numerical kernel or physical schedule is authored by this runtime.
 #include <hip/hip_runtime.h>
 #include <array>
@@ -40,7 +40,7 @@ struct Program {
   std::array<size_t,11> bytes{},elements{};
   std::array<std::vector<unsigned char>,5> host{};
   std::array<Stage,3> stages{};
-  bool weights=false,activations=false,output=false,poisoned=true;
+  bool converted=false,weights=false,activations=false,output=false,poisoned=true;
   uint64_t generation=0,allocationCount=0;
   int64_t capacityRows=0,activeRows=0,n=0,k=0;
   std::vector<hipEvent_t> events;
@@ -157,6 +157,19 @@ int bindRows(Program &p,int64_t rows) {
   s.refs[2].elements=rows;
   s.refs[4].elements=rows*p.n;
   return 0;
+}
+// Native readiness follows the actual converter -> storage -> consumer edges.
+// Enqueued completion is ordered on the private stream; reads establish host
+// visibility. A rewritten producer invalidates every dependent result.
+void invalidateStages(Program &p,int first) {
+  if(first==0)p.converted=false;
+  if(first<=1)p.weights=false;
+  p.output=false;
+}
+void finishStages(Program &p,int stage) {
+  if(stage==0 || stage>=3)p.converted=true;
+  if(stage==1 || stage>=3)p.weights=true;
+  if(stage==2 || stage==4){p.output=true;++p.generation;}
 }
 int launch(Program &p,int stage) {
   auto &s=p.stages[stage];
@@ -334,7 +347,7 @@ static int updateInputsImpl(
   }
   if(hipStreamSynchronize(p.stream)!=hipSuccess){p.poisoned=true;return 7;}
   if(int rc=bindRows(p,rows))return rc;
-  p.weights=false;p.activations=false;p.output=false;
+  p.converted=false;p.weights=false;p.activations=false;p.output=false;
   p.host=std::move(snapshots);
   for(size_t i=0;i<5;++i)
     if(hipMemcpyAsync(p.buffers[i],p.host[i].data(),activeBytes(p,i,rows),
@@ -366,10 +379,9 @@ extern "C" int tessera_rocm_nvfp4_invoke(
   auto found=programs.find(handle);if(found==programs.end())return 1;
   auto &p=*found->second;
   if(!identity(p))return 2;
-  if(p.poisoned || !p.activations || ((stage==1 || stage==2) && !p.weights))return 10;
+  if(p.poisoned || !p.activations || (stage==1 && !p.converted) || (stage==2 && !p.weights))return 10;
   int first=stage==3 || stage==4?0:stage,last=stage==3?1:stage==4?2:stage;
-  if(first==0)p.weights=false;
-  p.output=false;
+  invalidateStages(p,first);
   if(!elapsed) {
     for(int i=0;i<repeats;++i)
       for(int s=first;s<=last;++s) {
@@ -378,8 +390,7 @@ extern "C" int tessera_rocm_nvfp4_invoke(
       }
     // Submission is ordered on the private stream. Read/update/close establish
     // completion before exposing host values or releasing ownership.
-    if(stage==3 || stage==4)p.weights=true;
-    if(stage==2 || stage==4){p.output=true;++p.generation;}
+    finishStages(p,stage);
     *generation=p.generation;return 0;
   }
   hipEvent_t begin{},end{};
@@ -402,8 +413,7 @@ extern "C" int tessera_rocm_nvfp4_invoke(
   }
   if(status){p.poisoned=true;return status;}
   *elapsed/=repeats;
-  if(stage==3 || stage==4)p.weights=true;
-  if(stage==2 || stage==4){p.output=true;++p.generation;}
+  finishStages(p,stage);
   *generation=p.generation;return 0;
 } catch(...) {return 12;}
 
@@ -415,7 +425,8 @@ extern "C" int tessera_rocm_nvfp4_read(
   auto found=programs.find(handle);if(found==programs.end())return 1;
   auto &p=*found->second;
   if(!identity(p))return 2;
-  if(p.poisoned || (slot==10?(!p.output || generation!=p.generation):!p.weights))return 10;
+  if(p.poisoned || (slot==10 ? (!p.output || generation!=p.generation) :
+      slot<=7 ? !p.converted : !p.weights))return 10;
   if(bytes!=activeBytes(p,size_t(slot),p.activeRows))return 1;
   p.readback.resize(bytes);
   if(hipMemcpyAsync(p.readback.data(),p.buffers[slot],bytes,hipMemcpyDeviceToHost,p.stream)!=hipSuccess) {
@@ -450,7 +461,8 @@ extern "C" int tessera_rocm_nvfp4_graph(
   auto found=programs.find(handle);if(found==programs.end())return 1;
   auto &p=*found->second;
   if(!identity(p))return 2;
-  if(p.poisoned || !p.activations || ((stage==1 || stage==2) && !p.weights))return 10;
+  if(p.poisoned || !p.activations || (stage==1 && !p.converted) || (stage==2 && !p.weights))return 10;
+  int first=stage>=3?0:stage,last=stage==3?1:stage==4?2:stage;
   auto key=std::make_pair(stage,repeats);
   auto entry=p.graphs.find(key);
   if(entry==p.graphs.end()) {
@@ -466,7 +478,6 @@ extern "C" int tessera_rocm_nvfp4_graph(
     if(hipStreamBeginCapture(p.stream,hipStreamCaptureModeThreadLocal)!=hipSuccess) {
       p.poisoned=true;return 6;
     }
-    int first=stage>=3?0:stage,last=stage==3?1:stage==4?2:stage;
     int status=0;
     for(int i=0;i<repeats && !status;++i)
       for(int s=first;s<=last && !status;++s)status=launch(p,s);
@@ -484,12 +495,10 @@ extern "C" int tessera_rocm_nvfp4_graph(
     }
   }
   auto &g=entry->second;
-  p.output=false;
-  if(stage==0 || stage>=3)p.weights=false;
+  invalidateStages(p,first);
   if(!elapsed) {
     if(hipGraphLaunch(g.executable,p.stream)!=hipSuccess){p.poisoned=true;return 6;}
-    if(stage>=3)p.weights=true;
-    if(stage==2 || stage==4){p.output=true;++p.generation;}
+    finishStages(p,stage);
     *generation=p.generation;*nodes=g.nodes;return 0;
   }
   // Warm upload/first replay is outside the recorded event interval.
@@ -511,8 +520,7 @@ extern "C" int tessera_rocm_nvfp4_graph(
     p.events.pop_back();
   }
   if(status){p.poisoned=true;return status;}
-  if(stage>=3)p.weights=true;
-  if(stage==2 || stage==4){p.output=true;++p.generation;}
+  finishStages(p,stage);
   *generation=p.generation;*nodes=g.nodes;
   return 0;
 } catch(...) {return 12;}
@@ -600,7 +608,7 @@ extern "C" int tessera_rocm_nvfp4_release_cached(uint64_t handle) try {
   if(fits) {
     if(hipStreamSynchronize(p.stream)!=hipSuccess){p.poisoned=true;return 7;}
     pool.idle.emplace_back(); // allocate before moving any retained owner
-    p.weights=false;p.activations=false;p.output=false;
+    p.converted=false;p.weights=false;p.activations=false;p.output=false;
     auto &idle=pool.idle.back();idle.bytes=bytes;
     idle.key=std::move(key->second);idle.program=std::move(found->second);
     pool.idleBytes+=bytes;pool.cacheKeys.erase(key);programs.erase(found);

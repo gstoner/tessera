@@ -11626,6 +11626,12 @@ Ruff and mypy are clean. A source-bound twelve-row packet independently records
 producer, consumer, combined native events and warm public-call latency with
 changed values and compiler-free replay. All four backend queues are assessed.
 
+Native leaf follow-on: separate converted/stored readiness enables immediate
+intermediate numerical receipts and direct/captured per-producer attribution.
+48 gfx1201 device cases and 61 host/native cases pass (three owning-image skips).
+420 graph windows over twelve frames identify conversion as the dominant
+measured ingest stage; no numeric kernel or C ABI symbol is changed.
+
 Remaining: Generic scaled batching/transpose and full-suite green, original
 checkpoint/model quality, broader layouts/policies, composed attention and
 ROCm W8A8/MXFP4 performance obligations. This is the named bounded-row

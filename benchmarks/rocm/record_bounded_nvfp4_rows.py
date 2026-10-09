@@ -28,11 +28,16 @@ def check_output(actual,expected):
     return float(np.max(np.abs(actual.astype("f4")-expected)))
 
 
-def check_producer(session,converted,stored):
-    diagnostic=session.diagnostics()
+def check_conversion(session,converted):
+    diagnostic=session.conversion_diagnostics()
     for name,wanted in zip(("packed","exponents","stats"),converted,strict=True):
         if name=="stats":np.testing.assert_allclose(diagnostic[name],wanted,rtol=1e-13,atol=1e-30)
         else:np.testing.assert_array_equal(diagnostic[name],wanted)
+
+
+def check_producer(session,converted,stored):
+    check_conversion(session,converted)
+    diagnostic=session.storage_diagnostics()
     np.testing.assert_array_equal(diagnostic["fragment"],stored[0])
     np.testing.assert_array_equal(diagnostic["plane"],stored[1])
 
@@ -54,7 +59,7 @@ def profile(bound,n,k):
             check_producer(session,converted,stored)
             stage_samples={}
             graph_samples={}
-            for stage in ("ingest","consumer","combined"):
+            for stage in ("converter","storage","ingest","consumer","combined"):
                 samples=[]
                 captured=[]
                 windows=[]
@@ -69,14 +74,15 @@ def profile(bound,n,k):
                             samples.extend(session.measure(stage,samples=1,repeats=128))
                         else:
                             window=session.measure_graph(stage,samples=1,repeats=128)[0]
-                            nodes=128*{"ingest":2,"consumer":1,"combined":3}[stage]
+                            nodes=128*{"converter":1,"storage":1,"ingest":2,"consumer":1,"combined":3}[stage]
                             if (window["graph_nodes"]!=nodes or window["repeats"]!=128
                                     or window["host_graph_submissions"]!=1):
                                 raise RuntimeError("captured window differs from declared stage/repetitions")
                             captured.append(window["per_iteration_ms"])
                             windows.append(window)
-                        check_producer(session,converted,stored)
-                        if stage!="ingest":
+                        if stage=="converter":check_conversion(session,converted)
+                        else:check_producer(session,converted,stored)
+                        if stage in ("consumer","combined"):
                             error=max(error,check_output(session.read_output(),expected))
                 stage_samples[stage]={"samples_ms":samples,"median_ms":median(samples)}
                 graph_samples[stage]={"samples_ms":captured,"median_ms":median(captured),
@@ -142,7 +148,7 @@ def main():
             "image_runtime_sha256":digest(os.environ["TESSERA_ROCM_NATIVE_IMAGE_LIB"]),
             "source_sha256":{name:digest(name) for name in sources},"recorder_sha256":digest(__file__),
             "numeric_policy":"explicit NVFP4 requantization and folded-row approximate product; no original-BF16/model quality claim",
-            "native_domain":"HIP events; seven interleaved direct/captured rounds per stage; 128 repetitions/window; direct includes repeated host dispatch gaps; captured has one graph submission; ingest is conversion plus storage; consumer and three-stage program timed independently",
+            "native_domain":"HIP events; seven interleaved direct/captured rounds per stage; 128 repetitions/window; direct includes repeated host dispatch gaps; captured has one graph submission; converter and storage have checked independent producer receipts; ingest, consumer and three-stage program timed independently",
             "public_domain":"warm ordinary JIT call: host checks/packing, all-input upload, native program, synchronization and readback; changed values; compiler forbidden",
             "claim":"bounded-row correctness and matched native dispatch attribution; identical images/operands; graph/direct ratio is submission-policy characterization, not a kernel algorithm speedup or selector promotion",
             "profiles":[profile(*shape) for shape in ((257,32,64),(513,80,256),(256,64,1024))]}

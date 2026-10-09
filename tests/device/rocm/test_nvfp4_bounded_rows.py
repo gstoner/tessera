@@ -74,3 +74,39 @@ def test_one_native_owner_rebinds_rows_and_invalidates_captured_geometry(bound):
             session.update_activations(active,scale)
             session.launch_matmul_graph()
             np.testing.assert_array_equal(session.read_output(),actual[:1])
+
+
+@pytest.mark.parametrize("bound",[257,513])
+@pytest.mark.parametrize("captured",[False,True])
+def test_leaf_producer_readiness_and_independent_numerical_receipts(bound,captured):
+    frames=[inputs_and_oracle(rows,32,64) for rows in (17,bound,1,200)]
+    function=make_function(32,64)
+    program=function.compile_native_nvfp4_program(*frames[0][0],m_bound=bound)
+    with program.native.native_session(*frames[0][0],reuse=True) as session:
+        initial=session.frame_stats()
+        convert=session.run_conversion_graph if captured else session.convert
+        store=session.run_storage_graph if captured else session.store
+        consume=session.launch_matmul_graph if captured else session.launch_matmul
+        for args,_,converted,stored,expected in frames:
+            session.update_inputs(*args)
+            with pytest.raises(RuntimeError,match="rc=10"):store()
+            with pytest.raises(RuntimeError,match="rc=10"):session.conversion_diagnostics()
+            convert()
+            actual=session.conversion_diagnostics()
+            for name,wanted in zip(("packed","exponents","stats"),converted,strict=True):
+                if name=="stats":np.testing.assert_allclose(actual[name],wanted,rtol=1e-13,atol=1e-30)
+                else:np.testing.assert_array_equal(actual[name],wanted)
+            with pytest.raises(RuntimeError,match="rc=10"):consume()
+            with pytest.raises(RuntimeError,match="rc=10"):session.storage_diagnostics()
+            store()
+            actual=session.storage_diagnostics()
+            np.testing.assert_array_equal(actual["fragment"],stored[0])
+            np.testing.assert_array_equal(actual["plane"],stored[1])
+            consume()
+            np.testing.assert_allclose(session.read_output().astype("f4"),expected,rtol=.008,atol=.015625)
+            convert()
+            with pytest.raises(RuntimeError,match="rc=10"):session.read_output()
+            with pytest.raises(RuntimeError,match="rc=10"):consume()
+            stats=session.frame_stats()
+            assert stats["allocation_bytes"]==initial["allocation_bytes"]
+            assert stats["allocation_count"]==11

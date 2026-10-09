@@ -636,7 +636,10 @@ extern "C" int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
 // retires all reads/writes before allocations may be released or reused.
 static int invokeResident(
     uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
-    void *launchStream, bool ownedEdge) {
+    void *launchStream, bool ownedEdge,
+    const uint64_t *producerStreams = nullptr, size_t producerCount = 0,
+    int profileRepeats = 0, float *stageTimes = nullptr, size_t stageCount = 0,
+    float *programMs = nullptr) {
   error.clear();
   if (getpid() != process) return bad("prepared resident tensor cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);
@@ -646,6 +649,12 @@ static int invokeResident(
   if (!owner.producer || !views || count != owner.count + (ownedEdge ? 0 : 1) || !launchStream ||
       (ownedEdge && owner.rhsProducers.empty()))
     return bad("prepared resident tensor buffer/stream arity");
+  const size_t stages = size_t(bool(owner.producer)) + owner.followingProducers.size() +
+                        owner.rhsProducers.size() + 1;
+  if ((profileRepeats || stageTimes || stageCount || programMs) &&
+      (!producerStreams || profileRepeats <= 0 || profileRepeats > 1000000 ||
+       !stageTimes || !programMs || stageCount != stages))
+    return bad("ordered resident profiling stage/count ABI mismatch");
   CUcontext context = nullptr, streamContext = nullptr;
   unsigned long long identity = 0;
   CUstream stream = static_cast<CUstream>(launchStream);
@@ -734,10 +743,65 @@ static int invokeResident(
         return bad("prepared resident output/edge aliases live storage");
     }
   }
+  // Validate and order every external read after its declared producer.
+  // Keep events live through synchronous completion, including launch failure.
+  // All allocation/context/shape/alias checks precede event submission.
+  struct ProducerEvents {
+    std::vector<CUevent> events;
+    ~ProducerEvents() { for (CUevent event : events) cuEventDestroy(event); }
+  } ordering;
+  if (producerStreams) {
+    if (!ownedEdge || producerCount != owner.count - 1)
+      return bad("ordered resident producer stream arity mismatch");
+    std::vector<CUstream> producers;
+    for (size_t i = 0; i < producerCount; ++i) {
+      if (!producerStreams[i])
+        return bad("ordered resident producer stream must be explicit");
+      CUstream producer = reinterpret_cast<CUstream>(uintptr_t(producerStreams[i]));
+      CUcontext producerContext = nullptr;
+      if (!ok(cuStreamGetCtx(producer, &producerContext), "producer stream context") ||
+          producerContext != context)
+        return bad("ordered resident producer context mismatch");
+      if (producer == stream) continue;
+      bool duplicate = false;
+      for (CUstream prior : producers) duplicate |= prior == producer;
+      if (!duplicate) producers.push_back(producer);
+    }
+    for (CUstream producer : producers) {
+      CUevent event = nullptr;
+      if (!ok(cuEventCreate(&event, CU_EVENT_DISABLE_TIMING), "create producer ordering event"))
+        return 1;
+      ordering.events.push_back(event);
+      if (!ok(cuEventRecord(event, producer), "record producer ordering event") ||
+          !ok(cuStreamWaitEvent(stream, event, 0), "wait for resident producer"))
+        return 1;
+    }
+  }
   std::array<CUdeviceptr, 5> buffers{};
   for (size_t i = 0; i < owner.count; ++i) buffers[i] = pointers[i];
   owner.invoked = true;
-  bool submitted = submit(owner, buffers, pointers[owner.count], frame.dims, stream, rhsLeading);
+  bool submitted = true;
+  if (profileRepeats) {
+    CUevent start = nullptr, end = nullptr;
+    submitted = ok(cuEventCreate(&start, 0), "create resident program start") &&
+                ok(cuEventCreate(&end, 0), "create resident program end");
+    if (start) ordering.events.push_back(start);
+    if (end) ordering.events.push_back(end);
+    submitted = submitted && ok(cuEventRecord(start, stream), "record resident program start");
+    for (int i = 0; submitted && i < profileRepeats; ++i)
+      submitted = submit(owner, buffers, pointers[owner.count], frame.dims, stream, rhsLeading);
+    float elapsed = 0;
+    submitted = submitted && ok(cuEventRecord(end, stream), "record resident program end") &&
+                ok(cuEventSynchronize(end), "complete resident program window") &&
+                ok(cuEventElapsedTime(&elapsed, start, end), "resident program elapsed");
+    if (submitted) {
+      *programMs = elapsed / profileRepeats;
+      submitted = submit(owner, buffers, pointers[owner.count], frame.dims, stream,
+                         rhsLeading, profileRepeats, stageTimes);
+    }
+  } else {
+    submitted = submit(owner, buffers, pointers[owner.count], frame.dims, stream, rhsLeading);
+  }
   const std::string launchError = error;
   const bool completed = ok(cuStreamSynchronize(stream), "complete resident tensor/matmul");
   if (!submitted) { error = launchError; return 1; }
@@ -750,6 +814,26 @@ extern "C" int tessera_nvidia_matmul_invoke_resident(
 extern "C" int tessera_nvidia_matmul_invoke_dag_resident(
     uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count, void *stream) {
   return invokeResident(handle,views,count,stream,true);
+}
+extern "C" int tessera_nvidia_matmul_invoke_dag_resident_ordered(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producerStreams, size_t producerCount, void *stream) {
+  if (!producerStreams || !producerCount) {
+    error.clear();
+    return bad("ordered resident producer streams are required");
+  }
+  return invokeResident(handle, views, count, stream, true, producerStreams, producerCount);
+}
+extern "C" int tessera_nvidia_matmul_profile_dag_resident_ordered(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producerStreams, size_t producerCount, void *stream,
+    int repeats, float *stageMs, size_t stageCount, float *programMs) {
+  if (!producerStreams || !producerCount) {
+    error.clear();
+    return bad("ordered resident producer streams are required");
+  }
+  return invokeResident(handle, views, count, stream, true, producerStreams,
+                        producerCount, repeats, stageMs, stageCount, programMs);
 }
 extern "C" int tessera_nvidia_matmul_close(uint64_t handle) {
   error.clear();

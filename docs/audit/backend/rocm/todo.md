@@ -16828,3 +16828,19 @@ physical selector change. gfx1151 does not support this named RDNA4 ingest
 consumer and needs its own physical route. W8A8/MXFP4, model quality and
 generic scaled batching/transpose remain open.
 Evidence: benchmarks/baselines/gfx1201_nvfp4_winner_code_ab_20261009/README.md.
+
+## SM120-ORDERED-RESIDENT-ROOTS-20261009
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Two native CUDA ABI entry points accept borrowed resident roots and explicit
+producer streams. C++ validates allocation ownership, capacity, shapes and
+aliasing before inserting producer event/waits; private intermediates remain
+native-owned through synchronous completion. Primitive CUDA array-interface
+dtype metadata is authoritative. Graph/Schedule/Tile member semantics and
+numerical policies are unchanged.
+Evidence: benchmarks/baselines/sm120_ordered_resident_dag_20261009/README.md
+and sm120.json; recorder benchmarks/nvidia/record_ordered_resident_tensor_dag.py.
+Not applicable to ROCm physical execution: CUDA contexts, producer streams
+and event ownership belong to sm_120. Follow-up required before adopting an
+equivalent borrowed HIP-root contract. No gfx1151/gfx1201 parity or performance
+claim is transferred; existing ROCm route and shape-key obligations remain open.

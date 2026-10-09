@@ -14369,3 +14369,22 @@ Not applicable to NVIDIA physical lowering: this emitter selects
 gfx1201 exclusively. SM120 NVFP4 scaling and CUDA ownership differ; no
 sibling performance or exact-device evidence is transferred.
 Evidence: benchmarks/baselines/gfx1201_nvfp4_winner_code_ab_20261009/README.md.
+
+## SM120-ORDERED-RESIDENT-ROOTS-20261009
+
+Owner W1.1 / FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Two native CUDA ABI entry points accept borrowed resident roots and explicit
+producer streams. C++ validates allocation ownership, capacity, shapes and
+aliasing before inserting producer event/waits; private intermediates remain
+native-owned through synchronous completion. Primitive CUDA array-interface
+dtype metadata is authoritative. Graph/Schedule/Tile member semantics and
+numerical policies are unchanged.
+Evidence: benchmarks/baselines/sm120_ordered_resident_dag_20261009/README.md
+and sm120.json; recorder benchmarks/nvidia/record_ordered_resident_tensor_dag.py.
+Parity validated on RTX 5070 sm_120 for f16/bf16, static/bounded shapes,
+one/two-stage two-sided chains and fused consumers: 64 parity tests pass with
+four static-envelope skips; adjacent resident suites pass (159 tests, four
+skips). Host contract gates pass (525 tests). Public package execution accepts
+resident roots; ordinary public JIT CUDA-root tracing, mixed host/device roots,
+padded layouts, general AD and third-party provider execution remain follow-ups.
+The full CPU lane still exposes scaled-matmul batching/transpose closure gaps.

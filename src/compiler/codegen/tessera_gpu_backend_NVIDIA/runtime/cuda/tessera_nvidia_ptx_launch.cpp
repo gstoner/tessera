@@ -951,6 +951,18 @@ bool attentionBiasExtents(const int64_t* dims, size_t ndim, bool hasBias,
     return true;
 }
 
+bool attentionResultWidth(const char* name,bool saved,size_t &width) {
+    width=sizeof(float);
+    bool f16=std::strstr(name,"_out_f16_")!=nullptr;
+    bool bf16=std::strstr(name,"_out_bf16_")!=nullptr;
+    if ((f16 && bf16) || ((f16 || bf16) && saved)) return false;
+    if (f16 && std::strncmp(name,"tessera_tile_attention_f16_",27)!=0) return false;
+    if (bf16 && std::strncmp(name,"tessera_tile_attention_bf16_",28)!=0) return false;
+    if (f16 || bf16) width=2;
+    else if (std::strstr(name,"_out_")) return false;
+    return true;
+}
+
 int invokeAttention(CUfunction fn, const char* name, void** buffers,
                     size_t nbuf, const int64_t* dims, size_t ndim) {
     // 7 dims: full-shape bias (or none); 9: batch/head-broadcast bias (BiasB,
@@ -996,14 +1008,16 @@ int invokeAttention(CUfunction fn, const char* name, void** buffers,
         std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
         std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;
     const size_t elementBytes = narrow ? 2 : 4;
+    size_t outputBytes=0;
+    if (!attentionResultWidth(name,hasSavedLse,outputBytes)) return 5;
     if (qElements > SIZE_MAX / elementBytes || kElements > SIZE_MAX / elementBytes ||
-        vElements > SIZE_MAX / elementBytes || oElements > SIZE_MAX / sizeof(float) ||
+        vElements > SIZE_MAX / elementBytes || oElements > SIZE_MAX / outputBytes ||
         (hasSavedLse && rowElements > SIZE_MAX / sizeof(float)) ||
         (hasBias && biasElements > SIZE_MAX / sizeof(float))) return 5;
     size_t sizes[6] = {qElements * elementBytes, kElements * elementBytes,
                        vElements * elementBytes, 0, 0, 0};
     if (hasBias) sizes[3] = biasElements * sizeof(float);
-    sizes[outputIndex] = oElements * sizeof(float);
+    sizes[outputIndex] = oElements * outputBytes;
     if (hasSavedLse) sizes[lseIndex] = rowElements * sizeof(float);
     CUdeviceptr device[6] = {};
     int rc = 0;
@@ -1776,6 +1790,8 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
         std::strncmp(name, "tessera_tile_attention_f16_", 27) == 0 ||
         std::strncmp(name, "tessera_tile_attention_bf16_", 28) == 0;
     const size_t elementBytes = narrow ? 2 : 4;
+    size_t outputBytes=0;
+    if (!attentionResultWidth(name,hasSavedLse,outputBytes)) return 5;
     size_t sizes[6] = {};
     for (int i = 0; i < 3; ++i) {
         if (counts[i] > SIZE_MAX / elementBytes) return 5;
@@ -1783,8 +1799,8 @@ int benchmarkAttention(CUfunction fn, const char* name, void** buffers,
     }
     if (hasBias && counts[3] > SIZE_MAX / sizeof(float)) return 5;
     if (hasBias) sizes[3] = counts[3] * sizeof(float);
-    if (counts[outputIndex] > SIZE_MAX / sizeof(float)) return 5;
-    sizes[outputIndex] = counts[outputIndex] * sizeof(float);
+    if (counts[outputIndex] > SIZE_MAX / outputBytes) return 5;
+    sizes[outputIndex] = counts[outputIndex] * outputBytes;
     if (hasSavedLse) {
         if (counts[lseIndex] > SIZE_MAX / sizeof(float)) return 5;
         sizes[lseIndex] = counts[lseIndex] * sizeof(float);

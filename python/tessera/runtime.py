@@ -3108,6 +3108,10 @@ def _submit_nvidia_sm120_native(
     )
     from tessera.compiler.nvidia_native import (
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_F16_RESULT_ABI,
+        SM120_ATTN_BF16_RESULT_ABI,
+        SM120_ATTN_BIAS_F16_RESULT_ABI,
+        SM120_ATTN_BIAS_BF16_RESULT_ABI,
         SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
@@ -3192,6 +3196,10 @@ def _submit_nvidia_sm120_native(
 
     if descriptor.abi_id not in {
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_F16_RESULT_ABI,
+        SM120_ATTN_BF16_RESULT_ABI,
+        SM120_ATTN_BIAS_F16_RESULT_ABI,
+        SM120_ATTN_BIAS_BF16_RESULT_ABI,
         SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
@@ -3417,6 +3425,10 @@ def _submit_nvidia_sm120_native(
     }
     attention_abis = {
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_F16_RESULT_ABI,
+        SM120_ATTN_BF16_RESULT_ABI,
+        SM120_ATTN_BIAS_F16_RESULT_ABI,
+        SM120_ATTN_BIAS_BF16_RESULT_ABI,
         SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
@@ -3755,6 +3767,7 @@ def _submit_nvidia_sm120_native(
             output = (output, row_lse)
         else:
             has_bias = descriptor.abi_id in {
+            SM120_ATTN_BIAS_F16_RESULT_ABI, SM120_ATTN_BIAS_BF16_RESULT_ABI,
             SM120_ATTN_BIAS_F16_ABI,
             SM120_ATTN_BIAS_BF16_ABI,
             SM120_ATTN_BIAS_F32_ABI,
@@ -6721,6 +6734,10 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
 
     from tessera.compiler.nvidia_native import (
         SM120_ATTN_F16_ABI,
+        SM120_ATTN_F16_RESULT_ABI,
+        SM120_ATTN_BF16_RESULT_ABI,
+        SM120_ATTN_BIAS_F16_RESULT_ABI,
+        SM120_ATTN_BIAS_BF16_RESULT_ABI,
         SM120_ATTN_BF16_ABI,
         SM120_ATTN_F32_ABI,
         SM120_ATTN_BIAS_F16_ABI,
@@ -6793,6 +6810,10 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         in (
             {
                 SM120_ATTN_F16_ABI,
+                SM120_ATTN_F16_RESULT_ABI,
+                SM120_ATTN_BF16_RESULT_ABI,
+                SM120_ATTN_BIAS_F16_RESULT_ABI,
+                SM120_ATTN_BIAS_BF16_RESULT_ABI,
                 SM120_ATTN_BF16_ABI,
                 SM120_ATTN_F32_ABI,
                 SM120_ATTN_BIAS_F16_ABI,

@@ -11889,3 +11889,35 @@ All four backend queues assessed; no sibling exact-device evidence transfer.
 
 Evidence: benchmarks/baselines/sm120_resident_attention_vjp_20261009/README.md.
 <!-- entry-fields:end -->
+
+### 2026-10-09 — ordinary resident SM120 attention result ownership
+
+Owner: [E2E-REAL-6](INTEGRATED_COMPILER_PLAN.md#e2e-real-6)
+PRs: pending; sync SM120-RESIDENT-ATTENTION-FORWARD-20261009.
+
+Outcome: ordinary public JIT compact resident Q/K/V and optional bias reach
+typed Graph/Schedule/Tile/Target/LLVM-PTX with retained C++ ownership.
+FP16/BF16 output preserves frontend storage through distinct image/entry/ABI
+identities and exact two-byte host/device spans. Native FA-4 normalization
+and physical attention accumulate in FP32 before final result truncation.
+Existing half-input/FP32-result packages remain a separate contract.
+FP32 saved-LSE tuples retain independent output/LSE host buffers. Producer
+events order private input snapshots; checked capacity/alignment/overlap and
+product ownership prevent unsafe invocation. Warm calls reuse packages with
+frontend evaluation, capture and compiler subprocesses forbidden.
+
+Validation: matching LLVM/MLIR 23.1.1 tools build; 519 focused shared gates
+pass (six skips), 61 semantic/packaging cases pass (six skips), and 60 exact
+RTX5070 forward/component/adjacent AD/serialized byte-boundary cases pass.
+Ruff and focused mypy pass. Two source/tool/provider-pinned twelve-profile
+packets check an independent rounded FP64 oracle before timing; maximum
+error is 4.31e-7. Kernel events and completed public-call timing are separate.
+Resident/host completed-call ratios span 1.050–1.253; no speedup is claimed.
+
+Remaining: dynamic/composed/nested tuples, half saved-LSE/AD, binding overhead,
+full CI and all wider original five-slice obligations. All four backend
+queues assessed; half result admission is restricted to SM120 and does not
+transfer NVIDIA numerical or performance evidence to siblings.
+
+Evidence: benchmarks/baselines/sm120_resident_attention_forward_20261009/README.md.
+<!-- entry-fields:end -->

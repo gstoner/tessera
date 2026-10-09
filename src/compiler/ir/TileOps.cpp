@@ -2251,6 +2251,17 @@ LogicalResult AttentionKernelOp::verify() {
                    storage.getValue() != "f32"))
     return emitOpError(
         "requires storage=\"f16\", storage=\"bf16\", or storage=\"f32\"");
+  auto outputStorage = getOperation()->getAttrOfType<StringAttr>("output_storage");
+  if (getOperation()->hasAttr("output_storage")) {
+    auto module = getOperation()->getParentOfType<ModuleOp>();
+    auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
+    if (!outputStorage ||
+        (outputStorage.getValue() != "f32" &&
+         (!target || target.getValue() != "nvidia_sm120" || hasSavedLse ||
+          outputStorage.getValue() != storage.getValue() ||
+          (outputStorage.getValue() != "f16" && outputStorage.getValue() != "bf16"))))
+      return emitOpError("half result storage requires NVIDIA ordinary attention and matching input storage");
+  }
   if (!accum || accum.getValue() != "f32")
     return emitOpError("requires accum=\"f32\"");
   if (!scale || !scale.getValue().isFinite() || scale.getValueAsDouble() <= 0.0)

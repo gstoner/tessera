@@ -70,6 +70,11 @@ class ScheduledAttentionArtifact:
     schedule_digest: str
 
     @property
+    def output_dtype(self) -> str:
+        storage = schedule_attention_result_storage(self.tile_ir)
+        return {"f32": "fp32", "f16": "fp16", "bf16": "bf16"}[storage]
+
+    @property
     def graph_digest(self) -> str:
         return digest_text(self.graph_ir)
 
@@ -216,7 +221,9 @@ def lower_scheduled_attention(
         tile_ir=tile_ir,
         target=contract[0],
         architecture=contract[1],
-        function_name=(f"tessera_tile_attention_{contract[7]}_{'causal' if contract[12] else 'full'}_{hashes[0][:10]}"
+        function_name=(f"tessera_tile_attention_{contract[7]}_{'causal' if contract[12] else 'full'}_"
+                       + (f"out_{schedule_attention_result_storage(tile_ir)}_" if schedule_attention_result_storage(tile_ir) != "f32" else "")
+                       + hashes[0][:10]
                        if target == "nvidia_sm120" else contract[2]),
         q_name=contract[3][0],
         k_name=contract[3][1],
@@ -360,3 +367,11 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         backward_lse_policy,
         backward_lse_selection,
     )
+
+
+def schedule_attention_result_storage(tile_ir: str) -> str:
+    """Project native final-store metadata; native replay verifies its origin."""
+    matches = re.findall(r'\boutput_storage = "([^"]+)"', tile_ir)
+    if len(matches) > 1 or (matches and matches[0] not in ("f32", "f16", "bf16")):
+        raise ValueError("attention native result storage is malformed")
+    return matches[0] if matches else "f32"

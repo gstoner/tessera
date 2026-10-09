@@ -25,6 +25,9 @@ missing/singleton batch axes into the original operand shape.
 - Existing public NVIDIA attention-JVP regression: 4 passed on RTX 5070.
   This is sibling regression evidence, not four-f32 NVIDIA execution.
 - Ruff passes; mypy ratchet remains zero.
+- Exact required CI unit marker lane reproduced in host WSL: 19,619 passed,
+  9,559 skipped, 2 failed in 315.18 s. Both failures are the existing generic
+  scaled_matmul batching/transpose closure assertions.
 - The generic batching/transpose zero-open assertions still fail for
   scaled_matmul (2 failures, 4 passes). Their partial/planned coverage states
   remain unchanged. This slice does not claim generic AD closure.
@@ -35,6 +38,23 @@ Batched oracle reductions iterate logical planes independently of the compiler
 indexing recipe. Encoded matrix/scale storage receives no implicit STE.
 Dynamic shapes, wider storage/layouts, public Python JIT integration for this
 continuous domain, and Apple/x86/SM120 physical consumers remain follow-ups.
+
+## Expanded native validation
+
+A separate expanded native-tool run included hardware/performance/compiler
+rows outside the CI unit marker lane: 609 failed, 22,576 passed, 7,973 skipped,
+38 errors, 874 deselected. It used a GPU-focused compiler configuration with
+x86/EBM/Clifford disabled and lacked ROCm serializer linker layout. This result
+is not green and is not reported as the required CI lane.
+
+Restoring those build components and matched LLVM/CUDA tools yielded 628
+passes and 514 skips in a representative rerun; 21 failures/4 errors remained.
+The remaining selected cases were traced to the LLVM23 llvm/bin/ld.lld
+serialization path and absent bias-JVP benchmark JSON inputs. The tests now
+use self-contained typed Graph fixtures instead of optional packets, and a
+focused rerun passes all 63 checks. The earlier recorder naming failure was
+from a pre-staging README; the tracked naming gate now passes. These focused
+repairs do not assert that every expanded-run case has been rerun.
 
 ## Timing evidence
 

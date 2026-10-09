@@ -40,6 +40,7 @@ Generic batching/transpose statuses remain partial/planned; dynamic, broader
 dtype/layout and general transformation closure are still open.
 Evidence: benchmarks/baselines/floating_scaled_adjoint_20261009/README.md.
 Owning packet: benchmarks/baselines/floating_scaled_adjoint_20261009/gfx1201.json.
+Sibling SM120 test-fixture repair is not applicable to apple kernels or ABI. Shared validation build/fixture assumptions are assessed; no architecture-specific execution claim changes.
 
 Shared native Graph recipe is assessed; Metal four-f32 adjoint packaging requires an Apple-owned consumer and exact-device follow-up.
 

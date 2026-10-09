@@ -44,6 +44,8 @@ def requests_floating_scaled(module):
     products = 0
     for op in fn.body:
         if op.op_name in {"tessera.add", "tessera.transpose"}:
+            if len(op.result_names) == 1 and op.inferred_type is not None:
+                args[op.result_names[0]] = op.inferred_type
             continue
         if (op.op_name != "tessera.scaled_matmul" or len(op.operands) != 4
                 or op.kwargs.get("physical_contract")
@@ -52,6 +54,8 @@ def requests_floating_scaled(module):
                        for name in op.operands)):
             return False
         products += 1
+        if len(op.result_names) == 1 and op.inferred_type is not None:
+            args[op.result_names[0]] = op.inferred_type
     return products > 0
 
 @dataclass(frozen=True)
@@ -385,11 +389,22 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
         if result is None or result.dtype != "fp32":
             return False
         if op.op_name == "tessera.scaled_matmul":
-            if len(op.operands) != 4 or any(v.removeprefix("%") not in names for v in op.operands):
+            if len(op.operands) != 4:
+                return False
+            computed = any(v.removeprefix("%") not in names for v in op.operands)
+            # Native primal/JVP export already retains SSA lifetimes. Reverse
+            # reductions still require their explicit input/cotangent frame.
+            if computed and not (primal and floating_reverse):
                 return False
             member = copy.deepcopy(module)
             member_fn = member.functions[0]
-            member_fn.args = [copy.deepcopy(names[v.removeprefix("%")]) for v in op.operands]
+            member_fn.args = []
+            for value in op.operands:
+                name = value.removeprefix("%")
+                argument = copy.deepcopy(names.get(name, fn.args[0]))
+                argument.name = name
+                argument.ir_type = copy.deepcopy(values[value])
+                member_fn.args.append(argument)
             member_fn.body = [copy.deepcopy(op)]
             member_fn.result_types = [copy.deepcopy(result)]
             member_fn.return_values = ["%" + op.result_names[0]]
@@ -398,7 +413,8 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
                 return False
             eligible = op.operands if floating_reverse and requests_floating_scaled(member) else op.operands[2:]
             scales.update(v.removeprefix("%") for v in eligible)
-            used.update(v.removeprefix("%") for v in op.operands)
+            used.update(v.removeprefix("%") for v in op.operands
+                        if v.removeprefix("%") in names)
         elif op.op_name == "tessera.add":
             if (len(op.operands) != 2 or op.kwargs or op.numeric_policy is not None
                     or any(str(values[v]) != str(result) for v in op.operands)):

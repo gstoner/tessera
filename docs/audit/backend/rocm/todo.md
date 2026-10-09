@@ -5,6 +5,20 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## CONTINUOUS-SCALED-SSA-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Computed FP32 product operands reach existing native SSA export, retaining
+intermediate lifetime checks and Schedule/Tile/LLVM lowering. Six native
+checks, 566 frontend/AD regressions and two exact gfx1201 public primal/JVP
+cases pass. Tiny ragged frame oracle agreement and separate producer,
+consumer, native and public timings are recorded.
+Reverse residual capture, mapped chains and generic closure remain open.
+Evidence: benchmarks/baselines/gfx1201_continuous_ssa_chain_20261009/README.md.
+
+Parity validated for this gfx1201 continuous FP32 chain and forward derivative. gfx1151 needs its own native route/device proof; encoded FP8/MXFP8 physical schedules are unchanged.
+
+
 
 ## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
 

@@ -142,7 +142,7 @@ np.save(sys.argv[3],result["output"].astype(np.float32))
 
 def test_invalid_jit_policy_never_runs_eager_or_reaches_gpu(monkeypatch):
     import inspect
-    from tessera.compiler import rocm_nvfp4_program,rocm_nvfp4_ingest
+    from tessera.compiler import native_nvfp4_program,rocm_nvfp4_ingest
     args,*_=inputs_and_oracle(128,32,256)
     function=make_function(32,256)
     attributes=inspect.getclosurevars(function._fn).nonlocals["attrs"]
@@ -150,7 +150,7 @@ def test_invalid_jit_policy_never_runs_eager_or_reaches_gpu(monkeypatch):
     def forbidden(*a,**kw):
         pytest.fail("invalid JIT policy reached eager conversion/compiler/GPU")
     monkeypatch.setattr(rocm_nvfp4_ingest,"reference_nvfp4_requantize",forbidden)
-    monkeypatch.setattr(rocm_nvfp4_program,"find_tessera_opt",forbidden)
+    monkeypatch.setattr(native_nvfp4_program,"export_native_nvfp4_program",forbidden)
     monkeypatch.setattr(rt,"_load_hip_for_launch",forbidden)
     with pytest.raises(ValueError,match="named contract"):
         function(*args)

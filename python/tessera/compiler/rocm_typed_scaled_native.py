@@ -191,6 +191,60 @@ def _independent_scale_semantics(fn,op,types,block,fmt):
                              "nk" if op.kwargs.get("transposeB",False) else "kn","f32")
     return shape,fmt,[x.removeprefix("%") for x in op.operands],op.result_names[0]
 
+def primal_call_module(module):
+    """Immutable frontend projection of an ordinary call on an AD owner.
+
+    Numerical operations/types/policies are unchanged. An ordinary call asks
+    for its primal; keep the original differentiation request as retained
+    metadata rather than an executable paired-export request.
+    """
+    import copy
+    result = copy.deepcopy(module)
+    keys = ("tessera.autodiff", "tessera.autodiff.wrt", "tessera.autodiff.wrt_indices")
+    for fn in result.functions:
+        requested = {key: fn.fn_attrs[key] for key in keys if key in fn.fn_attrs}
+        if requested:
+            names = {"tessera.autodiff": "mode", "tessera.autodiff.wrt": "wrt",
+                     "tessera.autodiff.wrt_indices": "wrt_indices"}
+            retained = "{" + ", ".join(names[key]+" = "+value
+                                        for key,value in requested.items()) + "}"
+            fn.fn_attrs["tessera.primal_call.requested_autodiff"] = retained
+        for key in keys:
+            fn.fn_attrs.pop(key, None)
+    for key in keys:
+        result.module_attrs.pop(key, None)
+    return result
+
+
+def supports_floating_scaled_primal(module):
+    """Admit continuous Graph intent for the native gfx1201 product consumer."""
+    try:
+        if not requests_floating_scaled(module):
+            return False
+        fn = module.functions[0]
+        if (any(arg.ir_type.rank > 8 for arg in fn.args) or
+                len(fn.result_types) != 1 or fn.result_types[0].rank > 8 or
+                any(not str(dim).isdigit() or int(dim) <= 0
+                    for dim in fn.result_types[0].shape) or
+                math.prod(map(int, fn.result_types[0].shape)) > 2**31-1):
+            return False
+        if len(fn.body) == 1:
+            return contract(module, semantic_only=True) is not None
+        return _supports_composed_scaled(module, (), primal=True, floating_reverse=True)
+    except (ValueError, TypeError, KeyError, IndexError):
+        return False
+
+
+def supports_floating_scaled_jvp(module, wrt_indices):
+    """Continuous operand roles; encoded storage retains its separate gates."""
+    if not supports_floating_scaled_primal(module) or not wrt_indices:
+        return False
+    fn = module.functions[0]
+    return (len(set(wrt_indices)) == len(wrt_indices)
+            and all(type(index) is int and 0 <= index < len(fn.args)
+                    and fn.args[index].ir_type.dtype == "fp32" for index in wrt_indices))
+
+
 def supports_typed_scaled(module):
     try:return contract(module) is not None
     except (ValueError,TypeError):return False
@@ -300,11 +354,13 @@ def _package_native_typed(module,program,*,pipeline_name):
 
 
 def supports_composed_scaled_primal(module):
-    return _supports_composed_scaled(module, (), primal=True)
+    return (supports_floating_scaled_primal(module) or
+            _supports_composed_scaled(module, (), primal=True))
 
 
 def supports_composed_scale_jvp(module, wrt_indices):
-    return _supports_composed_scaled(module, wrt_indices, primal=False)
+    return (supports_floating_scaled_jvp(module, wrt_indices) or
+            _supports_composed_scaled(module, wrt_indices, primal=False))
 
 
 def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=False):

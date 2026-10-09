@@ -50,6 +50,19 @@ inline int hipMemcpy(void* dst,const void* src,size_t n,int kind){
  ++copies;std::memcpy(dst,src,n);return 0;
 }
 using hipStream_t=void*;using hipEvent_t=void*;
+using hipError_t=int;using hipGraph_t=void*;using hipGraphExec_t=void*;using hipGraphNode_t=void*;
+using hipGraphNodeType=int;
+constexpr int hipErrorInvalidValue=1,hipStreamCaptureModeThreadLocal=1,hipGraphNodeTypeKernel=0;
+// This controlled harness tests direct ownership/failures, not graph execution.
+// Graph APIs refuse explicitly; real graph proof belongs to owning-device tests.
+inline int hipStreamBeginCapture(void*,int){return hipErrorInvalidValue;}
+inline int hipStreamEndCapture(void*,void** p){*p=nullptr;return hipErrorInvalidValue;}
+inline int hipGraphGetNodes(void*,void**,size_t*){return hipErrorInvalidValue;}
+inline int hipGraphNodeGetType(void*,int*){return hipErrorInvalidValue;}
+inline int hipGraphInstantiateWithFlags(void**,void*,uint64_t){return hipErrorInvalidValue;}
+inline int hipGraphLaunch(void*,void*){return hipErrorInvalidValue;}
+inline int hipGraphExecDestroy(void*){return hipErrorInvalidValue;}
+inline int hipGraphDestroy(void*){return hipErrorInvalidValue;}
 constexpr int hipStreamNonBlocking=1;
 inline int hipStreamCreateWithFlags(void** p,unsigned){*p=new int(1);return 0;}
 inline int hipStreamSynchronize(void*){return hipDeviceSynchronize();}
@@ -234,6 +247,8 @@ int main(){
  views[0].dtype=1;table[0]=4;
  assert(tessera_rocm_movement_resident_upload(resident,views,2)==1);table[0]=2;
  assert(tessera_rocm_movement_resident_upload(resident,views,2)==0);
+ uint64_t refusedNodes=99;
+ assert(tessera_rocm_movement_resident_capture(resident,&refusedNodes)==6&&refusedNodes==0);
  assert(tessera_rocm_movement_resident_invoke(resident,&generation,&ms)==0&&generation==1&&ms>0);
  assert(tessera_rocm_movement_resident_read(resident,generation,&views[2])==0);
  for(int t=0;t<5;++t)for(int c=0;c<3;++c)

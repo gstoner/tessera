@@ -16600,3 +16600,10 @@ Generic primitive batching/transpose closure, dynamic shapes and wider physical
 routes remain follow-up required.
 
 gfx1201 named frontend numerical/lifetime parity is validated. gfx1151 physical admission and owning-device evidence remain follow-up required.
+
+## SM120-BOUNDED-PRODUCER-CHAIN-20261009
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Shared native export/replay and pass metadata are assessed. Not applicable to HIP physical schedules or ABI: native outlining selects only nvidia_sm120/sm_120 roots and the new staging reservation uses CUDA ownership. gfx1151/gfx1201 evidence does not change.
+See ../nvidia/todo.md, bounded native producer chains, and
+benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md.

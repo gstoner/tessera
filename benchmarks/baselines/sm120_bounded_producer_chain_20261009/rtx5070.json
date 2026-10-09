@@ -1,0 +1,953 @@
+{
+  "schema": "tessera.sm120.bounded_chain_benchmark.v1",
+  "target": "nvidia_sm120",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "compiler_sha256": "4260af49d39db1fc28b836e33c1a1091fb08b7c1e88f2d01bfb476be5ee4065d",
+  "target_tool_sha256": "f98dadf5cc8c1a7d7ab24ab9bb80d9af920192fceed716b6db943f55dad96b3b",
+  "runtime_sha256": "2e75cf987dbf7871c023e5ecf8997bd04345a85f0804198033c1c045f11c0757",
+  "resident_runtime_sha256": "5e21e47fd7b9dfa22ce777f3c82b3274901beccc4c180d1fd4fb078caa2dcc0f",
+  "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "recorder_sha256": "d29cbaba8ea3188be4199c688566d5afb8e100d127c31fc0234072e20e76441f",
+  "source_sha256": {
+    "src/transforms/lib/NativeSM120TensorProgram.h": "a5ebc7d53129f65c66c36399238d6e486d0bb1a2daf86248a0aacd66118addbb",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_gemm.cpp": "c5260d215618eef55564d97cdba50615efed759a3c40466244aadbd15ce07f08",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/aot/tessera_nvidia_mma_f16_sm120_v1.cu": "980a75f50468075977d2a95f26c5d01cb535d37524dcb2450fcf899fb5f44c48",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "9b4b188a3060c0387aceaf98be0233004409020d0b4d782e0e6782dc2b3f7aa6",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "b8f9314793ecddf152de492eec4849414c6b16fbf080fe03033281152849a47d",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/attention_jvp_prepared.cpp": "3bfdede3d2f21dd2d2fa12772e68114dec5ab0ea3ffe60ed8622f70cd430cfac",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "42035793a8a677b66743a48fce1540affc87bda73248a83e603e6e164cc74fb3",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "462e0723f3a1a52d35ff0061d5494b860078758245f717929d960f2488521ac6",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "3b6c5c6388f8e510f07cee01c2056100dfddc96a128626bb16318a1477402e6c",
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "e9036cf252254b690521684b2fd4298c7a1b9d81803d309964d9597d8875a83d",
+    "tests/unit/test_native_bounded_sm120_chain.py": "1240ff8f2a30371147125ce45e6abfa572e22a56045f43abf8957d8e9444fd77",
+    "tests/device/nvidia/test_bounded_producer_chain.py": "1b68a628ae1b35bac07c98ff61dc094f6c94df939e9e6ab166e58896e9553cd7"
+  },
+  "stage_domain": "separate resident CUDA-event launch windows; compilation/upload/readback excluded; stages are not summed into a whole-program time",
+  "public_domain": "warm ordinary public call including host checks, packing, upload, producer/consumer execution, synchronization and readback",
+  "first_call_domain": "first wrapper call includes tracing, native compilation and preparation; process caches may already be warm",
+  "claim": "numerical/capacity characterization only; no speedup or selector promotion",
+  "profiles": [
+    {
+      "storage": "fp16",
+      "producer_count": 2,
+      "shape_bounds_mnk": [
+        32,
+        24,
+        64
+      ],
+      "first_public_call_ms": 1635.5908489786088,
+      "plan_sha256": "2aabf24cf795a82eb95e692a36f4ed041846821a2ac54a7feb2f2750e093fa57",
+      "native_schema": "tessera.native.sm120_tensor_program.v4",
+      "image_digests": [
+        "3da58ab91559dcfd9d8d45c56a81cabd1e7b72a230f5760259fb1c1167930664",
+        "fc9831d0df18bbff80d4806f075214a595c1d9cd338c9d7032c5634c70f33da6",
+        "fd4510c2d8a4340d3c0411d1a63edea23da17d94d10190d83e823166f71c1e88"
+      ],
+      "descriptor_digests": [
+        "0968c58332dc6ae42830eec0b1beac38401c065f7c39ceb3c9d16669eb2ac6f9",
+        "51c569a45a989b400f169ec24f352e77ee375bfd342f402086a704e8f1997016",
+        "bebf32a93a234c3a78aeaabd27306d97153b428db7b272217d32b2b4f96f3a08"
+      ],
+      "rows": [
+        {
+          "active_mnk": [
+            17,
+            11,
+            32
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 2.784508978947997e-08,
+          "public_warm_samples_ms": [
+            0.6538609741255641,
+            0.6522309849970043,
+            0.6154309958219528,
+            0.6051100208424032,
+            0.6107299705035985,
+            0.6040999433025718,
+            0.6720509845763445
+          ],
+          "public_warm_median_ms": 0.6154309958219528,
+          "stages": [
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.009932000190019608,
+                0.009415250271558762,
+                0.010022499598562717,
+                0.01031474955379963,
+                0.009143250063061714,
+                0.009805249981582165,
+                0.009181000292301178
+              ],
+              "median_ms": 0.009805249981582165
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.011199249885976315,
+                0.010777249932289124,
+                0.010331000201404095,
+                0.011403249576687813,
+                0.011525250039994717,
+                0.009296000003814697,
+                0.0093384999781847
+              ],
+              "median_ms": 0.010777249932289124
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.0095637496560812,
+                0.00958549976348877,
+                0.009868999943137169,
+                0.009007750079035759,
+                0.010194499976933002,
+                0.00835025031119585,
+                0.009214749559760094
+              ],
+              "median_ms": 0.0095637496560812
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            32,
+            24,
+            64
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 5.977570253890008e-06,
+          "public_warm_samples_ms": [
+            0.693641952238977,
+            0.636929995380342,
+            0.7045110105536878,
+            0.6416899850592017,
+            0.688572006765753,
+            0.5988500197418034,
+            0.6402409635484219
+          ],
+          "public_warm_median_ms": 0.6416899850592017,
+          "stages": [
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.01293949969112873,
+                0.013559750281274319,
+                0.012658249586820602,
+                0.013148999772965908,
+                0.01224725041538477,
+                0.012118999846279621,
+                0.012357999570667744
+              ],
+              "median_ms": 0.012658249586820602
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.014584249816834927,
+                0.014750749804079533,
+                0.015735499560832977,
+                0.01546424999833107,
+                0.014815500006079674,
+                0.0156017504632473,
+                0.013893749564886093
+              ],
+              "median_ms": 0.014815500006079674
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.009567500092089176,
+                0.008959749713540077,
+                0.010074499994516373,
+                0.03843099996447563,
+                0.009860250167548656,
+                0.00981574971228838,
+                0.008775250054895878
+              ],
+              "median_ms": 0.00981574971228838
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            1,
+            1,
+            1
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 0.0,
+          "public_warm_samples_ms": [
+            0.6215299945324659,
+            0.6460910080932081,
+            0.6748109590262175,
+            0.5908689927309752,
+            0.7856430020183325,
+            0.6040000007487833,
+            0.606809975579381
+          ],
+          "public_warm_median_ms": 0.6215299945324659,
+          "stages": [
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.009742249734699726,
+                0.009758500382304192,
+                0.00920374970883131,
+                0.009781500324606895,
+                0.008808749727904797,
+                0.009138500317931175,
+                0.00850099977105856
+              ],
+              "median_ms": 0.00920374970883131
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.010193250142037868,
+                0.008279499597847462,
+                0.010971250012516975,
+                0.009324000217020512,
+                0.009043499827384949,
+                0.009388250298798084,
+                0.008650249801576138
+              ],
+              "median_ms": 0.009324000217020512
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.010105250403285027,
+                0.008374249562621117,
+                0.010526499710977077,
+                0.010510249994695187,
+                0.009510500356554985,
+                0.008472749963402748,
+                0.008364499546587467
+              ],
+              "median_ms": 0.009510500356554985
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        }
+      ]
+    },
+    {
+      "storage": "fp16",
+      "producer_count": 3,
+      "shape_bounds_mnk": [
+        32,
+        24,
+        64
+      ],
+      "first_public_call_ms": 1166.8585910229012,
+      "plan_sha256": "6ea0c4ee9c5c85e17c54db726dca0a4fd6cc23d76fe71d69ad3ee68b6392acb0",
+      "native_schema": "tessera.native.sm120_tensor_program.v4",
+      "image_digests": [
+        "ba99a12f8b0ea003db08792760e432f3aaf3e80f90a626f902b977e71c955055",
+        "3da58ab91559dcfd9d8d45c56a81cabd1e7b72a230f5760259fb1c1167930664",
+        "fc9831d0df18bbff80d4806f075214a595c1d9cd338c9d7032c5634c70f33da6",
+        "fd4510c2d8a4340d3c0411d1a63edea23da17d94d10190d83e823166f71c1e88"
+      ],
+      "descriptor_digests": [
+        "eb791c112a454c3bff8dd3511b3972d2b92ade9f585661ab3fa523150fb6d734",
+        "cc810e07ca47f97cf75140012bde108447e547cd25601e4bc8c4519de4918ae8",
+        "f24004bcd92b3f45e0a28b4b4ea74c9546614364feb7bddec6caca2cefbff024",
+        "2ddf493afaca0a1bc2c5596a6a6c258190637c77548ee4b4829a386ced0c2e75"
+      ],
+      "rows": [
+        {
+          "active_mnk": [
+            17,
+            11,
+            32
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 5.759582563769072e-06,
+          "public_warm_samples_ms": [
+            0.8820550283417106,
+            0.8974850061349571,
+            0.9157049935311079,
+            0.9165949886664748,
+            0.9099949966184795,
+            0.97126595210284,
+            0.9045850019901991
+          ],
+          "public_warm_median_ms": 0.9099949966184795,
+          "stages": [
+            {
+              "kind": "layernorm",
+              "device_event_samples_ms": [
+                0.009299750439822674,
+                0.009227500297129154,
+                0.00896424986422062,
+                0.010002249851822853,
+                0.009389249607920647,
+                0.009955249726772308,
+                0.010641000233590603
+              ],
+              "median_ms": 0.009389249607920647
+            },
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.008924249559640884,
+                0.010210249572992325,
+                0.009461999870836735,
+                0.009630500338971615,
+                0.010198500007390976,
+                0.009289249777793884,
+                0.009393749758601189
+              ],
+              "median_ms": 0.009461999870836735
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.00969650037586689,
+                0.010181250050663948,
+                0.010063749738037586,
+                0.009531499817967415,
+                0.010165500454604626,
+                0.010388250462710857,
+                0.009851000271737576
+              ],
+              "median_ms": 0.010063749738037586
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.008981499820947647,
+                0.008679750375449657,
+                0.009142999537289143,
+                0.03703949972987175,
+                0.010806250385940075,
+                0.008754500187933445,
+                0.009381749667227268
+              ],
+              "median_ms": 0.009142999537289143
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            32,
+            24,
+            64
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 1.3963028322905302e-05,
+          "public_warm_samples_ms": [
+            0.9076049900613725,
+            1.0143669787794352,
+            0.9031750378198922,
+            0.87861402425915,
+            1.0026069940067828,
+            0.9087350335903466,
+            0.9931759559549391
+          ],
+          "public_warm_median_ms": 0.9087350335903466,
+          "stages": [
+            {
+              "kind": "layernorm",
+              "device_event_samples_ms": [
+                0.01421349961310625,
+                0.01383025012910366,
+                0.01404650043696165,
+                0.01472024992108345,
+                0.015018249861896038,
+                0.014550000429153442,
+                0.015885749831795692
+              ],
+              "median_ms": 0.014550000429153442
+            },
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.013142249546945095,
+                0.011513499543070793,
+                0.029147250577807426,
+                0.012041750364005566,
+                0.012036499567329884,
+                0.01166549976915121,
+                0.012426500208675861
+              ],
+              "median_ms": 0.012041750364005566
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.014274749904870987,
+                0.014254000037908554,
+                0.014369750395417213,
+                0.014536749571561813,
+                0.01443949993699789,
+                0.01421900000423193,
+                0.014595000073313713
+              ],
+              "median_ms": 0.014369750395417213
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.007878749631345272,
+                0.007866250351071358,
+                0.008856499567627907,
+                0.009172249585390091,
+                0.008993750438094139,
+                0.009362500160932541,
+                0.008661249652504921
+              ],
+              "median_ms": 0.008856499567627907
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            1,
+            1,
+            1
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 0.0,
+          "public_warm_samples_ms": [
+            0.8657650323584676,
+            0.9059650474227965,
+            0.8802040247246623,
+            0.8614039979875088,
+            0.9472360252402723,
+            0.9180550114251673,
+            0.9558459860272706
+          ],
+          "public_warm_median_ms": 0.9059650474227965,
+          "stages": [
+            {
+              "kind": "layernorm",
+              "device_event_samples_ms": [
+                0.00907950010150671,
+                0.009556500241160393,
+                0.009541249834001064,
+                0.010273500345647335,
+                0.007914500311017036,
+                0.008258749730885029,
+                0.009430499747395515
+              ],
+              "median_ms": 0.009430499747395515
+            },
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.00816550012677908,
+                0.010486000217497349,
+                0.008239749819040298,
+                0.008420499972999096,
+                0.009185750037431717,
+                0.009024250321090221,
+                0.00849824957549572
+              ],
+              "median_ms": 0.00849824957549572
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.0087502496317029,
+                0.008209249936044216,
+                0.008927750401198864,
+                0.008088500238955021,
+                0.008364999666810036,
+                0.00944649986922741,
+                0.008519249968230724
+              ],
+              "median_ms": 0.008519249968230724
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.0342474989593029,
+                0.00919449981302023,
+                0.008977250196039677,
+                0.008953000418841839,
+                0.008678999729454517,
+                0.00876224972307682,
+                0.009007499553263187
+              ],
+              "median_ms": 0.008977250196039677
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "producer_count": 2,
+      "shape_bounds_mnk": [
+        32,
+        24,
+        64
+      ],
+      "first_public_call_ms": 1176.733875006903,
+      "plan_sha256": "bc11c47b80886abd51926348fa2cb9c9ffc1f49a72d8cf517c57a719620685f8",
+      "native_schema": "tessera.native.sm120_tensor_program.v4",
+      "image_digests": [
+        "9104a61e05c200d585d581a280f03b5e07df7cac77491d7cd302c252d61f098c",
+        "b0c25e527ca8091e58687cfc4e232b8dd96d463fa5005b49948141623825057a",
+        "31ef54f7bbd0ecab11b726275b5cb16d7872e62230954bdee4a66b074d174e6d"
+      ],
+      "descriptor_digests": [
+        "29aa78199f73ef4f3358cbc40eebdb5ed658fc67b7397ad1dbce9d14246ae67b",
+        "c93e1003d75dc5997bf65ecff5d5c36a4889e747fc4de7d66e1c25fc5d78a617",
+        "f747209229d3998e48f0661eebff95388b3beaf6168f4e9e5f940b799c440ed4"
+      ],
+      "rows": [
+        {
+          "active_mnk": [
+            17,
+            11,
+            32
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 2.0489096641540527e-08,
+          "public_warm_samples_ms": [
+            0.5954600055702031,
+            0.626989989541471,
+            0.5877300282008946,
+            0.7287419866770506,
+            0.620940001681447,
+            0.6597210303880274,
+            0.5950499908067286
+          ],
+          "public_warm_median_ms": 0.620940001681447,
+          "stages": [
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.00906275026500225,
+                0.008883249945938587,
+                0.008872250095009804,
+                0.008963249623775482,
+                0.00823224987834692,
+                0.008795250207185745,
+                0.009003249928355217
+              ],
+              "median_ms": 0.008883249945938587
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.00979674980044365,
+                0.009347500279545784,
+                0.009769749827682972,
+                0.010232999920845032,
+                0.010890999808907509,
+                0.010857000015676022,
+                0.009592750109732151
+              ],
+              "median_ms": 0.00979674980044365
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.008878749795258045,
+                0.008238749578595161,
+                0.009054250083863735,
+                0.008772999979555607,
+                0.008554250001907349,
+                0.009699500165879726,
+                0.008668250404298306
+              ],
+              "median_ms": 0.008772999979555607
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            32,
+            24,
+            64
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 1.932494342327118e-08,
+          "public_warm_samples_ms": [
+            0.6328609888441861,
+            0.6348800379782915,
+            0.622170977294445,
+            0.6051899981684983,
+            0.6441910518333316,
+            0.6153599824756384,
+            0.6557710003107786
+          ],
+          "public_warm_median_ms": 0.6328609888441861,
+          "stages": [
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.012219750322401524,
+                0.013098250143229961,
+                0.012187249958515167,
+                0.012934500351548195,
+                0.037761248648166656,
+                0.012626750394701958,
+                0.01233575027436018
+              ],
+              "median_ms": 0.012626750394701958
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.013453000225126743,
+                0.014062000438570976,
+                0.0145455002784729,
+                0.014601750299334526,
+                0.014744499698281288,
+                0.014402249827980995,
+                0.014982500113546848
+              ],
+              "median_ms": 0.0145455002784729
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.009356750175356865,
+                0.00787699967622757,
+                0.009865250438451767,
+                0.009186499752104282,
+                0.008250749669969082,
+                0.008840000256896019,
+                0.007998749613761902
+              ],
+              "median_ms": 0.008840000256896019
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            1,
+            1,
+            1
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 0.0,
+          "public_warm_samples_ms": [
+            0.6340109976008534,
+            0.5785790272057056,
+            0.5667190416716039,
+            0.674330978654325,
+            0.6199799827300012,
+            0.6305000279098749,
+            0.5803499952889979
+          ],
+          "public_warm_median_ms": 0.6199799827300012,
+          "stages": [
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.008605250157415867,
+                0.008637499995529652,
+                0.008051999844610691,
+                0.008311250247061253,
+                0.009578250348567963,
+                0.008433000184595585,
+                0.008062750101089478
+              ],
+              "median_ms": 0.008433000184595585
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.03264274820685387,
+                0.008489750325679779,
+                0.008370749652385712,
+                0.008657749742269516,
+                0.00891599990427494,
+                0.00995699968189001,
+                0.007975500077009201
+              ],
+              "median_ms": 0.008657749742269516
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.007797750178724527,
+                0.009710250422358513,
+                0.007902500219643116,
+                0.00937225017696619,
+                0.008418249897658825,
+                0.008342999964952469,
+                0.009538000449538231
+              ],
+              "median_ms": 0.008418249897658825
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        }
+      ]
+    },
+    {
+      "storage": "bf16",
+      "producer_count": 3,
+      "shape_bounds_mnk": [
+        32,
+        24,
+        64
+      ],
+      "first_public_call_ms": 1167.7580459509045,
+      "plan_sha256": "ac934879a6f92e1f439a06b11553674105d1562374d78b82896caaeb7e1f8382",
+      "native_schema": "tessera.native.sm120_tensor_program.v4",
+      "image_digests": [
+        "78709f454ccb80a87970314c3f870fb6842cdf32d075b8da132b608a22c81b7f",
+        "9104a61e05c200d585d581a280f03b5e07df7cac77491d7cd302c252d61f098c",
+        "b0c25e527ca8091e58687cfc4e232b8dd96d463fa5005b49948141623825057a",
+        "31ef54f7bbd0ecab11b726275b5cb16d7872e62230954bdee4a66b074d174e6d"
+      ],
+      "descriptor_digests": [
+        "9e08a22cba1e6c97451616775e6547cd01bdefc1bbf362ed62395ccae8676f21",
+        "e12bee6755bed4705c11b89b93cd16cce273c162b032ca78bf6e935a80b84f98",
+        "3b4e3e77823628c4a89eafd3ba3d8340b470f0f3607b9e69aedb7b2da6c03f46",
+        "c68db10185fa146362a60e4b9bf9981ded1b20f6c7e0c2eab74935c18ec4397d"
+      ],
+      "rows": [
+        {
+          "active_mnk": [
+            17,
+            11,
+            32
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 2.3247208446264267e-05,
+          "public_warm_samples_ms": [
+            0.9214049787260592,
+            0.9177550091408193,
+            0.8897940278984606,
+            0.9458560380153358,
+            0.8824249962344766,
+            0.9000040008686483,
+            0.9351650369353592
+          ],
+          "public_warm_median_ms": 0.9177550091408193,
+          "stages": [
+            {
+              "kind": "layernorm",
+              "device_event_samples_ms": [
+                0.008927499875426292,
+                0.00953774992376566,
+                0.009652749635279179,
+                0.01028124988079071,
+                0.009458250366151333,
+                0.009980750270187855,
+                0.009395250119268894
+              ],
+              "median_ms": 0.00953774992376566
+            },
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.008391249924898148,
+                0.009462250396609306,
+                0.008789749816060066,
+                0.009413249790668488,
+                0.008989750407636166,
+                0.009366749785840511,
+                0.009057000279426575
+              ],
+              "median_ms": 0.009057000279426575
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.010847999714314938,
+                0.009492999874055386,
+                0.0098860003054142,
+                0.009935500100255013,
+                0.009569499641656876,
+                0.009828249923884869,
+                0.01033174991607666
+              ],
+              "median_ms": 0.0098860003054142
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.009160500019788742,
+                0.007802249863743782,
+                0.009394749999046326,
+                0.00873124971985817,
+                0.00955250021070242,
+                0.00913225021213293,
+                0.008777500130236149
+              ],
+              "median_ms": 0.00913225021213293
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            32,
+            24,
+            64
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 2.2351741790771484e-08,
+          "public_warm_samples_ms": [
+            0.9111349936574697,
+            0.8788050035946071,
+            0.9456150000914931,
+            0.8804440149106085,
+            1.0002470226027071,
+            0.8998549892567098,
+            0.9145750082097948
+          ],
+          "public_warm_median_ms": 0.9111349936574697,
+          "stages": [
+            {
+              "kind": "layernorm",
+              "device_event_samples_ms": [
+                0.015021500177681446,
+                0.015193750150501728,
+                0.014732000418007374,
+                0.014574499800801277,
+                0.014596999622881413,
+                0.013616249896585941,
+                0.013118750415742397
+              ],
+              "median_ms": 0.014596999622881413
+            },
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.013117999769747257,
+                0.01292324997484684,
+                0.03969325125217438,
+                0.013201500289142132,
+                0.012469000183045864,
+                0.013903750106692314,
+                0.011819499544799328
+              ],
+              "median_ms": 0.013117999769747257
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.014154749922454357,
+                0.014069749973714352,
+                0.014131249859929085,
+                0.014608750119805336,
+                0.014542999677360058,
+                0.014159499667584896,
+                0.014450999908149242
+              ],
+              "median_ms": 0.014159499667584896
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.00989300012588501,
+                0.008787750266492367,
+                0.00919399969279766,
+                0.008934750221669674,
+                0.00851299986243248,
+                0.00937699992209673,
+                0.009567749686539173
+              ],
+              "median_ms": 0.00919399969279766
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        },
+        {
+          "active_mnk": [
+            1,
+            1,
+            1
+          ],
+          "correctness": "checked_before_and_after_every_public_round_and_each_stage",
+          "max_abs_error": 0.0,
+          "public_warm_samples_ms": [
+            0.9969869861379266,
+            0.9050450171343982,
+            0.9014949901029468,
+            0.9504659683443606,
+            0.9331759647466242,
+            0.935925985686481,
+            0.857003964483738
+          ],
+          "public_warm_median_ms": 0.9331759647466242,
+          "stages": [
+            {
+              "kind": "layernorm",
+              "device_event_samples_ms": [
+                0.0091559998691082,
+                0.008869499899446964,
+                0.009081000462174416,
+                0.008720999583601952,
+                0.008632499724626541,
+                0.008277500048279762,
+                0.0088724996894598
+              ],
+              "median_ms": 0.008869499899446964
+            },
+            {
+              "kind": "rmsnorm",
+              "device_event_samples_ms": [
+                0.00887800008058548,
+                0.008640499785542488,
+                0.00862049963325262,
+                0.00782450009137392,
+                0.008602749556303024,
+                0.008880499750375748,
+                0.008414249867200851
+              ],
+              "median_ms": 0.00862049963325262
+            },
+            {
+              "kind": "softmax",
+              "device_event_samples_ms": [
+                0.008374500088393688,
+                0.00797524955123663,
+                0.008509499952197075,
+                0.008861999958753586,
+                0.008458750322461128,
+                0.008411750197410583,
+                0.008999000303447247
+              ],
+              "median_ms": 0.008458750322461128
+            },
+            {
+              "kind": "matmul",
+              "device_event_samples_ms": [
+                0.009265749715268612,
+                0.007988999597728252,
+                0.009258500300347805,
+                0.008933000266551971,
+                0.009172500111162663,
+                0.008932249620556831,
+                0.008061000145971775
+              ],
+              "median_ms": 0.008933000266551971
+            }
+          ],
+          "staging_bytes": 14336,
+          "staging_allocations": 1
+        }
+      ]
+    }
+  ]
+}

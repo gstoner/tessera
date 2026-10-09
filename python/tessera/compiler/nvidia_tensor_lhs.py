@@ -270,8 +270,15 @@ def package_traced_lhs(module, *, producer_schedule=None, softmax_schedule=None,
         return replace(package,descriptor=replace(package.descriptor,provenance={
             **package.descriptor.provenance,"native_tensor_program_digest":plan_digest}))
     edge=replace(edge,producer=bind_plan(edge.producer),consumer=bind_plan(edge.consumer))
-    chain=tuple(bind_plan(native.package_scheduled_kernel(artifact,
-        pipeline_name="tessera-nvidia-pipeline-sm120")) for artifact in artifacts[:-2])+(edge.producer,) if len(producers)>1 else ()
+    def package_producer(artifact):
+        package=native.package_scheduled_kernel(artifact,pipeline_name="tessera-nvidia-pipeline-sm120")
+        for axis,dimension,helper in (("M",0,native._with_dynamic_m_capacity),
+                                      ("K",1,native._with_dynamic_k_capacity)):
+            if axis in dynamic_axes:
+                package=helper(package,input_name=artifact.input_name,
+                               output_name=artifact.output_name,bound=artifact.input_shape[dimension])
+        return bind_plan(package)
+    chain=tuple(package_producer(artifact) for artifact in artifacts[:-2])+(edge.producer,) if len(producers)>1 else ()
     result=TracedLhsProgram(edge,tuple(names),deepcopy(sem),
         record["source_graph_ir"],projected.plan_json,chain)
     result.validate()
@@ -338,7 +345,7 @@ class TracedLhsProgram:
         chain=bool(self.producer_chain)
         if chain != ("producer_chain" in self.semantics):
             raise ValueError("native LHS chain semantics/member count differs")
-        if chain!=(plan["schema"]=="tessera.native.sm120_tensor_program.v3") or len(plan["steps"])!=len(producers)+1:
+        if chain!=(plan["schema"] in {"tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4"}) or len(plan["steps"])!=len(producers)+1:
             raise ValueError("native LHS chain/schema differs")
         if chain and (producers[-1]!=self.edge.producer or len(self.semantics.get("producer_chain",[]))!=len(producers)):
             raise ValueError("native LHS producer package count differs")

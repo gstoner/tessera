@@ -14194,3 +14194,29 @@ Generic primitive batching/transpose closure, dynamic shapes and wider physical
 routes remain follow-up required.
 
 Not applicable to this exact gfx1201 admission. SM120 encoded and resident product routes remain unchanged; no NVIDIA evidence is inferred.
+
+## Bounded native SM120 producer chains — 2026-10-09
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Sync SM120-BOUNDED-PRODUCER-CHAIN-20261009; dependent on PR912.
+
+Native outlining now projects every shape-preserving producer result through
+the bounded Graph and emits v4 capacity/lifetime metadata. Single-producer v2
+and static-chain v3 remain compatible; the outer portable chain schema stays
+v3. All earlier producers receive the same checked active M/K bounds as the
+last producer. Native append reserves maximum staging before the first call,
+so a small initial frame can reach capacity without warm allocation growth.
+No Python numerical backend, Tile constructor or new exported C ABI is added.
+
+Matching full LLVM/MLIR 23.1.1 and CUDA ownership providers build successfully.
+57 native/legacy partition checks and 331 focused registry/seal checks pass.
+RTX5070: 32 public/portable cases pass over all seven nonempty M/N/K bound
+subsets, FP16/BF16, two/three producers, changed inputs, retained outputs and
+fused final FP16 stores. Over-bound frames are rejected before native context
+access. Twelve source-bound profiles check numerics around each timing round:
+warm public latency 0.615–0.933 ms, separate producer events 8.43–14.82 us and
+matmul events 8.42–9.82 us. Stage events are not summed into whole-program
+device time, and no speedup or selector promotion is claimed.
+Evidence: benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md.
+Arbitrary producer kinds, external asynchronous ownership and generic scaled
+batching/transpose closure remain open.

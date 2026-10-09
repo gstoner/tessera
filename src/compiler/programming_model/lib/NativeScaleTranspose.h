@@ -91,7 +91,42 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
   return generator;
 }
 
-static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected, bool wave) {
+// Bound the parallel outer contribution span from the actual native SSA.
+// Do not infer it from N: RHS scale columns may cover a narrower block.
+static int64_t nativeScaleContributionSpan(tensor::GenerateOp generator) {
+  auto yielded = dyn_cast<tensor::YieldOp>(generator.getBody().front().getTerminator());
+  auto partition = yielded && yielded->getNumOperands() == 1
+      ? yielded->getOperand(0).getDefiningOp<scf::ForOp>() : scf::ForOp{};
+  if (!partition) return 0;
+  while (true) {
+    auto yield = dyn_cast<scf::YieldOp>(partition.getBody()->getTerminator());
+    auto nested = yield && yield->getNumOperands() == 1
+        ? yield->getOperand(0).getDefiningOp<scf::ForOp>() : scf::ForOp{};
+    if (!nested) break;
+    partition = nested;
+  }
+  auto integer = [](Value value) -> int64_t {
+    auto op = value.getDefiningOp<arith::ConstantOp>();
+    auto attr = op ? dyn_cast<IntegerAttr>(op.getValue()) : IntegerAttr{};
+    return attr ? attr.getInt() : -1;
+  };
+  if (integer(partition.getStep()) != 1) return 0;
+  int64_t lower = integer(partition.getLowerBound());
+  int64_t upper = integer(partition.getUpperBound());
+  if (lower >= 0 && upper >= lower) return upper - lower;
+  // Native RHS column groups use lo + min(block, N - lo).
+  auto end = partition.getUpperBound().getDefiningOp<arith::AddIOp>();
+  if (!end || end.getLhs() != partition.getLowerBound()) return 0;
+  auto span = end.getRhs().getDefiningOp<arith::MinUIOp>();
+  auto remaining = span ? span.getRhs().getDefiningOp<arith::SubIOp>()
+                        : arith::SubIOp{};
+  if (!remaining || remaining.getRhs() != partition.getLowerBound()) return 0;
+  int64_t block = integer(span.getLhs()), columns = integer(remaining.getLhs());
+  return block > 0 && columns > 0 ? std::min(block, columns) : 0;
+}
+
+static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected,
+                                                  bool wave, bool automatic) {
   auto root = nativeScaleTransposeRoot(mod);
   if (failed(root)) return failure();
   auto generator = *root;
@@ -102,6 +137,14 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected, 
     auto tensor = dyn_cast<RankedTensorType>(type);
     return tensor && tensor.getElementType().isF32();
   });
+  if (automatic && !floatingInputs) {
+    auto type = cast<RankedTensorType>(generator.getType());
+    // Named low-cardinality FP8 scale gradients: a wave exposes independent
+    // column contributions while retaining each original K-group dot.
+    // Continuous f32 adjoints and narrow-column groups retain serial geometry.
+    wave = type.getNumElements() <= 128 &&
+           nativeScaleContributionSpan(generator) >= 4;
+  }
   if (wave && floatingInputs)
     return generator.emitError("native floating scaled adjoint wave scheduling requires separate admission");
   if (generator->hasAttr("schedule.artifact_hash"))

@@ -2335,3 +2335,18 @@ storage has no implicit derivative. FP8 matrix-storage AD, dynamic maps,
 nonzero output axes, and packed NVIDIA non-leading maps remain open. This
 extension does not establish generic primitive batching/transpose closure.
 Evidence: benchmarks/baselines/scaled_map_axes_20261008/README.md.
+
+### Explicit native scale-adjoint schedule policy
+
+TESSERA_ROCM_SCALE_VJP_SCHEDULE accepts serial_per_scale_element (default),
+wave_per_scale_element, or auto for native gfx1201 floating-scale reverse
+programs. Auto requests compiler-owned selection per actual outlined reduction:
+byte-coefficient members with <=128 output elements and scalar outer contribution
+span >=4 use the existing 32-lane wave recipe; continuous f32 members, narrow
+column groups and larger returned frames retain serial geometry. The span comes
+from the scalar column-loop SSA, including the RHS scale block, rather than
+logical N alone. Source types/policy and selected Schedule/Tile hashes, member
+geometry, image and checked runtime ABI still determine admission/execution.
+Encoded scale storage gains no differentiation or implicit straight-through
+rule. This experimental explicit request does not change default selection or
+establish generic batching/AD, dynamic shapes or sibling backend execution.

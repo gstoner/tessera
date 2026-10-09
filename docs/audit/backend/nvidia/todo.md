@@ -14109,3 +14109,35 @@ Evidence: benchmarks/baselines/native_batched_read_20261009/README.md.
 Generic scaled_matmul batching/transpose closure remains open.
 
 Not applicable to this HIP transport ABI: CUDA resident streams/events are unchanged. SM120 scaled-result ownership parity remains follow-up required.
+
+## Native FP8 scale-adjoint recipe selection — 2026-10-09
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Sync ROCM-SCALE-ADJOINT-AUTO-20261009; dependent on PR910.
+
+Exact gfx1201 profiling attributes the 7x19x256 two-gradient cost to the
+RHS-scale member (~1.63 ms), not return ordering. Twelve seven-round
+alternating serial/wave comparisons pass independent scale-gradient numerics
+over short/ragged and longer static envelopes. The existing wave recipe
+reduces ordinary two-gradient native events from ~1.94 to ~0.062 ms at
+7x19x256 and ~0.159 to ~0.0195 ms at 3x5x37. These are program event windows,
+separate from captured member graph windows and host transfer/public latency.
+
+A new explicit auto request moves recipe choice into native Graph-to-Schedule.
+It derives contribution span from actual scalar SSA, selects existing wave
+geometry only for byte-coefficient scale gradients with at most 128 output
+elements and outer contribution span >=4, and keeps serial for continuous f32
+adjoints, narrow scale groups and larger output frames. Schedule/Tile hash
+replay and checked member geometry remain authoritative. Serial remains the
+default; no blanket format or architecture promotion is made.
+
+Fresh matching compiler build succeeds. 25 native selector tests, 401
+existing native export/lowering/map regressions, and 298 metadata/admission
+checks pass. gfx1201: 76 public auto-policy and 48 FP8/MXFP8/NVFP4/MXFP4
+regression checks pass. Twelve rotating three-arm profiles prove that auto
+emits the explicit-wave images in the named cases, with ~0.062 ms versus
+~1.94 ms serial at 7x19x256. These are native events, not public-call speedups.
+Evidence: benchmarks/baselines/scaled_adjoint_auto_20261009/README.md.
+Generic batching/transpose closure and the original five-slice goal remain open.
+
+Not applicable to CUDA physical recipes: the selector requires isolated gfx1201 scale-adjoint members. SM120 producer/attention schedules and resident ABI are unchanged.

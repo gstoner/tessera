@@ -6,6 +6,35 @@ audit_role: reference
 # Integrated compiler engineering log
 
 
+### 2026-10-09 — public native paired saved-LSE JVP
+
+Owner: FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+PRs: pending; sync PUBLIC-NATIVE-JVP-20261009.
+
+Outcome: Public JVP binds frontend intent to a separate native Graph AD owner
+while preserving the caller graph and constraints. Typed paired O/LSE tangents
+traverse hashed Schedule, Tile and LLVM/PTX. Native C++ storage owns independent
+O/LSE/dO/dLSE spans and orders producer streams. Value-only dLSE is exact zero;
+legacy output contracts remain distinct. RTX5070 proves 26 public cases and
+24 prepared-owner cases; the combined adjacent resident lane proves 84 cases.
+Matching LLVM/MLIR 23.1.1 tools and provider build; Ruff, zero-error mypy ratchet
+and 359 focused registry/AD/audit/metadata gates pass.
+
+Two fresh six-profile packets validate four outputs against an independent FP64
+oracle before separate native events and completed-call timing. Maximum error
+is 6.167596078299198e-7. Resident/host ratios span 1.187–1.300; no speedup claimed.
+All 25 source pins match the current worktree. All four backend queues assessed.
+
+Remaining: GFX1201 public parity, generic scaled_matmul batching/transpose,
+dynamic/composed/higher-order products, half-storage AD and resident overhead.
+The parent full unit suite has 25,728 passes and two scaled_matmul closure
+failures; no full CI or broader backend completion is claimed.
+
+Evidence: benchmarks/baselines/public_saved_lse_jvp_20261009/README.md,
+run1.json and run2.json; native_public_jvp_integration_plan.md.
+<!-- entry-fields:end -->
+
+
 
 
 

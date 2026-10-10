@@ -151,7 +151,8 @@ static int prepareAttentionJvp(
   const void *fimage,size_t fbytes,const char *fentry,
   const void *timage,size_t tbytes,const char *tentry,
   const char *sizerPath,const char *sizerEntry,const int64_t *dims,
-  const int64_t *biasShape,const int *mapping,const int *roles,size_t activeCount,uint64_t *handle){
+  const int64_t *biasShape,const int *mapping,const int *roles,size_t activeCount,uint64_t *handle,
+  bool savedLse=false){
   ownerError.clear();if(handle)*handle=0;
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -162,7 +163,10 @@ static int prepareAttentionJvp(
   try{
     auto state=std::make_unique<Owner>();
     state->bias=biasShape!=nullptr;
-    const size_t primals=3+unsigned(state->bias),slots=state->bias?11:9;
+    state->savedLse=savedLse;
+    if (bool(std::strstr(tentry,"_with_lse")) != savedLse)
+      return bad("prepared JVP output contract differs from tangent entry");
+    const size_t primals=3+unsigned(state->bias),slots=(state->bias?11:9)+unsigned(savedLse);
     bool mapped[4]{},active[4]{};
     for(size_t i=0;i<primals;++i){
       if(mapping[i]<0 || mapping[i]>=int(primals) || mapped[mapping[i]])return bad("invalid frontend permutation");
@@ -193,10 +197,11 @@ static int prepareAttentionJvp(
         return bad("invalid prepared bias extent");
       state->bytes[9]=state->bytes[8];state->bytes[10]=state->bytes[3];
     }
+    if (savedLse) state->bytes[slots-1]=state->bytes[4];
     uint64_t rows=uint64_t(b)*hq*sq,outputs=state->bytes[3]/4;
     if(rows>INT_MAX || (outputs+127)/128>UINT_MAX)return bad("grid exceeds bounds");
     state->tangentGrid=unsigned(rows);state->forwardGrid=unsigned((outputs+127)/128);
-    size_t total=0;std::array<size_t,11> offsets{};
+    size_t total=0;std::array<size_t,12> offsets{};
     for(size_t i=0;i<slots;++i){
       if(total>std::numeric_limits<size_t>::max()-255)return bad("alignment overflow");
       total=(total+255)&~size_t(255);offsets[i]=total;
@@ -213,9 +218,15 @@ static int prepareAttentionJvp(
     // signatures preserve the old ABI and the explicit biased pointer arity.
     using Sizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
     using BiasSizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
-    int64_t shared=state->bias?
-      reinterpret_cast<BiasSizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128):
-      reinterpret_cast<Sizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128);
+    using LseSizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
+    using BiasLseSizer=int64_t(*)(void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,void*,int64_t);
+    int64_t shared = savedLse
+      ? (state->bias
+        ? reinterpret_cast<BiasLseSizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128)
+        : reinterpret_cast<LseSizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128))
+      : (state->bias
+        ? reinterpret_cast<BiasSizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128)
+        : reinterpret_cast<Sizer>(symbol)(nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,nullptr,128));
     if(shared<0 || shared>INT_MAX)return bad("invalid native shared extent");
     if(!ok(cuModuleLoadData(&state->forwardModule,fimage),"load forward") ||
        !ok(cuModuleGetFunction(&state->forward,state->forwardModule,fentry),"resolve forward") ||
@@ -261,10 +272,19 @@ extern "C" int tessera_nvidia_attention_jvp_prepare_bias(
   return prepareAttentionJvp(fimage,fbytes,fentry,timage,tbytes,tentry,
     sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle);
 }
+extern "C" int tessera_nvidia_attention_jvp_prepare_lse(
+  const void *fimage,size_t fbytes,const char *fentry,
+  const void *timage,size_t tbytes,const char *tentry,
+  const char *sizerPath,const char *sizerEntry,const int64_t *dims,
+  const int64_t *biasShape,const int *mapping,const int *roles,
+  size_t activeCount,uint64_t *handle){
+  return prepareAttentionJvp(fimage,fbytes,fentry,timage,tbytes,tentry,
+    sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle,true);
+}
 static int invokeAttentionJvp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
   void *const *outputs,const size_t *outputBytes,float *deviceMilliseconds,
-  const uint64_t *producerStreams=nullptr,size_t producerCount=0){
+  const uint64_t *producerStreams=nullptr,size_t producerCount=0,size_t outputCount=2){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -275,21 +295,41 @@ static int invokeAttentionJvp(
   unsigned long long identity=0;
   if(!ok(cuCtxGetId(context,&identity),"context identity"))return 3;
   if(identity!=s.contextIdentity)return bad("prepared attention context generation disagrees");
-  const size_t primals=3+unsigned(s.bias),slots=s.bias?11:9,resultSlot=s.bias?10:8;
+  const size_t primals=3+unsigned(s.bias),resultSlot=s.bias?10:8,
+      slots=(s.bias?11:9)+unsigned(s.savedLse),results=s.savedLse?4:2;
+  const std::array<size_t,4> outputSlots = s.savedLse
+      ? std::array<size_t,4>{3,4,resultSlot,resultSlot+1}
+      : std::array<size_t,4>{3,resultSlot,0,0};
   auto primalSlot=[&](size_t role){return role==3?size_t(8):role;};
   auto tangentSlot=[&](size_t role){return role==3?size_t(9):5+role;};
-  if(!inputs || !inputBytes || inputCount!=primals+s.activeCount || !outputs ||
-     !outputs[0] || !outputs[1] || !outputBytes || outputBytes[0]!=s.bytes[3] ||
-     outputBytes[1]!=s.bytes[resultSlot])return bad("prepared host ABI disagrees");
-  uintptr_t a=reinterpret_cast<uintptr_t>(outputs[0]),b=reinterpret_cast<uintptr_t>(outputs[1]);
-  if(a>UINTPTR_MAX-outputBytes[0] || b>UINTPTR_MAX-outputBytes[1] ||
-     (a<b+outputBytes[1] && b<a+outputBytes[0]))return bad("prepared outputs overlap");
+  if(!inputs || !inputBytes || inputCount!=primals+s.activeCount ||
+     !outputs || !outputBytes || outputCount!=results)return bad("prepared host ABI count disagrees");
+  for(size_t i=0;i<results;++i){
+    auto address=reinterpret_cast<uintptr_t>(outputs[i]);
+    if(!address || outputBytes[i]!=s.bytes[outputSlots[i]] || address>UINTPTR_MAX-outputBytes[i])
+      return bad("prepared output extent disagrees");
+    for(size_t j=0;j<i;++j){
+      auto prior=reinterpret_cast<uintptr_t>(outputs[j]);
+      if(address<prior+outputBytes[j] && prior<address+outputBytes[i])
+        return bad("prepared outputs overlap");
+    }
+  }
   for(size_t i=0;i<primals;++i)
     if(!inputs[s.mapping[i]] || inputBytes[s.mapping[i]]!=s.bytes[primalSlot(i)])
       return bad("primal extent disagrees");
   for(size_t i=0;i<s.activeCount;++i)
     if(!inputs[primals+i] || inputBytes[primals+i]!=s.bytes[tangentSlot(s.roles[i])])
       return bad("tangent extent disagrees");
+  for(size_t i=0;i<inputCount;++i){
+    auto input=reinterpret_cast<uintptr_t>(inputs[i]);
+    if(!input || input>UINTPTR_MAX-inputBytes[i])return bad("prepared input span overflows");
+    if(!producerStreams)
+      for(size_t j=0;j<results;++j){
+        auto output=reinterpret_cast<uintptr_t>(outputs[j]);
+        if(input<output+outputBytes[j] && output<input+inputBytes[i])
+          return bad("prepared input/output overlap");
+      }
+  }
   OrderingEvents ordering;
   std::vector<CUstream> producers;
   int dependencies=prepareResidentDependencies(s,inputs,inputBytes,inputCount,
@@ -320,18 +360,18 @@ static int invokeAttentionJvp(
     bool broadcast=false;for(size_t i=0;i<4;++i)broadcast|=s.biasShape[i]!=scores[i];
     if(broadcast)for(size_t i=0;i<4;++i)fa[arg++]=&s.biasShape[i];
   }
-  void *ta[12];for(size_t i=0;i<slots;++i)ta[i]=&s.buffers[i];
+  void *ta[13];for(size_t i=0;i<slots;++i)ta[i]=&s.buffers[i];
   int64_t scratch=128;ta[slots]=&scratch;
   if(!ok(cuEventRecord(s.events[0],s.stream),"start forward") ||
      !ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,fa,nullptr),"launch forward") ||
      !ok(cuEventRecord(s.events[1],s.stream),"end forward") ||
      !ok(cuEventRecord(s.events[2],s.stream),"start tangent") ||
      !ok(cuLaunchKernel(s.tangent,s.tangentGrid,1,1,128,1,1,s.shared,s.stream,ta,nullptr),"launch tangent") ||
-     !ok(cuEventRecord(s.events[3],s.stream),"end tangent") ||
-     !stageDownload(s,3) || !stageDownload(s,resultSlot) ||
-     !ok(cuStreamSynchronize(s.stream),"complete product"))return 3;
+     !ok(cuEventRecord(s.events[3],s.stream),"end tangent"))return 3;
+  for(size_t i=0;i<results;++i)if(!stageDownload(s,outputSlots[i]))return 3;
+  if(!ok(cuStreamSynchronize(s.stream),"complete product"))return 3;
   drain.armed=false;
-  copyOutput(s,3,outputs[0]);copyOutput(s,resultSlot,outputs[1]);
+  for(size_t i=0;i<results;++i)copyOutput(s,outputSlots[i],outputs[i]);
   if(deviceMilliseconds &&
      (!ok(cuEventElapsedTime(&deviceMilliseconds[0],s.events[0],s.events[1]),"forward elapsed") ||
       !ok(cuEventElapsedTime(&deviceMilliseconds[1],s.events[2],s.events[3]),"tangent elapsed")))return 3;
@@ -349,6 +389,20 @@ extern "C" int tessera_nvidia_attention_jvp_invoke_resident_ordered(
   if(!producerStreams || !producerCount)return bad("resident producer streams are missing");
   return invokeAttentionJvp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
                             deviceMilliseconds,producerStreams,producerCount);
+}
+extern "C" int tessera_nvidia_attention_jvp_invoke_lse(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds){
+  return invokeAttentionJvp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+                            deviceMilliseconds,nullptr,0,outputCount);
+}
+extern "C" int tessera_nvidia_attention_jvp_invoke_lse_resident_ordered(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds){
+  if(!producerStreams || !producerCount)return bad("resident producer streams are missing");
+  return invokeAttentionJvp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+                            deviceMilliseconds,producerStreams,producerCount,outputCount);
 }
 extern "C" int tessera_nvidia_attention_jvp_close(uint64_t handle){
   ownerError.clear();

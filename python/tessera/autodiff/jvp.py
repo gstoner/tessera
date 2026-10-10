@@ -647,7 +647,14 @@ def jvp_flash_attn(primals, tangents, **kwargs):
     q,k,v = (np.asarray(x, dtype=np.float64) for x in primals[:3])
     dq,dk,dv = (np.asarray(x, dtype=np.float64) for x in tangents[:3])
     forward_kwargs = dict(kwargs)
+    alias = forward_kwargs.pop("bias", None)
+    if alias is not None:
+        if forward_kwargs.get("attn_bias") is not None:
+            raise ValueError("flash_attn accepts only one of bias and attn_bias")
+        forward_kwargs["attn_bias"] = alias
     if len(primals) == 4:
+        if forward_kwargs.get("attn_bias") is not None:
+            raise ValueError("attention JVP bias must have one operand source")
         forward_kwargs["attn_bias"] = primals[3]
     dropout = float(kwargs.get("dropout_p", 0.0))
     if dropout > 0.0 and kwargs.get("seed") is None:
@@ -1896,6 +1903,14 @@ def jvp(fn: Callable, primals, tangents) -> Tuple[Any, Any]:
     tangent_values = tangents if isinstance(tangents, tuple) else (tangents,)
     if len(primal_values) != len(tangent_values):
         raise ValueError("primals and tangents must have matching arity")
+    from tessera.compiler.jit import JitFn
+    from tessera.compiler.native_public_jvp import requires_native_jvp, native_public_jvp
+    if isinstance(fn, JitFn) and requires_native_jvp(fn):
+        from .tape import _ACTIVE_TAPE
+        if _ACTIVE_JVP.get() is not None or _ACTIVE_TAPE.get() is not None:
+            raise TesseraAutodiffError(
+                "nested native JVP requires a compiler-owned higher-order product")
+        return native_public_jvp(fn, primal_values, tangent_values)
     converted = tuple(np.asarray(value) for value in primal_values)
     trace = _JVPTrace()
     for primal, tangent in zip(converted, tangent_values):

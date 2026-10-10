@@ -733,8 +733,12 @@ mlir::LogicalResult CheckpointJVPOp::verify() {
       k.getDimSize(1)!=v.getDimSize(1) || k.getDimSize(2)!=v.getDimSize(2) ||
       q.getDimSize(3)!=k.getDimSize(3) || types[3]!=tensor({b,h,n,v.getDimSize(3)}) ||
       types[4]!=tensor({b,h,n}) || types[5]!=q || types[6]!=k || types[7]!=v ||
-      getResult().getType()!=types[3])
+      getDOutput().getType()!=types[3])
     return emitOpError("JVP tangent, output or LSE shapes disagree");
+  if (getNumResults() != 1 && getNumResults() != 2)
+    return emitOpError("JVP requires dO and optional paired row-LSE tangent");
+  if (getNumResults() == 2 && getResult(1).getType() != types[4])
+    return emitOpError("JVP row-LSE tangent shape must equal the forward LSE shape");
   if (bias) {
     const auto shape = types[8].getShape();
     const int64_t scores[4] = {b,h,n,k.getDimSize(2)};

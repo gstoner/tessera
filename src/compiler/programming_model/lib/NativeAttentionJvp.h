@@ -7,7 +7,7 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
   auto target=mod->getAttrOfType<StringAttr>("tessera.target");
   auto arch=mod->getAttrOfType<StringAttr>("tessera.arch");
   if (!fn || !fn.getBody().hasOneBlock() || !target || target.getValue()!="nvidia_sm120" ||
-      !arch || arch.getValue()!="sm_120" || (op->getNumOperands()!=8 && !bias) || op->getNumResults()!=1)
+      !arch || arch.getValue()!="sm_120" || (op->getNumOperands()!=8 && !bias) || (op->getNumResults()!=1 && op->getNumResults()!=2))
     return op->emitError("attention JVP requires the SM120 paired static tensor product"),failure();
   auto primalRef=fn->getAttrOfType<FlatSymbolRefAttr>("tessera.autodiff.forward");
   for (auto sibling:mod.getOps<func::FuncOp>()) {
@@ -69,7 +69,7 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
     return op->emitError("attention JVP lost its paired forward generation"),failure();
   for (Operation &body:fn.getBody().front()) {
     if (body.getName().getStringRef()!="tessera.flash_attn") continue;
-    if (body.getNumOperands()!=(bias?4u:3u) || body.getNumResults()!=1 ||
+    if (body.getNumOperands()!=(bias?4u:3u) || body.getNumResults()!=op->getNumResults() ||
         body.getResult(0).getType()!=op->getOperand(3).getType() ||
         body.getAttrOfType<BoolAttr>("causal")!=causal)
       return op->emitError("attention JVP primal differs from its paired generation"),failure();
@@ -87,13 +87,27 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
     if (op->getOperand(i)!=forward->getOperand(i) || !isa<BlockArgument>(op->getOperand(i)))
       return op->emitError("attention JVP requires direct primal argument roles"),failure();
   auto returned=dyn_cast<func::ReturnOp>(fn.getBody().front().getTerminator());
-  if (!returned || (returned.getNumOperands()!=1 && returned.getNumOperands()!=2) ||
-      returned.getOperand(returned.getNumOperands()-1)!=op->getResult(0))
-    return op->emitError("attention JVP export must return its selected tangent"),failure();
-  if (returned.getNumOperands()==2 && returned.getOperand(0)!=op->getOperand(3)) {
-    auto primal=returned.getOperand(0).getDefiningOp();
-    if (!primal || primal->getName().getStringRef()!="tessera.flash_attn")
-      return op->emitError("attention JVP export returned an unrelated primal"),failure();
+  const bool savedLse = op->getNumResults() == 2;
+  if (savedLse) {
+    if (!returned || returned.getNumOperands() != 4 ||
+        returned.getOperand(2) != op->getResult(0) ||
+        returned.getOperand(3) != op->getResult(1))
+      return op->emitError("attention JVP must return paired O/LSE and their tangents"),failure();
+    auto primal = returned.getOperand(0).getDefiningOp();
+    if (!primal || primal->getName().getStringRef() != "tessera.flash_attn" ||
+        primal->getNumResults() != 2 ||
+        returned.getOperand(0) != primal->getResult(0) ||
+        returned.getOperand(1) != primal->getResult(1))
+      return op->emitError("attention JVP primal O/LSE generation changed"),failure();
+  } else {
+    if (!returned || (returned.getNumOperands()!=1 && returned.getNumOperands()!=2) ||
+        returned.getOperand(returned.getNumOperands()-1)!=op->getResult(0))
+      return op->emitError("attention JVP export must return its selected tangent"),failure();
+    if (returned.getNumOperands()==2 && returned.getOperand(0)!=op->getOperand(3)) {
+      auto primal=returned.getOperand(0).getDefiningOp();
+      if (!primal || primal->getName().getStringRef()!="tessera.flash_attn")
+        return op->emitError("attention JVP export returned an unrelated primal"),failure();
+    }
   }
   SmallVector<Attribute> active;
   SmallVector<int64_t> roles;
@@ -129,6 +143,11 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
       b.getNamedAttr("algorithm",b.getStringAttr(scoresActive ? "cooperative_saved_lse_moments_v1" : "cooperative_saved_lse_value_linear_v1")),
       b.getNamedAttr("workgroup_size",b.getI64IntegerAttr(128)),
       b.getNamedAttr("ownership",b.getStringAttr("private_saved_generation_distinct_tangent"))});
+  if (savedLse) {
+    NamedAttrList attrs(contract);
+    attrs.set("saved_lse",b.getBoolAttr(true));
+    contract=attrs.getDictionary(op->getContext());
+  }
   if (bias) {
     NamedAttrList attrs(contract);
     attrs.set("bias_shape",b.getDenseI64ArrayAttr(types[8].getShape()));
@@ -183,15 +202,19 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   SmallVector<int64_t> shape(dims.begin(),dims.end());
   SmallVector<RankedTensorType> tensorTypes;
   for(Type t:graph->getOperandTypes())tensorTypes.push_back(cast<RankedTensorType>(t));
-  tensorTypes.push_back(cast<RankedTensorType>(graph->getResult(0).getType()));
+  const bool savedLse = graph->getNumResults() == 2;
+  const unsigned outputIndex = graph->getNumOperands();
+  for (Type type : graph->getResultTypes())
+    tensorTypes.push_back(cast<RankedTensorType>(type));
   SmallVector<StringRef> names{"q","k","v","primal","lse","dq","dk","dv"};
   if (bias) {names.push_back("bias");names.push_back("dbias");}
   names.push_back("tangent");
+  if (savedLse) names.push_back("dlse");
   llvm::json::Array specs;
   for(unsigned i=0;i<tensorTypes.size();++i) {
     llvm::json::Array extents;for(int64_t d:tensorTypes[i].getShape())extents.push_back(d);
     specs.push_back(llvm::json::Object{{"kind","tensor"},{"name",names[i]},{"dtype","fp32"},
-        {"shape",std::move(extents)},{"writable",i==tensorTypes.size()-1}});
+        {"shape",std::move(extents)},{"writable",i>=outputIndex}});
   }
   specs.push_back(llvm::json::Object{{"kind","index"},{"name","scratch"},{"minimum",128},{"maximum",128}});
   llvm::json::Object manifest{{"schema",1},{"arguments",std::move(specs)},
@@ -229,7 +252,7 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   b.setInsertionPointToStart(&gm.getBodyRegion().front());
   auto ptr=LLVM::LLVMPointerType::get(mod.getContext(),1);
   SmallVector<Type> abi(tensorTypes.size(),ptr);abi.push_back(b.getIndexType());
-  auto kernel=gpu::GPUFuncOp::create(b,loc,"saved_lse_jvp",b.getFunctionType(abi,{}));
+  auto kernel=gpu::GPUFuncOp::create(b,loc,savedLse ? "saved_lse_jvp_with_lse" : "saved_lse_jvp",b.getFunctionType(abi,{}));
   kernel.setKernelAttr(b.getUnitAttr());
   kernel->setAttr("tessera.schedule_hash",record->getAttr("hash"));
   b.setInsertionPointToStart(&kernel.getBody().front());
@@ -328,8 +351,19 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
     Value moment=memref::LoadOp::create(b,loc,scratch[0],ValueRange{z});
     result=fsub(product,fmul(load(3,oi),moment));
   }
-  Value out=LLVM::GEPOp::create(b,loc,ptr,b.getF32Type(),args[tensorTypes.size()-1],ValueRange{oi});
+  Value out=LLVM::GEPOp::create(b,loc,ptr,b.getF32Type(),args[outputIndex],ValueRange{oi});
   LLVM::StoreOp::create(b,loc,result,out,4);
+  if (savedLse) {
+    auto firstColumn=scf::IfOp::create(b,loc,
+        arith::CmpIOp::create(b,loc,arith::CmpIPredicate::eq,col,c64(0)),false);
+    b.setInsertionPointToStart(firstColumn.thenBlock());
+    Value moment = scoresActive
+        ? Value(memref::LoadOp::create(b,loc,scratch[0],ValueRange{z})) : zero;
+    Value lseOut=LLVM::GEPOp::create(b,loc,ptr,b.getF32Type(),
+        args[outputIndex+1],ValueRange{row});
+    LLVM::StoreOp::create(b,loc,moment,lseOut,4);
+    b.setInsertionPointAfter(firstColumn);
+  }
   b.setInsertionPointAfter(leader);gpu::BarrierOp::create(b,loc);
   b.setInsertionPointAfter(cols);gpu::ReturnOp::create(b,loc,ValueRange{});
   SmallVector<func::FuncOp> old;

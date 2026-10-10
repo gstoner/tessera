@@ -1632,6 +1632,7 @@ by `python/tessera/compiler/op_catalog.py`; tests guard this table against drift
 | `dropout_p` | `float` | `0.0` | Dropout probability in `[0, 1)`. If `> 0`, applies inverted dropout to attention weights. |
 | `seed` | `int \| None` | `None` | Optional NumPy RNG seed for deterministic dropout masks. |
 | `attn_bias` | `array \| None` | `None` | Optional additive score bias of shape `(B, Sq, Sk)`, broadcastable from `(1, Sq, Sk)`, applied pre-softmax: `softmax(scale·Q·Kᵀ + attn_bias)·V`. The general substrate for structured attention masks (e.g. DFlash sliding-window blocks). On Apple GPU it lowers to `tessera_apple_gpu_flash_attn_bias_{f32,f16,bf16}` (`metal_runtime`); causal + bias applies both masks; a broadcast `(1,Sq,Sk)` bias falls back to the reference. The VJP returns a `dbias` cotangent only when the bias is passed positionally (a recorded input). |
+| `bias` | `array \| None` | `None` | Alias of `attn_bias`, including reference attention, JVP/VJP certificates, and frontend tracing. Supplying both non-null operands is rejected. The alias does not widen an architecture's physical bias envelope. |
 
 **`fused_epilogue` activation values:** `"linear"` (identity), `"relu"`, `"gelu"`.
 

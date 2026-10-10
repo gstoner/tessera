@@ -583,7 +583,8 @@ class AutodiffForwardPass
         return signalPassFailure();
       }
       auto fn=forwards.front();
-      if (!fn.getBody().hasOneBlock() || (fn.getNumArguments()!=3 && fn.getNumArguments()!=4) || fn.getNumResults()!=1 ||
+      if (!fn.getBody().hasOneBlock() || (fn.getNumArguments()!=3 && fn.getNumArguments()!=4) ||
+          (fn.getNumResults()!=1 && fn.getNumResults()!=2) ||
           fn.getBody().front().getOperations().size()!=2) {
         fn.emitError("attention JVP export requires one direct attention operation");
         return signalPassFailure();
@@ -952,6 +953,10 @@ class AutodiffForwardPass
         llvm::json::Array shape;
         for (auto dim:mlir::cast<mlir::RankedTensorType>(op->getOperand(8).getType()).getShape()) shape.push_back(dim);
         contract["bias_shape"]=std::move(shape);
+      }
+      if (op->getNumResults() == 2) {
+        contract["schema"]=3;
+        contract["saved_lse"]=true;
       }
       std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
       module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));

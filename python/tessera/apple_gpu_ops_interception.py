@@ -268,7 +268,12 @@ def _wrap_flash_attn(original_fn: Optional[Callable]) -> Callable:
                     # PagedKVState consumer alias (Workstream A) — routes to the
                     # unifying KV ABI instead of dense K/V.
                     kv_state: Any = None,
-                    lse_checkpoint: Optional[str] = None):
+                    lse_checkpoint: Optional[str] = None,
+                    bias: Any = None):
+        if bias is not None:
+            if attn_bias is not None:
+                raise ValueError("flash_attn accepts only one of bias and attn_bias")
+            attn_bias = bias
         if kv_state is not None:
             if original_fn is None:
                 raise NotImplementedError(

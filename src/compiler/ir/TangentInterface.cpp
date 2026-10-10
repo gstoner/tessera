@@ -10,7 +10,7 @@ namespace tessera {
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (!denseAttentionAD(*this, true) || tangents.size() != getNumOperands()) return {};
+  if (!denseAttentionAD(*this, true, true) || tangents.size() != getNumOperands()) return {};
   bool scoresActive = false;
   for (auto [index, value] : llvm::enumerate(tangents)) {
     if (index == 2) continue;
@@ -19,7 +19,7 @@ llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     auto dense = constant ? mlir::dyn_cast<mlir::DenseFPElementsAttr>(constant.getValue()) : mlir::DenseFPElementsAttr();
     scoresActive |= !dense || !dense.isSplat() || !dense.getSplatValue<llvm::APFloat>().isZero();
   }
-  if (scoresActive) {
+  if (scoresActive || getNumResults() == 2) {
     auto forward=attentionCheckpoint(builder,*this,false,getOperands());
     if (!forward) return {};
     mlir::OperationState state(getLoc(),"tessera_attn.checkpoint_jvp");
@@ -43,9 +43,10 @@ llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
       state.addOperands(getOperand(3));
       state.addOperands(zeroIfInactive(getOperand(3),tangents[3]));
     }
-    state.addTypes(getResult().getType());
+    state.addTypes(getResultTypes());
     state.addAttributes(forward->getAttrs());
-    return {builder.create(state)->getResult(0)};
+    auto product = builder.create(state);
+    return llvm::SmallVector<mlir::Value>(product->getResults());
   }
   if (!tangents[2]) return {};
   llvm::SmallVector<mlir::Value> args{getOperand(0), getOperand(1), tangents[2]};

@@ -30,6 +30,7 @@ class NativeAttentionJVPProgram:
     active: tuple[int,...]
     input_indices: tuple[int,...] = ()
     input_names: tuple[str,...] = ()
+    saved_lse: bool = False
 
     def validate(self):
         from .native_attention_jvp_artifact import payload
@@ -70,25 +71,31 @@ class NativeAttentionJVPProgram:
             if f'tessera.attention_checkpoint_identity = "{expected}"' not in self.tangent.arena_ir:
                 raise ValueError('automatic attention program forward/tangent generations disagree')
             tensor_names=('q','k','v','primal','lse','dq','dk','dv') + (
-                ('bias','dbias') if biased else ()) + ('tangent','scratch')
+                ('bias','dbias') if biased else ()) + ('tangent',) + (('dlse',) if self.saved_lse else ()) + ('scratch',)
             signature=inspect.Signature([inspect.Parameter(n,inspect.Parameter.POSITIONAL_ONLY) for n in tensor_names])
             frame._jvp_binding=generate_tensor_binding(self.tangent,signature)
+            frame._jvp_saved_lse = self.saved_lse
             shapes=(*frame.shapes[:3], *((frame._bias_shape,) if biased else ()))
             zeros={i:_Buffer(frame,shapes[i]) for i in range(count) if i not in self.active}
             # Inactive loads are removed by native lowering. Distinct allocated
             # placeholders preserve the no-alias argument ABI.
-            return AutomaticAttentionFrame(frame,self.active,zeros)
+            return AutomaticAttentionFrame(frame,self.active,zeros,self.saved_lse)
         except BaseException:
             frame.close()
             raise
 
 
 class AutomaticAttentionFrame:
-    def __init__(self,frame,active,zeros):
+    def __init__(self,frame,active,zeros,saved_lse=False):
         self._frame,self._active,self._zeros=frame,active,zeros
+        self._saved_lse = saved_lse
 
     @property
     def primal(self):
+        if self._saved_lse:
+            from .resident_attention import _ReadOnly
+            self._frame._ready()
+            return (_ReadOnly(self._frame._saved[3]), _ReadOnly(self._frame._saved[4]))
         return self._frame.primal
 
     def jvp(self,*tangents):
@@ -150,7 +157,8 @@ def compile_attention_program(source,active,*,compiler,llvm_bin,input_names=(),r
     expected="active = ["+", ".join(str(i in physical_active).lower() for i in range(count))+"]"
     if len(contract)!=1 or expected not in contract[0]:
         raise ValueError("native attention JVP tangent activity disagrees with frontend request")
-    return NativeAttentionJVPProgram(pair,tangent,physical_active,mapping,tuple(input_names))
+    saved_lse = "saved_lse = true" in contract[0]
+    return NativeAttentionJVPProgram(pair,tangent,physical_active,mapping,tuple(input_names),saved_lse)
 
 
 @dataclass(frozen=True)

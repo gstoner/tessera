@@ -1509,7 +1509,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         attn_bias=None,
         kv_state=None,
         lse_checkpoint: str | None = None,
+        bias=None,
     ):
+        if bias is not None:
+            if attn_bias is not None:
+                raise ValueError("flash_attn accepts only one of bias and attn_bias")
+            attn_bias = bias
         if lse_checkpoint not in (None, "saved"):
             raise ValueError("flash_attn lse_checkpoint must be None or saved")
         if kv_state is not None and lse_checkpoint is not None:

@@ -63,3 +63,58 @@ def test_chained_public_native_matches_oracle_and_reuses_images(mode,monkeypatch
         np.testing.assert_allclose(got,want,rtol=4e-5,atol=3e-6)
     for got,old in zip(actual,retained,strict=True):
         np.testing.assert_array_equal(got,old)
+
+
+def product_reverse(a,b,sa,sb,seed):
+    m,k=a.shape
+    n=b.shape[1]
+    grads=[np.zeros_like(value,dtype=np.float64) for value in (a,b,sa,sb)]
+    da,db,dsa,dsb=grads
+    for row in range(m):
+        for col in range(n):
+            for group in range((k+3)//4):
+                dot=sum(float(a[row,t])*float(b[t,col])
+                        for t in range(group*4,min(k,(group+1)*4)))
+                dy=float(seed[row,col])
+                left,right=float(sa[row,group]),float(sb[group,col//4])
+                dsa[row,group]+=dy*dot*right
+                dsb[group,col//4]+=dy*dot*left
+                for t in range(group*4,min(k,(group+1)*4)):
+                    da[row,t]+=dy*float(b[t,col])*left*right
+                    db[t,col]+=dy*float(a[row,t])*left*right
+    return tuple(value.astype(np.float32) for value in grads)
+
+
+def reverse_oracle(values,seed):
+    a,b,sa,sb,c,sc,sd=values
+    first=product(a,b,sa,sb)
+    dfirst,dc,dsc,dsd=product_reverse(first,c,sc,sd,seed)
+    da,db,dsa,dsb=product_reverse(a,b,sa,sb,dfirst)
+    return da,db,dsa,dsb,dc,dsc,dsd
+
+
+@pytest.mark.parametrize("roles",[("a",),("c",),("sb","a","sd"),("a","b","sa","sb","c","sc","sd")])
+@pytest.mark.parametrize("shape",[(2,9,5,3),(3,17,7,6),(1,4,4,4)])
+def test_chained_public_reverse_executes_residual_and_cotangent_dependencies(roles,shape,monkeypatch):
+    assert runtime._rocm_live_arch()=="gfx1201"
+    _,_,values=case(shape)
+    owner=ts.jit(target="rocm_gfx1201",autodiff="reverse",wrt=roles)(chained)
+    seed=np.random.default_rng(19044).uniform(-.5,.5,(shape[0],shape[3])).astype(np.float32)
+    wanted=reverse_oracle(values,seed)
+    positions={name:index for index,name in enumerate(("a","b","sa","sb","c","sc","sd"))}
+    actual=owner.native_backward(*values,out_cotangents=seed)
+    assert owner.last_backward_execution["execution_kind"]=="native_gpu"
+    for result,name in zip(actual,roles,strict=True):
+        np.testing.assert_allclose(result,wanted[positions[name]],rtol=4e-5,atol=3e-6)
+    retained=tuple(value.copy() for value in actual)
+    changed=tuple(np.ascontiguousarray(value*np.float32(-.875)) for value in values)
+    wanted=reverse_oracle(changed,seed*np.float32(-.5))
+    def forbidden(*args,**kwargs):
+        raise AssertionError("warm reverse chain invoked compiler or eager")
+    monkeypatch.setattr(subprocess,"run",forbidden)
+    monkeypatch.setattr(owner,"_fn",forbidden)
+    repeated=owner.native_backward(*changed,out_cotangents=seed*np.float32(-.5))
+    for result,name in zip(repeated,roles,strict=True):
+        np.testing.assert_allclose(result,wanted[positions[name]],rtol=4e-5,atol=3e-6)
+    for result,old in zip(actual,retained,strict=True):
+        np.testing.assert_array_equal(result,old)

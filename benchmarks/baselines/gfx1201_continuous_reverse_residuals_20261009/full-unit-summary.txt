@@ -1,0 +1,5 @@
+Final CI-equivalent host WSL unit run; four workers; hardware/compiler/slow/performance markers excluded.
+Raw log SHA256: 8f8c135f486c02f73012c01d2c199acdfd171f2b2d94652016b5ac8012e6fcc2
+tests/unit/test_batching_rule_closure.py::test_batching_axis_has_zero_open
+tests/unit/test_batching_rule_closure.py::test_transpose_axis_has_zero_open
+2 failed, 20448 passed, 9592 skipped, 11 warnings in 339.82s (0:05:39)

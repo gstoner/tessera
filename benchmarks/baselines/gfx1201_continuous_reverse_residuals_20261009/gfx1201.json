@@ -1,0 +1,557 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "uuid_hex": "32386439653765666266326566373136",
+  "route": "Python frontend->Graph->native AD/residual SSA->Schedule->Tile->ROCm Target->LLVM->HSACO->checked HIP ABI",
+  "input_shapes": [
+    [
+      2,
+      9
+    ],
+    [
+      9,
+      5
+    ],
+    [
+      2,
+      3
+    ],
+    [
+      3,
+      2
+    ],
+    [
+      5,
+      3
+    ],
+    [
+      2,
+      2
+    ],
+    [
+      2,
+      1
+    ]
+  ],
+  "requested_roles": [
+    "a",
+    "b",
+    "sa",
+    "sb",
+    "c",
+    "sc",
+    "sd"
+  ],
+  "max_abs_error": 4.656612873077393e-10,
+  "correctness": "independent scalar adjoint oracle before and after every timing window",
+  "cold_compile_and_call_ms": 399.32150300592184,
+  "native_program_samples_ms": [
+    0.023165563121438026,
+    0.022621726617217064,
+    0.02248634397983551,
+    0.022460563108325005,
+    0.02235119603574276,
+    0.022437524050474167,
+    0.023329859599471092
+  ],
+  "native_program_median_ms": 0.02248634397983551,
+  "public_compile_warm_samples_ms": [
+    13.54986010119319,
+    2.4161729961633682,
+    2.3446620907634497,
+    2.480531809851527,
+    2.3156669922173023,
+    2.46068905107677,
+    2.361895050853491
+  ],
+  "public_compile_warm_median_ms": 2.4161729961633682,
+  "member_samples_ms": [
+    [
+      0.001858171890489757,
+      0.002882101573050022,
+      0.003058820264413953,
+      0.001867851591669023,
+      0.00186973437666893,
+      0.00305475783534348,
+      0.0041407267563045025,
+      0.0019147343700751662,
+      0.0018872030777856708
+    ],
+    [
+      0.0018581405747681856,
+      0.002589703071862459,
+      0.003069398459047079,
+      0.0018550078384578228,
+      0.00187876564450562,
+      0.0030897108372300863,
+      0.004213468637317419,
+      0.0018818905809894204,
+      0.0023207187186926603
+    ],
+    [
+      0.001860015676356852,
+      0.002587836002930999,
+      0.0030647108796983957,
+      0.001859078067354858,
+      0.0019037656020373106,
+      0.00302721094340086,
+      0.004258937668055296,
+      0.00199321866966784,
+      0.001888445345684886
+    ],
+    [
+      0.001857195282354951,
+      0.002587515627965331,
+      0.003103765659034252,
+      0.0018837577663362026,
+      0.001872507855296135,
+      0.003024078207090497,
+      0.004148140549659729,
+      0.0019215702777728438,
+      0.0019828202202916145
+    ],
+    [
+      0.0018512577516958117,
+      0.0026046952698379755,
+      0.003069070400670171,
+      0.0018478203564882278,
+      0.001876882859505713,
+      0.0030296952463686466,
+      0.004167203325778246,
+      0.0019143827958032489,
+      0.0018871952779591084
+    ],
+    [
+      0.0020150078926235437,
+      0.0026415702886879444,
+      0.003146570408716798,
+      0.0019103202503174543,
+      0.0019253203645348549,
+      0.003939312417060137,
+      0.004203765653073788,
+      0.0019459453178569674,
+      0.0022511875722557306
+    ],
+    [
+      0.0019159140065312386,
+      0.0026481016539037228,
+      0.003169031348079443,
+      0.001899359398521483,
+      0.001951546873897314,
+      0.0030699686612933874,
+      0.004325039219111204,
+      0.001955609302967787,
+      0.0019346718909218907
+    ]
+  ],
+  "member_medians_ms": [
+    0.001858171890489757,
+    0.0026046952698379755,
+    0.003069398459047079,
+    0.001867851591669023,
+    0.00187876564450562,
+    0.00305475783534348,
+    0.004203765653073788,
+    0.0019215702777728438,
+    0.0019346718909218907
+  ],
+  "member_timing_scope": "Grouped repeated SSA members including HIP graph device dispatch; not additive interleaved program times.",
+  "public_scope": "Compilation warm; preparation/allocation not excluded. No speedup claim.",
+  "dependency_policy": "native_recompute_prefix_v1",
+  "steps": [
+    {
+      "continuous_contract": {
+        "scale_k": 4,
+        "scale_n": 4,
+        "transposeA": false,
+        "transposeB": false
+      },
+      "dependency_kind": "residual",
+      "inputs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "lowering": "structured_f32_scaled_product",
+      "member": "chained__bwd__member_0",
+      "operation": "tessera.scaled_matmul",
+      "output": 8,
+      "step": 0
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_argument": 5,
+      "gradient_role": "lhs_scale",
+      "inputs": [
+        4,
+        6,
+        7,
+        8
+      ],
+      "member": "chained__bwd__member_1",
+      "operation": "tensor.generate",
+      "output": 9,
+      "seed_input": 7,
+      "step": 1
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_argument": 6,
+      "gradient_role": "rhs_scale",
+      "inputs": [
+        4,
+        5,
+        7,
+        8
+      ],
+      "member": "chained__bwd__member_2",
+      "operation": "tensor.generate",
+      "output": 10,
+      "seed_input": 7,
+      "step": 2
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_role": "lhs_matrix",
+      "inputs": [
+        4,
+        5,
+        6,
+        7
+      ],
+      "member": "chained__bwd__member_3",
+      "operation": "tensor.generate",
+      "output": 11,
+      "seed_input": 7,
+      "step": 3
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_argument": 4,
+      "gradient_role": "rhs_matrix",
+      "inputs": [
+        5,
+        6,
+        7,
+        8
+      ],
+      "member": "chained__bwd__member_4",
+      "operation": "tensor.generate",
+      "output": 12,
+      "seed_input": 7,
+      "step": 4
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_argument": 2,
+      "gradient_role": "lhs_scale",
+      "inputs": [
+        0,
+        1,
+        3,
+        11
+      ],
+      "member": "chained__bwd__member_5",
+      "operation": "tensor.generate",
+      "output": 13,
+      "seed_input": 11,
+      "step": 5
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_argument": 3,
+      "gradient_role": "rhs_scale",
+      "inputs": [
+        0,
+        1,
+        2,
+        11
+      ],
+      "member": "chained__bwd__member_6",
+      "operation": "tensor.generate",
+      "output": 14,
+      "seed_input": 11,
+      "step": 6
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_argument": 0,
+      "gradient_role": "lhs_matrix",
+      "inputs": [
+        1,
+        2,
+        3,
+        11
+      ],
+      "member": "chained__bwd__member_7",
+      "operation": "tensor.generate",
+      "output": 15,
+      "seed_input": 11,
+      "step": 7
+    },
+    {
+      "dependency_kind": "cotangent",
+      "gradient_argument": 1,
+      "gradient_role": "rhs_matrix",
+      "inputs": [
+        0,
+        2,
+        3,
+        11
+      ],
+      "member": "chained__bwd__member_8",
+      "operation": "tensor.generate",
+      "output": 16,
+      "seed_input": 11,
+      "step": 8
+    }
+  ],
+  "buffers": [
+    {
+      "bytes": 72,
+      "elements": 18,
+      "first_write": -1,
+      "id": 0,
+      "last_read": 8,
+      "ownership": 0,
+      "shape": [
+        2,
+        9
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 180,
+      "elements": 45,
+      "first_write": -1,
+      "id": 1,
+      "last_read": 7,
+      "ownership": 0,
+      "shape": [
+        9,
+        5
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": -1,
+      "id": 2,
+      "last_read": 8,
+      "ownership": 0,
+      "shape": [
+        2,
+        3
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": -1,
+      "id": 3,
+      "last_read": 8,
+      "ownership": 0,
+      "shape": [
+        3,
+        2
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 60,
+      "elements": 15,
+      "first_write": -1,
+      "id": 4,
+      "last_read": 3,
+      "ownership": 0,
+      "shape": [
+        5,
+        3
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 16,
+      "elements": 4,
+      "first_write": -1,
+      "id": 5,
+      "last_read": 4,
+      "ownership": 0,
+      "shape": [
+        2,
+        2
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 8,
+      "elements": 2,
+      "first_write": -1,
+      "id": 6,
+      "last_read": 4,
+      "ownership": 0,
+      "shape": [
+        2,
+        1
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": -1,
+      "id": 7,
+      "last_read": 4,
+      "ownership": 0,
+      "shape": [
+        2,
+        3
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 40,
+      "elements": 10,
+      "first_write": 0,
+      "id": 8,
+      "last_read": 4,
+      "ownership": 1,
+      "shape": [
+        2,
+        5
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 16,
+      "elements": 4,
+      "first_write": 1,
+      "id": 9,
+      "last_read": 9,
+      "ownership": 2,
+      "shape": [
+        2,
+        2
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 8,
+      "elements": 2,
+      "first_write": 2,
+      "id": 10,
+      "last_read": 9,
+      "ownership": 2,
+      "shape": [
+        2,
+        1
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 40,
+      "elements": 10,
+      "first_write": 3,
+      "id": 11,
+      "last_read": 8,
+      "ownership": 1,
+      "shape": [
+        2,
+        5
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 60,
+      "elements": 15,
+      "first_write": 4,
+      "id": 12,
+      "last_read": 9,
+      "ownership": 2,
+      "shape": [
+        5,
+        3
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": 5,
+      "id": 13,
+      "last_read": 9,
+      "ownership": 2,
+      "shape": [
+        2,
+        3
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 24,
+      "elements": 6,
+      "first_write": 6,
+      "id": 14,
+      "last_read": 9,
+      "ownership": 2,
+      "shape": [
+        3,
+        2
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 72,
+      "elements": 18,
+      "first_write": 7,
+      "id": 15,
+      "last_read": 9,
+      "ownership": 2,
+      "shape": [
+        2,
+        9
+      ],
+      "storage": "f32"
+    },
+    {
+      "bytes": 180,
+      "elements": 45,
+      "first_write": 8,
+      "id": 16,
+      "last_read": 9,
+      "ownership": 2,
+      "shape": [
+        9,
+        5
+      ],
+      "storage": "f32"
+    }
+  ],
+  "image_sha256": [
+    "a7836698b89f9fa45f915cd75ba2a291c31562eef7f5353333fd0fdcf9e1ab6d",
+    "d1d383a7b2cc8e875dca9eba9cc642b172616eac163ef3ca5b1743f7156c7ee6",
+    "b529c15360bd00c17b0118efa8c611a0b3f4017b69bd824471f8702b0acdd328",
+    "d3be2c46e9b91beae4bff843b76af36901aa808e098629371fc86384de4b310d",
+    "49b93e68c37573e9ceac74c6fc572b79142d2155d09318177ca4976d0bdb82d1",
+    "620451bf8784a055e67837e2df01c714c6e0c4bdc4a0990115e301e5cf175ed1",
+    "1a328e39dd1cad360ff8975341a88bbb01ccaea3997ff60023d5482f2ceba0f8",
+    "01df5d8ecc16f632e30ab8faeff2b2a5b09a7557437227339ce37cc3c7fcb79f",
+    "39ceb3fefe11b25fe4cbf3476099c1e89ddd91e305d113fc94d6cdbd1c3cf3b4"
+  ],
+  "sources": {
+    "python/tessera/compiler/native_scaled_program.py": "bc7c1a1fcdf4aeeb23d38e685c289b71e1c9b71411cf0ef6ff28656ce86e0e02",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "a26016892e02ffb8865846ead95c04539f526ef9a456e316cc99fd48c6ed7796",
+    "src/compiler/ir/LinearTransposeInterface.cpp": "3f61c42b030da770aadbe9aa46e0eeefffa7c9ba8f1085dcaba5573cf3732348",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "58d8f6b69e796de39fa8e216ebd313fbb969be3f519209902afea8ca985404b0",
+    "src/compiler/programming_model/lib/NativeScaleTranspose.h": "66556d89335d8adaccf0e04506789fbdec0728d8187d1178480d8364caab17a3",
+    "tests/device/rocm/test_continuous_scaled_ssa_chain.py": "347201a9f84e127af466454ecbd1f38329187be79b173a47a6430ca084961435",
+    "benchmarks/rocm/record_continuous_scaled_reverse.py": "d1a05e84247969d9b5008585831249157ae2c69eb77ebec096f4333e5ce4b808"
+  },
+  "tools": {
+    "TESSERA_OPT": "83451e97503d39d74b71acfa8ba00954123bb69991101c6ab4f20c3ef41696e9",
+    "TESSERA_ROCM_OPT": "0e7027141f4c3e6b46a5d0d531015a9711906d71da4ff9eb1c66fee20e833865"
+  }
+}

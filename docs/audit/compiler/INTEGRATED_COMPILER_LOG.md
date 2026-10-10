@@ -11690,3 +11690,31 @@ dynamic layouts and original backend performance obligations.
 Evidence: benchmarks/baselines/gfx1201_continuous_ssa_chain_20261009/README.md
 and gfx1201.json.
 <!-- entry-fields:end -->
+
+
+### 2026-10-09 — native continuous reverse residual dependencies
+
+Owner: [AD-RESIDUAL-EVAL-1](INTEGRATED_COMPILER_PLAN.md#ad-residual-eval-1)
+PRs: pending; sync CONTINUOUS-SCALED-REVERSE-RESIDUALS-20261009.
+
+Outcome: Native AD's actual recompute-all Graph exports the requested
+gradient dependency closure, preserving required continuous residual products
+and intermediate cotangents. Explicit seed-input/lineage metadata accompanies
+the existing storage/lifetime/witness ABI. No Python arithmetic or numerical
+kernel is added. A-only requests omit unused primal products.
+
+Validation: 105 native checks, 567 host frontend/projection checks (42 skips),
+70 gfx1201 device cases; independent scalar adjoint oracle, changed values/seeds,
+requested role ordering, retained outputs and compiler/eager-free replay.
+Nine-member native median 22.486 us; public compile-warm reverse 2.416 ms.
+Grouped member timings are diagnostic, not additive. 85 adjacent gfx1201
+FP8 scale-gradient/composed/permutation cases pass. Final full host unit:
+20,448 passed, 9,592 skipped, two generic batching/transpose failures.
+308 registry/audit/recorder checks and generated docs pass; all queues assessed.
+
+Remaining: mapped chains, aliases, dynamic/save-policy, generic scaled closure
+and original cross-backend route/performance obligations.
+
+Evidence: benchmarks/baselines/gfx1201_continuous_reverse_residuals_20261009/README.md
+and gfx1201.json.
+<!-- entry-fields:end -->

@@ -41,6 +41,9 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
   SmallVector<int64_t> gradientRoles;
   llvm::DenseMap<Value, int64_t> gradientForValue;
   llvm::SmallPtrSet<Operation *, 8> cotangentPermutations;
+  llvm::SmallPtrSet<Operation *, 32> dependencies;
+  llvm::DenseMap<Operation *, Value> adjointSeeds;
+  llvm::DenseMap<Value, bool> cotangentLineage;
   auto isScaleSum = [](Operation *op) {
     if (isa<AddOp>(op)) return true;
     auto sum = dyn_cast<arith::AddFOp>(op);
@@ -68,22 +71,64 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           floatingArguments.insert(argument.getArgNumber());
       }
     });
-    std::function<LogicalResult(Value)> visitCotangent =
+    std::function<LogicalResult(Value)> visitDependency =
         [&](Value value) -> LogicalResult {
-      auto argument = dyn_cast<BlockArgument>(value);
-      if (argument && argument.getOwner() == &root.getBody().front() &&
-          argument.getArgNumber() == root.getNumArguments() - 1)
+      if (auto argument = dyn_cast<BlockArgument>(value)) {
+        if (argument.getOwner() != &root.getBody().front())
+          return root.emitError("scaled transpose capture is outside its native frame");
+        cotangentLineage[value] = argument.getArgNumber() == root.getNumArguments()-1;
         return success();
+      }
       Operation *definition = value.getDefiningOp();
       auto type = dyn_cast<RankedTensorType>(value.getType());
       if (!definition || definition->getBlock() != &root.getBody().front() ||
-          !isa<TransposeOp>(definition) || definition->getNumOperands() != 1 ||
-          !type || !type.hasStaticShape() || !type.getElementType().isF32() ||
-          type.getEncoding() || type.getRank() < 1 || type.getRank() > 8 ||
-          !transposePermutation(definition))
-        return root.emitError("scale adjoint computed capture must be a native output-cotangent permutation");
-      if (!cotangentPermutations.insert(definition).second) return success();
-      return visitCotangent(definition->getOperand(0));
+          definition->getNumResults() != 1 || !type || !type.hasStaticShape() ||
+          !type.getElementType().isF32() || type.getEncoding() ||
+          type.getRank() < 1 || type.getRank() > 8)
+        return root.emitError("scaled transpose dependency requires static native f32 SSA");
+      if (!dependencies.insert(definition).second) return success();
+      SmallVector<Value> captures;
+      bool cotangent = false;
+      if (auto generate = dyn_cast<tensor::GenerateOp>(definition)) {
+        auto role = generate->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint");
+        auto seed = generate->getAttrOfType<IntegerAttr>("tessera.autodiff.cotangent_capture");
+        llvm::SetVector<Value> used;
+        getUsedValuesDefinedAbove(generate->getRegions(), used);
+        if (!role || !seed || used.size()!=4 || seed.getInt()<0 ||
+            uint64_t(seed.getInt())>=used.size() ||
+            (role.getValue()!="lhs_scale" && role.getValue()!="rhs_scale" &&
+             role.getValue()!="lhs_matrix" && role.getValue()!="rhs_matrix"))
+          return root.emitError("scaled transpose dependency lost its native adjoint seed");
+        llvm::append_range(captures,used);
+        adjointSeeds[definition]=used[seed.getInt()];
+      } else if (isNativeFloatingScaledProduct(definition) || isScaleSum(definition)) {
+        llvm::append_range(captures,definition->getOperands());
+      } else if (isa<TransposeOp>(definition) && transposePermutation(definition)) {
+        llvm::append_range(captures,definition->getOperands());
+      } else return root.emitError("scaled transpose captured an unsupported native dependency");
+      for (Value capture:captures)
+        if (failed(visitDependency(capture))) return failure();
+      if (adjointSeeds.contains(definition)) {
+        cotangent=cotangentLineage.lookup(adjointSeeds.lookup(definition));
+        if (!cotangent)
+          return root.emitError("scaled transpose seed is not rooted in the output cotangent");
+        for (Value capture:captures)
+          if (capture!=adjointSeeds.lookup(definition) && cotangentLineage.lookup(capture))
+            return root.emitError("scaled transpose coefficient captured a cotangent");
+      } else if (isScaleSum(definition)) {
+        cotangent=llvm::all_of(captures,[&](Value capture) {
+          return cotangentLineage.lookup(capture);
+        });
+        if (!cotangent && llvm::any_of(captures,[&](Value capture) {
+              return cotangentLineage.lookup(capture);
+            }))
+          return root.emitError("scaled transpose sum mixes residual and cotangent roles");
+      } else if (isa<TransposeOp>(definition)) {
+        cotangent=cotangentLineage.lookup(captures.front());
+        if (cotangent) cotangentPermutations.insert(definition);
+      }
+      cotangentLineage[value]=cotangent;
+      return success();
     };
     std::function<LogicalResult(Value, int64_t)> visit =
         [&](Value value, int64_t role) -> LogicalResult {
@@ -97,17 +142,10 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           (!isa<tensor::GenerateOp>(definition) && !isScaleSum(definition)))
         return root.emitError("scaled transpose needs native scale reductions and their sums");
       gradientForValue[value] = role;
+      if (failed(visitDependency(value))) return failure();
       if (isScaleSum(definition)) {
         for (Value operand : definition->getOperands())
           if (failed(visit(operand, role))) return failure();
-      } else {
-        llvm::SetVector<Value> captures;
-        getUsedValuesDefinedAbove(definition->getRegions(), captures);
-        for (Value capture : captures) {
-          auto argument = dyn_cast<BlockArgument>(capture);
-          if (argument && argument.getOwner() == &root.getBody().front()) continue;
-          if (failed(visitCotangent(capture))) return failure();
-        }
       }
       return success();
     };
@@ -132,40 +170,23 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
   bool hasScaledProduct = false;
   for (Operation &op : root.getBody().front().without_terminator()) {
     if (reverse) {
-      // Select requested actual reductions, preserving the complete backward
-      // root as witness. Unreturned matrix-storage zeros are not members.
-      if (cotangentPermutations.contains(&op)) {
+      // Preserve the required residual/cotangent SSA prefix in native order.
+      if (!dependencies.contains(&op)) continue;
+      if (!isa<tensor::GenerateOp>(&op)) {
         llvm::append_range(capturedInputs[&op], op.getOperands());
-        ops.push_back(&op);
-        continue;
+      } else {
+        llvm::SetVector<Value> captures;
+        getUsedValuesDefinedAbove(op.getRegions(), captures);
+        for (Value argument:root.getArguments())
+          if (captures.contains(argument)) capturedInputs[&op].push_back(argument);
+        for (Operation &producer:root.getBody().front().without_terminator())
+          if (dependencies.contains(&producer) &&
+              captures.contains(producer.getResult(0)))
+            capturedInputs[&op].push_back(producer.getResult(0));
+        if (capturedInputs[&op].size()!=captures.size())
+          return op.emitError("scaled transpose captured a value outside its native SSA prefix");
       }
-      if (op.getNumResults() != 1 || !gradientForValue.contains(op.getResult(0)))
-        continue;
-      if (isScaleSum(&op)) {
-        llvm::append_range(capturedInputs[&op], op.getOperands());
-        ops.push_back(&op);
-        continue;
-      }
-      auto kind = op.getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint");
-      if (op.getName().getStringRef() != "tensor.generate" || !kind ||
-          (kind.getValue() != "lhs_scale" && kind.getValue() != "rhs_scale" &&
-           kind.getValue() != "lhs_matrix" && kind.getValue() != "rhs_matrix") ||
-          op.getNumRegions() != 1)
-        return op.emitError("scaled transpose result must retain its native reduction");
-      llvm::SetVector<Value> captures;
-      getUsedValuesDefinedAbove(op.getRegions(), captures);
-      // Root argument order determines stable ABI order, regardless of the
-      // order in which the scalar reduction body happens to read its inputs.
-      for (Value argument : root.getArguments())
-        if (captures.contains(argument)) capturedInputs[&op].push_back(argument);
-      // Computed seed permutations follow root arguments in stable SSA order.
-      for (Operation &producer : root.getBody().front().without_terminator())
-        if (cotangentPermutations.contains(&producer) &&
-            captures.contains(producer.getResult(0)))
-          capturedInputs[&op].push_back(producer.getResult(0));
-      if (capturedInputs[&op].size() != captures.size())
-        return op.emitError("scaled transpose captured a value outside its native input/cotangent frame");
-      hasScaledProduct = true;
+      hasScaledProduct |= isa<ScaledMatmulOp, tensor::GenerateOp>(&op);
     } else {
       if (!isa<ScaledMatmulOp, AddOp, TransposeOp>(op) || op.getNumResults() != 1)
         return op.emitError("scaled JVP program needs scaled products, native sums and result permutations");
@@ -292,7 +313,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       cloned = body.create(state);
     } else cloned = body.clone(*op, map);
     body.create<func::ReturnOp>(op->getLoc(), cloned->getResults());
-    if (!reverse && isNativeFloatingScaledProduct(cloned) &&
+    if (isNativeFloatingScaledProduct(cloned) &&
         failed(expandNativeFloatingScaledProduct(cloned)))
       return failure();
     steps.push_back(b.getDictionaryAttr({
@@ -335,7 +356,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
             AddOp::getOperationName().str() : ops[index]->getName().getStringRef().str()},
         {"inputs", std::move(inputs)},
         {"output", cast<IntegerAttr>(step.get("output")).getInt()}};
-    if (!reverse && isNativeFloatingScaledProduct(ops[index])) {
+    if (isNativeFloatingScaledProduct(ops[index])) {
       auto product = cast<ScaledMatmulOp>(ops[index]);
       auto block = product.getScaleLayoutAttr().getAs<ArrayAttr>("block");
       manifestStep["lowering"] = "structured_f32_scaled_product";
@@ -360,6 +381,12 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
     if (auto role = ops[index]->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint")) {
       manifestStep["gradient_role"] = role.getValue().str();
     }
+    if (reverse) {
+      manifestStep["dependency_kind"] =
+          cotangentLineage.lookup(ops[index]->getResult(0)) ? "cotangent" : "residual";
+      if (adjointSeeds.contains(ops[index]))
+        manifestStep["seed_input"] = ids.lookup(adjointSeeds.lookup(ops[index]));
+    }
     if (reverse && gradientForValue.contains(ops[index]->getResult(0)))
       manifestStep["gradient_argument"] = gradientForValue.lookup(ops[index]->getResult(0));
     if (reverse && cotangentPermutations.contains(ops[index]))
@@ -381,6 +408,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
     llvm::json::Array roles;
     for (int64_t role : gradientRoles) roles.push_back(role);
     manifest["gradient_roles"] = std::move(roles);
+    manifest["dependency_policy"] = "native_recompute_prefix_v1";
   }
   std::string manifestText;
   llvm::raw_string_ostream manifestStream(manifestText);

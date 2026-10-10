@@ -4,6 +4,8 @@
 
 #include "Tessera/IR/TesseraOps.h"
 #include "mlir/IR/Builders.h"
+#include "mlir/Transforms/RegionUtils.h"
+#include "llvm/ADT/SetVector.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
@@ -174,6 +176,14 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
   // reduce every logical batch axis; mapped operands keep the exact prefix.
   // The ragged final K/N groups stop at the original logical extent.
   auto loc = getLoc();
+  auto retainCotangentCapture = [&](tensor::GenerateOp generated) {
+    llvm::SetVector<Value> captures;
+    getUsedValuesDefinedAbove(generated->getRegions(), captures);
+    auto found = llvm::find(captures, outputCotangents[0]);
+    assert(found != captures.end() && "scaled adjoint must capture its seed");
+    generated->setAttr("tessera.autodiff.cotangent_capture",
+        builder.getI64IntegerAttr(std::distance(captures.begin(), found)));
+  };
   auto makeGradient = [&](bool lhs) -> Value {
     auto type = lhs ? sa : sb;
     // Scale storage, not matrix mapping, owns gradient coordinates.
@@ -287,6 +297,7 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
         });
     generated->setAttr("tessera.autodiff.scale_adjoint",
                        builder.getStringAttr(lhs ? "lhs_scale" : "rhs_scale"));
+    retainCotangentCapture(generated);
     return generated.getResult();
   };
 
@@ -367,6 +378,7 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
         });
     generated->setAttr("tessera.autodiff.scale_adjoint",
                        builder.getStringAttr(lhs ? "lhs_matrix" : "rhs_matrix"));
+    retainCotangentCapture(generated);
     return generated.getResult();
   };
   Value dsa = makeGradient(true), dsb = makeGradient(false);

@@ -4445,7 +4445,7 @@ def package_generated_attention_forward_checkpoint(source: str, *, pipeline_name
     forward = lower_generated_checkpoint(source)
     identity = _checkpoint_identity(
         forward.dims, forward.scale, forward.causal,
-        bias=forward.bias, bias_shape=forward.bias_shape)
+        bias=forward.bias, bias_shape=forward.bias_shape, shape_bounds=forward.shape_bounds)
     return AttentionForwardCheckpoint(
         package_scheduled_checkpoint(forward, pipeline_name=pipeline_name), identity)
 

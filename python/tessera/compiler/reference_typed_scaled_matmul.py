@@ -14,8 +14,6 @@ def reference_typed_scaled_matmul(a, b, scale_a, scale_b, *, numeric_policy,
     rhs_batched = batching in {"independent_rhs","shared_lhs"}
     if batching not in {None,"shared_rhs_rows","independent_rhs","shared_lhs","broadcast"}:
         raise ValueError("typed scaled reference batching policy is unsupported")
-    if batched and not broadcast and transposeA:
-        raise ValueError("typed shared-RHS reference requires no lhs transpose")
     if numeric_policy != {"accum":"fp32", "execution_mode":"exact_per_block"}:
         raise ValueError("typed scaled reference requires exact fp32 block accumulation")
     block = scale_layout.get("block") if isinstance(scale_layout,dict) else None

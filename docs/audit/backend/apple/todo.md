@@ -13453,3 +13453,16 @@ validation still run per call. Compiler, loaded-library, environment and full
 IR and working-directory identity participate, with bounded entry/byte retention.
 Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
 and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
+
+## Named scaled-batch frontend orientation — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SCALED-BATCH-ORIENTATION-20261008.
+Shared eager numerical contract accepts transposed LHS for shared-RHS,
+shared-LHS and independent batches; 24 independent-oracle cases pass.
+385 host WSL frontend/native Graph/registry checks pass without skips.
+apple physical lowering, admission and runtime ABI: not applicable to
+this reference-only correction. Existing architecture-owned execution
+envelopes remain unchanged; no new exact-device or timing evidence.
+Generic batching and transpose AD closure remain follow-up required.
+Evidence: benchmarks/baselines/scaled_batch_orientation_20261008/README.md.

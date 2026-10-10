@@ -102,3 +102,16 @@ route/performance closure retain their existing plans and evidence obligations.
 Recorder: `benchmarks/nvidia/record_public_saved_lse_jvp.py`; correctness-gated paired output and tangent checks precede alternating host/resident completed-call and native event timing.
 
 GFX1201 recorder: benchmarks/rocm/record_public_native_scaled_jvp.py.
+
+## Retained GFX1201 execution plan
+
+The named public scaled-product route now retains one checked C++ owner per
+compiled specialization, with bounded cache, transactional input/update/read
+and native guarded cleanup. Cold admission seals parent/child identity;
+warm calls preserve the same native IR/images and avoid repeated serialized
+validation and preparation. 70 gfx1201 ownership/numerical/FP8 regression cases
+and 50 SM120 shared lifecycle cases pass. Four matched 36-profile packets
+show 31.9–63.0% lower completed public time, with unchanged kernel images.
+Evidence: benchmarks/baselines/retained_public_scaled_jvp_20261009/README.md.
+Recorder: benchmarks/rocm/record_retained_public_scaled_jvp.py.
+Remaining public overhead and general contracts above remain active.

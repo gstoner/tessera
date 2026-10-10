@@ -6,64 +6,6 @@ audit_role: reference
 # Integrated compiler engineering log
 
 
-### 2026-10-09 — public native GFX1201 JVP execution and attribution
-
-Owner: FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
-PRs: pending; sync PUBLIC-NATIVE-JVP-GFX1201-20261009
-(shared PUBLIC-NATIVE-JVP-20261009).
-
-Outcome: 36 owning RX 9070 XT/gfx1201 public JVP tests pass with the matching
-compiler and fresh C++ HIP providers. Transposed/direct/nested continuous
-FP32 scaled products retain caller Graph/request identity, inactive roles,
-warm compiler refusal and independent old outputs. Two fresh 36-profile
-packets verify all 23 source pins and all native tool/provider hashes.
-Maximum absolute error is 8.189881861575543e-8 against the independent FP64
-oracle. Completed public medians span 1.065–2.643 ms and native interleaved
-event medians 4.072–25.124 us. Captured member windows stay distinct and
-exceed 3.170 ms. No speedup or cross-architecture proof transfer.
-
-Remaining: Public preparation/binding overhead, mixed-axis/general
-compositions, generic scaled_matmul batching/transpose closure, quantized AD,
-and the broader five-slice obligations. All four backend queues assessed.
-
-Evidence: benchmarks/baselines/public_native_scaled_jvp_20261009/README.md,
-run1.json, run2.json, device-tests.txt.
-<!-- entry-fields:end -->
-
-
-### 2026-10-09 — public native paired saved-LSE JVP
-
-Owner: FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
-PRs: pending; sync PUBLIC-NATIVE-JVP-20261009.
-
-Outcome: Public JVP binds frontend intent to a separate native Graph AD owner
-while preserving the caller graph and constraints. Typed paired O/LSE tangents
-traverse hashed Schedule, Tile and LLVM/PTX. Native C++ storage owns independent
-O/LSE/dO/dLSE spans and orders producer streams. Value-only dLSE is exact zero;
-legacy output contracts remain distinct. RTX5070 proves 26 public cases and
-24 prepared-owner cases; the combined adjacent resident lane proves 84 cases.
-Matching LLVM/MLIR 23.1.1 tools and provider build; Ruff, zero-error mypy ratchet
-and 359 focused registry/AD/audit/metadata gates pass.
-
-Two fresh six-profile packets validate four outputs against an independent FP64
-oracle before separate native events and completed-call timing. Maximum error
-is 6.167596078299198e-7. Resident/host ratios span 1.187–1.300; no speedup claimed.
-All 25 source pins match the current worktree. All four backend queues assessed.
-
-Remaining: GFX1201 public parity, generic scaled_matmul batching/transpose,
-dynamic/composed/higher-order products, half-storage AD and resident overhead.
-The parent full unit suite has 25,728 passes and two scaled_matmul closure
-failures; no full CI or broader backend completion is claimed.
-
-Evidence: benchmarks/baselines/public_saved_lse_jvp_20261009/README.md,
-run1.json and run2.json; native_public_jvp_integration_plan.md.
-<!-- entry-fields:end -->
-
-
-
-
-
-
 ### 2026-10-05 — native normalization accuracy closure
 
 Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
@@ -11974,4 +11916,79 @@ queues assessed; half result admission is restricted to SM120 and does not
 transfer NVIDIA numerical or performance evidence to siblings.
 
 Evidence: benchmarks/baselines/sm120_resident_attention_forward_20261009/README.md.
+<!-- entry-fields:end -->
+
+### 2026-10-09 — public native paired saved-LSE JVP
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: [#933](https://github.com/gstoner/tessera/pull/933); sync PUBLIC-NATIVE-JVP-20261009.
+
+Outcome: Public JVP binds frontend intent to a separate native Graph AD owner
+while preserving the caller graph and constraints. Typed paired O/LSE tangents
+traverse hashed Schedule, Tile and LLVM/PTX. Native C++ storage owns independent
+O/LSE/dO/dLSE spans and orders producer streams. Value-only dLSE is exact zero;
+legacy output contracts remain distinct. RTX5070 proves 26 public cases and
+24 prepared-owner cases; the combined adjacent resident lane proves 84 cases.
+Matching LLVM/MLIR 23.1.1 tools and provider build; Ruff, zero-error mypy ratchet
+and 359 focused registry/AD/audit/metadata gates pass.
+
+Two fresh six-profile packets validate four outputs against an independent FP64
+oracle before separate native events and completed-call timing. Maximum error
+is 6.167596078299198e-7. Resident/host ratios span 1.187–1.300; no speedup claimed.
+All 25 source pins match the current worktree. All four backend queues assessed.
+
+Remaining: GFX1201 public parity, generic scaled_matmul batching/transpose,
+dynamic/composed/higher-order products, half-storage AD and resident overhead.
+The parent full unit suite has 25,728 passes and two scaled_matmul closure
+failures; no full CI or broader backend completion is claimed.
+
+Evidence: benchmarks/baselines/public_saved_lse_jvp_20261009/README.md,
+run1.json and run2.json; native_public_jvp_integration_plan.md.
+<!-- entry-fields:end -->
+
+### 2026-10-09 — public native GFX1201 JVP execution and attribution
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: [#934](https://github.com/gstoner/tessera/pull/934); sync PUBLIC-NATIVE-JVP-GFX1201-20261009
+(shared PUBLIC-NATIVE-JVP-20261009).
+
+Outcome: 36 owning RX 9070 XT/gfx1201 public JVP tests pass with the matching
+compiler and fresh C++ HIP providers. Transposed/direct/nested continuous
+FP32 scaled products retain caller Graph/request identity, inactive roles,
+warm compiler refusal and independent old outputs. Two fresh 36-profile
+packets verify all 23 source pins and all native tool/provider hashes.
+Maximum absolute error is 8.189881861575543e-8 against the independent FP64
+oracle. Completed public medians span 1.065–2.643 ms and native interleaved
+event medians 4.072–25.124 us. Captured member windows stay distinct and
+exceed 3.170 ms. No speedup or cross-architecture proof transfer.
+
+Remaining: Public preparation/binding overhead, mixed-axis/general
+compositions, generic scaled_matmul batching/transpose closure, quantized AD,
+and the broader five-slice obligations. All four backend queues assessed.
+
+Evidence: benchmarks/baselines/public_native_scaled_jvp_20261009/README.md,
+run1.json, run2.json, device-tests.txt.
+<!-- entry-fields:end -->
+
+### 2026-10-09 — retained checked GFX1201 public JVP plan
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync GFX1201-RETAINED-PUBLIC-JVP-20261009.
+
+Outcome: One caller-owned sealed native program retains C++ buffers,
+generations and module ownership. Warm binding avoids repeated serialized
+validation/preparation; metadata mutation cannot rebind the owned snapshot.
+Bounded caches, transactional frames, process checks and guarded explicit/GC
+cleanup preserve ownership. 70 gfx1201 numerical/admission/lifetime/FP8
+regression cases and 50 SM120 shared-lifecycle cases pass.
+Matched A/B/B/A packets preserve all 36 native program and member-image hashes.
+Public median ratios are 0.370–0.681 and 0.380–0.659; geometric means
+0.508/0.514. Maximum error remains 8.189881861575543e-8.
+No native kernel speedup claimed; all four sibling queues assessed.
+
+Remaining: Public overhead, generic scaled batching/transpose, mixed/general
+composition, wider quantized AD and the larger five-slice obligations.
+
+Evidence: benchmarks/baselines/retained_public_scaled_jvp_20261009/README.md,
+control1.json, candidate1.json, candidate2.json, control2.json.
 <!-- entry-fields:end -->

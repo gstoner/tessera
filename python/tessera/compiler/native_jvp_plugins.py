@@ -734,21 +734,21 @@ def _plan_attention_checkpoint(*, primal_inputs, wrt_indices, target,
 @register_native_jvp_plugin(
     "scaled_matmul", family="scaled_product_program",
     schedule_consumer="schedule.artifact",
-    tile_consumer="tile.scaled_matmul_kernel",
+    tile_consumer="tile.scaled_matmul_kernel|tile.structured_reduction_kernel",
     target_consumers={"rocm":"rocm.gfx1201_native_scaled_program"},
 )
 def _plan_scaled_product_program(*, primal_inputs, wrt_indices, target,
                                  architecture, execution_mode, ir_contract=None, **_):
     from .native_scaled_program import package_native_scaled_jvp
     if (target,architecture,execution_mode)!=("rocm","gfx1201","hip_runtime"):
-        raise ValueError("scaled FP8 JVP requires its native gfx1201 program consumer")
+        raise ValueError("scaled-product JVP requires its native gfx1201 program consumer")
     if (not 4 <= len(primal_inputs) <= 128 or not wrt_indices
             or len(set(wrt_indices)) != len(wrt_indices)
             or any(type(i) is not int or not 0 <= i < len(primal_inputs)
                    or str(primal_inputs[i].dtype) != "float32" for i in wrt_indices)):
-        raise ValueError("scaled FP8 JVP requires floating scale tangent roles")
+        raise ValueError("scaled-product JVP requires explicit continuous tangent roles")
     if not isinstance(ir_contract,Mapping):
-        raise ValueError("scaled FP8 JVP requires its traced native Graph")
+        raise ValueError("scaled-product JVP requires its traced native Graph")
     program=package_native_scaled_jvp(ir_contract["source_graph_ir"])
     names=[f"primal_{i}" for i in range(len(primal_inputs))]+[f"tangent_{i}" for i in wrt_indices]
     child={"target":target,"compiler_path":"rocm_scaled_jvp_program_compiled",

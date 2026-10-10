@@ -2105,10 +2105,13 @@ class JitFn:
 
     def _try_rocm_composed_scaled_call(self,args,kwargs):
         """Compile the full semantic product/sum Graph; native HIP owns execution."""
-        if normalize_target_kind(self.target)!="rocm_gfx1201" or self.differentiation_request is not None:
+        if normalize_target_kind(self.target)!="rocm_gfx1201":
             return _JIT_FALLBACK
-        from .rocm_typed_scaled_native import requests_composed_typed_scaled
-        if not (requests_composed_typed_scaled(self.graph_ir) or
+        from .rocm_typed_scaled_native import requests_composed_typed_scaled, requests_floating_scaled
+        floating = requests_floating_scaled(self.graph_ir)
+        if self.differentiation_request is not None and not floating:
+            return _JIT_FALLBACK
+        if not (requests_composed_typed_scaled(self.graph_ir) or floating or
                 (self._frontend_output_permutation is not None and
                  self._frontend_output_permutation != tuple(range(len(self._frontend_output_permutation))))):
             return _JIT_FALLBACK
@@ -2121,11 +2124,17 @@ class JitFn:
         ordered=self._ordered_inputs(args,kwargs)
         if ordered is None or not all(isinstance(value,np.ndarray) for value in ordered):
             raise ValueError("native composed scaled primal requires explicit host tensors")
+        from .paged_host_span import checked_host_span
+        for value in ordered:
+            checked_host_span(value)
         self.frontend_differential(*args,**kwargs)
         module=self._traced_autodiff_module(args,kwargs)
         from .rocm_typed_scaled_native import supports_composed_scaled_primal
         if not supports_composed_scaled_primal(module):
             raise ValueError("native composed scaled primal requires its exact product/sum/permutation contract")
+        if self.differentiation_request is not None:
+            from .rocm_typed_scaled_native import primal_call_module
+            module = primal_call_module(module)
         from dataclasses import replace
         module=replace(module,module_attrs={**module.module_attrs,
                        "tessera.target":json.dumps("rocm"),"tessera.arch":json.dumps("gfx1201")})
@@ -2644,12 +2653,13 @@ class JitFn:
         if len(tangent_values) != len(request.wrt_indices):
             raise TesseraJitError("native_jvp requires one tangent per active input")
         from .rocm_typed_scaled_native import (
-            requests_typed_scaled, requests_composed_typed_scaled,
+            requests_typed_scaled, requests_composed_typed_scaled, requests_floating_scaled,
         )
         native_scaled_frame = (
             normalize_target_kind(self.target) in {"rocm", "rocm_gfx1201"}
             and (requests_typed_scaled(self.graph_ir)
-                 or requests_composed_typed_scaled(self.graph_ir))
+                 or requests_composed_typed_scaled(self.graph_ir)
+                 or requests_floating_scaled(self.graph_ir))
         )
         if native_scaled_frame:
             from .paged_host_span import checked_host_span

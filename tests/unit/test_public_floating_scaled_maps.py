@@ -42,12 +42,20 @@ def test_floating_map_projects_native_reverse_and_certificate(mask,ta,tb,prefix,
     assert scalar.graph_ir == before and scalar._frontend_batch_axes is None
     assert owner.differentiation_request is not scalar.differentiation_request
 
-def test_continuous_map_does_not_admit_ordinary_primal_or_encoded_scale():
+def test_continuous_map_admits_native_primal_and_rejects_encoded_scale():
     import tessera as ts
+    from tessera.compiler.rocm_typed_scaled_native import supports_floating_scaled_primal
     from tests.unit.test_public_floating_scaled_reverse import floating_python_source
-    owner = ts.from_text(floating_python_source(), target="rocm_gfx1201")
-    with pytest.raises(ValueError,match="reverse JIT"):
-        vmap(owner)
+    from tests.device.rocm.test_floating_scaled_adjoint import inputs
+    scalar = ts.from_text(floating_python_source(), target="rocm_gfx1201")
+    owner = vmap(scalar)
+    assert isinstance(owner, JitFn) and owner is not scalar
+    values = tuple(np.stack((value,value)) for value in inputs(False,False)[:4])
+    graph = owner._specialized_autodiff_module(values,{})
+    assert supports_floating_scaled_primal(graph)
+    graph = copy.deepcopy(graph)
+    graph.functions[0].body[0].kwargs["scale_layout"]["format"] = "e8m0"
+    assert not supports_floating_scaled_primal(graph)
 
 
 

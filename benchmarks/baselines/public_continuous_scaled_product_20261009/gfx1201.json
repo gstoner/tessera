@@ -1,0 +1,709 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid_hex": "32386439653765666266326566373136",
+  "route": "public textual frontend -> typed Graph -> native MLIR differentiation/product expansion -> Schedule/Tile -> ROCm/LLVM -> HSACO -> checked ABI",
+  "first_public_call_domain": "first owner invocation includes trace/certificate, compilation and package preparation; process caches may already be warm",
+  "warm_public_call_domain": "public call includes host checks/map packing, upload, dispatch, readback and output placement; compiler subprocesses forbidden",
+  "native_event_packet": "benchmarks/baselines/continuous_scaled_product_20261009/gfx1201.json",
+  "claim": "named numerical/latency characterization; no default or performance promotion",
+  "compiler_sha256": "44b62c78cc3a7bd941e9780889e7c9ba8120d6047270406b46f5b27acd6befa9",
+  "compiler_version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions.\n",
+  "provider_sha256": "040f9dc1247d66c6f6879a89d3778c26d5f05658fc21c136ab80577a3b40c202",
+  "recorder_sha256": "f553596a56a4ecba30ba39bbf6ac98744d9d5c5aed7bd7376a92a8795c9443b5",
+  "source_sha256": {
+    "src/transforms/lib/NativeFloatingScaledProduct.h": "c7642a4a5af99f713e6570e09d2041e4ce1800475e2a6bbaaa575e349ab91fc6",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "51649f0da5f95ebcca55a0832f1c646b80395c3ff00cac57ae909a02c65cdec7",
+    "src/compiler/programming_model/lib/NativeScaleTranspose.h": "622e77743d94b7b699783eb4c9d3e83f94fcf52590525c616487f33ee97c81da",
+    "python/tessera/compiler/native_scaled_program.py": "8401343266b9c441e629c0ae5f55c8ac468795de5c2bc8483c14c3dc42792db4",
+    "python/tessera/compiler/jit.py": "5d7cb5de68359663809b192117a0c7e10375b24ca27d4143d9d3fe12ce3c0988",
+    "python/tessera/compiler/native_jvp_plugins.py": "e3ce92ea3c80d2de17c743dd2ca49f0b88d07e1b77cf2d4d8d16e6c86fbbb766",
+    "python/tessera/compiler/native_vmap.py": "f7fb6b4fa5a5f12c2e084458fd085e406efb8ba0fdd81be81941e44dd57115b8",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "75867ca854c44b004846a3cef1ee022ce0f12bacdced8b39bddad5dcf25554b7",
+    "tests/unit/test_public_floating_scaled_primal_jvp.py": "cba17707050963610c1a5a5762511e45f15de5751911010ab52360ab14960ab9",
+    "tests/device/rocm/test_public_floating_scaled_primal_jvp.py": "0f6659484278a81d6d4134ef8fb1155b0bcd793877b71140b131c938567e42e9",
+    "tests/device/rocm/test_floating_scaled_product.py": "7202448ff71beff7c1e7c047adbec446c641cd0e5670f1cb2e42a2fe4ed86389"
+  },
+  "rows": [
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "envelope": "direct",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 273.1117911171168,
+      "warm_public_call_samples_ms": [
+        1.648888923227787,
+        1.22584099881351,
+        1.299611059948802,
+        1.2584230862557888,
+        1.217924989759922,
+        1.2799538671970367,
+        1.2697339989244938
+      ],
+      "warm_public_call_median_ms": 1.2697339989244938,
+      "max_abs_error": 1.6454790474629277e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "envelope": "direct",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 297.17846401035786,
+      "warm_public_call_samples_ms": [
+        1.8231410067528486,
+        1.7948381137102842,
+        1.7037531360983849,
+        1.8643399234861135,
+        2.344626933336258,
+        2.5554699823260307,
+        2.502629067748785
+      ],
+      "warm_public_call_median_ms": 1.8643399234861135,
+      "max_abs_error": 3.527432443362066e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "envelope": "nested_mixed",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          2,
+          9
+        ],
+        [
+          9,
+          2,
+          5
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 106.08971701003611,
+      "warm_public_call_samples_ms": [
+        1.827700063586235,
+        1.6567041166126728,
+        1.5866400208324194,
+        1.6188810113817453,
+        1.5101428143680096,
+        1.6227380838245153,
+        1.4951240736991167
+      ],
+      "warm_public_call_median_ms": 1.6188810113817453,
+      "max_abs_error": 3.737821108185102e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": false,
+      "transposeB": false,
+      "envelope": "nested_mixed",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          2,
+          9
+        ],
+        [
+          9,
+          2,
+          5
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 367.36303591169417,
+      "warm_public_call_samples_ms": [
+        2.4695820175111294,
+        2.4326550774276257,
+        2.3421519435942173,
+        2.2342270240187645,
+        2.3178658448159695,
+        2.3300989996641874,
+        2.346110064536333
+      ],
+      "warm_public_call_median_ms": 2.3421519435942173,
+      "max_abs_error": 5.986679935121586e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "envelope": "direct",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 58.670076075941324,
+      "warm_public_call_samples_ms": [
+        1.4974591322243214,
+        1.434308011084795,
+        1.3835118152201176,
+        1.4186990447342396,
+        1.343645853921771,
+        1.2641041539609432,
+        1.458474900573492
+      ],
+      "warm_public_call_median_ms": 1.4186990447342396,
+      "max_abs_error": 2.1523414883706238e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "envelope": "direct",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 283.2706500776112,
+      "warm_public_call_samples_ms": [
+        1.9545319955796003,
+        1.8300150986760855,
+        1.898435177281499,
+        2.0627581980079412,
+        1.7051049508154392,
+        1.7348930705338717,
+        1.7082919366657734
+      ],
+      "warm_public_call_median_ms": 1.8300150986760855,
+      "max_abs_error": 2.535781773449486e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "envelope": "nested_mixed",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          2,
+          9
+        ],
+        [
+          5,
+          2,
+          9
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 96.11345501616597,
+      "warm_public_call_samples_ms": [
+        2.065954962745309,
+        1.6618638765066862,
+        1.711829099804163,
+        1.8583990167826414,
+        1.5890640206634998,
+        1.6383889596909285,
+        1.582892844453454
+      ],
+      "warm_public_call_median_ms": 1.6618638765066862,
+      "max_abs_error": 3.146030902456687e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": false,
+      "transposeB": true,
+      "envelope": "nested_mixed",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          2,
+          9
+        ],
+        [
+          5,
+          2,
+          9
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 365.55222794413567,
+      "warm_public_call_samples_ms": [
+        2.6538269594311714,
+        2.7456919196993113,
+        2.52446997910738,
+        2.3942808620631695,
+        2.381817903369665,
+        2.478301990777254,
+        2.4404600262641907
+      ],
+      "warm_public_call_median_ms": 2.478301990777254,
+      "max_abs_error": 6.464218504920183e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "envelope": "direct",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 57.98336700536311,
+      "warm_public_call_samples_ms": [
+        1.5717209316790104,
+        1.3090998400002718,
+        1.5296360943466425,
+        1.345108961686492,
+        1.3243688736110926,
+        1.4205928891897202,
+        1.2856950052082539
+      ],
+      "warm_public_call_median_ms": 1.345108961686492,
+      "max_abs_error": 1.7862665069312555e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "envelope": "direct",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 283.83129509165883,
+      "warm_public_call_samples_ms": [
+        1.8548620864748955,
+        1.7927528824657202,
+        1.81626807898283,
+        2.019657054916024,
+        1.762955915182829,
+        1.7347829416394234,
+        1.7219888977706432
+      ],
+      "warm_public_call_median_ms": 1.7927528824657202,
+      "max_abs_error": 2.0840487516271544e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "envelope": "nested_mixed",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          9,
+          2,
+          5
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 95.71981895714998,
+      "warm_public_call_samples_ms": [
+        1.9910370465368032,
+        1.7566739115864038,
+        1.6903569921851158,
+        1.6166181303560734,
+        1.5859890263527632,
+        1.6356438864022493,
+        1.6242519486695528
+      ],
+      "warm_public_call_median_ms": 1.6356438864022493,
+      "max_abs_error": 5.090191801393473e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": false,
+      "envelope": "nested_mixed",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          9,
+          2,
+          5
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 366.3830691948533,
+      "warm_public_call_samples_ms": [
+        2.5961778592318296,
+        2.51761800609529,
+        2.5266651064157486,
+        2.4246089160442352,
+        2.3125759325921535,
+        2.5068670511245728,
+        2.4002029094845057
+      ],
+      "warm_public_call_median_ms": 2.5068670511245728,
+      "max_abs_error": 9.894184677117224e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "envelope": "direct",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 59.89065789617598,
+      "warm_public_call_samples_ms": [
+        1.3981799129396677,
+        1.4250818639993668,
+        1.4526040758937597,
+        1.431833952665329,
+        1.3192889746278524,
+        1.265265978872776,
+        1.3515609316527843
+      ],
+      "warm_public_call_median_ms": 1.3981799129396677,
+      "max_abs_error": 1.9545843610302427e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "envelope": "direct",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          9,
+          2
+        ],
+        [
+          5,
+          9
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "first_public_call_ms": 287.84437803551555,
+      "warm_public_call_samples_ms": [
+        2.0284990314394236,
+        1.9287830218672752,
+        1.7944469582289457,
+        1.6825429629534483,
+        1.8438110128045082,
+        1.7798789776861668,
+        1.8165488727390766
+      ],
+      "warm_public_call_median_ms": 1.8165488727390766,
+      "max_abs_error": 5.753972120992046e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "envelope": "nested_mixed",
+      "kind": "primal",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          5,
+          2,
+          9
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 95.76777601614594,
+      "warm_public_call_samples_ms": [
+        2.082030987367034,
+        1.7055859789252281,
+        1.7086321022361517,
+        1.7412849701941013,
+        1.7323079518973827,
+        1.6871308907866478,
+        1.547415042296052
+      ],
+      "warm_public_call_median_ms": 1.7086321022361517,
+      "max_abs_error": 2.7708468297582556e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_scaled_primal_program_compiled",
+      "execution_kind": "native_gpu"
+    },
+    {
+      "transposeA": true,
+      "transposeB": true,
+      "envelope": "nested_mixed",
+      "kind": "paired_jvp",
+      "raw_input_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          5,
+          2,
+          9
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "first_public_call_ms": 361.7172511294484,
+      "warm_public_call_samples_ms": [
+        2.7108858339488506,
+        2.6162350550293922,
+        2.552615012973547,
+        2.4722099769860506,
+        2.434619003906846,
+        2.4649070110172033,
+        2.531483070924878
+      ],
+      "warm_public_call_median_ms": 2.531483070924878,
+      "max_abs_error": 4.561819211268414e-08,
+      "correctness": "checked_before_and_after_every_round",
+      "warm_compiler_subprocesses": "forbidden",
+      "compiler_path": "rocm_jvp_compiled",
+      "execution_kind": "native_gpu"
+    }
+  ]
+}

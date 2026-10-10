@@ -100,7 +100,8 @@ class NativeScaledProgram:
                 math.prod(member["geometry"][3:]) > 1024):
                 raise ValueError("native scaled member ABI differs from its program")
             if step["operation"] == "tessera.scaled_matmul":
-                if len(step["inputs"]) != 4 or len(member["scalars"]) != 3:
+                if len(step["inputs"]) != 4 or len(member["scalars"]) != (
+                    1 if step.get("lowering") == "structured_f32_scaled_product" else 3):
                     raise ValueError("native scaled product has an invalid scalar ABI")
             elif step["operation"] == "tessera.transpose":
                 if len(step["inputs"]) != 1 or len(member["scalars"]) != 1:
@@ -135,7 +136,46 @@ class NativeScaledProgram:
             if any(type(v) is not int or v <= 0 or v > 2**63 - 1 for v in member["scalars"]):
                 raise ValueError("native scaled member scalar extent is invalid")
             output_buffer = buffers[step["output"]]
-            if step["operation"] == "tessera.scaled_matmul":
+            if (step["operation"] == "tessera.scaled_matmul" and
+                step.get("lowering") == "structured_f32_scaled_product"):
+                captured = [buffers[slot] for slot in step["inputs"]]
+                count = output_buffer["elements"]
+                contract = step.get("continuous_contract")
+                if (not isinstance(contract, dict) or
+                    set(contract) != {"scale_n", "scale_k", "transposeA", "transposeB"} or
+                    any(type(contract[key]) is not int or contract[key] <= 0
+                        for key in ("scale_n", "scale_k")) or
+                    any(type(contract[key]) is not bool for key in ("transposeA", "transposeB"))):
+                    raise ValueError("native continuous product lost its block/orientation contract")
+                shapes = [row["shape"] for row in captured]
+                prefix = output_buffer["shape"][:-2]
+                if any(len(shape) < 2 or len(shape)-2 > len(prefix) for shape in shapes):
+                    raise ValueError("native continuous product has invalid prefix ranks")
+                joined = []
+                for axis in range(len(prefix)):
+                    extents = [([1]*(len(prefix)-len(shape)+2)+shape[:-2])[axis]
+                               for shape in shapes]
+                    nonunit = {extent for extent in extents if extent != 1}
+                    if len(nonunit) > 1:
+                        raise ValueError("native continuous product has incompatible prefixes")
+                    joined.append(next(iter(nonunit), 1))
+                a, b, sa, sb = shapes
+                k, m = a[-2:] if contract["transposeA"] else a[-2:][::-1]
+                n, kb = b[-2:] if contract["transposeB"] else b[-2:][::-1]
+                groups = (k+contract["scale_k"]-1)//contract["scale_k"]
+                columns = (n+contract["scale_n"]-1)//contract["scale_n"]
+                if (joined != prefix or max(len(shape)-2 for shape in shapes) != len(prefix) or
+                    k != kb or output_buffer["shape"] != prefix+[m,n] or
+                    sa[-2:] != [m,groups] or sb[-2:] != [groups,columns]):
+                    raise ValueError("native continuous product shape differs from block semantics")
+                if (kind not in {"primal", "paired_jvp"} or
+                    any(row["storage"] != "f32" for row in captured) or
+                    output_buffer["storage"] != "f32" or
+                    member["scalars"] != [count] or
+                    member.get("scale_adjoint_schedule") != "serial_per_scale_element" or
+                    member["geometry"] != [(count+127)//128,1,1,128,1,1]):
+                    raise ValueError("native continuous product storage/count/geometry differs")
+            elif step["operation"] == "tessera.scaled_matmul":
                 m, n, k = member["scalars"]
                 lhs, rhs = (buffers[slot] for slot in step["inputs"][:2])
                 batching=step.get("batching")
@@ -301,7 +341,8 @@ def _package_native_scaled(graph_ir: str, *, target: str = "rocm_gfx1201", prima
     images, members = [], []
     from .rocm_native import _extract_hsaco
     for step in program["steps"]:
-        family = ("matmul" if step["operation"] == "tessera.scaled_matmul" else
+        family = ("reduction" if step.get("lowering") == "structured_f32_scaled_product" else
+                  "matmul" if step["operation"] == "tessera.scaled_matmul" else
                   "reduction" if step["operation"] == "tensor.generate" else
                   "scalar_unary" if step["operation"] == "tessera.transpose" else "scalar_binary")
         index = step["step"]

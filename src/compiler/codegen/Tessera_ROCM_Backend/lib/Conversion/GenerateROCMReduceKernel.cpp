@@ -350,7 +350,8 @@ struct GenerateROCMReduceKernelPass
       const int64_t scalars[] = {count};
       bool wave = op->getAttrOfType<StringAttr>("algorithm").getValue() == "wave_per_scale_element";
       const int64_t geometry[] = {wave ? count : (count + threads - 1) / threads, 1, 1, threads, 1, 1};
-      if (failed(projectROCMNativeProgramMember(module, name.getValue(), 4, scalars, geometry,
+      if (failed(projectROCMNativeProgramMember(module, name.getValue(),
+          op->getAttrOfType<IntegerAttr>("input_count").getInt(), scalars, geometry,
           op->getAttrOfType<StringAttr>("algorithm").getValue())))
         return signalPassFailure();
       // The GPU region already contains the actual verified native SSA.

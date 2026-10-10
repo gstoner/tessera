@@ -247,6 +247,8 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
         "%" + arg.name: tensor_ir_type(tuple(value.shape), _storage_dtype(value))
         for arg, value in zip(function.args, values, strict=True)}
     scale_roles: set[int] = set()
+    projected_ops = []
+    reserved = {arg.name for arg in function.args} | {name for op in function.body for name in op.result_names}
     for op in function.body:
         if len(op.result_names) != 1 or any(value not in scalar_types for value in op.operands):
             raise ValueError("native composed map requires prefix SSA")
@@ -280,10 +282,28 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
                                if value.removeprefix("%") in arguments)
         elif op.op_name == "tessera.add":
             left, right = (projected_types[value] for value in op.operands)
-            if str(left) != str(right):
-                raise ValueError("native composed sum requires matching projected storage")
-            result_type = left
-            op.operand_types = [str(left), str(right)]
+            if left.dtype != right.dtype:
+                raise ValueError("native composed sum requires matching storage")
+            result_type = tensor_ir_type(np.broadcast_shapes(tuple(map(int, left.shape)),
+                                                             tuple(map(int, right.shape))), left.dtype)
+            from .graph_ir import IROp
+            for index, source in enumerate((left, right)):
+                if str(source) == str(result_type):
+                    continue
+                stem = op.result_names[0] + "_map_broadcast_" + str(index)
+                name = stem
+                suffix = 0
+                while name in reserved:
+                    suffix += 1
+                    name = stem + "_" + str(suffix)
+                reserved.add(name)
+                broadcast = IROp(result=name, op_name="tessera.broadcast",
+                    operands=[op.operands[index]], operand_types=[str(source)],
+                    result_type=str(result_type), inferred_type=result_type)
+                projected_ops.append(broadcast)
+                op.operands[index] = "%" + name
+                projected_types["%" + name] = result_type
+            op.operand_types = [str(result_type), str(result_type)]
         elif op.op_name == "tessera.transpose":
             source = projected_types[op.operands[0]]
             leading = source.rank - scalar_types[op.operands[0]].rank
@@ -299,6 +319,7 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
         op.inferred_types = (result_type,)
         op.result_type = str(result_type)
         value = "%" + op.result_names[0]
+        projected_ops.append(op)
         scalar_types[value] = scalar_result
         projected_types[value] = result_type
         # Shape/dtype metadata only: no host/device intermediate allocation.
@@ -309,6 +330,7 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
         arg.ir_type = tensor_ir_type(tuple(value.shape), _storage_dtype(value))
     if str(projected_types[function.return_values[0]]) != str(output):
         raise ValueError("native composed map result differs from the logical map frame")
+    function.body = projected_ops
     function.result_types = [output]
     admission = supports_scaled_reverse if scale_transpose else supports_composed_scale_jvp
     if not admission(module, tuple(sorted(scale_roles))):
@@ -492,6 +514,8 @@ def certify_typed_batch_frontends(owner, values, *, rtol, atol):
             operands=[semantic[name] for name in operation.operands]
             if operation.op_name == "tessera.scaled_matmul":
                 computed = reference_typed_scaled_matmul(*operands, **operation.kwargs)
+            elif operation.op_name == "tessera.broadcast":
+                computed = np.broadcast_to(operands[0], tuple(map(int, operation.inferred_type.shape)))
             elif operation.op_name == "tessera.transpose":
                 computed = np.transpose(operands[0], operation.kwargs["permutation"])
             else:

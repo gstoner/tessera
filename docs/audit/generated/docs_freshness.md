@@ -143,13 +143,13 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/APPLE_AUDIT.md` | - | 2026-09-25 | 14 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 88 | ✓ |
 | `backend/apple/README.md` | - | 2026-09-05 | 34 | ✓ |
-| `backend/apple/todo.md` | - | 2026-10-08 | 1 | ✓ |
+| `backend/apple/todo.md` | - | 2026-10-09 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-09-05 | 34 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-09-05 | 34 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-09-27 | 12 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 88 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 107 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-10-08 | 1 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-10-09 | 0 | ✓ |
 | `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 66 | ✓ |
 | `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 56 | ✓ |
 | `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 61 | ✓ |
@@ -158,8 +158,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-09-26 | 13 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 73 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-09-05 | 34 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-10-08 | 1 | ✓ |
-| `backend/x86/todo.md` | - | 2026-10-08 | 1 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-10-09 | 0 | ✓ |
+| `backend/x86/todo.md` | - | 2026-10-09 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-09-22 | 17 | ✓ |
 | `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 35 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-09-06 | 33 | ✓ |

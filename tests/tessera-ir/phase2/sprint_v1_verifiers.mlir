@@ -38,7 +38,7 @@ func.func @transpose_elem_mismatch(%x: tensor<4x8xf32>) -> tensor<8x4xf16> {
 
 // TransposeOp — negative: static dims aren't a permutation
 func.func @transpose_dims_not_perm(%x: tensor<4x8xf32>) -> tensor<7x5xf32> {
-  // expected-error @+1 {{dimensions matching the declared input axes}}
+  // expected-error @+1 {{requires a rank-sized unique nonnegative i64 permutation and result dimensions matching the declared input axes}}
   %y = "tessera.transpose"(%x) : (tensor<4x8xf32>) -> tensor<7x5xf32>
   return %y : tensor<7x5xf32>
 }

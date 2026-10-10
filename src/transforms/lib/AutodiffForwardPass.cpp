@@ -3,6 +3,8 @@
 #include "tessera/Dialect/Attn/AttnDialect.h"
 #include "Tessera/Transforms/Passes.h"
 #include "Tessera/IR/TesseraOps.h"
+#include "Tessera/IR/AttentionShapeContract.h"
+#include "Tessera/IR/AttentionTangentZero.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -40,10 +42,10 @@ static bool isAllowedStochasticTangent(mlir::Operation *op) {
 }
 
 static mlir::Value buildStaticZero(mlir::OpBuilder &builder,
-                                   mlir::Location loc, mlir::Type type) {
+                                   mlir::Location loc, mlir::Type type, mlir::Value shapeLike = {}) {
   if (auto shaped = mlir::dyn_cast<mlir::ShapedType>(type)) {
     if (!shaped.hasStaticShape())
-      return {};
+      return shapeLike ? buildAttentionDynamicZero(builder, loc, shapeLike) : mlir::Value{};
     mlir::Type element = shaped.getElementType();
     mlir::Attribute zero = builder.getZeroAttr(element);
     if (!zero)
@@ -127,7 +129,7 @@ class RegionTangentBuilder {
     auto found = current_->tangents.find(source);
     if (found != current_->tangents.end() && found->second)
       return found->second;
-    return buildStaticZero(builder, source.getLoc(), primal.getType());
+    return buildStaticZero(builder, source.getLoc(), primal.getType(), primal);
   }
 
   mlir::LogicalResult buildLeaf(mlir::Operation &operation,
@@ -613,10 +615,26 @@ class AutodiffForwardPass
         forward.emitError("tessera-autodiff-forward: requires one defined block");
         return signalPassFailure();
       }
+      bool boundedAttentionExport = false;
+      if (exportAttentionJVP) {
+        auto &attention = forward.getBody().front().front();
+        llvm::SmallVector<int64_t> dims;
+        auto q = mlir::dyn_cast<mlir::RankedTensorType>(attention.getOperand(0).getType());
+        auto k = mlir::dyn_cast<mlir::RankedTensorType>(attention.getOperand(1).getType());
+        auto v = mlir::dyn_cast<mlir::RankedTensorType>(attention.getOperand(2).getType());
+        if (q && k && v && q.getRank() == 4 && k.getRank() == 4 && v.getRank() == 4) {
+          dims = {q.getDimSize(0), q.getDimSize(1), k.getDimSize(1),
+                  q.getDimSize(2), k.getDimSize(2), q.getDimSize(3), v.getDimSize(3)};
+          auto shape = resolveNativeAttentionShape(&attention, dims);
+          if (mlir::failed(shape)) return signalPassFailure();
+          boundedAttentionExport = shape->dynamicSequence;
+        }
+      }
       for (mlir::Type type : forward.getArgumentTypes()) {
         auto tensor = mlir::dyn_cast<mlir::RankedTensorType>(type);
         bool admissibleTensor =
-            tensor && tensor.hasStaticShape() &&
+            tensor && (tensor.hasStaticShape() ||
+                       (boundedAttentionExport && !tensor.getEncoding() && tensor.getElementType().isF32())) &&
             mlir::isa<mlir::FloatType, mlir::IntegerType, mlir::ComplexType>(
                 tensor.getElementType());
         bool controlScalar =
@@ -697,6 +715,9 @@ class AutodiffForwardPass
                                              resultTypes);
       auto jvp = mlir::func::FuncOp::create(forward.getLoc(), jvpName, jvpType);
       jvp.setPrivate();
+      // Bounded native attention tangent construction reads the owning
+      // module's sealed capacities. Attach before invoking interfaces.
+      module.push_back(jvp);
       // Primal argument contracts survive differentiation. Tangent arguments
       // share storage/layout/sharding, but are not model-parameter declarations.
       for (unsigned index = 0; index < forward.getNumArguments(); ++index) {
@@ -753,7 +774,7 @@ class AutodiffForwardPass
             tangent == state.tangents.end() ? mlir::Value{} : tangent->second;
         if (!value)
           value = buildStaticZero(builder, forward.getLoc(),
-                                  state.primals.lookup(result).getType());
+                                  state.primals.lookup(result).getType(), state.primals.lookup(result));
         if (!value) {
           forward.emitError(
               "tessera-autodiff-forward: cannot materialize return tangent");
@@ -762,7 +783,6 @@ class AutodiffForwardPass
         returns.push_back(value);
       }
       builder.create<mlir::func::ReturnOp>(forward.getLoc(), returns);
-      module.push_back(jvp);
       forward->setAttr("tessera.autodiff.jvp",
                        mlir::FlatSymbolRefAttr::get(&getContext(), jvpName));
       // Export a tensor-only native HVP entry. Saved branch predicates must
@@ -914,11 +934,11 @@ class AutodiffForwardPass
           tangent.addOperands(primal->getOperands().take_front(3));
           tangent.addOperands(saved->getResults());
           for (auto input:primal->getOperands().take_front(2))
-            tangent.addOperands(buildStaticZero(builder,value->getLoc(),input.getType()));
+            tangent.addOperands(buildStaticZero(builder,value->getLoc(),input.getType(),input));
           tangent.addOperands(value->getOperand(2));
           if (primal->getNumOperands()==4) {
             tangent.addOperands(primal->getOperand(3));
-            tangent.addOperands(buildStaticZero(builder,value->getLoc(),primal->getOperand(3).getType()));
+            tangent.addOperands(buildStaticZero(builder,value->getLoc(),primal->getOperand(3).getType(),primal->getOperand(3)));
           }
           tangent.addTypes(value->getResult(0).getType());
           tangent.addAttributes(value->getAttrs());
@@ -937,7 +957,8 @@ class AutodiffForwardPass
       auto k=mlir::cast<mlir::RankedTensorType>(op->getOperand(1).getType());
       auto v=mlir::cast<mlir::RankedTensorType>(op->getOperand(2).getType());
       llvm::json::Array dims;
-      for (auto d : {q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),q.getDimSize(2),k.getDimSize(2),q.getDimSize(3),v.getDimSize(3)}) dims.push_back(d);
+      for (auto d : {q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),q.getDimSize(2),k.getDimSize(2),q.getDimSize(3),v.getDimSize(3)})
+        dims.push_back(mlir::ShapedType::isDynamic(d) ? -1 : d);
       llvm::json::Array active;
       for (auto tangent : op->getOperands().slice(5,3))
         active.push_back(mlir::isa<mlir::BlockArgument>(tangent));
@@ -950,8 +971,16 @@ class AutodiffForwardPass
       if (bias) {
         contract["schema"]=2;
         llvm::json::Array shape;
-        for (auto dim:mlir::cast<mlir::RankedTensorType>(op->getOperand(8).getType()).getShape()) shape.push_back(dim);
+        for (auto dim:mlir::cast<mlir::RankedTensorType>(op->getOperand(8).getType()).getShape())
+          shape.push_back(mlir::ShapedType::isDynamic(dim) ? -1 : dim);
         contract["bias_shape"]=std::move(shape);
+      }
+      if (auto bounds = module->getAttrOfType<mlir::DenseI64ArrayAttr>("tessera.attention_shape_bounds")) {
+        llvm::json::Array capacities;
+        for (auto extent : bounds.asArrayRef()) capacities.push_back(extent);
+        contract["schema"] = bias ? 4 : 3;
+        contract["shape_bounds"] = std::move(capacities);
+        contract["shape_policy"] = "bounded_sequences_v1";
       }
       std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
       module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));

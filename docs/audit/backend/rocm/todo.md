@@ -52,7 +52,7 @@ No image, kernel, dtype, operation or ABI changes are introduced.
 
 Current as of 2026-10-08. Required route: frontend -> typed Graph MLIR -> verified AD/optimization -> Schedule -> Tile -> Target -> native image and checked ABI.
 
-ROCM-NVFP4-INGEST-1: model-quality acceptance and wider dynamic/layout/AD envelopes. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151 version-query reuse needs owning-host proof.
+ROCM-NVFP4-INGEST-1: model-quality acceptance and wider dynamic/layout/AD envelopes. ROCM-FP8-BLOCKSCALE-1: broader W8A8 short/ragged-K and MXFP4 M256 attribution. E2E-REAL-6: general paged-KV layouts, launch overhead and wider cache families. gfx1151/gfx1201 unary, matmul and native-math warm package reuse have owning-host proof; remaining cache families need per-envelope evidence.
 
 Named gfx1201 leading/scalar primal, scale JVP/VJP, transposed A and partial K32 groups are proved. Actual-image packaging and bounded version-query reuse are proved in recorded envelopes; they are not pending builds.
 
@@ -16250,6 +16250,66 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 345 host WSL tests pass without skips; the unchanged execution gate passes.
 Host-free image parity validated: 235 previously skipped ROCm image cases now execute with the owning SDK source manifest. Hosted GitHub replay remains follow-up required; no fresh gfx1151/gfx1201 device or performance claim.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
+
+## Shared attention sequence-capacity foundation — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Semantic checkpoint verification and native Schedule projection now use one
+IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
+Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
+Not applicable to ROCm physical kernels: this resolver is used by the shared attention checkpoint dialect and NVIDIA native products. No gfx1151/gfx1201 schedule, image ABI or performance claim is changed.
+Foundation verification alone does not establish execution; the native evidence is recorded below. Generic scaled-matmul closure remains open.
+
+## Bounded saved-LSE JVP native integration — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Shared contracts: symbolic sequence AD, exact source-shaped inactive zeros,
+schema-2 native tensor manifests and checked actual-size product launch grids.
+574 host WSL regressions pass, zero skipped.
+Not applicable to HIP physical execution: the schema-2 native tensor manifest is shared, but no ROCm JVP producer emits it. Existing checkpoint capacity verifier parity is tested on host; new gfx1151/gfx1201 execution evidence is not inferred.
+Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
+No generic scaled-matmul closure or default-route promotion.
+Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
+
+## Native unary replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.
+gfx1151 and gfx1201 owning numerical proof and package A/B passed.
+The four gfx1201 unary profiles improve package time from 43–44 ms to
+16.6–16.9 ms; two matmul controls remain unchanged. This is not kernel timing.
+Only successful native MLIR pass output is cached; artifact and descriptor
+validation still run per call. Compiler, loaded-library, environment and full
+IR and working-directory identity participate, with bounded entry/byte retention.
+Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
+and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
+
+## Matmul native replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-MATMUL-REPLAY-CACHE-2026-10-08.
+Native matmul replay now uses the same exact-source bounded pass cache.
+Descriptor and Tile validation remain per call. Four fp16 profiles pass on
+each owning GPU with matching images/fingerprints: gfx1151 package medians
+63.1–64.3 ms to 20.7–21.6 ms; gfx1201 42.9–43.2 ms to 17.0–17.1 ms.
+These are package overhead measurements, not kernel gains.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+ROCM-MATMUL-REPLAY-CACHE-2026-10-08 synchronized rerun: both gfx1151 and
+gfx1201 retain numerical parity, equal images/fingerprints and three-to-one
+replay subprocess counts after PR894 and explicit cwd identity. Owning tests
+pass 23 gfx1151 / 22 gfx1201 (one unavailable NVIDIA-dialect skip).
+Package timing is 61.9–65.7 to 20.8–22.5 ms on gfx1151 and
+42.4–43.9 to 16.7–17.0 ms on gfx1201; no kernel timing is claimed.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+## Native math Graph replay reuse — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Sync ROCM-MATH-REPLAY-2026-10-08.
+Shared contract: bounded pure replay additionally admits Graph-to-Schedule;
+MathRecipe retains per-call Graph/Schedule/Tile and descriptor validation.
+68 host regressions and 19 owning cache tests per architecture pass.
+Owning gfx1151 and gfx1201 parity validated for all six math operations, three storage types and two static profiles per operation. Separate 36-profile A/B packets preserve architecture-specific image/tool hashes. Broader cache families and generic closure remain follow-up required.
+Evidence: benchmarks/baselines/rocm_math_replay_cache_20261008/README.md.
 
 ## Named scaled-batch frontend orientation — 2026-10-08
 

@@ -258,6 +258,7 @@ def test_scan_parses_every_ods_form() -> None:
         "tile.nvfp4_requantize_kernel",
         "tile.mxfp4_folded_storage_kernel",
         "tile.structured_reduction_kernel",
+        "tile.transpose_kernel",
         "tessera_rocm.structured_reduction",
         "tessera_rocm.swmmac",
         "tile.tmem.store",                 # dotted mnemonic
@@ -274,6 +275,7 @@ def test_scan_parses_every_ods_form() -> None:
 #: Every op record under `src/`. Pinned exactly, not as a floor: a floor let
 #: the reader lose up to its slack without failing (GOV-ODS-CONSUMER-1 review).
 #: 618 -> 663: 45 unique x86 Graph op records added to the post-#875 baseline.
+# 673 -> 674: native compact tile.transpose_kernel result materialization.
 #: 673 -> 674: native tile.transpose_kernel carrier with Schedule/ROCm consumers.
 _DECLARED_OP_RECORDS = 674
 

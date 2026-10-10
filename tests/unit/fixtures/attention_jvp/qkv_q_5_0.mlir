@@ -1,0 +1,6 @@
+module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer", tessera.autodiff = "reverse", tessera.autodiff.wrt = ["q"], tessera.autodiff.wrt_indices = [0], tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
+  func.func @qkv(%a0: tensor<1x2x3x4xf32>, %a1: tensor<1x1x5x4xf32>, %a2: tensor<1x1x5x3xf32>) -> (tensor<1x2x3x3xf32>) attributes {tessera.frontend.authority = "tracer", tessera.structured_cfg.schema = "tessera.structured_cfg.v1", tessera.structured_cfg.digest = "76f4f4527014e5fb8512ec5038d7af3190a6da6b229af579988047b77daf41c3", tessera.structured_cfg.blocks = 2, tessera.autodiff = "reverse", tessera.autodiff.wrt = ["q"], tessera.autodiff.wrt_indices = [0]} {
+    %v0 = tessera.flash_attn %a0, %a1, %a2 {causal = false, head_dim = 4 : i64, tessera.effect_kind = "pure", operandSegmentSizes = array<i32: 1, 1, 1, 0>} : (tensor<1x2x3x4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>) -> tensor<1x2x3x3xf32> loc("benchmarks/nvidia/benchmark_jvp_argument_order.py":22:28)
+    return %v0 : tensor<1x2x3x3xf32>
+  }
+}

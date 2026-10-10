@@ -64,7 +64,19 @@ inline int hipMemcpy(void* dst,const void* src,size_t n,int kind){
  ++copies;std::memcpy(dst,src,n);return 0;
 }
 using hipStream_t=void*;using hipEvent_t=void*;
-constexpr int hipErrorInvalidValue=1;
+using hipError_t=int;using hipGraph_t=void*;using hipGraphExec_t=void*;using hipGraphNode_t=void*;
+using hipGraphNodeType=int;
+constexpr int hipErrorInvalidValue=1,hipStreamCaptureModeThreadLocal=1,hipGraphNodeTypeKernel=0;
+// This controlled harness tests direct ownership/failures, not graph execution.
+// Graph APIs refuse explicitly; real graph proof belongs to owning-device tests.
+inline int hipStreamBeginCapture(void*,int){return hipErrorInvalidValue;}
+inline int hipStreamEndCapture(void*,void** p){*p=nullptr;return hipErrorInvalidValue;}
+inline int hipGraphGetNodes(void*,void**,size_t*){return hipErrorInvalidValue;}
+inline int hipGraphNodeGetType(void*,int*){return hipErrorInvalidValue;}
+inline int hipGraphInstantiateWithFlags(void**,void*,uint64_t){return hipErrorInvalidValue;}
+inline int hipGraphLaunch(void*,void*){return hipErrorInvalidValue;}
+inline int hipGraphExecDestroy(void*){return hipErrorInvalidValue;}
+inline int hipGraphDestroy(void*){return hipErrorInvalidValue;}
 constexpr int hipStreamNonBlocking=1;
 inline int hipStreamCreateWithFlags(void** p,unsigned){*p=new int(1);return 0;}
 inline int hipStreamSynchronize(void*){return hipDeviceSynchronize();}

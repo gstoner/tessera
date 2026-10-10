@@ -1,6 +1,7 @@
 """Native Graph/AD and Schedule/Tile bias product contracts."""
 import json
 import re
+from pathlib import Path
 import pytest
 from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 from tessera.compiler.native_gpu_storage import _decode_image

@@ -1,0 +1,622 @@
+{
+  "architecture": "gfx1201",
+  "host": "tajasarus",
+  "rocminfo": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "measurement": "warm-image package wall time; only native ancestry replay cache is varied",
+  "source_sha256": "c4786544fd3b96d7f071678ca8f33bf9b39bb5127be658ad8c9f272ebde3cd85",
+  "replay_cache_sha256": "432d205abf4210ab5b22443df53a51ec88e6a32d8fbb86d47e8608ebcadbed3a",
+  "ancestry_sha256": "19858eca0699f842cba382e56af4ef6bb757e5e44a7a7f0eac86ab0bd85ca2c2",
+  "recorder_sha256": "2f19d328b0bb6605453830c0ceff0c8ca2e6bf131afdcb609bd81a16a4fdaf15",
+  "compiler_sha256": "76d1d508bd01cb171d31ed6c375de9fc7380dcd716e7cae7150b272ba075c285",
+  "rows": [
+    {
+      "family": "softmax",
+      "role": "unary_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 1.595001838938792e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          46.485587,
+          44.032036,
+          44.247244,
+          43.508838,
+          42.324147,
+          44.334542,
+          43.870969
+        ],
+        "cached_replay": [
+          18.26302,
+          17.186622,
+          16.817988,
+          16.893711,
+          16.43729,
+          17.692755,
+          15.86615
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 44.032036,
+        "cached_replay": 16.893711
+      },
+      "uncached_over_cached": 2.606415843150152,
+      "image_digest": "ee6494b3f1da5d413a2b94c02a9c737a56515a900b689694783dadde9ab26994",
+      "entry": "tessera_rocm_softmax_b72669b1186eaa4c",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "softmax",
+      "role": "unary_replay_candidate",
+      "shape": [
+        5,
+        300
+      ],
+      "max_abs_error": 3.7924293705415835e-09,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.945852,
+          44.18647,
+          43.581416,
+          42.690366,
+          43.85072,
+          44.031304,
+          43.171334
+        ],
+        "cached_replay": [
+          17.231253,
+          16.605501,
+          16.107541,
+          16.094426,
+          17.343148,
+          17.16621,
+          16.564011
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.85072,
+        "cached_replay": 16.605501
+      },
+      "uncached_over_cached": 2.6407345373078477,
+      "image_digest": "ee6494b3f1da5d413a2b94c02a9c737a56515a900b689694783dadde9ab26994",
+      "entry": "tessera_rocm_softmax_b72669b1186eaa4c",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "reduce",
+      "role": "unary_replay_candidate",
+      "shape": [
+        2,
+        3,
+        5
+      ],
+      "max_abs_error": 4.967053723881065e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          44.397162,
+          41.834063,
+          42.865631,
+          42.76089,
+          43.398276,
+          43.030555,
+          44.970175
+        ],
+        "cached_replay": [
+          17.530806,
+          16.627744,
+          16.074287,
+          16.13863,
+          16.616692,
+          17.153888,
+          17.218941
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.030555,
+        "cached_replay": 16.627744
+      },
+      "uncached_over_cached": 2.5878769242538255,
+      "image_digest": "b1372fd90ffd70ff03489291a02993035c0716cb9620eb5b33924607ad98d0e1",
+      "entry": "tessera_rocm_reduction_d2c7d63b43c59123",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "reduce",
+      "role": "unary_replay_candidate",
+      "shape": [
+        4,
+        33,
+        7
+      ],
+      "max_abs_error": 3.285028718491567e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.949611,
+          42.999666,
+          43.633526,
+          42.843518,
+          44.251504,
+          42.32525,
+          44.014763
+        ],
+        "cached_replay": [
+          17.395258,
+          16.365622,
+          17.116595,
+          16.920011,
+          16.120085,
+          17.056782,
+          15.922628
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.999666,
+        "cached_replay": 16.920011
+      },
+      "uncached_over_cached": 2.5413497662619724,
+      "image_digest": "b1372fd90ffd70ff03489291a02993035c0716cb9620eb5b33924607ad98d0e1",
+      "entry": "tessera_rocm_reduction_d2c7d63b43c59123",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "matmul_fp16",
+      "role": "unaffected_control",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 5.634501576423645e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          39.465133,
+          39.282524,
+          39.226268,
+          38.974006,
+          39.229043,
+          38.875468,
+          38.832346
+        ],
+        "cached_replay": [
+          39.74652,
+          38.645309,
+          40.060288,
+          38.977372,
+          38.926406,
+          38.365545,
+          39.174789
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 39.226268,
+        "cached_replay": 38.977372
+      },
+      "uncached_over_cached": 1.0063856537069764,
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "entry": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "matmul_fp16",
+      "role": "unaffected_control",
+      "shape": [
+        17,
+        31,
+        19
+      ],
+      "max_abs_error": 1.0628718882799149e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          40.183233,
+          39.784893,
+          39.062685,
+          39.807947,
+          39.226849,
+          38.308888,
+          38.9863
+        ],
+        "cached_replay": [
+          39.979564,
+          40.312209,
+          38.646611,
+          38.821605,
+          39.000967,
+          39.099025,
+          39.533063
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 39.226849,
+        "cached_replay": 39.099025
+      },
+      "uncached_over_cached": 1.0032692375321381,
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "entry": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "identity_equal_all_arms": true
+    }
+  ],
+  "limitations": [
+    "No kernel speed claim",
+    "Owning-host compiler snapshot identified by content hash",
+    "Six static profiles; no generic cache closure claim"
+  ]
+}

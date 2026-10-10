@@ -11,6 +11,10 @@ def verify_unary_ancestry(artifact, *, target, architecture):
     if target == "x86":
         # The replay is memoized on the exact Schedule text and compiler digest.
         from .x86_compile_cache import run as runner
+    elif target == "rocm":
+        from .rocm_pass_cache import run
+        runner = lambda tool, source, option: run(
+            tool, source, option, execute=run_tessera_opt)
     tile = runner(tool, artifact.schedule_ir, "--tessera-schedule-to-tile")
     if tile != artifact.tile_ir:
         raise ValueError("unary Tile IR disagrees with native Schedule replay")

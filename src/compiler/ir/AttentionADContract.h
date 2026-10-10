@@ -6,6 +6,7 @@
 #define TESSERA_ATTENTION_AD_CONTRACT_H
 #include <cmath>
 #include "mlir/IR/BuiltinOps.h"
+#include "Tessera/IR/AttentionShapeContract.h"
 namespace tessera {
 inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool allowLse = false, bool allowBoundedSequences = false) {
   if ((op->getNumOperands() != 3 && !(allowBias && op->getNumOperands() == 4)) || (op->getNumResults() != 1 && !(allowLse && op->getNumResults() == 2)) ||
@@ -35,11 +36,8 @@ inline bool denseAttentionAD(mlir::Operation *op, bool allowBias = false, bool a
         !arch || arch.getValue()!="sm_120" || !bounds || bounds.size()!=7) return false;
     llvm::SmallVector<int64_t> dims{q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),
         q.getDimSize(2),k.getDimSize(2),q.getDimSize(3),v.getDimSize(3)};
-    for (unsigned axis=0;axis<7;++axis) {
-      bool unknown=mlir::ShapedType::isDynamic(dims[axis]);
-      if ((unknown && axis!=3 && axis!=4) || bounds[axis]<=0 ||
-          (!unknown && (dims[axis]<=0 || bounds[axis]!=dims[axis]))) return false;
-    }
+    auto shape = resolveNativeAttentionShape(op, dims);
+    if (mlir::failed(shape)) return false;
   }
   if (q.getDimSize(0)<=0 || q.getDimSize(1)<=0 || k.getDimSize(1)<=0 ||
       q.getDimSize(3)<=0 || v.getDimSize(3)<=0) return false;

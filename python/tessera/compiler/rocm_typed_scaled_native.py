@@ -34,6 +34,26 @@ def requests_composed_typed_scaled(module):
         products+=1
     return products>=2 or (products>=1 and permutations>=1)
 
+
+def requests_floating_scaled(module):
+    """Recognize continuous Graph products; this is not primal admission."""
+    if len(module.functions) != 1:
+        return False
+    fn = module.functions[0]
+    args = {arg.name: arg.ir_type for arg in fn.args}
+    products = 0
+    for op in fn.body:
+        if op.op_name in {"tessera.add", "tessera.transpose"}:
+            continue
+        if (op.op_name != "tessera.scaled_matmul" or len(op.operands) != 4
+                or op.kwargs.get("physical_contract")
+                or any(args.get(name.removeprefix("%")) is None
+                       or args[name.removeprefix("%")].dtype != "fp32"
+                       for name in op.operands)):
+            return False
+        products += 1
+    return products > 0
+
 @dataclass(frozen=True)
 class _LogicalScaleShape:
     # Semantic group extents do not imply an aligned WMMA primal schedule.
@@ -54,14 +74,15 @@ class _LogicalScaleShape:
         return (self.n+self.scale_n-1)//self.scale_n
 
 def contract(module, *, semantic_only=False):
-    if not requests_typed_scaled(module):return None
+    floating = semantic_only and requests_floating_scaled(module)
+    if not requests_typed_scaled(module) and not floating:return None
     fn=module.functions[0];op=fn.body[0]
     if (len(op.operands)!=4 or len(op.result_names)!=1 or
         len(set(op.operands))!=4 or
         set(x.removeprefix("%") for x in op.operands)!={a.name for a in fn.args} or
         [x.removeprefix("%") for x in fn.return_values]!=op.result_names or
         type(op.kwargs.get("transposeA",False)) is not bool or
-        (op.kwargs.get("transposeA",False) is not False and
+        (op.kwargs.get("transposeA",False) is not False and not floating and
          op.kwargs.get("batching") not in (None,"broadcast")) or
         type(op.kwargs.get("transposeB",False)) is not bool or
         op.kwargs.get("batching") not in (None,"shared_rhs_rows","independent_rhs","shared_lhs","broadcast") or
@@ -77,6 +98,22 @@ def contract(module, *, semantic_only=False):
     args={a.name:a.ir_type for a in fn.args}
     types=[args[x.removeprefix("%")] for x in op.operands]
     policy=op.kwargs.get("batching")
+    if floating:
+        if fmt != "fp32" or any(t.dtype != "fp32" for t in types):
+            return None
+        a,b,sa,sb=types
+        if policy in {"shared_lhs","shared_rhs_rows","independent_rhs"}:
+            lhs_batched=policy != "shared_lhs"
+            rhs_batched=policy != "shared_rhs_rows"
+            prefix=a.shape[:-2] if lhs_batched else b.shape[:-2]
+            if (not prefix or a.shape[:-2] != (prefix if lhs_batched else ())
+                    or sa.shape[:-2] != a.shape[:-2]
+                    or b.shape[:-2] != (prefix if rhs_batched else ())
+                    or sb.shape[:-2] != b.shape[:-2]):
+                return None
+        elif policy is None and any(t.rank != 2 for t in types):
+            return None
+        return _independent_scale_semantics(fn,op,types,block,fmt)
     scalar_plane = (policy is None and all(t.rank == 2 for t in types) and
         (op.kwargs.get("transposeA",False) or
          int(types[0].shape[-1]) % block[1] != 0))
@@ -125,7 +162,8 @@ def _independent_scale_semantics(fn,op,types,block,fmt):
            for t in types):
         return None
     a,b,sa,sb=types
-    if a.dtype != "fp8_e4m3" or b.dtype != "fp8_e4m3":
+    if (a.dtype != b.dtype or a.dtype not in {"fp8_e4m3","fp32"}
+            or (a.dtype == "fp32" and fmt != "fp32")):
         return None
     if sa.dtype != ("fp32" if fmt == "fp32" else "uint8") or sb.dtype != sa.dtype:
         return None
@@ -161,8 +199,28 @@ def supports_scale_transpose(module):
     """Static FP32 scale-adjoint semantic admission; native AD owns reduction."""
     try:
         info = contract(module, semantic_only=True)
-        return info is not None and info[1] == "fp32"
+        return requests_typed_scaled(module) and info is not None and info[1] == "fp32"
     except (ValueError, TypeError):
+        return False
+
+
+def supports_scaled_reverse(module, wrt_indices=()):
+    """Continuous/scale-only reverse semantics, independent of primal WMMA."""
+    if len(module.functions) != 1:
+        return False
+    if len(module.functions[0].body) > 1:
+        if not (requests_floating_scaled(module) or requests_composed_typed_scaled(module)):
+            return False
+        return _supports_composed_scaled(module, wrt_indices, primal=False,
+                                        floating_reverse=True)
+    try:
+        fn = module.functions[0]
+        return (contract(module, semantic_only=True) is not None
+                and fn.body[0].kwargs["scale_layout"]["format"] == "fp32"
+                and len(set(wrt_indices)) == len(wrt_indices)
+                and all(type(i) is int and 0 <= i < len(fn.args)
+                        and fn.args[i].ir_type.dtype == "fp32" for i in wrt_indices))
+    except (ValueError, TypeError, KeyError, IndexError):
         return False
 
 def lower_typed_scaled(module):
@@ -249,7 +307,7 @@ def supports_composed_scale_jvp(module, wrt_indices):
     return _supports_composed_scaled(module, wrt_indices, primal=False)
 
 
-def _supports_composed_scaled(module, wrt_indices, *, primal):
+def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=False):
     """Check frontend product/sum SSA; native AD and codegen own execution."""
     import copy
     if len(module.functions) != 1 or (not primal and not wrt_indices):
@@ -279,9 +337,11 @@ def _supports_composed_scaled(module, wrt_indices, *, primal):
             member_fn.body = [copy.deepcopy(op)]
             member_fn.result_types = [copy.deepcopy(result)]
             member_fn.return_values = ["%" + op.result_names[0]]
-            if contract(member, semantic_only=True) is None:
+            if (contract(member, semantic_only=True) is None
+                    or (requests_floating_scaled(member) and not floating_reverse)):
                 return False
-            scales.update(v.removeprefix("%") for v in op.operands[2:])
+            eligible = op.operands if floating_reverse and requests_floating_scaled(member) else op.operands[2:]
+            scales.update(v.removeprefix("%") for v in eligible)
             used.update(v.removeprefix("%") for v in op.operands)
         elif op.op_name == "tessera.add":
             if (len(op.operands) != 2 or op.kwargs or op.numeric_policy is not None

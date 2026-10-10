@@ -1,0 +1,691 @@
+{
+  "architecture": "gfx1201",
+  "device_inventory": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "identity_sha256": {
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.build-output-axes/tools/tessera-opt/tessera-opt": "26697b7560b468a4257e684e2fac8e88e277ca2c1c52b1f1aae00a000f57626f",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.build-output-axes/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "4b649c8d6c9b34e49c9d933b8ed300453474cf8c5d8d34947214d3dbc8bfce3c",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.transfer/libtessera_rocm_mapped_output_runtime.so": "32bb423fa40c25b4f4b5feed51e4f5d027f466ea62dd787928a82297a31f3848",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/autodiff/transforms.py": "8ee183facc71c0e17c3a1daefe88fc78454ae0bb4c94730571b6ff3ce5f55cf4",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/jit.py": "dcd3acf0f8adcf569576e60c20c969d659575b7fc87aa99fd1c654c458d1a2c5",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/native_vmap.py": "567ff4159b9772d1e7d299cdff6c9eb73f46c0cfb4dc87acddeced4f0348395b",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/rocm_typed_scaled_native.py": "76c9912242209dc0cb1c01919a4595fca9a191e874943a0543cbe84efde0fbdc",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/native_vjp_plugins.py": "f0a48908c0321937236914289a37efda49ba80973d07ce4129a03e42b6f92e1c",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/native_scaled_program.py": "779a8201443a4cea39f916484a58d6a96ad53a3e67a5b326804d92f4a0f4c94c",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/graph_ir.py": "dce2f84cc58c1d08a257fb34ad1de52b4e7a259e370aea79dcd37123b8c92607",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/capabilities.py": "bf749a71b9ae567c8294b6ec0c4aefaf2bdb529c54f012c3459b17d3a6e9b756",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/reference_typed_scaled_matmul.py": "8e35ad0b1f9c8f0b73e87f6ee888c743ac0d2402bd24223382695f0d0dc955fa",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/ir/LinearTransposeInterface.cpp": "ec1b5f51ce7dd0680b1e963681faf9836e36cd718970393054d49a0223bd10df",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/ir/TesseraOps.cpp": "1c6a8d5fa79223794120cd85bf4463ec5f85d748153cbdb58a5df6d24e36d516",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/transforms/lib/NativeScaledMatmulProgram.h": "ecc83ec15941d4a19d490ee0795b440c865b1eb53422ff4835ed36228d693029",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "d50489a9d6583e432a2ac15ad4a017e4ca452428c4955dbb658d7536ee301ef3",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/unit/test_public_floating_scaled_maps.py": "2d5ca593b4dbcb6daa9d2c2af4551e2ae2eee54c74f719969ccea047eb46a05f",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/unit/test_public_floating_scaled_reverse.py": "fda1486d67eb169f0c582ff909ce0c040bd99557de3dcc17a6b6904ed6247412",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/device/rocm/test_public_floating_scaled_maps.py": "8ccfb8e99a2712c5ca253774b795b725c2b7b55d0b5f6a34a96409a23b33a6ac",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/device/rocm/test_floating_scaled_adjoint.py": "0153234f0d4657c81ba4dddbed1adf1217489444cc0076b440e348d3f5db11f6",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/benchmarks/rocm/record_public_floating_maps.py": "bcaa6d92d2dd2d6c00789a4e917b0040a0e69442f65fe4a938fa74ff6f4eea82"
+  },
+  "cases": [
+    {
+      "label": "shared_rhs_leading",
+      "raw_shapes": [
+        [
+          2,
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "normalized_shapes": [
+        [
+          2,
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "map_policies": [
+        [
+          0,
+          null,
+          0,
+          null
+        ]
+      ],
+      "output_permutation": [
+        0,
+        1,
+        2
+      ],
+      "mapped_seed_shape": [
+        2,
+        2,
+        5
+      ],
+      "transpose_a": false,
+      "transpose_b": false,
+      "gradient_roles": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "members": [
+        "lhs_scale",
+        "rhs_scale",
+        "lhs_matrix",
+        "rhs_matrix"
+      ],
+      "correctness": "independent_float64_before_and_after_each_timing_domain",
+      "max_abs_error": 3.440000378995833e-08,
+      "setup_with_fixture_and_oracle_ms": 115.67802214995027,
+      "first_public_reverse_ms": 224.79288605973125,
+      "warm_public_reverse_samples_ms": [
+        1.835071505047381,
+        1.7829550546593964,
+        1.7705623526126146,
+        1.7598934471607208,
+        1.7910990514792502
+      ],
+      "warm_public_reverse_median_ms": 1.7829550546593964,
+      "captured_repetitions": 2048,
+      "captured_member_samples_ms": [
+        [
+          0.003298894502222538,
+          0.006685417611151934,
+          0.0023123358841985464,
+          0.002294347621500492
+        ],
+        [
+          0.003550482913851738,
+          0.006829692050814629,
+          0.0023364946246147156,
+          0.002357447287067771
+        ],
+        [
+          0.0035591123159974813,
+          0.006797663401812315,
+          0.0023300780449062586,
+          0.0023624857421964407
+        ],
+        [
+          0.003544759238138795,
+          0.00679143238812685,
+          0.002303355373442173,
+          0.0023080375976860523
+        ],
+        [
+          0.003563764039427042,
+          0.006810267921537161,
+          0.002344182226806879,
+          0.002334689488634467
+        ]
+      ],
+      "captured_member_median_ms": [
+        0.003550482913851738,
+        0.006797663401812315,
+        0.0023300780449062586,
+        0.002334689488634467
+      ],
+      "captured_min_window_ms": 4.698823928833008,
+      "interleaved_native_program_samples_ms": [
+        0.015460632741451263,
+        0.015271554701030254,
+        0.01526519563049078,
+        0.015670359134674072,
+        0.015354265458881855
+      ],
+      "interleaved_native_program_median_ms": 0.015354265458881855,
+      "source_graph_sha256": "cb1f0072da1ea6cb169b57d501bfab7996238e7ae9b10cf39eb016c9f187dd35",
+      "native_package_sha256": "4d2479b3097b99c951dc23892fdb1494f4a2be3da64141094d30d2871eca9766",
+      "physical_attestation": {
+        "schema": "tessera.runtime_physical_execution.v1",
+        "target": "rocm_gfx1201",
+        "device_arch": "gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "artifact_hash": "4d2479b3097b99c951dc23892fdb1494f4a2be3da64141094d30d2871eca9766",
+        "digest": "4ae5109e362528786f37b593b5e641eb5ae9d87de747af0ff4ff5ce2832ad5da"
+      }
+    },
+    {
+      "label": "independent_matrix_scale_nonleading",
+      "raw_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          2,
+          3,
+          5,
+          9
+        ],
+        [
+          2,
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "normalized_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          2,
+          3,
+          5,
+          9
+        ],
+        [
+          2,
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ]
+      ],
+      "map_policies": [
+        [
+          null,
+          0,
+          0,
+          null
+        ],
+        [
+          null,
+          0,
+          0,
+          null
+        ]
+      ],
+      "output_permutation": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "mapped_seed_shape": [
+        3,
+        2,
+        5,
+        2
+      ],
+      "transpose_a": false,
+      "transpose_b": true,
+      "gradient_roles": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "members": [
+        "tessera.transpose",
+        "lhs_scale",
+        "rhs_scale",
+        "lhs_matrix",
+        "rhs_matrix"
+      ],
+      "correctness": "independent_float64_before_and_after_each_timing_domain",
+      "max_abs_error": 4.409832383978074e-08,
+      "setup_with_fixture_and_oracle_ms": 108.72049792669713,
+      "first_public_reverse_ms": 234.12266094237566,
+      "warm_public_reverse_samples_ms": [
+        1.7587084439583123,
+        1.7142934491857886,
+        1.689109404105693,
+        1.7132534529082477,
+        1.7192453960888088
+      ],
+      "warm_public_reverse_median_ms": 1.7142934491857886,
+      "captured_repetitions": 2048,
+      "captured_member_samples_ms": [
+        [
+          0.002232990227639675,
+          0.003962768707424402,
+          0.017013709992170334,
+          0.0033151060342788696,
+          0.002592917997390032
+        ],
+        [
+          0.0022361287847161293,
+          0.003949587233364582,
+          0.01697223260998726,
+          0.0034028631635010242,
+          0.002577677136287093
+        ],
+        [
+          0.0022301313001662493,
+          0.003958150278776884,
+          0.016972240060567856,
+          0.003334191394969821,
+          0.002565102418884635
+        ],
+        [
+          0.002229922916740179,
+          0.003950800281018019,
+          0.016972612589597702,
+          0.003384321229532361,
+          0.002562307519838214
+        ],
+        [
+          0.00223183399066329,
+          0.0039560734294354916,
+          0.016957426443696022,
+          0.003290168009698391,
+          0.00249342224560678
+        ]
+      ],
+      "captured_member_median_ms": [
+        0.00223183399066329,
+        0.0039560734294354916,
+        0.016972240060567856,
+        0.003334191394969821,
+        0.002565102418884635
+      ],
+      "captured_min_window_ms": 4.566882133483887,
+      "interleaved_native_program_samples_ms": [
+        0.03286499157547951,
+        0.03164903074502945,
+        0.031662773340940475,
+        0.03180210292339325,
+        0.03235606104135513
+      ],
+      "interleaved_native_program_median_ms": 0.03180210292339325,
+      "source_graph_sha256": "7a9c0571dff8bf0f2e793af865b4878cc23e2902256319b6ec1e699164237fc8",
+      "native_package_sha256": "a268a9a280a7a861f62786324ce648d9aca692a849ef3479b35290d8a3bca0cc",
+      "physical_attestation": {
+        "schema": "tessera.runtime_physical_execution.v1",
+        "target": "rocm_gfx1201",
+        "device_arch": "gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "artifact_hash": "a268a9a280a7a861f62786324ce648d9aca692a849ef3479b35290d8a3bca0cc",
+        "digest": "542d90315445e926f733ccfcbaf51beaf845d76930c49cdf4fd796ed78308c55"
+      }
+    },
+    {
+      "label": "all_mapped_transposed_nonleading",
+      "raw_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          2,
+          3,
+          5,
+          9
+        ],
+        [
+          2,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          3,
+          2
+        ]
+      ],
+      "normalized_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          2,
+          3,
+          5,
+          9
+        ],
+        [
+          2,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          3,
+          2
+        ]
+      ],
+      "map_policies": [
+        [
+          0,
+          0,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          0,
+          0
+        ]
+      ],
+      "output_permutation": [
+        1,
+        2,
+        3,
+        0
+      ],
+      "mapped_seed_shape": [
+        3,
+        2,
+        5,
+        2
+      ],
+      "transpose_a": true,
+      "transpose_b": true,
+      "gradient_roles": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "members": [
+        "tessera.transpose",
+        "lhs_scale",
+        "rhs_scale",
+        "lhs_matrix",
+        "rhs_matrix"
+      ],
+      "correctness": "independent_float64_before_and_after_each_timing_domain",
+      "max_abs_error": 2.2083106121506546e-08,
+      "setup_with_fixture_and_oracle_ms": 100.1154740806669,
+      "first_public_reverse_ms": 221.34908009320498,
+      "warm_public_reverse_samples_ms": [
+        1.7729727551341057,
+        1.704164152033627,
+        1.688419550191611,
+        1.6789499553851783,
+        1.6784139908850193
+      ],
+      "warm_public_reverse_median_ms": 1.688419550191611,
+      "captured_repetitions": 2048,
+      "captured_member_samples_ms": [
+        [
+          0.0022010093089193106,
+          0.003922021947801113,
+          0.004903476219624281,
+          0.002724497579038143,
+          0.0027668026741594076
+        ],
+        [
+          0.0022013632114976645,
+          0.0038965872954577208,
+          0.004890471696853638,
+          0.0027100411243736744,
+          0.0026978598907589912
+        ],
+        [
+          0.002216754946857691,
+          0.003884211415424943,
+          0.0049014948308467865,
+          0.0027109652291983366,
+          0.0026963672135025263
+        ],
+        [
+          0.0022057744208723307,
+          0.003899267176166177,
+          0.004893963225185871,
+          0.002719853539019823,
+          0.0026932256296277046
+        ],
+        [
+          0.0022014370188117027,
+          0.003887394443154335,
+          0.004899936728179455,
+          0.002727571874856949,
+          0.002707594772800803
+        ]
+      ],
+      "captured_member_median_ms": [
+        0.0022014370188117027,
+        0.0038965872954577208,
+        0.004899936728179455,
+        0.002719853539019823,
+        0.0026978598907589912
+      ],
+      "captured_min_window_ms": 4.507667064666748,
+      "interleaved_native_program_samples_ms": [
+        0.01788879744708538,
+        0.018874436616897583,
+        0.01813444495201111,
+        0.017952632158994675,
+        0.018183061853051186
+      ],
+      "interleaved_native_program_median_ms": 0.01813444495201111,
+      "source_graph_sha256": "84bff31d36d60980dd4519efa726de05e0d2428dcd25b39f1e73b4578f8f5993",
+      "native_package_sha256": "6c31a11da14cafa9e0a10ef240c677aa71905ee819af93961b8916073e4967ff",
+      "physical_attestation": {
+        "schema": "tessera.runtime_physical_execution.v1",
+        "target": "rocm_gfx1201",
+        "device_arch": "gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "artifact_hash": "6c31a11da14cafa9e0a10ef240c677aa71905ee819af93961b8916073e4967ff",
+        "digest": "28db476dd90d740a38754eac391c9d9d274947b540d3e16d65b90c3f8a6504c6"
+      }
+    },
+    {
+      "label": "mixed_nested_input_result_axes",
+      "raw_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          5,
+          2,
+          9
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          3,
+          2,
+          2
+        ]
+      ],
+      "normalized_shapes": [
+        [
+          2,
+          3,
+          9,
+          2
+        ],
+        [
+          2,
+          1,
+          5,
+          9
+        ],
+        [
+          1,
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          1,
+          3,
+          2
+        ]
+      ],
+      "map_policies": [
+        [
+          0,
+          1,
+          null,
+          -1
+        ],
+        [
+          0,
+          null,
+          0,
+          null
+        ]
+      ],
+      "output_permutation": [
+        2,
+        1,
+        3,
+        0
+      ],
+      "mapped_seed_shape": [
+        2,
+        3,
+        5,
+        2
+      ],
+      "transpose_a": true,
+      "transpose_b": true,
+      "gradient_roles": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "members": [
+        "tessera.transpose",
+        "lhs_scale",
+        "rhs_scale",
+        "lhs_matrix",
+        "rhs_matrix"
+      ],
+      "correctness": "independent_float64_before_and_after_each_timing_domain",
+      "max_abs_error": 3.300938611339177e-08,
+      "setup_with_fixture_and_oracle_ms": 100.24044313468039,
+      "first_public_reverse_ms": 217.81820617616177,
+      "warm_public_reverse_samples_ms": [
+        2.011553302872926,
+        1.9619902595877647,
+        2.0004505990073085,
+        1.9814754603430629,
+        2.0026928978040814
+      ],
+      "warm_public_reverse_median_ms": 2.0004505990073085,
+      "captured_repetitions": 2048,
+      "captured_member_samples_ms": [
+        [
+          0.003326567355543375,
+          0.005334959365427494,
+          0.00906063336879015,
+          0.0025496669113636017,
+          0.0026346459053456783
+        ],
+        [
+          0.0021902655716985464,
+          0.005284312181174755,
+          0.009088422171771526,
+          0.0025514266453683376,
+          0.0025490194093436003
+        ],
+        [
+          0.0022062992211431265,
+          0.005297477822750807,
+          0.009077642112970352,
+          0.0025799511931836605,
+          0.0025461136829108
+        ],
+        [
+          0.0022101469803601503,
+          0.005305786617100239,
+          0.009066025726497173,
+          0.00254165381193161,
+          0.002588841365650296
+        ],
+        [
+          0.002218215260654688,
+          0.005267414730042219,
+          0.009050439111888409,
+          0.00255108205601573,
+          0.0025519561022520065
+        ]
+      ],
+      "captured_member_median_ms": [
+        0.0022101469803601503,
+        0.005297477822750807,
+        0.009066025726497173,
+        0.00255108205601573,
+        0.0025519561022520065
+      ],
+      "captured_min_window_ms": 4.485663890838623,
+      "interleaved_native_program_samples_ms": [
+        0.023389242589473724,
+        0.02340489812195301,
+        0.02403719536960125,
+        0.0232501570135355,
+        0.02324088290333748
+      ],
+      "interleaved_native_program_median_ms": 0.023389242589473724,
+      "source_graph_sha256": "45fcd9472a346de45b9f86430fe8e20259f3b65f47d2311d38246f90bb06bf4f",
+      "native_package_sha256": "c3a020c608f81f70db755ae84e10b80426e655b1e2fb76584d3f9b31a81ab457",
+      "physical_attestation": {
+        "schema": "tessera.runtime_physical_execution.v1",
+        "target": "rocm_gfx1201",
+        "device_arch": "gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "artifact_hash": "c3a020c608f81f70db755ae84e10b80426e655b1e2fb76584d3f9b31a81ab457",
+        "digest": "43e11a268d0a7b76fc95ece24df09ee4f34191c4503ecb9f931c03532571c750"
+      }
+    }
+  ],
+  "timing_scope": {
+    "setup": "JIT owner construction plus fixture generation and independent oracle; not compiler-only cost",
+    "first_public_reverse": "frontend/certificate, cold compilation, preparation, execution and copied gradients",
+    "warm_public_reverse": "completed native_backward with compiler calls forbidden; includes frontend and native preparation/readback",
+    "captured_members": "pure-SSA captured member device windows excluding capture/instantiation/copies",
+    "interleaved_native_program": "128-repeat native program event windows including host dispatch gaps; input update and output copies excluded"
+  },
+  "claim": "owning public mapped f32 reverse through typed Graph/native AD/Schedule/Tile/ROCm/LLVM/checked ABI; no generic closure or primal f32 claim"
+}

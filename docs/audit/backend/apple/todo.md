@@ -6,6 +6,25 @@ target: apple_gpu
 last_updated: 2026-10-08
 ---
 
+## FLOATING-SCALED-MAPS-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Public continuous reverse maps preserve a native JIT owner, project static
+matrix/scale batch types and output permutations into semantic Graph, and
+execute verified native AD/Schedule/Tile/ROCm/LLVM/HSACO with checked private
+cotangent/output lifetimes. Mixed nested/nonleading input axes restore
+gradients to the original layouts. Existing FP8 primal and scale-JVP
+admission is retained; f32 primal packages and encoded storage derivatives
+are not added. No Python arithmetic backend, Tile constructor or C ABI changes.
+Evidence: benchmarks/baselines/public_floating_maps_20261009/README.md.
+Packet: benchmarks/baselines/public_floating_maps_20261009/gfx1201.json.
+Host integration 625 and registry drift 478 checks pass; owning gfx1201
+598 numerical/ownership cases pass, including 496 new mapped cases.
+Generic closure and broader dynamic/storage/higher-AD envelopes remain open.
+
+Shared frontend reverse admission is assessed. Native Metal f32 scaled-product/mapped adjoint consumers and Mac proof remain follow-up required; no Metal ABI or physical schedule change.
+
+
 ## PUBLIC-FLOATING-REVERSE-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

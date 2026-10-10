@@ -1,0 +1,6 @@
+passed softmax (3, 17)
+passed softmax (5, 300)
+passed reduce (2, 3, 5)
+passed reduce (4, 33, 7)
+passed matmul_fp16 (16, 16, 16)
+passed matmul_fp16 (17, 31, 19)

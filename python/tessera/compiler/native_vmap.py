@@ -172,8 +172,9 @@ def project_batch(module: GraphIRModule, values: Sequence[Any], axes: Sequence[i
     if len(function.body) != 1 or len(function.args) != 4:
         raise ValueError("native NVFP4 vmap requires one scaled-matmul producer")
     op = function.body[0]
-    from .rocm_typed_scaled_native import requests_typed_scaled
-    typed = requests_typed_scaled(result)
+    from .rocm_typed_scaled_native import requests_typed_scaled, requests_floating_scaled
+    floating_reverse = scale_transpose and requests_floating_scaled(result)
+    typed = requests_typed_scaled(result) or floating_reverse
     if (op.op_name != "tessera.scaled_matmul"
             or (not typed and op.kwargs.get("physical_contract") != "nvidia_sm120_nvfp4_blockscale_v1")
             or op.kwargs.get("batching") not in {None, "none"}
@@ -208,8 +209,8 @@ def project_batch(module: GraphIRModule, values: Sequence[Any], axes: Sequence[i
                              "independent_rhs" if axes[1] == 0 else "shared_rhs_rows")
                             if coupled else "broadcast")
     if typed:
-        from .rocm_typed_scaled_native import supports_typed_scaled, supports_scale_transpose
-        admission = supports_scale_transpose if scale_transpose else supports_typed_scaled
+        from .rocm_typed_scaled_native import supports_typed_scaled, supports_scaled_reverse
+        admission = supports_scaled_reverse if scale_transpose else supports_typed_scaled
         if not admission(result):
             raise ValueError("native typed scaled vmap requires the exact matrix/scale contract")
     return result
@@ -218,8 +219,9 @@ def project_batch(module: GraphIRModule, values: Sequence[Any], axes: Sequence[i
 
 def _project_composed_batch(module, values, axes, *, depth, scale_transpose, broadcast_prefix):
     """Project semantic batch types per product; native MLIR owns arithmetic."""
-    from .rocm_typed_scaled_native import requests_composed_typed_scaled, supports_composed_scale_jvp
-    if not requests_composed_typed_scaled(module):raise ValueError("native composed maps require typed scaled products and sums")
+    from .rocm_typed_scaled_native import requests_composed_typed_scaled, supports_composed_scale_jvp, requests_floating_scaled, supports_scaled_reverse
+    floating_reverse = scale_transpose and requests_floating_scaled(module)
+    if not requests_composed_typed_scaled(module) and not floating_reverse:raise ValueError("native composed maps require typed scaled products and sums")
     function=module.functions[0]
     if len(function.args)!=len(values) or len(function.result_types)!=1 or function.result_types[0].rank!=2:
         raise ValueError("native composed maps require one scalar matrix result")
@@ -246,7 +248,7 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
             if str(child.inferred_type)!=str(output):
                 raise ValueError("native composed map products must carry the same result batch")
             op.kwargs=copy.deepcopy(child.kwargs);op.operand_types=list(child.operand_types)
-            scale_roles.update(positions[2:])
+            scale_roles.update(positions if floating_reverse else positions[2:])
         elif op.op_name=="tessera.add":
             op.operand_types=[str(output)]*len(op.operands)
         else:
@@ -255,7 +257,8 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
     for arg,value in zip(function.args,values,strict=True):
         arg.ir_type=tensor_ir_type(tuple(value.shape),_storage_dtype(value))
     function.result_types=[output]
-    if not supports_composed_scale_jvp(module,tuple(sorted(scale_roles))):
+    admission = supports_scaled_reverse if floating_reverse else supports_composed_scale_jvp
+    if not admission(module,tuple(sorted(scale_roles))):
         raise ValueError("native composed map requires the exact scale-product semantic contract")
     return module
 
@@ -278,14 +281,18 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
                            and all(axis is None for axis in in_axes)):
         return fn
     request = fn.differentiation_request
-    from .rocm_typed_scaled_native import requests_composed_typed_scaled
-    composed = requests_composed_typed_scaled(fn.graph_ir)
+    from .rocm_typed_scaled_native import requests_composed_typed_scaled, requests_floating_scaled
+    floating_reverse = requests_floating_scaled(fn.graph_ir)
+    if floating_reverse and (request is None or request.mode != "reverse"):
+        raise ValueError("native floating scaled maps require a reverse JIT owner")
+    composed = requests_composed_typed_scaled(fn.graph_ir) or (
+        floating_reverse and len(fn.graph_ir.functions[0].body) > 1)
     if len(fn.graph_ir.functions)!=1:
         raise ValueError("native scaled vmap requires one semantic function")
     arguments=fn.graph_ir.functions[0].args
     scale_names={value.removeprefix("%") for op in fn.graph_ir.functions[0].body
                  if op.op_name=="tessera.scaled_matmul" for value in op.operands[2:]}
-    scale_indices={i for i,arg in enumerate(arguments) if arg.name in scale_names and arg.ir_type.dtype=="fp32"}
+    scale_indices={i for i,arg in enumerate(arguments) if (floating_reverse or arg.name in scale_names) and arg.ir_type.dtype=="fp32"}
     forward_scales = (
         target == "rocm_gfx1201" and request is not None
         and request.mode in {"forward", "reverse"} and request.wrt_indices
@@ -390,16 +397,19 @@ def certify_typed_batch_frontends(owner, values, *, rtol, atol):
     depth = owner._frontend_batch_depth
     batch_specs(values, axes, depth=depth, broadcast_prefix=mixed)
     tracer_module, _ = owner._trace_frontend_capture(tuple(raw_values), {})
-    from .rocm_typed_scaled_native import supports_typed_scaled, supports_scale_transpose
+    from .rocm_typed_scaled_native import supports_typed_scaled, supports_scaled_reverse, requests_floating_scaled
     request = owner.differentiation_request
     scale_transpose = request is not None and request.mode == "reverse"
-    admission = supports_scale_transpose if scale_transpose else supports_typed_scaled
+    admission = supports_scaled_reverse if scale_transpose else supports_typed_scaled
     from .rocm_typed_scaled_native import requests_composed_typed_scaled, supports_composed_scale_jvp
-    composed=requests_composed_typed_scaled(tracer_module)
+    floating_reverse = scale_transpose and requests_floating_scaled(tracer_module)
+    composed=requests_composed_typed_scaled(tracer_module) or (
+        floating_reverse and len(tracer_module.functions[0].body) > 1)
     scale_roles=tuple(i for i,arg in enumerate(tracer_module.functions[0].args) if arg.ir_type.dtype=="fp32")
     from .rocm_typed_scaled_native import supports_composed_scaled_primal
     if not ((supports_composed_scaled_primal(tracer_module) if request is None else
-             supports_composed_scale_jvp(tracer_module,scale_roles)) if composed else admission(tracer_module)):
+             (supports_scaled_reverse(tracer_module,scale_roles) if floating_reverse else
+              supports_composed_scale_jvp(tracer_module,scale_roles))) if composed else admission(tracer_module)):
         raise ValueError("mapped frontend differential requires exact typed scaled Graph")
     batch_shape = np.broadcast_shapes(*(value.shape[:depth] for value, axis in zip(values, axes, strict=True) if axis is not None)) if mixed else values[next(i for i, axis in enumerate(axes) if axis is not None)].shape[:depth]
     # This loop is the explicit independent eager map oracle, evaluated once

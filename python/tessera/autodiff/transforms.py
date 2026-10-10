@@ -68,8 +68,9 @@ def vmap(
         return native_nvfp4_vmap(fn, in_axes, out_axes)
 
     if isinstance(fn, JitFn):
-        from tessera.compiler.rocm_typed_scaled_native import requests_typed_scaled, requests_composed_typed_scaled
-        if requests_typed_scaled(fn.graph_ir) or requests_composed_typed_scaled(fn.graph_ir):
+        from tessera.compiler.rocm_typed_scaled_native import requests_typed_scaled, requests_composed_typed_scaled, requests_floating_scaled
+        if (requests_typed_scaled(fn.graph_ir) or requests_composed_typed_scaled(fn.graph_ir)
+                or requests_floating_scaled(fn.graph_ir)):
             from tessera.compiler.native_vmap import native_typed_scaled_vmap
             return native_typed_scaled_vmap(fn, in_axes, out_axes)
 

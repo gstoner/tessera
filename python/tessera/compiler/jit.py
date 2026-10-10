@@ -2871,8 +2871,8 @@ class JitFn:
         frontend_certificate = None
         composed_scale = False
         if len(graph_ops) > 1 and target_family == "rocm":
-            from .rocm_typed_scaled_native import supports_composed_scale_jvp
-            composed_scale = supports_composed_scale_jvp(
+            from .rocm_typed_scaled_native import supports_scaled_reverse
+            composed_scale = supports_scaled_reverse(
                 source_module, self.differentiation_request.wrt_indices)
         if len(graph_ops) == 1 or composed_scale:
             from .native_vjp_plugins import (
@@ -2922,8 +2922,8 @@ class JitFn:
                     for op in function.body
                 ]
         if composed_scale:
-            from .rocm_typed_scaled_native import supports_composed_scale_jvp
-            if not supports_composed_scale_jvp(
+            from .rocm_typed_scaled_native import supports_scaled_reverse
+            if not supports_scaled_reverse(
                     source_module, self.differentiation_request.wrt_indices):
                 raise TesseraJitError("native scale VJP traced Graph differs from its admitted product/sum contract")
         if len(graph_ops) == 1 or composed_scale:

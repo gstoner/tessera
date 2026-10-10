@@ -108,3 +108,21 @@ def test_native_jvp_export_does_not_admit_aliased_primal_roles():
     }'''
     with pytest.raises(RuntimeError,match="direct Q/K/V"):
         run_tessera_opt(Path(tool),text,"--tessera-autodiff-forward=export-attention-jvp")
+
+@pytest.mark.parametrize("bounds", [
+    '"ignored"',
+    "array<i64: 1, 2, 1>",
+    "array<i64: 1, 2, 1, 8, 12, 8, 8>",
+])
+def test_jvp_schedule_replay_checks_checkpoint_capacity_policy(bounds):
+    # A static tangent generation must not ignore a module capacity override
+    # that its paired checkpoint serializer rejects.
+    tool, schedule = _scheduled_product()
+    changed = schedule.replace(
+        "module attributes {",
+        "module attributes {tessera.attention_shape_bounds = " + bounds + ", ",
+        1,
+    )
+    assert changed != schedule
+    with pytest.raises(RuntimeError, match="bounds|sequences"):
+        run_tessera_opt(tool, changed, "--tessera-schedule-to-tile")

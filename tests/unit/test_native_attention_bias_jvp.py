@@ -5,6 +5,8 @@ import pytest
 from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 from tessera.compiler.native_gpu_storage import _decode_image
 
+ARTIFACTS=Path(__file__).resolve().parent/"fixtures/attention_jvp"
+
 @pytest.fixture
 def compiler():
     tool=find_tessera_opt()
@@ -12,44 +14,8 @@ def compiler():
     return tool
 
 def source(case):
-    """Typed Graph fixtures are independent of optional benchmark packets."""
-    if case == "qkv_q_5_0":
-        names = ("q", "k", "v")
-        types = ("1x2x3x4", "1x1x5x4", "1x1x5x3")
-        wrt = ("q",)
-        result = "1x2x3x3"
-        causal = False
-    else:
-        configurations = {
-            "biasvqk_bias_5_0_1x4x1x1": ((1, 4, 1, 1), ("bias",), False),
-            "biasvqk_bias_v_k_q_5_1_2x4x3x5": ((2, 4, 3, 5), ("bias", "v", "k", "q"), True),
-            "biasvqk_k_bias_5_0_2x4x3x5": ((2, 4, 3, 5), ("k", "bias"), False),
-            "biasvqk_bias_5_0_2x4x3x5": ((2, 4, 3, 5), ("bias",), False),
-        }
-        bias, wrt, causal = configurations[case]
-        names = ("bias", "v", "q", "k")
-        types = ("x".join(map(str, bias)), "2x2x5x3", "2x4x3x4", "2x2x5x4")
-        result = "2x4x3x3"
-    type_by_name = dict(zip(names, types, strict=True))
-    args = ", ".join(f"%{name}: tensor<{typ}xf32>"
-                     for name, typ in zip(names, types, strict=True))
-    operation_names = ("q", "k", "v") + (("bias",) if "bias" in names else ())
-    operands = ", ".join("%" + name for name in operation_names)
-    signature = ", ".join(f"tensor<{type_by_name[name]}xf32>" for name in operation_names)
-    roles = ", ".join(str(names.index(name)) for name in wrt)
-    active_names = ", ".join('"' + name + '"' for name in wrt)
-    segments = "1, 1, 1, " + ("1" if "bias" in names else "0")
-    return f'''module attributes {{tessera.target = "nvidia_sm120", tessera.arch = "sm_120"}} {{
-  func.func @attention({args}) -> tensor<{result}xf32>
-      attributes {{tessera.autodiff = "forward", tessera.autodiff.wrt = [{active_names}],
-                   tessera.autodiff.wrt_indices = [{roles}]}} {{
-    %out = tessera.flash_attn {operands} {{
-      head_dim = 4 : i64, causal = {str(causal).lower()}, dropout_p = 0.0 : f64,
-      operandSegmentSizes = array<i32: {segments}>
-    }} : ({signature}) -> tensor<{result}xf32>
-    return %out : tensor<{result}xf32>
-  }}
-}}'''
+    return (ARTIFACTS/(case+".mlir")).read_text().replace(
+        'tessera.autodiff = "reverse"','tessera.autodiff = "forward"')
 
 @pytest.mark.parametrize("case,activity,bias",[
     ("biasvqk_bias_5_0_1x4x1x1",[False,False,False,True],[1,4,1,1]),

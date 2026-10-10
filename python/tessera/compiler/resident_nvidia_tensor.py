@@ -8,6 +8,26 @@ import numpy as np
 from .prepared_nvidia_matmul import HostView
 
 
+def resident_views(values,stream,*,writable_from):
+    """Project checked CUDA metadata; no allocation or tensor computation."""
+    from tessera import runtime as rt
+    interfaces=[value.__cuda_array_interface__ for value in values]
+    rt._validate_nvidia_cuda_buffer_streams(interfaces,stream)
+    views=(HostView*len(values))()
+    for ordinal,(view,value,interface) in enumerate(zip(views,values,interfaces,strict=True)):
+        shape=tuple(interface["shape"]);dtype=np.dtype(value.dtype)
+        if len(shape) not in {1,2}:raise ValueError("native resident tensor requires rank-one/two buffers")
+        if interface["data"][1] and ordinal>=writable_from:
+            raise ValueError("native resident tensor requires writable result buffers")
+        strides=interface["strides"]
+        if strides is None:
+            strides=(dtype.itemsize,) if len(shape)==1 else (shape[1]*dtype.itemsize,dtype.itemsize)
+        view.data=int(interface["data"][0]);view.bytes=int(np.prod(shape))*dtype.itemsize
+        view.dtype={"float16":2,"bfloat16":3,"float32":1}.get(dtype.name,0);view.rank=len(shape)
+        for axis in range(len(shape)):view.shape[axis],view.strides[axis]=shape[axis],strides[axis]
+    return views
+
+
 class ResidentTensorCall:
     """Retain compiler images; caller buffers stay live until native completion."""
     def __init__(self, program, *, producer_chain=()):
@@ -108,31 +128,12 @@ class ResidentTensorCall:
 
     def invoke(self, buffers, edge, *, stream):
         """Consumer-ordered device buffers, with producer source in LHS slot."""
-        from tessera import runtime as rt
         if self.pid != os.getpid() or not self._finalizer.alive:
             raise ValueError("native resident tensor is closed or belongs to another process")
         if self.program != self.snapshot or self.producer_chain != self.chain_snapshot:
             raise ValueError("native resident tensor package changed")
         values = tuple(buffers) + (edge,)
-        interfaces = [value.__cuda_array_interface__ for value in values]
-        rt._validate_nvidia_cuda_buffer_streams(interfaces, stream)
-        views = (HostView * len(values))()
-        for ordinal, (view, value, interface) in enumerate(zip(views, values, interfaces, strict=True)):
-            shape = tuple(interface["shape"])
-            dtype = np.dtype(value.dtype)
-            if len(shape) not in {1, 2}:
-                raise ValueError("native resident tensor requires rank-one/two buffers")
-            if interface["data"][1] and ordinal >= len(values) - 2:
-                raise ValueError("native resident tensor requires writable output and edge buffers")
-            strides = interface["strides"]
-            if strides is None:
-                strides = (dtype.itemsize,) if len(shape) == 1 else (shape[1] * dtype.itemsize, dtype.itemsize)
-            view.data = int(interface["data"][0])
-            view.bytes = int(np.prod(shape)) * dtype.itemsize
-            view.dtype = {"float16": 2, "bfloat16": 3, "float32": 1}.get(dtype.name, 0)
-            view.rank = len(shape)
-            for axis in range(len(shape)):
-                view.shape[axis], view.strides[axis] = shape[axis], strides[axis]
+        views=resident_views(values,stream,writable_from=len(values)-2)
         assert self.lib is not None
         self._check(self.lib.tessera_nvidia_matmul_invoke_resident(
             self.handle, views, len(values), ct.c_void_p(stream)))

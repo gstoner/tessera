@@ -16,7 +16,7 @@ def _plan(ir):
     if len(matches)!=1:
         raise ValueError("native tensor export requires one program record")
     text=base64.b64decode(matches[0],validate=True).decode()
-    if json.loads(text).get("schema") not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4"}:
+    if json.loads(text).get("schema") not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4","tessera.native.sm120_tensor_program.v5","tessera.native.sm120_tensor_program.v6"}:
         raise ValueError("native tensor program schema differs")
     return text
 
@@ -138,12 +138,12 @@ def validate_native_tensor_plan(text):
         raise ValueError("native tensor plan must be serialized JSON")
     plan=json.loads(text)
     keys={"schema","source_graph_ir","root","role_indices","buffers","steps","output","member_graphs"}
-    if isinstance(plan,dict) and plan.get("schema") in {"tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v4"}:
+    if isinstance(plan,dict) and plan.get("schema") in {"tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v4","tessera.native.sm120_tensor_program.v6"}:
         keys.update({"active_shape","shape_bounds","dynamic_axes","original_graph_ir"})
     if (not isinstance(plan,dict) or set(plan)!=keys or
-            plan["schema"] not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4"}):
+            plan["schema"] not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4","tessera.native.sm120_tensor_program.v5","tessera.native.sm120_tensor_program.v6"}):
         raise ValueError("native tensor program schema differs")
-    if plan["schema"].endswith((".v2",".v4")):
+    if plan["schema"].endswith((".v2",".v4",".v6")):
         if not isinstance(plan["original_graph_ir"],str) or not plan["original_graph_ir"]:
             raise ValueError("native tensor original Graph witness differs")
         axes=plan["dynamic_axes"]
@@ -163,8 +163,9 @@ def validate_native_tensor_plan(text):
         raise ValueError("native tensor argument roles differ")
     count=len(roles)
     steps=plan["steps"]
-    chain=plan["schema"].endswith((".v3",".v4"))
-    if (not isinstance(steps,list) or (not 3<=len(steps)<=64 if chain else len(steps)!=2) or type(plan["output"]) is not int or
+    dag=plan["schema"].endswith((".v5",".v6"))
+    chain=plan["schema"].endswith((".v3",".v4",".v5",".v6"))
+    if (not isinstance(steps,list) or (not (2 if dag else 3)<=len(steps)<=64 if chain else len(steps)!=2) or type(plan["output"]) is not int or
             plan["output"]!=count+len(steps)-1):
         raise ValueError("native tensor output/step count differs")
     if (not isinstance(plan["root"],str) or not plan["root"] or
@@ -174,6 +175,14 @@ def validate_native_tensor_plan(text):
         raise ValueError("native tensor retained Graphs differ")
     for index,step in enumerate(steps):
         expected_inputs=([roles[0]] if index==0 else [count+index-1]) if index<len(steps)-1 else [count+index-1,*roles[1:]]
+        if dag:
+            inputs=step.get("inputs") if isinstance(step,dict) else None
+            arity=1 if index<len(steps)-1 else count
+            if (not isinstance(inputs,list) or len(inputs)!=arity or
+                    any(type(v) is not int or not 0<=v<count+index for v in inputs) or
+                    (index==len(steps)-1 and inputs[2:]!=roles[2:])):
+                raise ValueError("native tensor DAG input prefix differs")
+            expected_inputs=inputs
         if (not isinstance(step,dict) or set(step)!={"step","operation","member","inputs","outputs"} or
                 type(step["step"]) is not int or step["step"]!=index or
                 step["member"]!=plan["root"]+"__tensor_member_"+str(index) or
@@ -208,10 +217,38 @@ def validate_native_tensor_plan(text):
                 type(b["last_read"]) is not int or b["last_read"]!=read or b["ownership"]!=ownership):
             raise ValueError("native tensor buffer ownership/lifetime differs")
     source=buffers[roles[0]]
-    for row in buffers[count:count+len(steps)-1]:
-        if row["shape"]!=source["shape"] or row["storage"]!=source["storage"]:
-            raise ValueError("native tensor chain changed producer storage")
-    if plan["schema"].endswith((".v2",".v4")):
+    if dag:
+        origins={index:index for index in range(count)}
+        dependencies={}
+        for step in steps[:-1]:
+            input_id=step["inputs"][0];output_id=step["outputs"][0]
+            if origins[input_id] not in roles[:2]:
+                raise ValueError("native tensor DAG producer captured an epilogue role")
+            input_buffer,output_buffer=buffers[input_id],buffers[output_id]
+            if (input_buffer["shape"]!=output_buffer["shape"] or
+                    input_buffer["storage"]!=output_buffer["storage"] or
+                    len(input_buffer["shape"])!=2 or input_buffer["storage"] not in {"f16","bf16"}):
+                raise ValueError("native tensor DAG changed producer storage")
+            origins[output_id]=origins[input_id];dependencies[output_id]=input_id
+        lhs_id,rhs_id=steps[-1]["inputs"][:2]
+        if origins[lhs_id]!=roles[0] or origins[rhs_id]!=roles[1] or rhs_id<count:
+            raise ValueError("native tensor DAG operand roots differ")
+        live=set()
+        for value in (lhs_id,rhs_id):
+            while value in dependencies:
+                live.add(value);value=dependencies[value]
+        if live!=set(dependencies):
+            raise ValueError("native tensor DAG has an unused producer")
+        lhs,rhs,out=buffers[lhs_id],buffers[rhs_id],buffers[plan["output"]]
+        if (len(lhs["shape"])!=2 or len(rhs["shape"])!=2 or
+                lhs["shape"][1]!=rhs["shape"][0] or lhs["storage"]!=rhs["storage"] or
+                out["shape"]!=[lhs["shape"][0],rhs["shape"][1]] or out["storage"] not in {"f16","f32"}):
+            raise ValueError("native tensor DAG consumer shape/storage differs")
+    else:
+        for row in buffers[count:count+len(steps)-1]:
+            if row["shape"]!=source["shape"] or row["storage"]!=source["storage"]:
+                raise ValueError("native tensor chain changed producer storage")
+    if plan["schema"].endswith((".v2",".v4",".v6")):
         m,n,k=plan["shape_bounds"]
         # Optional roles follow the consumer's bias/residual bindings. The
         # portable edge validator checks their named semantics.

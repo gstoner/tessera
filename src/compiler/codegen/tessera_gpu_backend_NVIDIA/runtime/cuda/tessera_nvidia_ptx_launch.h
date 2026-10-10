@@ -40,6 +40,11 @@ int tessera_nvidia_matmul_attach_producer(uint64_t handle, const void *image,
 int tessera_nvidia_matmul_append_producer(uint64_t handle, const void *image,
     size_t imageBytes, const char *entry, int cooperative);
 
+// Append a checked KxN row producer; its two scratch buffers stay native-owned.
+// append=0 attaches the first RHS stage; append=1 extends it before invocation.
+int tessera_nvidia_matmul_attach_rhs_producer(uint64_t handle, const void *image,
+    size_t image_bytes, const char *entry, int cooperative, int append);
+
 // Resolve the live checked native context for context-scoped portable owners.
 int tessera_nvidia_matmul_context_identity(uint64_t *identity);
 int tessera_nvidia_matmul_invoke(uint64_t handle,
@@ -49,6 +54,15 @@ int tessera_nvidia_matmul_invoke(uint64_t handle,
 // stream must belong to the handle context. Earlier views follow consumer ABI.
 int tessera_nvidia_matmul_invoke_resident(uint64_t handle,
     const TesseraNvidiaMatmulHostView *views, size_t count, void *stream);
+// Resident DAG invocation has no caller-supplied intermediate. The C++ owner
+// allocates and retains both operand edges; views contain roots and output.
+int tessera_nvidia_matmul_invoke_dag_resident(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *views, size_t count, void *stream);
+// CUDA-event profiles of the last successful host frame. Rejects stale shared
+// arena leases. Stage windows group repeated kernels and are not additive.
+int tessera_nvidia_matmul_profile(uint64_t handle, int repeats,
+    float *stage_ms, size_t stage_count, float *program_ms,
+    TesseraNvidiaMatmulHostView *output);
 int tessera_nvidia_matmul_close(uint64_t handle);
 int tessera_nvidia_matmul_scratch_stats(uint64_t handle,
     size_t *capacity, size_t *allocations);

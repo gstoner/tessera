@@ -2312,7 +2312,7 @@ class JitFn:
 
     def native_lhs_packages(self):
         program=self._nvidia_lhs_last_program
-        return () if program is None else (*(program.producer_chain or (program.edge.producer,)),program.edge.consumer)
+        return () if program is None else (*(program.producer_chain or (program.edge.producer,)),*program.rhs_chain,program.edge.consumer)
 
     def compile_native_lhs_matmul(self,*args,dynamic_axes=(),shape_bounds=None,rhs_storage_order=None,**kwargs):
         from dataclasses import replace

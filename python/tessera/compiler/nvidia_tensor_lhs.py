@@ -22,6 +22,9 @@ def _digest(value):
 def candidate(module):
     if len(module.functions)!=1 or not 2<=len(module.functions[0].body)<=64:
         return False
+    from .nvidia_tensor_dag import candidate as dag_candidate
+    if dag_candidate(module):
+        return True
     body=module.functions[0].body
     producers,c=body[:-1],body[-1]
     return (all(p.op_name in PRODUCERS and len(p.operands)==1 and p.result for p in producers)
@@ -43,6 +46,11 @@ def project_rhs_storage(module, ordered, *, dynamic=False, rhs_storage_order=Non
         if consumer.kwargs.get("rhs_storage_order",rhs_storage_order)!=rhs_storage_order:
             raise ValueError("RHS storage request conflicts with the authored Graph")
         consumer.kwargs["rhs_storage_order"]=rhs_storage_order
+    from .nvidia_tensor_dag import candidate as dag_candidate
+    if dag_candidate(module):
+        if consumer.kwargs.get("rhs_storage_order","row_major")!="row_major":
+            raise ValueError("computed RHS requires row-major native materialization")
+        return module
     if "rhs_storage_order" not in consumer.kwargs:
         names = [arg.name for arg in fn.args]
         rhs = ordered[names.index(consumer.operands[1].removeprefix("%"))]
@@ -55,10 +63,18 @@ def project_rhs_storage(module, ordered, *, dynamic=False, rhs_storage_order=Non
 
 def _checked_semantics(semantics):
     s=deepcopy(semantics)
-    if set(s)-{"producer","producer_attrs","consumer","consumer_attrs","roles","producer_chain"} or not {"producer","producer_attrs","consumer","consumer_attrs","roles"}<=set(s):
+    if set(s)-{"producer","producer_attrs","consumer","consumer_attrs","roles","producer_chain","rhs_chain"} or not {"producer","producer_attrs","consumer","consumer_attrs","roles"}<=set(s):
         raise ValueError("LHS semantic certificate fields differ")
     if s["producer"] not in PRODUCERS or s["consumer"] not in {"tessera.matmul","tessera.gemm"}:
         raise ValueError("LHS requires a registered normalization/softmax and matmul")
+    if "rhs_chain" in s:
+        right=s["rhs_chain"]
+        if not isinstance(right,list) or not 1<=len(right)<=63:
+            raise ValueError("RHS producer chain count differs")
+        for row in right:
+            if not isinstance(row,dict) or set(row)!={"producer","producer_attrs"}:
+                raise ValueError("RHS producer semantic fields differ")
+            _checked_semantics({**{k:v for k,v in s.items() if k not in {"producer_chain","rhs_chain"}},**row})
     if "producer_chain" in s:
         chain=s["producer_chain"]
         if not isinstance(chain,list) or not 2<=len(chain)<=63:
@@ -175,6 +191,11 @@ def package_traced_lhs(module, *, producer_schedule=None, softmax_schedule=None,
             or len(set(dynamic_axes))!=len(dynamic_axes)):
         raise ValueError("LHS dynamic axes must be distinct M/N/K names")
     dynamic_axes=tuple(axis for axis in ("M","N","K") if axis in dynamic_axes)
+    from .nvidia_tensor_dag import candidate as dag_candidate, package as package_dag
+    if dag_candidate(module):
+        if producer_schedule is not None or softmax_schedule is not None:
+            raise ValueError("DAG Schedule overrides require per-node policies")
+        return package_dag(module,dynamic_axes=dynamic_axes,shape_bounds=shape_bounds)
     if not candidate(module):
         raise ValueError("LHS trace requires matmul(producer(source), rhs)")
     if set(module.module_attrs)-{"tessera.ir.version","tessera.frontend.authority",
@@ -293,6 +314,7 @@ class TracedLhsProgram:
     graph_ir:str
     native_plan_json:str|None=None
     producer_chain:tuple=()
+    rhs_chain:tuple=()
 
     def validate(self):
         self.edge.validate()
@@ -301,7 +323,7 @@ class TracedLhsProgram:
         if self.native_plan_json is not None:
             self._validate_native()
             return
-        if self.producer_chain or "producer_chain" in self.semantics:
+        if self.producer_chain or self.rhs_chain or "producer_chain" in self.semantics or "rhs_chain" in self.semantics:
             raise ValueError("LHS producer chains require native Graph member and lifetime certificates")
         dynamic_axes=tuple(axis for axis,enabled in (
             ("M",self.edge.dynamic_m),("N",self.edge.dynamic_n),("K",self.edge.dynamic_k)) if enabled)
@@ -337,6 +359,10 @@ class TracedLhsProgram:
             raise ValueError("LHS native package bindings differ from frontend roles")
 
     def _validate_native(self):
+        if self.rhs_chain:
+            from .nvidia_tensor_dag import validate
+            validate(self)
+            return
         from .native_sm120_tensor_program import validate_native_tensor_plan
         plan=validate_native_tensor_plan(self.native_plan_json)
         _,pa,ca,roles=_checked_semantics(self.semantics)
@@ -417,6 +443,9 @@ class TracedLhsProgram:
 
     def execute_resident(self,*args,**kwargs):
         self.validate()
+        if self.rhs_chain:
+            from .nvidia_tensor_dag import execute_resident
+            return execute_resident(self,args,kwargs)
         signature=inspect.Signature([inspect.Parameter(name,inspect.Parameter.POSITIONAL_OR_KEYWORD)
                                     for name in self.argument_names])
         bound=signature.bind(*args,**kwargs)
@@ -445,18 +474,24 @@ class TracedLhsProgram:
         if self.producer_chain:
             data["schema"]="tessera.nvidia.lhs_tensor_program.v3"
             data["producer_chain"]=[package_artifact(p).to_dict() for p in self.producer_chain]
+        if self.rhs_chain:
+            data["schema"]="tessera.nvidia.lhs_tensor_program.v4"
+            data["producer_chain"]=[package_artifact(p).to_dict() for p in self.producer_chain]
+            data["rhs_chain"]=[package_artifact(p).to_dict() for p in self.rhs_chain]
         return deepcopy({**data,"contract_digest":_digest(data)})
 
 
 def from_manifest(data):
     from tessera import runtime as rt
     keys={"schema","graph_ir","argument_names","semantics","edge","producer","consumer","contract_digest"}
-    if isinstance(data,dict) and data.get("schema") in {"tessera.nvidia.lhs_tensor_program.v2","tessera.nvidia.lhs_tensor_program.v3"}:
+    if isinstance(data,dict) and data.get("schema") in {"tessera.nvidia.lhs_tensor_program.v2","tessera.nvidia.lhs_tensor_program.v3","tessera.nvidia.lhs_tensor_program.v4"}:
         keys.add("native_plan_json")
-        if data["schema"].endswith(".v3"):
+        if data["schema"].endswith((".v3",".v4")):
             keys.add("producer_chain")
+        if data["schema"].endswith(".v4"):
+            keys.add("rhs_chain")
     if (not isinstance(data,dict) or set(data)!=keys or
-            data["schema"] not in {"tessera.nvidia.lhs_tensor_program.v1","tessera.nvidia.lhs_tensor_program.v2","tessera.nvidia.lhs_tensor_program.v3"}):
+            data["schema"] not in {"tessera.nvidia.lhs_tensor_program.v1","tessera.nvidia.lhs_tensor_program.v2","tessera.nvidia.lhs_tensor_program.v3","tessera.nvidia.lhs_tensor_program.v4"}):
         raise ValueError("LHS native manifest schema differs")
     data=deepcopy(data)
     if data["schema"]!="tessera.nvidia.lhs_tensor_program.v1" and not isinstance(data["native_plan_json"],str):
@@ -475,16 +510,25 @@ def from_manifest(data):
             raise ValueError("LHS native component artifact integrity differs")
         packages.append(native.NVIDIANativePackage(a.tile_ir,a.target_ir,"",a.native_image,a.launch_descriptor))
     chain=[]
-    if data["schema"].endswith(".v3"):
-        if not isinstance(data["producer_chain"],list) or not 2<=len(data["producer_chain"])<=63:
+    if data["schema"].endswith((".v3",".v4")):
+        if not isinstance(data["producer_chain"],list) or not (0 if data["schema"].endswith(".v4") else 2)<=len(data["producer_chain"])<=63:
             raise ValueError("native LHS chain package count differs")
         for item in data["producer_chain"]:
             a=rt.RuntimeArtifact.from_dict(item)
             if a.native_image is None or a.launch_descriptor is None or item.get("artifact_hash") != a.artifact_hash:
                 raise ValueError("LHS chain component artifact integrity differs")
             chain.append(native.NVIDIANativePackage(a.tile_ir,a.target_ir,"",a.native_image,a.launch_descriptor))
+    right=[]
+    if data["schema"].endswith(".v4"):
+        if not isinstance(data["rhs_chain"],list) or not 1<=len(data["rhs_chain"])<=63:
+            raise ValueError("native RHS chain count differs")
+        for item in data["rhs_chain"]:
+            a=rt.RuntimeArtifact.from_dict(item)
+            if a.native_image is None or a.launch_descriptor is None or item.get("artifact_hash")!=a.artifact_hash:
+                raise ValueError("native RHS component artifact integrity differs")
+            right.append(native.NVIDIANativePackage(a.tile_ir,a.target_ir,"",a.native_image,a.launch_descriptor))
     result=TracedLhsProgram(native.NVIDIANativeTensorProgram(packages[0],packages[1],**data["edge"]),
-                           tuple(data["argument_names"]),data["semantics"],data["graph_ir"],data.get("native_plan_json"),tuple(chain))
+                           tuple(data["argument_names"]),data["semantics"],data["graph_ir"],data.get("native_plan_json"),tuple(chain),tuple(right))
     result.validate()
     return result
 

@@ -11768,3 +11768,49 @@ All four architecture queues assessed; sibling physical proof is separate.
 Evidence: benchmarks/baselines/gfx1201_scaled_broadcast_ssa_20261009/README.md
 and gfx1201.json.
 <!-- entry-fields:end -->
+
+### 2026-10-09 — two-sided SM120 producer DAG export
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync SM120-TWO-SIDED-PRODUCER-DAG-20261009.
+
+Outcome: native export retains actual topological SSA edges on both matmul
+operands, distinct roots and each operand's capacity frame. v5/v6 manifests
+seal member inputs, allocation sizes and first-write/last-read lifetime facts.
+Schedule/Tile projection reuses actual outlined members without Python Graph
+or Tile construction.
+
+Validation: matching core compiler builds; 94 native contract checks passed,
+including existing linear chains, both DAG orders, fp16/bf16 and all bounded
+M/N/K combinations. This proves compiler integration only.
+
+Remaining: native resident ownership of both chains, public JIT packaging,
+numerical RTX 5070 proof and separate producer/consumer/program/public timings.
+All four backend queues assessed; sibling execution proof is independent.
+Evidence: [native DAG contract tests](../../../tests/unit/test_native_sm120_tensor_dag.py) and NativeSM120TensorProgram.h; compiler/registry/audit final run: 401 passed.
+<!-- entry-fields:end -->
+
+### 2026-10-09 — native SM120 two-sided producer ownership
+
+Owner: [W1.1](INTEGRATED_COMPILER_PLAN.md#w11)
+PRs: pending; sync SM120-TWO-SIDED-PRODUCER-DAG-20261009.
+
+Outcome: actual Graph SSA members feed Schedule/Tile/native packages for both
+matmul operands. Checked C++ ownership covers LHS/RHS ping-pong capacity,
+ordered launches, private intermediate buffers and resident output lifetime.
+Public JIT/portable replay execute both chains; bounded frames reuse images.
+Closed CUDA buffers are rejected before driver reads.
+
+Validation: 146 RTX 5070 numerical/lifetime and legacy-route cases passed;
+368 native-manifest/diagnostic/pass/audit checks passed; Ruff/mypy pass.
+Packet separates event program/grouped stages, prepared host and public wall
+timing with queried exact GPU identity and source/tool hashes.
+
+Remaining: external CUDA roots, general producer/layout/dtype/AD closure,
+generic scaled batching/transpose and original five-slice obligations.
+FP8/MXFP8/MXFP4 evaluation remains required before default promotion.
+All four queues assessed; sibling physical execution remains independent.
+
+Evidence: benchmarks/baselines/sm120_two_sided_tensor_dag_20261009/README.md
+and sm120.json; benchmarks/nvidia/record_two_sided_tensor_dag.py.
+<!-- entry-fields:end -->

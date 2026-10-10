@@ -167,6 +167,14 @@ def _execute_nvidia_lhs_program_artifact(artifact: Any, args: Any) -> NativeProg
     program=from_manifest(metadata.get("native_program"))
     if artifact.graph_ir!=program.graph_ir or metadata.get("arg_names")!=list(program.argument_names):
         raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", "native program parent Graph/argument ABI mismatch")
+    if program.rhs_chain:
+        from .compiler.prepared_nvidia_lhs import PreparedLhsCall, _portable_arrays
+        call=PreparedLhsCall(program)
+        try:
+            output,receipt=call(_portable_arrays(program,args))
+            return NativeProgramExecution(output,tuple(receipt["component_receipts"]))
+        finally:
+            call.close()
     if isinstance(args, Mapping):
         result=program.execute_resident(**args)
     elif isinstance(args,(tuple,list)):

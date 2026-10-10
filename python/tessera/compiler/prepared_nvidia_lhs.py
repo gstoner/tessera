@@ -75,6 +75,17 @@ class PreparedLhsCall(PreparedMatmulCall):
                 self._check(attach(self.handle,image,len(stage.image.payload),
                     stage.descriptor.entry_symbol.encode(),
                     int(stage.descriptor.provenance["schedule"]=="cooperative_128")))
+            if program.rhs_chain:
+                if not hasattr(self.lib,"tessera_nvidia_matmul_attach_rhs_producer"):
+                    raise ValueError("native two-sided tensor runtime unavailable")
+                attach_rhs=self.lib.tessera_nvidia_matmul_attach_rhs_producer
+                attach_rhs.argtypes=[ct.c_uint64,ct.c_void_p,ct.c_size_t,ct.c_char_p,ct.c_int,ct.c_int]
+                attach_rhs.restype=ct.c_int
+                for index,stage in enumerate(program.rhs_chain):
+                    image=ct.create_string_buffer(stage.image.payload)
+                    self._check(attach_rhs(self.handle,image,len(stage.image.payload),
+                        stage.descriptor.entry_symbol.encode(),
+                        int(stage.descriptor.provenance["schedule"]=="cooperative_128"),int(index>0)))
             roles = program.semantics["roles"]
             self.input_positions = tuple(roles[role] for role in (
                 ["source", "rhs"] + (["bias"] if "bias" in roles else [])
@@ -84,6 +95,7 @@ class PreparedLhsCall(PreparedMatmulCall):
             self.semantics_snapshot = copy.deepcopy(program.semantics)
             self.producer_snapshot = copy.deepcopy(pd)
             self.chain_snapshot = copy.deepcopy(program.producer_chain)
+            self.rhs_snapshot = copy.deepcopy(program.rhs_chain)
             self.graph_snapshot = program.graph_ir
             binding=("prepared_cpp_dynamic_tensor_matmul" if dynamic else "prepared_cpp_tensor_matmul")
             self.component_receipts = tuple(dict(
@@ -93,7 +105,7 @@ class PreparedLhsCall(PreparedMatmulCall):
                 image_digest=p.image.image_digest,
                 launch_descriptor_digest=p.descriptor.descriptor_digest,
                 artifact_hash=NvidiaNormRhsProgram.runtime_artifact(p).artifact_hash)
-                for p in (*producers,consumer))
+                for p in (*producers,*program.rhs_chain,consumer))
             self.receipt_fields.update(compiler_path="canonical_nvidia_lhs_program",
                                        native_call_binding=binding)
         except Exception:
@@ -104,7 +116,8 @@ class PreparedLhsCall(PreparedMatmulCall):
         if (self.program.semantics != self.semantics_snapshot
                 or self.program.edge.producer.descriptor != self.producer_snapshot
                 or self.program.graph_ir != self.graph_snapshot
-                or self.program.producer_chain != self.chain_snapshot):
+                or self.program.producer_chain != self.chain_snapshot
+                or self.program.rhs_chain != self.rhs_snapshot):
             raise ValueError("prepared tensor edge semantic/producer contract changed")
         values = list(ordered)
         # Host views are packed to the sealed device storage contract. No
@@ -116,8 +129,32 @@ class PreparedLhsCall(PreparedMatmulCall):
             order = "F" if ordinal == 1 and self.rhs_layout == "col_major" else "C"
             values[position] = np.asarray(value, order=order)
         output, receipt = super().__call__(values)
+        self._profile_shape=output.shape
         receipt["component_receipts"] = tuple(dict(r) for r in self.component_receipts)
         return output, receipt
+
+
+    def profile(self, repeats=128):
+        """Profile the last host frame; native lease checks reject other owners."""
+        if self.pid != os.getpid() or not self._finalizer.alive:
+            raise ValueError("prepared tensor owner is closed or belongs to another process")
+        if type(repeats) is not int or not 1<=repeats<=1000000 or not hasattr(self,"_profile_shape"):
+            raise ValueError("profile requires a successful host frame and positive repeat count")
+        self.program.validate()
+        from .prepared_nvidia_matmul import HostView
+        output=np.empty(self._profile_shape,self.output_dtype)
+        view=HostView()
+        view.data,view.bytes,view.rank=output.ctypes.data,output.nbytes,2
+        view.dtype=2 if output.dtype==np.float16 else 1
+        view.shape[:]=output.shape;view.strides[:]=output.strides
+        count=len(self.component_receipts)
+        stages=(ct.c_float*count)();program=ct.c_float()
+        fn=self.lib.tessera_nvidia_matmul_profile
+        fn.argtypes=[ct.c_uint64,ct.c_int,ct.POINTER(ct.c_float),ct.c_size_t,
+                     ct.POINTER(ct.c_float),ct.POINTER(HostView)]
+        fn.restype=ct.c_int
+        self._check(fn(self.handle,repeats,stages,count,ct.byref(program),ct.byref(view)))
+        return {"program_ms":program.value,"grouped_stage_ms":list(stages),"output":output}
 
     def scratch_stats(self):
         if self.pid != os.getpid() or not self._finalizer.alive:

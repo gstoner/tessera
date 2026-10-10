@@ -1,0 +1,422 @@
+{
+  "architecture": "gfx1151",
+  "host": "Princess-Luna",
+  "rocminfo": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD RYZEN AI MAX+ 395 w/ Radeon 8060S\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            32                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    65476272(0x3e716b0) KB             \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1151                            \n  Uuid:                    GPU-ffffffffffffffff               \n  Marketing Name:          AMD Radeon(TM) 8060S Graphics      \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L2:                      2048(0x800) KB                     \n    L3:                      32768(0x8000) KB                   \n  Chip ID:                 5510(0x1586)                       \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2900                               \n  BDFID:                   50432                              \n  Internal Node ID:        1                                  \n  Compute Unit:            40                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          2                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 34                                 \n  SDMA engine uCode::      18                                 \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    116891132(0x6f79dfc) KB            \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 3                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1151         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx11-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "measurement": "warm-image package wall time; only native ancestry replay cache is varied",
+  "source_sha256": "a3c9b84651c47fab66f7d458bf359baac698c8a5bad01930cbf75469f660f605",
+  "replay_cache_sha256": "29d7a6ff329ddb73de2620041059c6eb0bb663f263f1d41010c6e9bb296a9cf1",
+  "ancestry_sha256": "4e2b78ed9265dd03cf5e45bc0d4748e584b653fd514e718f5ed12bce1c0a0e00",
+  "recorder_sha256": "c50a32a894870043fe309b93f5899de7dd8f7a2e2b30081911a1a201c58ac64f",
+  "compiler_sha256": "7ffa405de7d77ed0097f25cf7527fb5beb2f70934fecda3e3bdc162c4fc60126",
+  "rows": [
+    {
+      "family": "matmul_fp16",
+      "role": "matmul_replay_candidate",
+      "shape": [
+        16,
+        16,
+        16
+      ],
+      "max_abs_error": 6.51925802230835e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          65.133414,
+          62.514706,
+          60.951612,
+          61.783745,
+          63.580517,
+          61.379022,
+          61.949914
+        ],
+        "cached_replay": [
+          23.376656,
+          20.160303,
+          21.148364,
+          20.203386,
+          20.821821,
+          20.653352,
+          21.719412
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 61.949914,
+        "cached_replay": 20.821821
+      },
+      "uncached_over_cached": 2.975239965803183,
+      "image_digest": "602e388c47eebb0048b8e40ba0388a6577861c115dbb105d9c94ed32707ab841",
+      "entry": "tessera_rocm_matmul_2d70fe383e098d94",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "matmul_fp16",
+      "role": "matmul_replay_candidate",
+      "shape": [
+        17,
+        31,
+        19
+      ],
+      "max_abs_error": 1.7613638192415237e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          63.8235,
+          61.811007,
+          61.721321,
+          63.126221,
+          63.776568,
+          62.989103,
+          63.068517
+        ],
+        "cached_replay": [
+          21.543248,
+          22.353153,
+          22.106074,
+          22.224061,
+          21.052994,
+          20.741526,
+          21.088456
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 63.068517,
+        "cached_replay": 21.543248
+      },
+      "uncached_over_cached": 2.9275305654931887,
+      "image_digest": "602e388c47eebb0048b8e40ba0388a6577861c115dbb105d9c94ed32707ab841",
+      "entry": "tessera_rocm_matmul_2d70fe383e098d94",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "matmul_fp16",
+      "role": "matmul_replay_candidate",
+      "shape": [
+        64,
+        256,
+        64
+      ],
+      "max_abs_error": 4.071858711540699e-06,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          60.545999,
+          66.022475,
+          62.435131,
+          62.913579,
+          64.468117,
+          63.613679,
+          60.181389
+        ],
+        "cached_replay": [
+          21.879432,
+          24.074951,
+          21.487319,
+          20.118152,
+          20.616809,
+          22.010138,
+          22.887387
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 62.913579,
+        "cached_replay": 21.879432
+      },
+      "uncached_over_cached": 2.8754667397215794,
+      "image_digest": "602e388c47eebb0048b8e40ba0388a6577861c115dbb105d9c94ed32707ab841",
+      "entry": "tessera_rocm_matmul_2d70fe383e098d94",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "matmul_fp16",
+      "role": "matmul_replay_candidate",
+      "shape": [
+        200,
+        128,
+        64
+      ],
+      "max_abs_error": 1.6130506992340088e-06,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          74.114009,
+          67.632007,
+          64.651888,
+          64.530271,
+          66.494261,
+          65.726898,
+          62.417031
+        ],
+        "cached_replay": [
+          26.692999,
+          22.507337,
+          22.009294,
+          21.845564,
+          23.868584,
+          20.897216,
+          23.306522
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 65.726898,
+        "cached_replay": 22.507337
+      },
+      "uncached_over_cached": 2.920243207803749,
+      "image_digest": "602e388c47eebb0048b8e40ba0388a6577861c115dbb105d9c94ed32707ab841",
+      "entry": "tessera_rocm_matmul_2d70fe383e098d94",
+      "identity_equal_all_arms": true
+    }
+  ],
+  "limitations": [
+    "No kernel speed claim",
+    "Owning-host compiler snapshot identified by content hash",
+    "Four static fp16 profiles; no generic cache closure claim"
+  ]
+}

@@ -100,6 +100,34 @@ int main() {
  auto prepare=[&](uint64_t &h){return tessera_rocm_nvfp4_prepare(images,lengths,entries,dims,
    geometry,inputs,sizes,&h);};
  uint64_t handle=0,generation=0;float elapsed=0;
+ // Readiness follows actual leaf edges, in both direct and captured execution.
+ for(bool graph:{false,true}) {
+   assert(prepare(handle)==0);uint64_t nodes=0;
+   auto step=[&](int stage) {
+     return graph ? tessera_rocm_nvfp4_graph(handle,stage,1,&generation,&nodes,nullptr)
+                  : tessera_rocm_nvfp4_invoke(handle,stage,1,&generation,nullptr);
+   };
+   unsigned char packed[1024]{},fragment[1024]{},result[8192]{};
+   assert(step(1)==10 && step(2)==10);
+   assert(tessera_rocm_nvfp4_read(handle,5,0,packed,sizeof(packed))==10);
+   assert(step(0)==0);
+   assert(tessera_rocm_nvfp4_read(handle,5,0,packed,sizeof(packed))==0);
+   assert(tessera_rocm_nvfp4_read(handle,8,0,fragment,sizeof(fragment))==10);
+   assert(step(2)==10);
+   assert(step(1)==0);
+   assert(tessera_rocm_nvfp4_read(handle,8,0,fragment,sizeof(fragment))==0);
+   assert(step(2)==0);
+   assert(tessera_rocm_nvfp4_read(handle,10,generation,result,sizeof(result))==0);
+   assert(step(0)==0);
+   assert(tessera_rocm_nvfp4_read(handle,10,generation,result,sizeof(result))==10);
+   assert(tessera_rocm_nvfp4_update_inputs(handle,inputs,sizes)==0);
+   assert(tessera_rocm_nvfp4_read(handle,5,0,packed,sizeof(packed))==10);
+   assert(step(1)==10);
+   assert(tessera_rocm_nvfp4_close(handle)==0);
+   assert(allocations.empty() && leases==0 && graphObjects.empty() && graphExecObjects.empty());
+ }
+ launchCount=0;
+
  sizes[3]--;assert(prepare(handle)==1&&handle==0&&allocations.empty());sizes[3]++;
  assert(prepare(handle)==0&&handle&&allocations.size()==11&&leases==3);
  assert(tessera_rocm_nvfp4_invoke(handle,2,1,&generation,&elapsed)==10);
@@ -208,6 +236,44 @@ int main() {
  assert(tessera_rocm_nvfp4_prepare_cached(different,lengths,entries,dims,
    geometry,inputs,sizes,&handle,&hit)==0&&!hit);
  assert(tessera_rocm_nvfp4_release_cached(handle)==0&&allocations.size()==22);
+ assert(tessera_rocm_nvfp4_cache_clear()==0&&allocations.empty());
+
+ // Bounded frames use actual spans while retaining their capacity allocation.
+ size_t rowSizes[5];std::copy_n(sizes,5,rowSizes);
+ rowSizes[3]=17*64;rowSizes[4]=17*sizeof(float);
+ assert(tessera_rocm_nvfp4_prepare_rows(images,lengths,entries,dims,geometry,
+   inputs,rowSizes,17,&handle)==0);
+ int64_t capacity=0,active=0;uint64_t span=0,count=0;
+ assert(tessera_rocm_nvfp4_frame_stats(handle,&capacity,&active,&span,&count)==0);
+ assert(capacity==128&&active==17&&count==11);
+ size_t realSpan=0;for(auto &allocation:allocations)realSpan+=allocation.second;
+ assert(span==realSpan);
+ assert(tessera_rocm_nvfp4_graph(handle,4,1,&generation,&nodes,nullptr)==0);
+ assert(graphObjects.size()==1);
+ // Invalid lengths/rows do not retire the previous completed graph or frame.
+ assert(tessera_rocm_nvfp4_update_inputs_rows(handle,129,inputs,rowSizes)==1);
+ assert(tessera_rocm_nvfp4_update_inputs_rows(handle,1,inputs,rowSizes)==1);
+ assert(graphObjects.size()==1&&allocations.size()==11);
+ rowSizes[3]=64;rowSizes[4]=sizeof(float);
+ failGraphDestroy=true;
+ assert(tessera_rocm_nvfp4_update_inputs_rows(handle,1,inputs,rowSizes)==9);
+ assert(allocations.size()==11&&leases==3);
+ assert(tessera_rocm_nvfp4_invoke(handle,4,1,&generation,nullptr)==10);
+ failGraphDestroy=false;
+ assert(tessera_rocm_nvfp4_close(handle)==0&&allocations.empty()&&graphObjects.empty());
+ assert(tessera_rocm_nvfp4_prepare_cached_rows(images,lengths,entries,dims,geometry,
+   inputs,rowSizes,1,&handle,&hit)==0&&!hit);
+ assert(tessera_rocm_nvfp4_invoke(handle,4,1,&generation,nullptr)==0);
+ unsigned char oneRow[64];
+ assert(tessera_rocm_nvfp4_read(handle,10,generation,oneRow,sizeof(oneRow))==0);
+ assert(tessera_rocm_nvfp4_read(handle,10,generation,output,sizeof(output))==1);
+ assert(tessera_rocm_nvfp4_release_cached(handle)==0);
+ // Static and bounded views may reuse capacity-compatible native owners,
+ // but a static rebinding restores its full declared row frame.
+ assert(cached(handle)==0&&hit);
+ assert(tessera_rocm_nvfp4_frame_stats(handle,&capacity,&active,&span,&count)==0);
+ assert(active==128&&count==11);
+ assert(tessera_rocm_nvfp4_release_cached(handle)==0);
  assert(tessera_rocm_nvfp4_cache_clear()==0&&allocations.empty());
 
  // The byte budget can bind before the four-entry limit.

@@ -1,4 +1,4 @@
-// Native lifecycle for the compiler-owned static NVFP4 three-stage program.
+// Native lifecycle for the compiler-owned NVFP4 three-stage program.
 // No numerical kernel or physical schedule is authored by this runtime.
 #include <hip/hip_runtime.h>
 #include <array>
@@ -40,8 +40,9 @@ struct Program {
   std::array<size_t,11> bytes{},elements{};
   std::array<std::vector<unsigned char>,5> host{};
   std::array<Stage,3> stages{};
-  bool weights=false,activations=false,output=false,poisoned=true;
-  uint64_t generation=0;
+  bool converted=false,weights=false,activations=false,output=false,poisoned=true;
+  uint64_t generation=0,allocationCount=0;
+  int64_t capacityRows=0,activeRows=0,n=0,k=0;
   std::vector<hipEvent_t> events;
   std::vector<unsigned char> readback;
   std::map<std::pair<int,int>,Graph> graphs;
@@ -122,14 +123,53 @@ int clean(Program &p) {
   p.stream=nullptr;
   return 0;
 }
-bool values(const Program &p,const void *a,const void *scale) {
+size_t activeBytes(const Program &p,size_t slot,int64_t rows) {
+  if(slot==3)return size_t(rows)*size_t(p.k);
+  if(slot==4)return size_t(rows)*sizeof(float);
+  if(slot==10)return size_t(rows)*size_t(p.n)*2;
+  return p.bytes[slot];
+}
+bool values(const Program &p,const void *a,const void *scale,int64_t rows) {
   if(!a || !scale || uintptr_t(scale)%alignof(float))return false;
   auto codes=static_cast<const unsigned char*>(a);
   auto scales=static_cast<const float*>(scale);
-  for(size_t i=0;i<p.elements[3];++i)if((codes[i]&127)==127)return false;
-  for(size_t i=0;i<p.elements[4];++i)
+  for(size_t i=0;i<activeBytes(p,3,rows);++i)if((codes[i]&127)==127)return false;
+  for(int64_t i=0;i<rows;++i)
     if(!std::isfinite(scales[i]) || scales[i]<0)return false;
   return true;
+}
+// Caller establishes stream completion before changing a prepared frame.
+// Captured graphs bind argv and launch geometry, so an active-row change must
+// retire their completed executables before updating those bindings.
+int bindRows(Program &p,int64_t rows) {
+  if(rows<=0 || rows>p.capacityRows)return 1;
+  if(rows!=p.activeRows) {
+    for(auto it=p.graphs.begin();it!=p.graphs.end();) {
+      if(releaseGraph(it->second)){p.poisoned=true;return 9;}
+      it=p.graphs.erase(it);
+    }
+  }
+  p.activeRows=rows;
+  auto &s=p.stages[2];
+  s.scalars[0]=rows;
+  s.geometry[1]=unsigned((uint64_t(rows)+255)/256);
+  s.refs[0].elements=int64_t(activeBytes(p,3,rows));
+  s.refs[2].elements=rows;
+  s.refs[4].elements=rows*p.n;
+  return 0;
+}
+// Native readiness follows the actual converter -> storage -> consumer edges.
+// Enqueued completion is ordered on the private stream; reads establish host
+// visibility. A rewritten producer invalidates every dependent result.
+void invalidateStages(Program &p,int first) {
+  if(first==0)p.converted=false;
+  if(first<=1)p.weights=false;
+  p.output=false;
+}
+void finishStages(Program &p,int stage) {
+  if(stage==0 || stage>=3)p.converted=true;
+  if(stage==1 || stage>=3)p.weights=true;
+  if(stage==2 || stage==4){p.output=true;++p.generation;}
 }
 int launch(Program &p,int stage) {
   auto &s=p.stages[stage];
@@ -141,17 +181,20 @@ int launch(Program &p,int stage) {
 // Status: 1 malformed request, 2 process/context, 3 image, 4 allocation,
 // 5 copy, 6 launch, 7 completion, 8 lease, 9 cleanup, 10 state, 12 exception.
 // A nonzero preparation status can still return a retained handle: close it.
-extern "C" int tessera_rocm_nvfp4_prepare(
+static int prepareImpl(
     const void *const *images,const size_t *imageBytes,const char *const *entries,
     const int64_t *dims,const unsigned *geometry,const void *const *inputs,
-    const size_t *inputBytes,uint64_t *handle) try {
+    const size_t *inputBytes,uint64_t *handle,int64_t requestedRows) try {
   if(handle)*handle=0;
   if(!handle || !images || !imageBytes || !entries || !dims || !geometry ||
       !inputs || !inputBytes)return 1;
   if(getpid()!=ownerProcess)return 2;
   int64_t m=dims[0],n=dims[1],k=dims[2],segments=dims[3];
   if(m<=0 || n<=0 || n%16 || k<=0 || k%64 || segments<=0 || segments>n)return 1;
+  int64_t rows=requestedRows?requestedRows:m;
+  if(rows<=0 || rows>m)return 1;
   auto p=std::make_unique<Program>();
+  p->capacityRows=m;p->activeRows=m;p->n=n;p->k=k;
   if(!product(p->bytes[0],{n,k/2},1) || !product(p->bytes[1],{n,k/16},1) ||
      !product(p->bytes[2],{segments},8) || !product(p->bytes[3],{m,k},1) ||
      !product(p->bytes[4],{m},4) || !product(p->bytes[5],{n,k/2},1) ||
@@ -160,8 +203,8 @@ extern "C" int tessera_rocm_nvfp4_prepare(
      !product(p->bytes[10],{m,n},2))return 1;
   constexpr size_t sizes[11]={1,1,8,1,4,1,1,8,1,1,2};
   for(size_t i=0;i<11;++i)p->elements[i]=p->bytes[i]/sizes[i];
-  for(size_t i=0;i<5;++i)if(!inputs[i] || inputBytes[i]!=p->bytes[i])return 1;
-  if(uintptr_t(inputs[2])%alignof(double) || !values(*p,inputs[3],inputs[4]))return 1;
+  for(size_t i=0;i<5;++i)if(!inputs[i] || inputBytes[i]!=activeBytes(*p,i,rows))return 1;
+  if(uintptr_t(inputs[2])%alignof(double) || !values(*p,inputs[3],inputs[4],rows))return 1;
   auto gs=static_cast<const double*>(inputs[2]);
   for(int64_t i=0;i<segments;++i)if(!std::isfinite(gs[i]) || gs[i]<=0)return 1;
   auto scales=static_cast<const unsigned char*>(inputs[1]);
@@ -183,7 +226,8 @@ extern "C" int tessera_rocm_nvfp4_prepare(
       std::string(properties.gcnArchName).substr(0,7)!="gfx1201")return 2;
   for(size_t i=0;i<5;++i) {
     auto begin=static_cast<const unsigned char*>(inputs[i]);
-    p->host[i].assign(begin,begin+p->bytes[i]);
+    p->host[i].resize(p->bytes[i]);
+    std::memcpy(p->host[i].data(),begin,inputBytes[i]);
   }
   std::lock_guard<std::mutex> lock(mutex);
   if(!nextHandle)return 12;
@@ -198,10 +242,12 @@ extern "C" int tessera_rocm_nvfp4_prepare(
         &owned.stages[stage].lease,&module,&function,&hit))return 3;
     owned.stages[stage].function=static_cast<hipFunction_t>(function);
   }
-  for(size_t i=0;i<11;++i)
+  for(size_t i=0;i<11;++i) {
     if(hipMalloc(&owned.buffers[i],owned.bytes[i])!=hipSuccess)return 4;
+    ++owned.allocationCount;
+  }
   for(size_t i=0;i<5;++i)
-    if(hipMemcpyAsync(owned.buffers[i],owned.host[i].data(),owned.bytes[i],
+    if(hipMemcpyAsync(owned.buffers[i],owned.host[i].data(),activeBytes(owned,i,rows),
         hipMemcpyHostToDevice,owned.stream)!=hipSuccess)return 5;
   constexpr int slots[3][6]={{0,1,2,5,6,7},{5,6,8,9,-1,-1},{3,8,4,9,10,-1}};
   constexpr int counts[3]={6,4,5};
@@ -218,38 +264,66 @@ extern "C" int tessera_rocm_nvfp4_prepare(
       for(auto &scalar:s.scalars)s.argv[arg++]=&scalar;
     }
   }
+  if(int rc=bindRows(owned,rows))return rc;
   if(hipStreamSynchronize(owned.stream)!=hipSuccess) {owned.poisoned=true;return 7;}
   owned.activations=true;owned.poisoned=false;
   return 0;
 } catch(...) {return 12;}
 
-extern "C" int tessera_rocm_nvfp4_update(
-    uint64_t handle,const void *a,size_t aBytes,const void *scale,size_t scaleBytes) try {
+extern "C" int tessera_rocm_nvfp4_prepare(
+    const void *const *images,const size_t *imageBytes,const char *const *entries,
+    const int64_t *dims,const unsigned *geometry,const void *const *inputs,
+    const size_t *inputBytes,uint64_t *handle) {
+  return prepareImpl(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle,0);
+}
+extern "C" int tessera_rocm_nvfp4_prepare_rows(
+    const void *const *images,const size_t *imageBytes,const char *const *entries,
+    const int64_t *dims,const unsigned *geometry,const void *const *inputs,
+    const size_t *inputBytes,int64_t rows,uint64_t *handle) {
+  if(rows<=0){if(handle)*handle=0;return 1;}
+  return prepareImpl(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle,rows);
+}
+
+static int updateImpl(
+    uint64_t handle,const void *a,size_t aBytes,const void *scale,size_t scaleBytes,int64_t requestedRows) try {
   if(getpid()!=ownerProcess)return 2;
   std::lock_guard<std::mutex> lock(mutex);
   auto found=programs.find(handle);if(found==programs.end())return 1;
   auto &p=*found->second;
   if(!identity(p))return 2;
   if(p.poisoned)return 10;
-  if(aBytes!=p.bytes[3] || scaleBytes!=p.bytes[4] || !values(p,a,scale))return 1;
+  int64_t rows=requestedRows?requestedRows:p.capacityRows;
+  if(rows<=0 || rows>p.capacityRows || aBytes!=activeBytes(p,3,rows) ||
+     scaleBytes!=activeBytes(p,4,rows) || !values(p,a,scale,rows))return 1;
   std::vector<unsigned char> nextA(static_cast<const unsigned char*>(a),
       static_cast<const unsigned char*>(a)+aBytes);
   std::vector<unsigned char> nextScale(static_cast<const unsigned char*>(scale),
       static_cast<const unsigned char*>(scale)+scaleBytes);
   if(hipStreamSynchronize(p.stream)!=hipSuccess){p.poisoned=true;return 7;}
+  if(int rc=bindRows(p,rows))return rc;
   p.activations=false;p.output=false;
   p.host[3]=std::move(nextA);p.host[4]=std::move(nextScale);
   for(size_t i=3;i<5;++i)
-    if(hipMemcpyAsync(p.buffers[i],p.host[i].data(),p.bytes[i],hipMemcpyHostToDevice,p.stream)!=hipSuccess) {
+    if(hipMemcpyAsync(p.buffers[i],p.host[i].data(),activeBytes(p,i,rows),hipMemcpyHostToDevice,p.stream)!=hipSuccess) {
       p.poisoned=true;return 5;
     }
   if(hipStreamSynchronize(p.stream)!=hipSuccess){p.poisoned=true;return 7;}
   p.activations=true;return 0;
 } catch(...) {return 12;}
 
+extern "C" int tessera_rocm_nvfp4_update(
+    uint64_t handle,const void *a,size_t aBytes,const void *scale,size_t scaleBytes) {
+  return updateImpl(handle,a,aBytes,scale,scaleBytes,0);
+}
+extern "C" int tessera_rocm_nvfp4_update_rows(
+    uint64_t handle,int64_t rows,const void *a,size_t aBytes,const void *scale,size_t scaleBytes) {
+  if(rows<=0)return 1;
+  return updateImpl(handle,a,aBytes,scale,scaleBytes,rows);
+}
+
 // Full rebinding validates and snapshots all inputs before changing ownership.
-extern "C" int tessera_rocm_nvfp4_update_inputs(
-    uint64_t handle,const void *const *inputs,const size_t *bytes) try {
+static int updateInputsImpl(
+    uint64_t handle,const void *const *inputs,const size_t *bytes,int64_t requestedRows) try {
   if(!inputs || !bytes)return 1;
   if(getpid()!=ownerProcess)return 2;
   std::lock_guard<std::mutex> lock(mutex);
@@ -257,8 +331,10 @@ extern "C" int tessera_rocm_nvfp4_update_inputs(
   auto &p=*found->second;
   if(!identity(p))return 2;
   if(p.poisoned)return 10;
-  for(size_t i=0;i<5;++i)if(!inputs[i] || bytes[i]!=p.bytes[i])return 1;
-  if(uintptr_t(inputs[2])%alignof(double) || !values(p,inputs[3],inputs[4]))return 1;
+  int64_t rows=requestedRows?requestedRows:p.capacityRows;
+  if(rows<=0 || rows>p.capacityRows)return 1;
+  for(size_t i=0;i<5;++i)if(!inputs[i] || bytes[i]!=activeBytes(p,i,rows))return 1;
+  if(uintptr_t(inputs[2])%alignof(double) || !values(p,inputs[3],inputs[4],rows))return 1;
   auto globals=static_cast<const double*>(inputs[2]);
   for(size_t i=0;i<p.elements[2];++i)if(!std::isfinite(globals[i]) || globals[i]<=0)return 1;
   auto scales=static_cast<const unsigned char*>(inputs[1]);
@@ -270,16 +346,27 @@ extern "C" int tessera_rocm_nvfp4_update_inputs(
     snapshots[i].assign(begin,begin+bytes[i]);
   }
   if(hipStreamSynchronize(p.stream)!=hipSuccess){p.poisoned=true;return 7;}
-  p.weights=false;p.activations=false;p.output=false;
+  if(int rc=bindRows(p,rows))return rc;
+  p.converted=false;p.weights=false;p.activations=false;p.output=false;
   p.host=std::move(snapshots);
   for(size_t i=0;i<5;++i)
-    if(hipMemcpyAsync(p.buffers[i],p.host[i].data(),p.bytes[i],
+    if(hipMemcpyAsync(p.buffers[i],p.host[i].data(),activeBytes(p,i,rows),
                       hipMemcpyHostToDevice,p.stream)!=hipSuccess) {
       p.poisoned=true;return 5;
     }
   if(hipStreamSynchronize(p.stream)!=hipSuccess){p.poisoned=true;return 7;}
   p.activations=true;return 0;
 } catch(...) {return 12;}
+
+extern "C" int tessera_rocm_nvfp4_update_inputs(
+    uint64_t handle,const void *const *inputs,const size_t *bytes) {
+  return updateInputsImpl(handle,inputs,bytes,0);
+}
+extern "C" int tessera_rocm_nvfp4_update_inputs_rows(
+    uint64_t handle,int64_t rows,const void *const *inputs,const size_t *bytes) {
+  if(rows<=0)return 1;
+  return updateInputsImpl(handle,inputs,bytes,rows);
+}
 
 // stage 0/1/2 are individual kernels; 3 ingest; 4 combined.
 // Repeated submissions and event ownership live below Python.
@@ -292,10 +379,9 @@ extern "C" int tessera_rocm_nvfp4_invoke(
   auto found=programs.find(handle);if(found==programs.end())return 1;
   auto &p=*found->second;
   if(!identity(p))return 2;
-  if(p.poisoned || !p.activations || ((stage==1 || stage==2) && !p.weights))return 10;
+  if(p.poisoned || !p.activations || (stage==1 && !p.converted) || (stage==2 && !p.weights))return 10;
   int first=stage==3 || stage==4?0:stage,last=stage==3?1:stage==4?2:stage;
-  if(first==0)p.weights=false;
-  p.output=false;
+  invalidateStages(p,first);
   if(!elapsed) {
     for(int i=0;i<repeats;++i)
       for(int s=first;s<=last;++s) {
@@ -304,8 +390,7 @@ extern "C" int tessera_rocm_nvfp4_invoke(
       }
     // Submission is ordered on the private stream. Read/update/close establish
     // completion before exposing host values or releasing ownership.
-    if(stage==3 || stage==4)p.weights=true;
-    if(stage==2 || stage==4){p.output=true;++p.generation;}
+    finishStages(p,stage);
     *generation=p.generation;return 0;
   }
   hipEvent_t begin{},end{};
@@ -328,8 +413,7 @@ extern "C" int tessera_rocm_nvfp4_invoke(
   }
   if(status){p.poisoned=true;return status;}
   *elapsed/=repeats;
-  if(stage==3 || stage==4)p.weights=true;
-  if(stage==2 || stage==4){p.output=true;++p.generation;}
+  finishStages(p,stage);
   *generation=p.generation;return 0;
 } catch(...) {return 12;}
 
@@ -341,8 +425,9 @@ extern "C" int tessera_rocm_nvfp4_read(
   auto found=programs.find(handle);if(found==programs.end())return 1;
   auto &p=*found->second;
   if(!identity(p))return 2;
-  if(p.poisoned || (slot==10?(!p.output || generation!=p.generation):!p.weights))return 10;
-  if(bytes!=p.bytes[slot])return 1;
+  if(p.poisoned || (slot==10 ? (!p.output || generation!=p.generation) :
+      slot<=7 ? !p.converted : !p.weights))return 10;
+  if(bytes!=activeBytes(p,size_t(slot),p.activeRows))return 1;
   p.readback.resize(bytes);
   if(hipMemcpyAsync(p.readback.data(),p.buffers[slot],bytes,hipMemcpyDeviceToHost,p.stream)!=hipSuccess) {
     p.poisoned=true;return 5;
@@ -376,7 +461,8 @@ extern "C" int tessera_rocm_nvfp4_graph(
   auto found=programs.find(handle);if(found==programs.end())return 1;
   auto &p=*found->second;
   if(!identity(p))return 2;
-  if(p.poisoned || !p.activations || ((stage==1 || stage==2) && !p.weights))return 10;
+  if(p.poisoned || !p.activations || (stage==1 && !p.converted) || (stage==2 && !p.weights))return 10;
+  int first=stage>=3?0:stage,last=stage==3?1:stage==4?2:stage;
   auto key=std::make_pair(stage,repeats);
   auto entry=p.graphs.find(key);
   if(entry==p.graphs.end()) {
@@ -392,7 +478,6 @@ extern "C" int tessera_rocm_nvfp4_graph(
     if(hipStreamBeginCapture(p.stream,hipStreamCaptureModeThreadLocal)!=hipSuccess) {
       p.poisoned=true;return 6;
     }
-    int first=stage>=3?0:stage,last=stage==3?1:stage==4?2:stage;
     int status=0;
     for(int i=0;i<repeats && !status;++i)
       for(int s=first;s<=last && !status;++s)status=launch(p,s);
@@ -410,12 +495,10 @@ extern "C" int tessera_rocm_nvfp4_graph(
     }
   }
   auto &g=entry->second;
-  p.output=false;
-  if(stage==0 || stage>=3)p.weights=false;
+  invalidateStages(p,first);
   if(!elapsed) {
     if(hipGraphLaunch(g.executable,p.stream)!=hipSuccess){p.poisoned=true;return 6;}
-    if(stage>=3)p.weights=true;
-    if(stage==2 || stage==4){p.output=true;++p.generation;}
+    finishStages(p,stage);
     *generation=p.generation;*nodes=g.nodes;return 0;
   }
   // Warm upload/first replay is outside the recorded event interval.
@@ -437,8 +520,7 @@ extern "C" int tessera_rocm_nvfp4_graph(
     p.events.pop_back();
   }
   if(status){p.poisoned=true;return status;}
-  if(stage>=3)p.weights=true;
-  if(stage==2 || stage==4){p.output=true;++p.generation;}
+  finishStages(p,stage);
   *generation=p.generation;*nodes=g.nodes;
   return 0;
 } catch(...) {return 12;}
@@ -446,19 +528,20 @@ extern "C" int tessera_rocm_nvfp4_graph(
 
 // Bounded native idle ownership. Checkout assigns a fresh token so stale
 // handles cannot access reused allocations. Keys include complete images.
-extern "C" int tessera_rocm_nvfp4_prepare_cached(
+static int prepareCachedImpl(
     const void *const *images,const size_t *imageBytes,const char *const *entries,
     const int64_t *dims,const unsigned *geometry,const void *const *inputs,
-    const size_t *inputBytes,uint64_t *handle,int *hit) try {
+    const size_t *inputBytes,uint64_t *handle,int *hit,int64_t requestedRows) try {
   if(handle)*handle=0;if(hit)*hit=0;
   if(!handle || !hit || !images || !imageBytes || !entries || !dims || !geometry ||
      !inputs || !inputBytes)return 1;
   if(getpid()!=ownerProcess)return 2;
+  if(requestedRows<0 || (requestedRows && requestedRows>dims[0]))return 1;
   CacheKey key;
   for(size_t i=0;i<3;++i) {
     if(!images[i] || imageBytes[i]<4 || !entries[i] || !*entries[i])return 1;
     if(imageBytes[i]>cacheLimit)
-      return tessera_rocm_nvfp4_prepare(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle);
+      return prepareImpl(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle,requestedRows);
     auto begin=static_cast<const unsigned char*>(images[i]);
     key.images[i].assign(begin,begin+imageBytes[i]);key.entries[i]=entries[i];
   }
@@ -478,14 +561,28 @@ extern "C" int tessera_rocm_nvfp4_prepare_cached(
       pool.idle.erase(it);*handle=id;*hit=1;break;
     }
   }
-  if(*handle)return tessera_rocm_nvfp4_update_inputs(*handle,inputs,inputBytes);
-  int rc=tessera_rocm_nvfp4_prepare(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle);
+  if(*handle)return updateInputsImpl(*handle,inputs,inputBytes,requestedRows);
+  int rc=prepareImpl(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle,requestedRows);
   if(!rc) {
     std::lock_guard<std::mutex> lock(mutex);
     state().cacheKeys.emplace(*handle,std::move(key));
   }
   return rc;
 } catch(...) {return 12;}
+
+extern "C" int tessera_rocm_nvfp4_prepare_cached(
+    const void *const *images,const size_t *imageBytes,const char *const *entries,
+    const int64_t *dims,const unsigned *geometry,const void *const *inputs,
+    const size_t *inputBytes,uint64_t *handle,int *hit) {
+  return prepareCachedImpl(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle,hit,0);
+}
+extern "C" int tessera_rocm_nvfp4_prepare_cached_rows(
+    const void *const *images,const size_t *imageBytes,const char *const *entries,
+    const int64_t *dims,const unsigned *geometry,const void *const *inputs,
+    const size_t *inputBytes,int64_t rows,uint64_t *handle,int *hit) {
+  if(rows<=0){if(handle)*handle=0;if(hit)*hit=0;return 1;}
+  return prepareCachedImpl(images,imageBytes,entries,dims,geometry,inputs,inputBytes,handle,hit,rows);
+}
 
 extern "C" int tessera_rocm_nvfp4_release_cached(uint64_t handle) try {
   if(getpid()!=ownerProcess)return 2;
@@ -511,7 +608,7 @@ extern "C" int tessera_rocm_nvfp4_release_cached(uint64_t handle) try {
   if(fits) {
     if(hipStreamSynchronize(p.stream)!=hipSuccess){p.poisoned=true;return 7;}
     pool.idle.emplace_back(); // allocate before moving any retained owner
-    p.weights=false;p.activations=false;p.output=false;
+    p.converted=false;p.weights=false;p.activations=false;p.output=false;
     auto &idle=pool.idle.back();idle.bytes=bytes;
     idle.key=std::move(key->second);idle.program=std::move(found->second);
     pool.idleBytes+=bytes;pool.cacheKeys.erase(key);programs.erase(found);
@@ -531,5 +628,23 @@ extern "C" int tessera_rocm_nvfp4_cache_clear() try {
     int rc=clean(*it->program);if(rc)return rc;
     pool.idleBytes-=it->bytes;it=pool.idle.erase(it);
   }
+  return 0;
+} catch(...) {return 12;}
+
+// Native capacity receipt does not expose device addresses or ownership.
+extern "C" int tessera_rocm_nvfp4_frame_stats(
+    uint64_t handle,int64_t *capacity,int64_t *active,uint64_t *bytes,uint64_t *allocations) try {
+  if(!capacity || !active || !bytes || !allocations)return 1;
+  if(getpid()!=ownerProcess)return 2;
+  std::lock_guard<std::mutex> lock(mutex);
+  auto found=programs.find(handle);if(found==programs.end())return 1;
+  auto &p=*found->second;if(!identity(p))return 2;
+  if(p.poisoned)return 10;
+  uint64_t total=0;
+  for(size_t n:p.bytes) {
+    if(uint64_t(n)>UINT64_MAX-total)return 1;
+    total+=uint64_t(n);
+  }
+  *capacity=p.capacityRows;*active=p.activeRows;*bytes=total;*allocations=p.allocationCount;
   return 0;
 } catch(...) {return 12;}

@@ -1,0 +1,7 @@
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_benchmark_recorders_are_named.py::test_every_recorder_is_named_or_frozen
+FAILED tests/unit/test_batching_rule_closure.py::test_batching_axis_has_zero_open
+FAILED tests/unit/test_batching_rule_closure.py::test_transpose_axis_has_zero_open
+FAILED tests/unit/test_compiler_plan_routing.py::test_compiler_plan_routing_and_log_are_consistent
+4 failed, 20441 passed, 9583 skipped, 15 warnings in 355.42s (0:05:55)

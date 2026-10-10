@@ -183,7 +183,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 33 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 32 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 28 | ✓ |
-| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-08 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-09 | 0 | ✓ |
 | `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-07 | 2 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-23 | 16 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 68 | ✓ |

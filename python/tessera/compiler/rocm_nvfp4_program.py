@@ -145,6 +145,8 @@ def package_traced_resident(module):
     if tuple(plan["role_indices"]) != indices:
         raise ValueError("resident frontend/native argument roles differ")
     members = [native.project_member(index) for index in range(3)]
+    # Capacity is a native Graph decision, not a Python shape projection.
+    m = plan["buffers"][indices[3]]["shape"][0]
     program=NVFP4ResidentProgram(
         package_nvfp4_ingest_graph(members[0]), package_mxfp4_storage_graph(members[1]),
         package_resident_packed_consumer(m,n,k,graph=members[2],native_plan_json=native.plan_json),

@@ -16235,6 +16235,27 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 Host-free image parity validated: 235 previously skipped ROCm image cases now execute with the owning SDK source manifest. Hosted GitHub replay remains follow-up required; no fresh gfx1151/gfx1201 device or performance claim.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
 
+## Shared attention sequence-capacity foundation — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Semantic checkpoint verification and native Schedule projection now use one
+IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
+Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
+Not applicable to ROCm physical kernels: this resolver is used by the shared attention checkpoint dialect and NVIDIA native products. No gfx1151/gfx1201 schedule, image ABI or performance claim is changed.
+Foundation verification alone does not establish execution; the native evidence is recorded below. Generic scaled-matmul closure remains open.
+
+## Bounded saved-LSE JVP native integration — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Shared contracts: symbolic sequence AD, exact source-shaped inactive zeros,
+schema-2 native tensor manifests and checked actual-size product launch grids.
+574 host WSL regressions pass, zero skipped.
+Not applicable to HIP physical execution: the schema-2 native tensor manifest is shared, but no ROCm JVP producer emits it. Existing checkpoint capacity verifier parity is tested on host; new gfx1151/gfx1201 execution evidence is not inferred.
+Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
+No generic scaled-matmul closure or default-route promotion.
+Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
+
 ## Native unary replay reuse — 2026-10-08
 
 Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.

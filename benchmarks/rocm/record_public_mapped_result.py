@@ -21,7 +21,19 @@ def record(fmt, axis, mode="primal"):
     owner = vmap(scalar, in_axes=leading._frontend_batch_axes, out_axes=axis)
     expected = (np.moveaxis(oracle, 0, axis),)
     prepared_inputs = values
-    if mode == "jvp":
+    if mode == "reverse":
+        import tessera as ts
+        from tests.device.rocm.test_public_mapped_scale_vjp import scale_oracle
+        reverse = ts.jit(target="rocm_gfx1201", autodiff="reverse",
+                         wrt=("sa", "sb"))(scalar._fn)
+        owner = vmap(reverse, in_axes=leading._frontend_batch_axes, out_axes=axis)
+        seed = np.random.default_rng(908).uniform(-.5, .5, oracle.shape).astype(np.float32)
+        dy = np.ascontiguousarray(np.moveaxis(seed, 0, axis))
+        expected = scale_oracle(values, leading._frontend_batch_axes, seed)
+        prepared_inputs = (*values, dy)
+        def invoke():
+            return owner.native_backward(*values, out_cotangents=dy)
+    elif mode == "jvp":
         import tessera as ts
         forward = ts.jit(target="rocm_gfx1201", autodiff="forward",
                          wrt=("sa", "sb"))(scalar._fn)
@@ -41,7 +53,9 @@ def record(fmt, axis, mode="primal"):
     actual = invoke()
     cold_ms = (time.perf_counter() - start) * 1e3
     compare(actual)
-    if mode == "jvp":
+    if mode == "reverse":
+        package = owner._native_backward_artifact
+    elif mode == "jvp":
         contract = next(iter(owner._native_jvp_packages.values())).contract
         package = NativeScaledProgram.from_manifest(
             contract["steps"][0]["child_metadata"]["native_scaled_program"])
@@ -72,7 +86,8 @@ def record(fmt, axis, mode="primal"):
     return {
         "mode": mode, "format": fmt, "shape_bmnk": [2, 17, 19, 256], "out_axes": axis,
         "output_shapes": [list(output.shape) for output in actual],
-        "execution_receipt": (owner.last_jvp_execution if mode == "jvp" else
+        "execution_receipt": (owner.last_backward_execution if mode == "reverse" else
+                              owner.last_jvp_execution if mode == "jvp" else
                               owner._native_descriptor_last_receipt)["execution_kind"],
         "members": [step["operation"] for step in program["steps"]],
         "correctness": "passed_before_and_after_timing",
@@ -90,6 +105,7 @@ def record(fmt, axis, mode="primal"):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--mode", choices=("all", "reverse"), default="all")
     args = parser.parse_args()
     architecture = runtime._rocm_live_arch()
     if architecture != "gfx1201":
@@ -100,20 +116,24 @@ def main():
              root / "python/tessera/compiler/native_vmap.py",
              root / "python/tessera/compiler/jit.py",
              root / "python/tessera/compiler/rocm_typed_scaled_native.py",
+             root / "python/tessera/compiler/native_scaled_program.py",
+             root / "src/transforms/lib/NativeScaledMatmulProgram.h",
+             root / "src/compiler/programming_model/lib/NativeScaleTranspose.h",
              Path(__file__).resolve()]
     packet = {
         "architecture": architecture,
         "device_inventory": subprocess.run(["rocminfo"], check=True, capture_output=True,
                                            text=True, timeout=30).stdout,
         "identity_sha256": {str(path): hashlib.sha256(path.read_bytes()).hexdigest() for path in paths},
-        "cases": ([record(fmt, axis) for fmt in ("fp32", "e8m0") for axis in (1, -1)] +
+        "cases": ([record("fp32", axis, "reverse") for axis in (1, -1)] if args.mode == "reverse" else
+                  [record(fmt, axis) for fmt in ("fp32", "e8m0") for axis in (1, -1)] +
                   [record("fp32", axis, "jvp") for axis in (1, -1)]),
         "timing_scope": {
             "captured_members": "grouped pure-SSA device graph windows including dispatch; capture/instantiation/copies excluded",
             "warm_public": "ordinary vmap JIT call including input preparation, cache admission, HIP execution and copied return",
             "cold_public": "first compiler-owned public call including frontend certificate, compilation and execution",
         },
-        "claim": "public static mapped primal/JVP execution and cost attribution; no speedup or reverse-AD closure",
+        "claim": "bounded public static mapped execution and cost attribution; no speedup or general AD closure",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(packet, indent=2) + "\n")

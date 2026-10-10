@@ -15,6 +15,21 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
   if (!kind || kind.getValue() != "scale_vjp")
     return tensor::GenerateOp{};
   auto operation = member.getAs<StringAttr>("operation");
+  if (operation && operation.getValue() == "tessera.transpose") {
+    // An inverse output seed is a movement member, not a scale reduction.
+    // Keep the isolated original Graph for the result-permutation consumer.
+    auto functions = llvm::to_vector(mod.getOps<func::FuncOp>());
+    if (functions.size() != 1 || !functions[0].getBody().hasOneBlock() ||
+        functions[0].getNumArguments() != 1 || functions[0].getNumResults() != 1 ||
+        !isa<tessera::TransposeOp>(functions[0].getBody().front().front()) ||
+        !isa<func::ReturnOp>(functions[0].getBody().front().back()))
+      return mod.emitError("native inverse cotangent lost its isolated Graph member"), failure();
+    for (Operation &op : functions[0].getBody().front())
+      if (&op != &functions[0].getBody().front().front() &&
+          !isa<func::ReturnOp>(op) && op.getName().getStringRef() != "schedule.artifact")
+        return mod.emitError("native inverse cotangent has an unexpected Schedule member"), failure();
+    return tensor::GenerateOp{};
+  }
   if (operation && operation.getValue() == "tessera.add") {
     // Accumulated scale contributions use the ordinary native sum lane.
     // This reduction-specific projection must not claim that sum member.

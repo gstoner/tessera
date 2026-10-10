@@ -334,8 +334,6 @@ def _native_scaled_vmap(fn, in_axes, out_axes, *, target):
     permutation.insert(out_axes % rank, 0)
     if rank > 8 and tuple(permutation) != tuple(range(rank)):
         raise ValueError("native mapped result exceeds the verified permutation rank")
-    if request is not None and request.mode == "reverse" and tuple(permutation) != tuple(range(rank)):
-        raise ValueError("mapped AD result placement requires its native cotangent integration")
     owner = JitFn(fn._fn, copy.deepcopy(fn._legacy_graph_ir or fn.graph_ir),
                   fn.inferred_effect, copy.deepcopy(fn.constraints),
                   deterministic=fn.deterministic, seed=fn.seed, target=fn.target,

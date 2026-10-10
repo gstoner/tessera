@@ -82,8 +82,12 @@ Matching LLVM/MLIR 23.1.1 compiler tools and the fresh C++ provider were built.
 
 ## Remaining integration
 
-Public integration on GFX1201 requires separate exact-device proof. The
-SM120 result does not establish AMD, Apple or x86 parity. Dynamic/composed
+Public integration on GFX1201 is now proved for 36 named continuous FP32
+scaled-product cases, with two fresh 36-profile event/public-call packets.
+Evidence: benchmarks/baselines/public_native_scaled_jvp_20261009/README.md.
+This is a different program family from the SM120 attention proof; neither
+establishes Apple or x86 parity. GFX1201 public preparation/binding overhead,
+mixed-axis and broader composition/quantized AD remain open. Dynamic/composed
 products, half-storage AD, nested/higher-order transforms and resident-call
 overhead remain open. Generic scaled_matmul batching/transpose closure also
 remains open; the existing unit gates have not been weakened.
@@ -96,3 +100,5 @@ retirement, general attention forward/backward consumers, and ROCm
 route/performance closure retain their existing plans and evidence obligations.
 
 Recorder: `benchmarks/nvidia/record_public_saved_lse_jvp.py`; correctness-gated paired output and tangent checks precede alternating host/resident completed-call and native event timing.
+
+GFX1201 recorder: benchmarks/rocm/record_public_native_scaled_jvp.py.

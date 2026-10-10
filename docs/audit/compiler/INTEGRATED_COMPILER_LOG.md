@@ -6,6 +6,31 @@ audit_role: reference
 # Integrated compiler engineering log
 
 
+### 2026-10-09 — public native GFX1201 JVP execution and attribution
+
+Owner: FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+PRs: pending; sync PUBLIC-NATIVE-JVP-GFX1201-20261009
+(shared PUBLIC-NATIVE-JVP-20261009).
+
+Outcome: 36 owning RX 9070 XT/gfx1201 public JVP tests pass with the matching
+compiler and fresh C++ HIP providers. Transposed/direct/nested continuous
+FP32 scaled products retain caller Graph/request identity, inactive roles,
+warm compiler refusal and independent old outputs. Two fresh 36-profile
+packets verify all 23 source pins and all native tool/provider hashes.
+Maximum absolute error is 8.189881861575543e-8 against the independent FP64
+oracle. Completed public medians span 1.065–2.643 ms and native interleaved
+event medians 4.072–25.124 us. Captured member windows stay distinct and
+exceed 3.170 ms. No speedup or cross-architecture proof transfer.
+
+Remaining: Public preparation/binding overhead, mixed-axis/general
+compositions, generic scaled_matmul batching/transpose closure, quantized AD,
+and the broader five-slice obligations. All four backend queues assessed.
+
+Evidence: benchmarks/baselines/public_native_scaled_jvp_20261009/README.md,
+run1.json, run2.json, device-tests.txt.
+<!-- entry-fields:end -->
+
+
 ### 2026-10-09 — public native paired saved-LSE JVP
 
 Owner: FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

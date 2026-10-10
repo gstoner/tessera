@@ -160,20 +160,23 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
         b.create<arith::CmpIOp>(l, arith::CmpIPredicate::sle, exponent, c32(127)));
     Value boundedExponent = clamp(exponent);
     Value scale = pow2(boundedExponent);
-    // Both scale and its reciprocal are normal, exactly representable f64
-    // powers of two (exponents [-126,127] and [-127,126]). IEEE multiplication
-    // by that reciprocal has the same rounding as division by scale, including
-    // midpoint ties and gradual underflow. Keep candidate SSE/reduction order.
-    Value reciprocal = pow2(b.create<arith::SubIOp>(l, c32(0), boundedExponent));
+    // Compare in source units. Each midpoint times scale is an exact normal
+    // f64 dyadic number for exponent [-126,127]. Near a midpoint, scaling a
+    // normal input by the reciprocal power of two is exact; underflow/overflow
+    // occurs only outside all midpoint decisions. Ordered strict comparisons
+    // therefore preserve ties without a normalization multiply per value.
+    SmallVector<Value, 7> thresholds;
+    for (double midpoint : midpoints)
+      thresholds.push_back(mul(cf(midpoint), scale));
     SmallVector<Value, 32> codes, errors;
     for (int j = 0; j < 32; ++j) {
-      Value normalized = mul(b.create<math::AbsFOp>(l, values[j]), reciprocal);
+      Value absolute = b.create<math::AbsFOp>(l, values[j]);
       Value magnitude = c32(0);
-      for (double midpoint : midpoints)
+      for (Value threshold : thresholds)
         magnitude = b.create<arith::AddIOp>(
             l, magnitude, b.create<arith::ExtUIOp>(
                 l, b.getI32Type(), b.create<arith::CmpFOp>(
-                    l, arith::CmpFPredicate::OGT, normalized, cf(midpoint))));
+                    l, arith::CmpFPredicate::OGT, absolute, threshold)));
       Value negative = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, values[j], cf(0));
       codes.push_back(b.create<arith::OrIOp>(l, magnitude, choose(negative, c32(8), c32(0))));
       Value decoded = mul(choose(negative, b.create<arith::NegFOp>(

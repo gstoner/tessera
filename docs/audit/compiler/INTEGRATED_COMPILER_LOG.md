@@ -11640,3 +11640,31 @@ envelope, not universal frontend/AD or sibling physical completion.
 Evidence: benchmarks/baselines/gfx1201_bounded_nvfp4_rows_20261009/README.md
 and gfx1201.json.
 <!-- entry-fields:end -->
+
+
+### 2026-10-09 — source-unit NVFP4 midpoint comparisons
+
+Owner: [ROCM-NVFP4-INGEST-1](INTEGRATED_COMPILER_PLAN.md#rocm-nvfp4-ingest-1)
+PRs: pending; sync ROCM-NVFP4-SOURCE-MIDPOINTS-20261009.
+
+Outcome: Native scaled-midpoint comparisons retain strict numerical semantics
+while reducing static FP64 multiplies 1065 -> 831 and private-segment metadata
+180 -> 128 bytes. Two matched gfx1201 packets prove bitwise intermediates/output
+and repeated 6–9% full-native program gains. Public wall timings are mixed;
+standalone converter variance and correlated scratch/code-size changes prevent
+unique bottleneck attribution. A fp64 reference energy/SQNR decode fixes valid
+upper-range overflow without changing the existing fp32 decoder default.
+
+Validation: matching full compiler; 20 native, 24 oracle, 322 host checks (seven
+hardware skips); 60 converter/public/resident and 153 adjacent FP8/MXFP8/MXFP4
+owning-device checks. Runtime ABI, selector and physical package contracts are
+unchanged. All four queues assessed; no sibling physical proof transfer.
+
+Remaining: broad route/AD/layout closure, short/long dispatch and W8A8/MXFP4
+performance obligations; the generic batching/transpose unit gates stay open.
+
+Evidence: benchmarks/baselines/gfx1201_nvfp4_source_midpoints_20261009/README.md,
+nvfp4-threshold-comparison.json, nvfp4-threshold-isa-public.json,
+nvfp4-threshold-sources.json, nvfp4-threshold-device-tests.txt,
+nvfp4-threshold-format-device-tests.txt.
+<!-- entry-fields:end -->

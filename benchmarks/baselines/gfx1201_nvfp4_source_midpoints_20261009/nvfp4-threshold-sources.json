@@ -1,0 +1,14 @@
+{
+  "control_source_revision": "a9bec72ad0f48f8a7522b77c238ff789ebc6457c",
+  "candidate_parent_revision": "339c31e41a4f566a7604e633ffe888f8b0687bbd",
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h": "d50a5f1b7de7e7eba1dcf0f59103dc41d90da64e96d248326bd427c914072b77",
+    "python/tessera/compiler/rocm_mxfp4.py": "53a67cb2b7a4b005de7862c02e90d7eccf1a06095a634a22750df1a6a85e66a1",
+    "python/tessera/compiler/rocm_nvfp4_ingest.py": "cca18d20a7c7efb498aefa2f9c785b87dd9211f0067f9bd78ccc4044ec27cb9d",
+    "tests/device/rocm/test_native_nvfp4_ingest_leaf.py": "f55f4497c9a1a0be7294de4e430e30a09a27efe247b9fcbc3d9d3217dcfebe73",
+    "benchmarks/rocm/record_nvfp4_winner_codes.py": "6206e0a947805cb8a13010455e8c373b0502a25427827f07f85b110873ccd8ef"
+  },
+  "image_runtime_sha256": "cd29afc8e768d6c2e81b79ea3b3c19f91e74b8b9799ebbd1bd12630b48765249",
+  "numeric_scope": "explicit NVFP4 conversion / folded-row approximate matmul; no original-BF16 model quality claim",
+  "public_frame_policy": "compiler/eager forbidden; native-frame caches not prewarmed before the first public sample; medians are characterization, not a wall speedup claim"
+}

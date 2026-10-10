@@ -148,3 +148,21 @@ def test_row_reference_fold_requires_explicit_approximate_policy() -> None:
     scales = np.asarray([[127]], dtype=np.uint8)
     with pytest.raises(ValueError, match="explicit approximate numerical policy"):
         mx.fold_to_row_reference(codes, scales)
+
+
+def test_fp64_oracle_decode_preserves_full_e2m1_e8m0_range():
+    codes = np.tile(np.asarray([7, 15, 1, 9], np.uint8), (2, 8))
+    exponents = np.asarray([[254, 1]], np.uint8)
+    decoded = mx.exact_weights(codes, exponents, dtype=np.float64)
+    assert decoded.dtype == np.float64
+    assert np.isfinite(decoded).all()
+    levels = np.asarray([6., -6., .5, -.5], np.float64)
+    expected = np.tile(levels, (2, 8)) * np.exp2(np.asarray([127., -126.]))[:, None]
+    np.testing.assert_array_equal(decoded, expected)
+    with np.errstate(over="ignore"):
+        ordinary = mx.exact_weights(codes, exponents)
+    assert ordinary.dtype == np.float32
+    assert np.isinf(ordinary[0, :2]).all()
+    np.testing.assert_array_equal(ordinary[1].astype(np.float64), expected[1])
+    with pytest.raises(ValueError, match="fp32 or fp64"):
+        mx.exact_weights(codes, exponents, dtype=np.float16)

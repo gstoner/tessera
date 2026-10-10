@@ -1,0 +1,1058 @@
+{
+  "schema": "tessera.nvfp4.winner_codes.compare.v2",
+  "architecture": "gfx1201",
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "uuid": "32386439653765666266326566373136",
+    "ordinal": 0
+  },
+  "recorder_sha256": "0640005eb27b3ac440e823d367f45aef77a31d545d1c8a164882cbdc5d1020d2",
+  "selector_promotion": false,
+  "objdump_sha256": "707d2832386fbedda85afaa952cecd16be23063cdd261d95af3a37678f9ed6a6",
+  "isa_domain": "static opcode counts across converter disassembly; not dynamic issue counts or hardware counters",
+  "runtime_sha256": "a49d03f3de516459b8f88e0da7791fe8ee7f06d06aabd952f14017e077b36b72",
+  "timing_domain": "HIP events; direct includes host submission gaps; captured window one submission; seven AB/BA rounds, 128 repetitions",
+  "profiles": [
+    {
+      "shape_mnk": [
+        256,
+        64,
+        1024
+      ],
+      "tools": {
+        "control": {
+          "TESSERA_OPT": "4bf2dd9a1748197253debf57c1cfb445aaf08277b218326635ac1a2d1a5a8164",
+          "TESSERA_ROCM_OPT": "69e84b888c3e93a87efee6282978df5465d9d9b5234b3a52c1eb6ea61d2d0af8"
+        },
+        "candidate": {
+          "TESSERA_OPT": "4680b4b9db75600fa0172a2b64786a1adbce73029e5034febe9090320b0ae391",
+          "TESSERA_ROCM_OPT": "26795b00b4052c1db8dd8dde7f462c4d38130255397bbf928565a7c85f1deed4"
+        }
+      },
+      "component_images": {
+        "control": [
+          "723e9b232eb91f44bdfcc77c7eb58b030f2cd669f5f7a6118d3546ad97b46bb1",
+          "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ],
+        "candidate": [
+          "3c09e7659d9a84ceec1d19f1412de6ee8faacf39cf9ef4371385b2d11cc4f663",
+          "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ]
+      },
+      "resources": {
+        "control": {
+          "static_isa_opcodes": {
+            "global_load_b128": 1,
+            "global_load_d16_b16": 1,
+            "global_store_b128": 2,
+            "global_store_b8": 1,
+            "s_and_b32": 19,
+            "s_ashr_i32": 1,
+            "s_cbranch_vccnz": 1,
+            "s_clause": 11,
+            "s_code_end": 119,
+            "s_cselect_b32": 1,
+            "s_delay_alu": 2703,
+            "s_endpgm": 1,
+            "s_load_b64": 7,
+            "s_lshl_b32": 1,
+            "s_lshl_b64": 1,
+            "s_mov_b32": 1,
+            "s_movk_i32": 2,
+            "s_or_b32": 8,
+            "s_wait_alu": 3714,
+            "s_wait_kmcnt": 2,
+            "s_wait_loadcnt": 15,
+            "scratch_load_b32": 2,
+            "scratch_load_b64": 21,
+            "scratch_store_b32": 2,
+            "scratch_store_b64": 21,
+            "v_add_co_ci_u32_e64": 871,
+            "v_add_co_u32": 7,
+            "v_add_f64_e32": 434,
+            "v_add_f64_e64": 292,
+            "v_add_nc_u16": 1,
+            "v_add_nc_u32_e32": 8,
+            "v_and_b16": 12,
+            "v_and_b32_e32": 41,
+            "v_bfe_i32": 16,
+            "v_bfe_u32": 4,
+            "v_cmp_eq_f64_e64": 4,
+            "v_cmp_eq_u16_e32": 1,
+            "v_cmp_eq_u16_e64": 1,
+            "v_cmp_eq_u32_e32": 37,
+            "v_cmp_eq_u32_e64": 302,
+            "v_cmp_gt_f64_e64": 32,
+            "v_cmp_gt_i16_e32": 5,
+            "v_cmp_gt_i16_e64": 11,
+            "v_cmp_gt_i32_e32": 3,
+            "v_cmp_gt_i32_e64": 1,
+            "v_cmp_le_f64_e64": 3,
+            "v_cmp_lt_f64_e32": 5,
+            "v_cmp_lt_f64_e64": 2020,
+            "v_cmp_lt_i32_e32": 4,
+            "v_cmp_lt_i32_e64": 4,
+            "v_cmp_lt_u32_e32": 1,
+            "v_cmp_lt_u32_e64": 3,
+            "v_cmp_lt_u64_e64": 2,
+            "v_cmp_ne_u32_e32": 192,
+            "v_cmp_ne_u32_e64": 1728,
+            "v_cmp_nle_f64_e64": 1,
+            "v_cmp_o_f64_e64": 1,
+            "v_cndmask_b16": 18,
+            "v_cndmask_b32_e32": 299,
+            "v_cndmask_b32_e64": 3584,
+            "v_cvt_f64_u32_e32": 4,
+            "v_cvt_u32_u16_e32": 4,
+            "v_div_fixup_f64": 1,
+            "v_div_fmas_f64": 1,
+            "v_div_scale_f64": 2,
+            "v_dual_cndmask_b32": 89,
+            "v_dual_mov_b32": 55,
+            "v_fma_f64": 5,
+            "v_ldexp_f64": 2,
+            "v_lshl_add_u32": 12,
+            "v_lshl_or_b32": 17,
+            "v_lshlrev_b16": 8,
+            "v_lshlrev_b32_e32": 10,
+            "v_lshlrev_b64_e32": 3,
+            "v_lshrrev_b16": 3,
+            "v_lshrrev_b32_e32": 21,
+            "v_lshrrev_b64": 1,
+            "v_max_i32_e32": 4,
+            "v_maximum_f64": 1,
+            "v_med3_u32": 2,
+            "v_min_i32_e32": 4,
+            "v_mov_b16_e32": 17,
+            "v_mov_b32_e32": 372,
+            "v_mul_f64_e32": 750,
+            "v_mul_f64_e64": 315,
+            "v_or_b16": 10,
+            "v_or_b32_e32": 289,
+            "v_rcp_f64_e32": 1,
+            "v_sub_nc_u32_e32": 9,
+            "v_xor_b32_e32": 320
+          },
+          "disassembly_sha256": "7bb3f88fc7236774c9c5a45ae90bd67582720e35aaebc2c4d90cd2ee7b369b96",
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 180,
+          "image_bytes": 135704
+        },
+        "candidate": {
+          "static_isa_opcodes": {
+            "global_load_b128": 1,
+            "global_load_d16_b16": 1,
+            "global_store_b128": 2,
+            "global_store_b8": 1,
+            "s_and_b32": 19,
+            "s_ashr_i32": 1,
+            "s_cbranch_vccnz": 1,
+            "s_clause": 7,
+            "s_code_end": 102,
+            "s_cselect_b32": 1,
+            "s_delay_alu": 2570,
+            "s_endpgm": 1,
+            "s_load_b64": 7,
+            "s_lshl_b32": 1,
+            "s_lshl_b64": 1,
+            "s_mov_b32": 1,
+            "s_movk_i32": 2,
+            "s_or_b32": 8,
+            "s_wait_alu": 3556,
+            "s_wait_kmcnt": 2,
+            "s_wait_loadcnt": 14,
+            "scratch_load_b32": 1,
+            "scratch_load_b64": 15,
+            "scratch_store_b32": 1,
+            "scratch_store_b64": 15,
+            "v_add_co_ci_u32_e64": 871,
+            "v_add_co_u32": 7,
+            "v_add_f64_e32": 434,
+            "v_add_f64_e64": 292,
+            "v_add_nc_u16": 1,
+            "v_add_nc_u32_e32": 7,
+            "v_and_b16": 8,
+            "v_and_b32_e32": 44,
+            "v_bfe_i32": 16,
+            "v_bfe_u32": 1,
+            "v_cmp_eq_f64_e64": 4,
+            "v_cmp_eq_u32_e32": 38,
+            "v_cmp_eq_u32_e64": 303,
+            "v_cmp_gt_f64_e64": 2048,
+            "v_cmp_gt_i16_e32": 3,
+            "v_cmp_gt_i16_e64": 13,
+            "v_cmp_gt_i32_e32": 3,
+            "v_cmp_gt_i32_e64": 1,
+            "v_cmp_le_f64_e64": 3,
+            "v_cmp_lt_f64_e32": 5,
+            "v_cmp_lt_f64_e64": 4,
+            "v_cmp_lt_i32_e32": 4,
+            "v_cmp_lt_i32_e64": 4,
+            "v_cmp_lt_u32_e32": 1,
+            "v_cmp_lt_u32_e64": 3,
+            "v_cmp_lt_u64_e64": 2,
+            "v_cmp_ne_u32_e32": 192,
+            "v_cmp_ne_u32_e64": 1728,
+            "v_cmp_nle_f64_e64": 1,
+            "v_cmp_o_f64_e64": 1,
+            "v_cndmask_b16": 18,
+            "v_cndmask_b32_e32": 285,
+            "v_cndmask_b32_e64": 3587,
+            "v_cvt_f64_u32_e32": 4,
+            "v_cvt_u32_u16_e32": 1,
+            "v_div_fixup_f64": 1,
+            "v_div_fmas_f64": 1,
+            "v_div_scale_f64": 2,
+            "v_dual_cndmask_b32": 102,
+            "v_dual_mov_b32": 15,
+            "v_fma_f64": 5,
+            "v_ldexp_f64": 11,
+            "v_lshl_add_u32": 12,
+            "v_lshl_or_b32": 17,
+            "v_lshlrev_b16": 8,
+            "v_lshlrev_b32_e32": 3,
+            "v_lshlrev_b64_e32": 3,
+            "v_lshrrev_b16": 1,
+            "v_lshrrev_b32_e32": 26,
+            "v_lshrrev_b64": 1,
+            "v_max_i32_e32": 4,
+            "v_maximum_f64": 1,
+            "v_med3_u32": 2,
+            "v_min_i32_e32": 4,
+            "v_mov_b16_e32": 10,
+            "v_mov_b16_e64": 2,
+            "v_mov_b32_e32": 324,
+            "v_mul_f64_e32": 807,
+            "v_mul_f64_e64": 24,
+            "v_or_b16": 8,
+            "v_or_b32_e32": 291,
+            "v_rcp_f64_e32": 1,
+            "v_xor_b32_e32": 320
+          },
+          "disassembly_sha256": "11eff9c31f7770c4d9fa8194d7729f5848162637cb09be33bfe94cf1e232a05d",
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 128,
+          "image_bytes": 123800
+        }
+      },
+      "input_sha256": [
+        "02542dffb19a01c121303f1f0c3f47e267cd52e9b98301103214e3786dcc345a",
+        "4d451171d868ee1d196a57070cf625b19398e2e5e706b2ca6df0c3f34b7ab241",
+        "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "8e15f61dd31f0864ecd178d6ee60435b9c48ad13776b845921c66c03a7489e62",
+        "00b06fcc99810dd4097f9056c4c338c6879a13368f67c084bdea88e9a983c70e"
+      ],
+      "correctness": "independent oracle; control/candidate packed, exponents, f64 stats, storage and output bitwise identical",
+      "native_frames": {
+        "control": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 435280,
+          "allocation_count": 11
+        },
+        "candidate": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 435280,
+          "allocation_count": 11
+        }
+      },
+      "samples_ms": {
+        "control": {
+          "converter": {
+            "direct": [
+              0.10014130920171738,
+              0.0915742740035057,
+              0.09586549550294876,
+              0.14363712072372437,
+              0.14415602385997772,
+              0.14342691004276276,
+              0.14328478276729584
+            ],
+            "graph": [
+              0.09618072211742401,
+              0.09660744667053223,
+              0.09666740149259567,
+              0.14418908953666687,
+              0.14419254660606384,
+              0.14392851293087006,
+              0.14384129643440247
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.17103803157806396,
+              0.17017115652561188,
+              0.1703188121318817,
+              0.16997317969799042,
+              0.16981279850006104,
+              0.1697222739458084,
+              0.17022515833377838
+            ],
+            "graph": [
+              0.17082299292087555,
+              0.17072372138500214,
+              0.17018069326877594,
+              0.1699233502149582,
+              0.16979213058948517,
+              0.16952186822891235,
+              0.16948184370994568
+            ]
+          }
+        },
+        "candidate": {
+          "converter": {
+            "direct": [
+              0.0866340771317482,
+              0.08647133409976959,
+              0.09034476429224014,
+              0.13308878242969513,
+              0.13262668251991272,
+              0.13246123492717743,
+              0.13241447508335114
+            ],
+            "graph": [
+              0.0870758593082428,
+              0.09048929810523987,
+              0.11168482899665833,
+              0.13330408930778503,
+              0.1332227736711502,
+              0.13310706615447998,
+              0.13305965065956116
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.1599530130624771,
+              0.15934747457504272,
+              0.1596798449754715,
+              0.1594221591949463,
+              0.15959063172340393,
+              0.15905562043190002,
+              0.15909162163734436
+            ],
+            "graph": [
+              0.15993408858776093,
+              0.15978340804576874,
+              0.15960997343063354,
+              0.16010156273841858,
+              0.1591605246067047,
+              0.15891556441783905,
+              0.1587127149105072
+            ]
+          }
+        }
+      },
+      "control_over_candidate": {
+        "converter": {
+          "direct": 1.0820930466786365,
+          "graph": 1.0810286643726925
+        },
+        "combined": {
+          "direct": 1.0674247380975526,
+          "graph": 1.0646161174182942
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        512,
+        1024
+      ],
+      "tools": {
+        "control": {
+          "TESSERA_OPT": "4bf2dd9a1748197253debf57c1cfb445aaf08277b218326635ac1a2d1a5a8164",
+          "TESSERA_ROCM_OPT": "69e84b888c3e93a87efee6282978df5465d9d9b5234b3a52c1eb6ea61d2d0af8"
+        },
+        "candidate": {
+          "TESSERA_OPT": "4680b4b9db75600fa0172a2b64786a1adbce73029e5034febe9090320b0ae391",
+          "TESSERA_ROCM_OPT": "26795b00b4052c1db8dd8dde7f462c4d38130255397bbf928565a7c85f1deed4"
+        }
+      },
+      "component_images": {
+        "control": [
+          "b3830d56dccac5296fa8c5248b53c800e5fd979a1dd2d9fb90c188b5ed173fe1",
+          "7b990500906ae230efbf06e3dee70100b3b4514f32cf4f679cc154b9e58cbc1e",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ],
+        "candidate": [
+          "527647db27cb1500e8eaee4e26882ef3dca8ec21e3aee0a8942683a556235d61",
+          "7b990500906ae230efbf06e3dee70100b3b4514f32cf4f679cc154b9e58cbc1e",
+          "8c51ff1cd61e248eafa697453bb5d8100feeabab2fcc30eded5dd6d75fbc9270"
+        ]
+      },
+      "resources": {
+        "control": {
+          "static_isa_opcodes": {
+            "global_load_b128": 1,
+            "global_load_d16_b16": 1,
+            "global_store_b128": 2,
+            "global_store_b8": 1,
+            "s_and_b32": 19,
+            "s_ashr_i32": 1,
+            "s_cbranch_vccnz": 1,
+            "s_clause": 11,
+            "s_code_end": 119,
+            "s_cselect_b32": 1,
+            "s_delay_alu": 2703,
+            "s_endpgm": 1,
+            "s_load_b64": 7,
+            "s_lshl_b32": 1,
+            "s_lshl_b64": 1,
+            "s_mov_b32": 1,
+            "s_movk_i32": 2,
+            "s_or_b32": 8,
+            "s_wait_alu": 3714,
+            "s_wait_kmcnt": 2,
+            "s_wait_loadcnt": 15,
+            "scratch_load_b32": 2,
+            "scratch_load_b64": 21,
+            "scratch_store_b32": 2,
+            "scratch_store_b64": 21,
+            "v_add_co_ci_u32_e64": 871,
+            "v_add_co_u32": 7,
+            "v_add_f64_e32": 434,
+            "v_add_f64_e64": 292,
+            "v_add_nc_u16": 1,
+            "v_add_nc_u32_e32": 8,
+            "v_and_b16": 12,
+            "v_and_b32_e32": 41,
+            "v_bfe_i32": 16,
+            "v_bfe_u32": 4,
+            "v_cmp_eq_f64_e64": 4,
+            "v_cmp_eq_u16_e32": 1,
+            "v_cmp_eq_u16_e64": 1,
+            "v_cmp_eq_u32_e32": 37,
+            "v_cmp_eq_u32_e64": 302,
+            "v_cmp_gt_f64_e64": 32,
+            "v_cmp_gt_i16_e32": 5,
+            "v_cmp_gt_i16_e64": 11,
+            "v_cmp_gt_i32_e32": 3,
+            "v_cmp_gt_i32_e64": 1,
+            "v_cmp_le_f64_e64": 3,
+            "v_cmp_lt_f64_e32": 5,
+            "v_cmp_lt_f64_e64": 2020,
+            "v_cmp_lt_i32_e32": 4,
+            "v_cmp_lt_i32_e64": 4,
+            "v_cmp_lt_u32_e32": 1,
+            "v_cmp_lt_u32_e64": 3,
+            "v_cmp_lt_u64_e64": 2,
+            "v_cmp_ne_u32_e32": 192,
+            "v_cmp_ne_u32_e64": 1728,
+            "v_cmp_nle_f64_e64": 1,
+            "v_cmp_o_f64_e64": 1,
+            "v_cndmask_b16": 18,
+            "v_cndmask_b32_e32": 299,
+            "v_cndmask_b32_e64": 3584,
+            "v_cvt_f64_u32_e32": 4,
+            "v_cvt_u32_u16_e32": 4,
+            "v_div_fixup_f64": 1,
+            "v_div_fmas_f64": 1,
+            "v_div_scale_f64": 2,
+            "v_dual_cndmask_b32": 89,
+            "v_dual_mov_b32": 55,
+            "v_fma_f64": 5,
+            "v_ldexp_f64": 2,
+            "v_lshl_add_u32": 12,
+            "v_lshl_or_b32": 17,
+            "v_lshlrev_b16": 8,
+            "v_lshlrev_b32_e32": 10,
+            "v_lshlrev_b64_e32": 3,
+            "v_lshrrev_b16": 3,
+            "v_lshrrev_b32_e32": 21,
+            "v_lshrrev_b64": 1,
+            "v_max_i32_e32": 4,
+            "v_maximum_f64": 1,
+            "v_med3_u32": 2,
+            "v_min_i32_e32": 4,
+            "v_mov_b16_e32": 17,
+            "v_mov_b32_e32": 372,
+            "v_mul_f64_e32": 750,
+            "v_mul_f64_e64": 315,
+            "v_or_b16": 10,
+            "v_or_b32_e32": 289,
+            "v_rcp_f64_e32": 1,
+            "v_sub_nc_u32_e32": 9,
+            "v_xor_b32_e32": 320
+          },
+          "disassembly_sha256": "6dac9d06d2d740be9b88abff5013bd5ff03a08885dffdd3fcfadd6ea5c0c325d",
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 180,
+          "image_bytes": 135704
+        },
+        "candidate": {
+          "static_isa_opcodes": {
+            "global_load_b128": 1,
+            "global_load_d16_b16": 1,
+            "global_store_b128": 2,
+            "global_store_b8": 1,
+            "s_and_b32": 19,
+            "s_ashr_i32": 1,
+            "s_cbranch_vccnz": 1,
+            "s_clause": 7,
+            "s_code_end": 102,
+            "s_cselect_b32": 1,
+            "s_delay_alu": 2570,
+            "s_endpgm": 1,
+            "s_load_b64": 7,
+            "s_lshl_b32": 1,
+            "s_lshl_b64": 1,
+            "s_mov_b32": 1,
+            "s_movk_i32": 2,
+            "s_or_b32": 8,
+            "s_wait_alu": 3556,
+            "s_wait_kmcnt": 2,
+            "s_wait_loadcnt": 14,
+            "scratch_load_b32": 1,
+            "scratch_load_b64": 15,
+            "scratch_store_b32": 1,
+            "scratch_store_b64": 15,
+            "v_add_co_ci_u32_e64": 871,
+            "v_add_co_u32": 7,
+            "v_add_f64_e32": 434,
+            "v_add_f64_e64": 292,
+            "v_add_nc_u16": 1,
+            "v_add_nc_u32_e32": 7,
+            "v_and_b16": 8,
+            "v_and_b32_e32": 44,
+            "v_bfe_i32": 16,
+            "v_bfe_u32": 1,
+            "v_cmp_eq_f64_e64": 4,
+            "v_cmp_eq_u32_e32": 38,
+            "v_cmp_eq_u32_e64": 303,
+            "v_cmp_gt_f64_e64": 2048,
+            "v_cmp_gt_i16_e32": 3,
+            "v_cmp_gt_i16_e64": 13,
+            "v_cmp_gt_i32_e32": 3,
+            "v_cmp_gt_i32_e64": 1,
+            "v_cmp_le_f64_e64": 3,
+            "v_cmp_lt_f64_e32": 5,
+            "v_cmp_lt_f64_e64": 4,
+            "v_cmp_lt_i32_e32": 4,
+            "v_cmp_lt_i32_e64": 4,
+            "v_cmp_lt_u32_e32": 1,
+            "v_cmp_lt_u32_e64": 3,
+            "v_cmp_lt_u64_e64": 2,
+            "v_cmp_ne_u32_e32": 192,
+            "v_cmp_ne_u32_e64": 1728,
+            "v_cmp_nle_f64_e64": 1,
+            "v_cmp_o_f64_e64": 1,
+            "v_cndmask_b16": 18,
+            "v_cndmask_b32_e32": 285,
+            "v_cndmask_b32_e64": 3587,
+            "v_cvt_f64_u32_e32": 4,
+            "v_cvt_u32_u16_e32": 1,
+            "v_div_fixup_f64": 1,
+            "v_div_fmas_f64": 1,
+            "v_div_scale_f64": 2,
+            "v_dual_cndmask_b32": 102,
+            "v_dual_mov_b32": 15,
+            "v_fma_f64": 5,
+            "v_ldexp_f64": 11,
+            "v_lshl_add_u32": 12,
+            "v_lshl_or_b32": 17,
+            "v_lshlrev_b16": 8,
+            "v_lshlrev_b32_e32": 3,
+            "v_lshlrev_b64_e32": 3,
+            "v_lshrrev_b16": 1,
+            "v_lshrrev_b32_e32": 26,
+            "v_lshrrev_b64": 1,
+            "v_max_i32_e32": 4,
+            "v_maximum_f64": 1,
+            "v_med3_u32": 2,
+            "v_min_i32_e32": 4,
+            "v_mov_b16_e32": 10,
+            "v_mov_b16_e64": 2,
+            "v_mov_b32_e32": 324,
+            "v_mul_f64_e32": 807,
+            "v_mul_f64_e64": 24,
+            "v_or_b16": 8,
+            "v_or_b32_e32": 291,
+            "v_rcp_f64_e32": 1,
+            "v_xor_b32_e32": 320
+          },
+          "disassembly_sha256": "f9537315a4abd640a94ed77fef73999ade64f731e0fca3630a302ec7525c2695",
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 128,
+          "image_bytes": 123800
+        }
+      },
+      "input_sha256": [
+        "3954691556c8564f3a3219e8884bf064763dbe636a41b8dd933938572c4e6ea0",
+        "23fd67c68398bef75c102c926e415886d24db5b6368e65a4417bc449f8ae65f2",
+        "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "d29e0646853205e7cd6ff01731aa8a8d37a81661af029c47524e8c720dd15faa",
+        "02f2c5bac00703d33c4e5fe0defba452e5125bf3a29fb2560b4929d2f9baf38c"
+      ],
+      "correctness": "independent oracle; control/candidate packed, exponents, f64 stats, storage and output bitwise identical",
+      "native_frames": {
+        "control": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 1639952,
+          "allocation_count": 11
+        },
+        "candidate": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 1639952,
+          "allocation_count": 11
+        }
+      },
+      "samples_ms": {
+        "control": {
+          "converter": {
+            "direct": [
+              0.2504492700099945,
+              0.1297723799943924,
+              0.12230776250362396,
+              0.12829731404781342,
+              0.11748085916042328,
+              0.12905947864055634,
+              0.1195695549249649
+            ],
+            "graph": [
+              0.11272955685853958,
+              0.11332301795482635,
+              0.11348258703947067,
+              0.11398747563362122,
+              0.11393135040998459,
+              0.11393310129642487,
+              0.11388653516769409
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.1460389941930771,
+              0.15732689201831818,
+              0.15012197196483612,
+              0.14898744225502014,
+              0.1477489322423935,
+              0.1551993489265442,
+              0.1507907211780548
+            ],
+            "graph": [
+              0.13973137736320496,
+              0.14504535496234894,
+              0.14402072131633759,
+              0.14050821959972382,
+              0.1397525817155838,
+              0.13995365798473358,
+              0.1396249532699585
+            ]
+          }
+        },
+        "candidate": {
+          "converter": {
+            "direct": [
+              0.10244867950677872,
+              0.10260805487632751,
+              0.1053806021809578,
+              0.10289029031991959,
+              0.10545874387025833,
+              0.10289245843887329,
+              0.10511745512485504
+            ],
+            "graph": [
+              0.10164156556129456,
+              0.1020636111497879,
+              0.10262160748243332,
+              0.10274455696344376,
+              0.10297510027885437,
+              0.10292189568281174,
+              0.10291840136051178
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.1341363489627838,
+              0.13082890212535858,
+              0.1308707296848297,
+              0.12901365756988525,
+              0.13235364854335785,
+              0.12891946732997894,
+              0.13244453072547913
+            ],
+            "graph": [
+              0.1287248283624649,
+              0.12904393672943115,
+              0.12936004996299744,
+              0.12889063358306885,
+              0.12868055701255798,
+              0.1286366879940033,
+              0.12877042591571808
+            ]
+          }
+        }
+      },
+      "control_over_candidate": {
+        "converter": {
+          "direct": 1.2469068772813192,
+          "graph": 1.1084434887213988
+        },
+        "combined": {
+          "direct": 1.1471012068654949,
+          "graph": 1.0868462769264666
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        1024,
+        4096
+      ],
+      "tools": {
+        "control": {
+          "TESSERA_OPT": "4bf2dd9a1748197253debf57c1cfb445aaf08277b218326635ac1a2d1a5a8164",
+          "TESSERA_ROCM_OPT": "69e84b888c3e93a87efee6282978df5465d9d9b5234b3a52c1eb6ea61d2d0af8"
+        },
+        "candidate": {
+          "TESSERA_OPT": "4680b4b9db75600fa0172a2b64786a1adbce73029e5034febe9090320b0ae391",
+          "TESSERA_ROCM_OPT": "26795b00b4052c1db8dd8dde7f462c4d38130255397bbf928565a7c85f1deed4"
+        }
+      },
+      "component_images": {
+        "control": [
+          "0a18a637cd0083fc753b26dd399274f0eaf2f9dea918c1253f894ae19c409846",
+          "7ef9d0a6857489083c2ec905367a7b34935d9f431cf09c59e36ff935ef8aba4f",
+          "87b1a1904e90aa7d17a01263869c13dd75b947e5543b741dcb9896f08ea0def6"
+        ],
+        "candidate": [
+          "606a54100534e868c8390003e3d5b448f3d29bb9ff23096b854c6f064cb4835e",
+          "7ef9d0a6857489083c2ec905367a7b34935d9f431cf09c59e36ff935ef8aba4f",
+          "87b1a1904e90aa7d17a01263869c13dd75b947e5543b741dcb9896f08ea0def6"
+        ]
+      },
+      "resources": {
+        "control": {
+          "static_isa_opcodes": {
+            "global_load_b128": 1,
+            "global_load_d16_b16": 1,
+            "global_store_b128": 2,
+            "global_store_b8": 1,
+            "s_and_b32": 19,
+            "s_ashr_i32": 1,
+            "s_cbranch_vccnz": 1,
+            "s_clause": 11,
+            "s_code_end": 118,
+            "s_cselect_b32": 1,
+            "s_delay_alu": 2703,
+            "s_endpgm": 1,
+            "s_load_b64": 7,
+            "s_lshl_b32": 1,
+            "s_lshl_b64": 1,
+            "s_mov_b32": 1,
+            "s_movk_i32": 2,
+            "s_or_b32": 8,
+            "s_wait_alu": 3714,
+            "s_wait_kmcnt": 2,
+            "s_wait_loadcnt": 15,
+            "scratch_load_b32": 2,
+            "scratch_load_b64": 21,
+            "scratch_store_b32": 2,
+            "scratch_store_b64": 21,
+            "v_add_co_ci_u32_e64": 871,
+            "v_add_co_u32": 7,
+            "v_add_f64_e32": 434,
+            "v_add_f64_e64": 292,
+            "v_add_nc_u16": 1,
+            "v_add_nc_u32_e32": 8,
+            "v_and_b16": 12,
+            "v_and_b32_e32": 41,
+            "v_bfe_i32": 16,
+            "v_bfe_u32": 4,
+            "v_cmp_eq_f64_e64": 4,
+            "v_cmp_eq_u16_e32": 1,
+            "v_cmp_eq_u16_e64": 1,
+            "v_cmp_eq_u32_e32": 37,
+            "v_cmp_eq_u32_e64": 302,
+            "v_cmp_gt_f64_e64": 32,
+            "v_cmp_gt_i16_e32": 5,
+            "v_cmp_gt_i16_e64": 11,
+            "v_cmp_gt_i32_e32": 3,
+            "v_cmp_gt_i32_e64": 1,
+            "v_cmp_le_f64_e64": 3,
+            "v_cmp_lt_f64_e32": 5,
+            "v_cmp_lt_f64_e64": 2020,
+            "v_cmp_lt_i32_e32": 4,
+            "v_cmp_lt_i32_e64": 4,
+            "v_cmp_lt_u32_e32": 1,
+            "v_cmp_lt_u32_e64": 3,
+            "v_cmp_lt_u64_e64": 2,
+            "v_cmp_ne_u32_e32": 192,
+            "v_cmp_ne_u32_e64": 1728,
+            "v_cmp_nle_f64_e64": 1,
+            "v_cmp_o_f64_e64": 1,
+            "v_cndmask_b16": 18,
+            "v_cndmask_b32_e32": 299,
+            "v_cndmask_b32_e64": 3584,
+            "v_cvt_f64_u32_e32": 4,
+            "v_cvt_u32_u16_e32": 4,
+            "v_div_fixup_f64": 1,
+            "v_div_fmas_f64": 1,
+            "v_div_scale_f64": 2,
+            "v_dual_cndmask_b32": 89,
+            "v_dual_mov_b32": 55,
+            "v_fma_f64": 5,
+            "v_ldexp_f64": 2,
+            "v_lshl_add_u32": 12,
+            "v_lshl_or_b32": 17,
+            "v_lshlrev_b16": 8,
+            "v_lshlrev_b32_e32": 10,
+            "v_lshlrev_b64_e32": 3,
+            "v_lshrrev_b16": 3,
+            "v_lshrrev_b32_e32": 21,
+            "v_lshrrev_b64": 1,
+            "v_max_i32_e32": 4,
+            "v_maximum_f64": 1,
+            "v_med3_u32": 2,
+            "v_min_i32_e32": 4,
+            "v_mov_b16_e32": 17,
+            "v_mov_b32_e32": 372,
+            "v_mul_f64_e32": 750,
+            "v_mul_f64_e64": 315,
+            "v_or_b16": 10,
+            "v_or_b32_e32": 289,
+            "v_rcp_f64_e32": 1,
+            "v_sub_nc_u32_e32": 9,
+            "v_xor_b32_e32": 320
+          },
+          "disassembly_sha256": "fd44afec90ed59759dd6df5bce07a313b392931dea2f5ce8448875b47eaf5325",
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 180,
+          "image_bytes": 135704
+        },
+        "candidate": {
+          "static_isa_opcodes": {
+            "global_load_b128": 1,
+            "global_load_d16_b16": 1,
+            "global_store_b128": 2,
+            "global_store_b8": 1,
+            "s_and_b32": 19,
+            "s_ashr_i32": 1,
+            "s_cbranch_vccnz": 1,
+            "s_clause": 7,
+            "s_code_end": 101,
+            "s_cselect_b32": 1,
+            "s_delay_alu": 2570,
+            "s_endpgm": 1,
+            "s_load_b64": 7,
+            "s_lshl_b32": 1,
+            "s_lshl_b64": 1,
+            "s_mov_b32": 1,
+            "s_movk_i32": 2,
+            "s_or_b32": 8,
+            "s_wait_alu": 3556,
+            "s_wait_kmcnt": 2,
+            "s_wait_loadcnt": 14,
+            "scratch_load_b32": 1,
+            "scratch_load_b64": 15,
+            "scratch_store_b32": 1,
+            "scratch_store_b64": 15,
+            "v_add_co_ci_u32_e64": 871,
+            "v_add_co_u32": 7,
+            "v_add_f64_e32": 434,
+            "v_add_f64_e64": 292,
+            "v_add_nc_u16": 1,
+            "v_add_nc_u32_e32": 7,
+            "v_and_b16": 8,
+            "v_and_b32_e32": 44,
+            "v_bfe_i32": 16,
+            "v_bfe_u32": 1,
+            "v_cmp_eq_f64_e64": 4,
+            "v_cmp_eq_u32_e32": 38,
+            "v_cmp_eq_u32_e64": 303,
+            "v_cmp_gt_f64_e64": 2048,
+            "v_cmp_gt_i16_e32": 3,
+            "v_cmp_gt_i16_e64": 13,
+            "v_cmp_gt_i32_e32": 3,
+            "v_cmp_gt_i32_e64": 1,
+            "v_cmp_le_f64_e64": 3,
+            "v_cmp_lt_f64_e32": 5,
+            "v_cmp_lt_f64_e64": 4,
+            "v_cmp_lt_i32_e32": 4,
+            "v_cmp_lt_i32_e64": 4,
+            "v_cmp_lt_u32_e32": 1,
+            "v_cmp_lt_u32_e64": 3,
+            "v_cmp_lt_u64_e64": 2,
+            "v_cmp_ne_u32_e32": 192,
+            "v_cmp_ne_u32_e64": 1728,
+            "v_cmp_nle_f64_e64": 1,
+            "v_cmp_o_f64_e64": 1,
+            "v_cndmask_b16": 18,
+            "v_cndmask_b32_e32": 285,
+            "v_cndmask_b32_e64": 3587,
+            "v_cvt_f64_u32_e32": 4,
+            "v_cvt_u32_u16_e32": 1,
+            "v_div_fixup_f64": 1,
+            "v_div_fmas_f64": 1,
+            "v_div_scale_f64": 2,
+            "v_dual_cndmask_b32": 102,
+            "v_dual_mov_b32": 15,
+            "v_fma_f64": 5,
+            "v_ldexp_f64": 11,
+            "v_lshl_add_u32": 12,
+            "v_lshl_or_b32": 17,
+            "v_lshlrev_b16": 8,
+            "v_lshlrev_b32_e32": 3,
+            "v_lshlrev_b64_e32": 3,
+            "v_lshrrev_b16": 1,
+            "v_lshrrev_b32_e32": 26,
+            "v_lshrrev_b64": 1,
+            "v_max_i32_e32": 4,
+            "v_maximum_f64": 1,
+            "v_med3_u32": 2,
+            "v_min_i32_e32": 4,
+            "v_mov_b16_e32": 10,
+            "v_mov_b16_e64": 2,
+            "v_mov_b32_e32": 324,
+            "v_mul_f64_e32": 807,
+            "v_mul_f64_e64": 24,
+            "v_or_b16": 8,
+            "v_or_b32_e32": 291,
+            "v_rcp_f64_e32": 1,
+            "v_xor_b32_e32": 320
+          },
+          "disassembly_sha256": "00db326533c22bb24ba581db7740ce4b3e3144335330bbd307735575ee3dd339",
+          "vgpr_count": 256,
+          "sgpr_count": 46,
+          "group_segment_fixed_size": 0,
+          "private_segment_fixed_size": 128,
+          "image_bytes": 123800
+        }
+      },
+      "input_sha256": [
+        "1330cc0b4b779186e4445098f404a2646a4338dae4f3fd478556214b0e22b95f",
+        "c68ab9b1ca4c97c4f67f0379375dc8bdea9a51ac1542f154776b9f518a725d0c",
+        "20ba818bfc78b9c3ac5f0742b1ea2ff917e873b42576657b8d76968418da4463",
+        "0a91b64ac01c198e707d54c72c8902c3a045ee6190017aa3738218c76b9056b0",
+        "70db3a5e05ecb1ab8c156e9f142d80a43d88a0972281a174a9666ed7915c539d"
+      ],
+      "correctness": "independent oracle; control/candidate packed, exponents, f64 stats, storage and output bitwise identical",
+      "native_frames": {
+        "control": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 10487824,
+          "allocation_count": 11
+        },
+        "candidate": {
+          "capacity_m": 256,
+          "active_m": 256,
+          "allocation_bytes": 10487824,
+          "allocation_count": 11
+        }
+      },
+      "samples_ms": {
+        "control": {
+          "converter": {
+            "direct": [
+              1.24223792552948,
+              1.2126455307006836,
+              0.8916637897491455,
+              1.210196614265442,
+              0.8828660249710083,
+              0.8903508186340332,
+              0.9359920620918274
+            ],
+            "graph": [
+              0.8186026215553284,
+              0.8618953227996826,
+              1.230751633644104,
+              0.8579866290092468,
+              1.230135440826416,
+              1.0217418670654297,
+              0.8641327619552612
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.9604883193969727,
+              0.9160406589508057,
+              0.915860116481781,
+              0.9144637584686279,
+              0.915544331073761,
+              0.9156520962715149,
+              0.915784478187561
+            ],
+            "graph": [
+              0.8845309019088745,
+              0.8846303820610046,
+              0.8847308158874512,
+              0.8849685192108154,
+              0.8843415975570679,
+              0.8843996524810791,
+              0.8847506642341614
+            ]
+          }
+        },
+        "candidate": {
+          "converter": {
+            "direct": [
+              1.1611864566802979,
+              1.1563124656677246,
+              1.1588633060455322,
+              0.8302603363990784,
+              1.1565909385681152,
+              1.1852033138275146,
+              0.7912434339523315
+            ],
+            "graph": [
+              1.1701120138168335,
+              0.9491482973098755,
+              1.1005922555923462,
+              1.173318862915039,
+              1.1729546785354614,
+              1.1742219924926758,
+              1.1738117933273315
+            ]
+          },
+          "combined": {
+            "direct": [
+              0.9272025227546692,
+              0.8496657609939575,
+              0.850075364112854,
+              0.823180615901947,
+              0.8489828109741211,
+              0.8504728078842163,
+              0.8497393727302551
+            ],
+            "graph": [
+              0.8208912014961243,
+              0.8189494013786316,
+              0.8207590579986572,
+              0.8217724561691284,
+              0.8207710385322571,
+              0.821417510509491,
+              0.8191738724708557
+            ]
+          }
+        }
+      },
+      "control_over_candidate": {
+        "converter": {
+          "direct": 0.809268022841858,
+          "graph": 0.7367145361781651
+        },
+        "combined": {
+          "direct": 1.0777239558114151,
+          "graph": 1.07780408972878
+        }
+      }
+    }
+  ]
+}

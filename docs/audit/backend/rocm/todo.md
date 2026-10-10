@@ -5,6 +5,26 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## FLOATING-SCALED-ADJOINT-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Native linear-transpose recipes now build static f32 matrix and scale adjoints
+from the actual scaled-product Graph, including logical A/B transposes,
+ragged block bounds, shared-operand batches and independently broadcast scale
+prefixes. Missing/singleton matrix and scale prefixes reduce over output batches. Export retains requested role order, excludes each
+differentiated operand from its capture, and preserves private inverse output
+seeds. Schedule/Tile storage admission now includes serial four-f32 members.
+No Python arithmetic backend, new public operation/dtype, pass, or C ABI is
+introduced. Encoded storage remains without an implicit straight-through rule.
+Generic batching/transpose statuses remain partial/planned; dynamic, broader
+dtype/layout and general transformation closure are still open.
+Evidence: benchmarks/baselines/floating_scaled_adjoint_20261009/README.md.
+Owning packet: benchmarks/baselines/floating_scaled_adjoint_20261009/gfx1201.json.
+Sibling SM120 test-fixture repair is not applicable to rocm kernels or ABI. Shared validation build/fixture assumptions are assessed; no architecture-specific execution claim changes.
+
+Parity validated on gfx1201: 80 continuous f32 cases cover unbatched/batched sharing, broadcast prefixes, both matrix transposes, role ordering, changed inputs and retained outputs. Eight composed and 26 public mapped FP8 regressions also pass. gfx1151 requires its own consumer/device follow-up; no sibling physical claim is made.
+
+
 ## MAPPED-INVERSE-COTANGENT-20261008
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.

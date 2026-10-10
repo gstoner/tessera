@@ -57,7 +57,8 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
   auto role = generator ? generator->getAttrOfType<StringAttr>("tessera.autodiff.scale_adjoint")
                         : StringAttr{};
   auto type = generator ? dyn_cast<RankedTensorType>(generator.getType()) : RankedTensorType{};
-  if (!generator || !role || (role.getValue() != "lhs_scale" && role.getValue() != "rhs_scale") ||
+  if (!generator || !role || (role.getValue() != "lhs_scale" && role.getValue() != "rhs_scale" &&
+                             role.getValue() != "lhs_matrix" && role.getValue() != "rhs_matrix") ||
       !type || !type.hasStaticShape() || !type.getElementType().isF32() ||
       type.getNumElements() <= 0 || type.getNumElements() > INT32_MAX)
     return mod.emitError("native scale transpose lost its static f32 generated reduction"), failure();
@@ -69,8 +70,9 @@ static FailureOr<tensor::GenerateOp> nativeScaleTransposeRoot(ModuleOp mod) {
     bytes += isa<Float8E4M3FNType>(tensor.getElementType());
     floats += tensor.getElementType().isF32();
   }
-  if (bytes != 2 || floats != 2)
-    return mod.emitError("native scale transpose requires two E4M3 and two f32 captured inputs"), failure();
+  bool matrix = role.getValue() == "lhs_matrix" || role.getValue() == "rhs_matrix";
+  if ((matrix && floats != 4) || (!matrix && !((bytes == 2 && floats == 2) || floats == 4)))
+    return mod.emitError("native scaled adjoint captured storage differs from its matrix/scale role"), failure();
   bool valid = true;
   generator.getBody().walk([&](Operation *op) {
     auto name = op->getName().getStringRef();
@@ -95,6 +97,13 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected, 
   auto generator = *root;
   selected = bool(generator);
   if (!selected) return success();
+  auto functionType = generator->getParentOfType<func::FuncOp>().getFunctionType();
+  bool floatingInputs = llvm::all_of(functionType.getInputs(), [](Type type) {
+    auto tensor = dyn_cast<RankedTensorType>(type);
+    return tensor && tensor.getElementType().isF32();
+  });
+  if (wave && floatingInputs)
+    return generator.emitError("native floating scaled adjoint wave scheduling requires separate admission");
   if (generator->hasAttr("schedule.artifact_hash"))
     return generator.emitError("native scale transpose is already scheduled");
   OpBuilder b(mod.getContext());
@@ -115,7 +124,14 @@ static LogicalResult scheduleNativeScaleTranspose(ModuleOp mod, bool &selected, 
       b.getNamedAttr("workgroup_size", b.getI64IntegerAttr(width)),
       b.getNamedAttr("algorithm", b.getStringAttr(algorithm)),
       b.getNamedAttr("outer_accumulation", b.getStringAttr("compensated_fp32"))}));
-  state.addAttribute("numeric_policy", b.getStringAttr("E4M3FN coefficients;fp32 scale adjoint;exact_per_block"));
+  auto function = generator->getParentOfType<func::FuncOp>();
+  bool floating = llvm::all_of(function.getArgumentTypes(), [](Type type) {
+    auto tensor = dyn_cast<RankedTensorType>(type);
+    return tensor && tensor.getElementType().isF32();
+  });
+  state.addAttribute("numeric_policy", b.getStringAttr(floating
+      ? "f32 coefficients;fp32 scaled adjoint;exact_per_block"
+      : "E4M3FN coefficients;fp32 scale adjoint;exact_per_block"));
   b.create(state);
   return success();
 }

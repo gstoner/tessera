@@ -95,8 +95,13 @@ static llvm::SmallVector<mlir::Value> transposeImplicitBroadcast(
 
 
 bool ScaledMatmulOp::isLinearInOperand(unsigned index) {
-  // Typed low-precision matrix storage has no implicit straight-through rule.
-  return index == 2 || index == 3;
+  // Encoded matrix/scale storage has no implicit straight-through rule.
+  if (index >= getNumOperands()) return false;
+  auto type = mlir::dyn_cast<mlir::RankedTensorType>(getOperation()->getOperand(index).getType());
+  if (!type || !type.getElementType().isF32()) return false;
+  if (index >= 2) return true;
+  auto other = mlir::dyn_cast<mlir::RankedTensorType>(getOperation()->getOperand(1-index).getType());
+  return other && other.getElementType().isF32();
 }
 
 llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
@@ -116,6 +121,9 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
   auto accum = policy ? policy.getAs<StringAttr>("accum") : StringAttr{};
   auto batch = getOperation()->getAttrOfType<StringAttr>("batching");
   StringRef batching = batch ? batch.getValue() : "";
+  bool floatingMatrices = a && b && a.getElementType().isF32() && b.getElementType().isF32();
+  bool byteMatrices = a && b && isa<Float8E4M3FNType>(a.getElementType()) &&
+                      isa<Float8E4M3FNType>(b.getElementType());
   bool broadcast = batching == "broadcast";
   bool mappedA = batching == "shared_rhs_rows" || batching == "independent_rhs";
   bool mappedB = batching == "shared_lhs" || batching == "independent_rhs";
@@ -126,8 +134,7 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
       result.getRank() < 2 ||
       !result.getElementType().isF32() || !sa.getElementType().isF32() ||
       !sb.getElementType().isF32() ||
-      !isa<Float8E4M3FNType>(a.getElementType()) ||
-      !isa<Float8E4M3FNType>(b.getElementType()) ||
+      (!floatingMatrices && !byteMatrices) ||
       getOperation()->hasAttr("physical_contract") ||
       !format || format.getValue() != "fp32" ||
       !granularity || granularity.getValue() != "block" ||
@@ -159,8 +166,8 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
   };
   if (!matches(a, mappedA, getTransposeA() ? k : m, getTransposeA() ? m : k) ||
       !matches(b, mappedB, getTransposeB() ? n : k, getTransposeB() ? k : n) ||
-      !matches(sa, mappedA, m, (k+sk-1)/sk) ||
-      !matches(sb, mappedB, (k+sk-1)/sk, (n+sn-1)/sn))
+      !matches(sa, mappedA, m, (k/sk + (k%sk != 0))) ||
+      !matches(sb, mappedB, (k/sk + (k%sk != 0)), (n/sn + (n%sn != 0))))
     return {};
 
   // Each scale gradient is its own structured reduction. Shared operands
@@ -202,12 +209,14 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
           Value row = lhs ? indices[offset] : Value{};
           Value column;
           Value klo = arith::MulIOp::create(g, l, group, constant(sk));
-          Value khi = arith::MinUIOp::create(g, l, constant(k),
-              arith::AddIOp::create(g, l, klo, constant(sk)));
+          Value span = arith::MinUIOp::create(g, l, constant(sk),
+              arith::SubIOp::create(g, l, constant(k), klo));
+          Value khi = arith::AddIOp::create(g, l, klo, span);
           Value nlo = lhs ? c0 : arith::MulIOp::create(
               g, l, indices[offset+1], constant(sn));
-          Value nhi = lhs ? constant(n) : arith::MinUIOp::create(g, l, constant(n),
-              arith::AddIOp::create(g, l, nlo, constant(sn)));
+          Value nhi = lhs ? constant(n) : arith::AddIOp::create(g, l, nlo,
+              arith::MinUIOp::create(g, l, constant(sn),
+                  arith::SubIOp::create(g, l, constant(n), nlo)));
           std::function<Value(OpBuilder &, int64_t, Value)> reduce;
           reduce = [&](OpBuilder &r, int64_t axis, Value seed) -> Value {
             // Shared batch axes, then M (RHS gradient), N, and group-local K.
@@ -264,8 +273,10 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
                   bi.push_back(getTransposeB() ? iv : column);
                   Value av = tensor::ExtractOp::create(body, at, getLhs(), ai);
                   Value bv = tensor::ExtractOp::create(body, at, getRhs(), bi);
-                  av = arith::ExtFOp::create(body, at, body.getF32Type(), av);
-                  bv = arith::ExtFOp::create(body, at, body.getF32Type(), bv);
+                  if (!av.getType().isF32())
+                    av = arith::ExtFOp::create(body, at, body.getF32Type(), av);
+                  if (!bv.getType().isF32())
+                    bv = arith::ExtFOp::create(body, at, body.getF32Type(), bv);
                   Value term = arith::MulFOp::create(body, at, av, bv);
                   scf::YieldOp::create(body, at,
                       arith::AddFOp::create(body, at, carried[0], term).getResult());
@@ -278,8 +289,90 @@ llvm::SmallVector<mlir::Value> ScaledMatmulOp::buildLinearTranspose(
                        builder.getStringAttr(lhs ? "lhs_scale" : "rhs_scale"));
     return generated.getResult();
   };
+
+  auto makeMatrixGradient = [&](bool lhs) -> Value {
+    auto type = lhs ? a : b;
+    int64_t ownPrefix = type.getRank() - 2;
+    SmallVector<int64_t> reductionAxes;
+    for (int64_t axis = 0; axis < prefix; ++axis) {
+      int64_t local = axis - (prefix - ownPrefix);
+      if (local < 0 || type.getDimSize(local) == 1)
+        reductionAxes.push_back(axis);
+    }
+    auto generated = tensor::GenerateOp::create(
+        builder, loc, type, ValueRange{},
+        [&](OpBuilder &g, Location l, ValueRange indices) {
+          auto ci = [&](int64_t v) -> Value {
+            return arith::ConstantIndexOp::create(g, l, v);
+          };
+          Value c0 = ci(0), c1 = ci(1);
+          Value zero = arith::ConstantOp::create(g, l, g.getF32FloatAttr(0));
+          SmallVector<Value> batchIndices(prefix, c0);
+          for (int64_t axis = 0; axis < ownPrefix; ++axis)
+            if (type.getDimSize(axis) != 1)
+              batchIndices[prefix - ownPrefix + axis] = indices[axis];
+          Value row = lhs ? indices[ownPrefix + (getTransposeA() ? 1 : 0)] : Value{};
+          Value column = lhs ? Value{} : indices[ownPrefix + (getTransposeB() ? 0 : 1)];
+          Value contraction = indices[ownPrefix +
+              (lhs ? (getTransposeA() ? 0 : 1) : (getTransposeB() ? 1 : 0))];
+          Value group = arith::DivUIOp::create(g, l, contraction, ci(sk));
+          auto coordinates = [&](RankedTensorType operand) {
+            SmallVector<Value> result;
+            int64_t count = operand.getRank() - 2;
+            for (int64_t axis = 0; axis < count; ++axis)
+              result.push_back(operand.getDimSize(axis) == 1 ? c0
+                  : batchIndices[prefix - count + axis]);
+            return result;
+          };
+          std::function<Value(OpBuilder &, int64_t, Value)> reduce;
+          reduce = [&](OpBuilder &r, int64_t axis, Value seed) -> Value {
+            int64_t batchLoops = reductionAxes.size();
+            Value upper = arith::ConstantIndexOp::create(r, l,
+                axis < batchLoops ? result.getDimSize(reductionAxes[axis])
+                                  : (lhs ? n : m));
+            auto loop = scf::ForOp::create(r, l, c0, upper, c1, ValueRange{seed},
+                [&](OpBuilder &body, Location at, Value iv, ValueRange carried) {
+                  if (axis < batchLoops) {
+                    batchIndices[reductionAxes[axis]] = iv;
+                    scf::YieldOp::create(body, at, reduce(body, axis+1, carried[0]));
+                    return;
+                  }
+                  if (lhs) column = iv; else row = iv;
+                  auto other = coordinates(lhs ? b : a);
+                  if (lhs) other.append({getTransposeB() ? column : contraction,
+                                         getTransposeB() ? contraction : column});
+                  else other.append({getTransposeA() ? contraction : row,
+                                     getTransposeA() ? row : contraction});
+                  auto si = coordinates(sa), ti = coordinates(sb);
+                  si.append({row, group});
+                  Value blockColumn = arith::DivUIOp::create(body, at, column,
+                      arith::ConstantIndexOp::create(body, at, sn));
+                  ti.append({group, blockColumn});
+                  SmallVector<Value> oi(batchIndices);
+                  oi.append({row, column});
+                  Value coefficient = tensor::ExtractOp::create(body, at,
+                      lhs ? getRhs() : getLhs(), other);
+                  Value leftScale = tensor::ExtractOp::create(body, at, getLhsScale(), si);
+                  Value rightScale = tensor::ExtractOp::create(body, at, getRhsScale(), ti);
+                  Value dy = tensor::ExtractOp::create(body, at, outputCotangents[0], oi);
+                  Value term = arith::MulFOp::create(body, at, coefficient, leftScale);
+                  term = arith::MulFOp::create(body, at, term, rightScale);
+                  term = arith::MulFOp::create(body, at, term, dy);
+                  scf::YieldOp::create(body, at,
+                      arith::AddFOp::create(body, at, carried[0], term).getResult());
+                });
+            return loop.getResult(0);
+          };
+          tensor::YieldOp::create(g, l, reduce(g, 0, zero));
+        });
+    generated->setAttr("tessera.autodiff.scale_adjoint",
+                       builder.getStringAttr(lhs ? "lhs_matrix" : "rhs_matrix"));
+    return generated.getResult();
+  };
   Value dsa = makeGradient(true), dsb = makeGradient(false);
-  return {Value{}, Value{}, dsa, dsb};
+  Value da = floatingMatrices ? makeMatrixGradient(true) : Value{};
+  Value db = floatingMatrices ? makeMatrixGradient(false) : Value{};
+  return {da, db, dsa, dsb};
 }
 
 llvm::SmallVector<mlir::Value> MatmulOp::buildLinearTranspose(

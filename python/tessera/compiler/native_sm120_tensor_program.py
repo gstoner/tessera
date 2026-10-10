@@ -16,7 +16,7 @@ def _plan(ir):
     if len(matches)!=1:
         raise ValueError("native tensor export requires one program record")
     text=base64.b64decode(matches[0],validate=True).decode()
-    if json.loads(text).get("schema") not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3"}:
+    if json.loads(text).get("schema") not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4"}:
         raise ValueError("native tensor program schema differs")
     return text
 
@@ -138,12 +138,12 @@ def validate_native_tensor_plan(text):
         raise ValueError("native tensor plan must be serialized JSON")
     plan=json.loads(text)
     keys={"schema","source_graph_ir","root","role_indices","buffers","steps","output","member_graphs"}
-    if isinstance(plan,dict) and plan.get("schema")=="tessera.native.sm120_tensor_program.v2":
+    if isinstance(plan,dict) and plan.get("schema") in {"tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v4"}:
         keys.update({"active_shape","shape_bounds","dynamic_axes","original_graph_ir"})
     if (not isinstance(plan,dict) or set(plan)!=keys or
-            plan["schema"] not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3"}):
+            plan["schema"] not in {"tessera.native.sm120_tensor_program.v1","tessera.native.sm120_tensor_program.v2","tessera.native.sm120_tensor_program.v3","tessera.native.sm120_tensor_program.v4"}):
         raise ValueError("native tensor program schema differs")
-    if plan["schema"].endswith(".v2"):
+    if plan["schema"].endswith((".v2",".v4")):
         if not isinstance(plan["original_graph_ir"],str) or not plan["original_graph_ir"]:
             raise ValueError("native tensor original Graph witness differs")
         axes=plan["dynamic_axes"]
@@ -163,7 +163,7 @@ def validate_native_tensor_plan(text):
         raise ValueError("native tensor argument roles differ")
     count=len(roles)
     steps=plan["steps"]
-    chain=plan["schema"].endswith(".v3")
+    chain=plan["schema"].endswith((".v3",".v4"))
     if (not isinstance(steps,list) or (not 3<=len(steps)<=64 if chain else len(steps)!=2) or type(plan["output"]) is not int or
             plan["output"]!=count+len(steps)-1):
         raise ValueError("native tensor output/step count differs")
@@ -211,4 +211,10 @@ def validate_native_tensor_plan(text):
     for row in buffers[count:count+len(steps)-1]:
         if row["shape"]!=source["shape"] or row["storage"]!=source["storage"]:
             raise ValueError("native tensor chain changed producer storage")
+    if plan["schema"].endswith((".v2",".v4")):
+        m,n,k=plan["shape_bounds"]
+        # Optional roles follow the consumer's bias/residual bindings. The
+        # portable edge validator checks their named semantics.
+        if source["shape"]!=[m,k] or buffers[roles[1]]["shape"]!=[k,n] or buffers[plan["output"]]["shape"]!=[m,n]:
+            raise ValueError("native tensor capacity buffers differ")
     return plan

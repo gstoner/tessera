@@ -2392,3 +2392,25 @@ The public timing domain includes host checks/map packing, upload, dispatch and
 readback. Native events are recorded separately in the continuous native
 product packet. Generic batching/transpose, dynamic-shape and sibling-backend
 closure remain open.
+
+### Bounded SM120 producer-chain programs
+
+Ordinary `@jit(target="nvidia_sm120", shape_bounds={...})` admits static
+shape-preserving RMSNorm/LayerNorm/softmax chains feeding typed matmul with
+positive M/N/K capacities. Each named active axis varies independently.
+Original scalar source constraints and requested RHS/epilogue semantics remain
+checked. Compiler-owned v4 outlines every actual producer SSA edge and records
+maximum buffer capacities plus first-write/last-read lifetimes. The original
+Graph and its projected dynamic witness are retained separately.
+
+The portable outer chain schema remains v3, containing the native v4 plan.
+Single-producer native v2 and static-chain v3 plans retain their contracts.
+Native synchronous ownership reserves bounded staging before the first chain
+invocation and alternates private producer storage. Ordinary/portable warm
+shape changes reuse images with no tracing, compiler subprocess or eager math.
+
+RTX5070 proof covers two/three producers, FP16/BF16, seven nonempty bound-axis
+subsets and fused final stores. See
+`benchmarks/baselines/sm120_bounded_producer_chain_20261009/README.md`.
+This establishes the bounded named chain envelope; arbitrary producer kinds,
+external asynchronous consumers and sibling architectures remain separate.

@@ -125,8 +125,6 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     }
   }
   bool dynamic = varying[0] || varying[1] || varying[2];
-  if (dynamic && producerCount != 1)
-    return root.emitError("SM120 dynamic producer chains require the extended runtime capacity contract");
   bool bias = consumer->hasAttr("bias"), residual = consumer->hasAttr("residual");
   if (roles.size() != unsigned(2 + bias + residual))
     return root.emitError("SM120 tensor epilogue roles differ");
@@ -222,11 +220,15 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
     for (auto [old,arg] : llvm::zip(root.getArguments(),fn.getArguments())) {
       Type type = memberType(old,true); arg.setType(type); inputs.push_back(type);
     }
-    auto it = fn.getBody().front().begin();
-    it->getResult(0).setType(memberType(ops[0]->getResult(0),true)); ++it;
+    // Every producer carries the same active row/storage frame. Project all
+    // results, preserving the original SSA chain instead of assuming one
+    // producer followed by a consumer.
+    for (auto [original, cloned] :
+         llvm::zip(ops, fn.getBody().front().without_terminator()))
+      cloned.getResult(0).setType(memberType(original->getResult(0),true));
     Type result = memberType(consumer->getResult(0),true);
-    it->getResult(0).setType(result);
-    it->setAttr("shape_bounds",ArrayAttr::get(module.getContext(),{
+    auto &projectedConsumer = *std::prev(fn.getBody().front().end(), 2);
+    projectedConsumer.setAttr("shape_bounds",ArrayAttr::get(module.getContext(),{
       IntegerAttr::get(IntegerType::get(module.getContext(),64),capacities[0]),
       IntegerAttr::get(IntegerType::get(module.getContext(),64),capacities[1]),
       IntegerAttr::get(IntegerType::get(module.getContext(),64),capacities[2])}));
@@ -275,7 +277,8 @@ static mlir::LogicalResult emitNativeSM120TensorProgram(mlir::ModuleOp module) {
       {"member",symbol},{"inputs",std::move(inputs)},
       {"outputs",llvm::json::Array{ids.lookup(op->getResult(0))}}});
   }
-  llvm::json::Object plan{{"schema",dynamic ? "tessera.native.sm120_tensor_program.v2" :
+  llvm::json::Object plan{{"schema",dynamic ? (producerCount > 1 ?
+          "tessera.native.sm120_tensor_program.v4" : "tessera.native.sm120_tensor_program.v2") :
           producerCount > 1 ? "tessera.native.sm120_tensor_program.v3" : "tessera.native.sm120_tensor_program.v1"},
       {"source_graph_ir",sourceIR+"\n"},{"root",root.getSymName().str()},
       {"role_indices",std::move(roleJSON)},{"buffers",std::move(buffers)},

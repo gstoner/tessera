@@ -1473,3 +1473,16 @@ envelopes. Generic scaled-matmul batching/transpose and original-checkpoint
 NVFP4 model-quality acceptance remain open. No sibling device evidence is
 transferred. Evidence:
 benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
+
+## Native-owned ROCm movement graph replay — 2026-10-08
+
+E2E-REAL-6 / ROCM-NATIVE-GRAPH-MOVEMENT-20261008 adds explicit native HIP graph
+execution to the existing checked resident compiler packages. Private addresses,
+image leases, generations and cleanup stay under the native owner; Python emits
+no nodes or kernel body. 325 host checks, 25 gfx1151 and 23 gfx1201 checks pass;
+seven and five executed profiles respectively preserve numerical/lifetime proof.
+Counterbalanced paired paged-KV/softmax host ratios are 0.864–0.954 and
+0.772–0.957. Single-kernel graphs regress; direct remains default. Whole-graph
+event intervals and direct per-member events are different timing scopes.
+General KV layouts and generic scaled closure remain open.
+Evidence: benchmarks/baselines/rocm_native_graph_movement_20261008/README.md.

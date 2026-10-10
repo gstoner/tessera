@@ -492,6 +492,9 @@ struct ResidentMovement {
   void *lease=nullptr, *module=nullptr, *function=nullptr;
   hipStream_t stream=nullptr;
   hipEvent_t begin=nullptr, end=nullptr;
+  hipGraph_t graph=nullptr;
+  hipGraphExec_t graphExec=nullptr;
+  bool capturedReady=false;
   void *consumerLease=nullptr, *consumerModule=nullptr, *consumerFunction=nullptr;
   hipEvent_t consumerBegin=nullptr, consumerEnd=nullptr;
   std::array<Memref,2> consumerRefs;
@@ -536,6 +539,17 @@ bool residentView(const ResidentMovement &r,const TesseraMovementHostView &v,siz
 int residentRelease(ResidentMovement &r) {
   r.closing=true; r.ready=false; r.outputGeneration=0;
   if (r.stream && hipStreamSynchronize(r.stream)!=hipSuccess) return 7;
+  r.capturedReady=false;
+  // Executables retain pointers, module functions and events. Retire graph
+  // resources before releasing those dependencies; failed cleanup is retryable.
+  if (r.graphExec) {
+    if (hipGraphExecDestroy(r.graphExec)!=hipSuccess) return 9;
+    r.graphExec=nullptr;
+  }
+  if (r.graph) {
+    if (hipGraphDestroy(r.graph)!=hipSuccess) return 9;
+    r.graph=nullptr;
+  }
   if (r.begin) {
     if (hipEventDestroy(r.begin)!=hipSuccess) return 9;
     r.begin=nullptr;
@@ -663,8 +677,24 @@ extern "C" int tessera_rocm_movement_resident_upload(
 } catch (...) { return 12; }
 
 namespace {
+hipError_t residentEnqueue(ResidentMovement &r,bool timed=true) {
+  auto status=timed?hipEventRecord(r.begin,r.stream):hipSuccess;
+  auto elements=r.call->bytes[2]/4;
+  if (status==hipSuccess)
+    status=hipModuleLaunchKernel(reinterpret_cast<hipFunction_t>(r.function),
+      unsigned((elements+255)/256),1,1,256,1,1,0,r.stream,r.arguments.data(),nullptr);
+  if (status==hipSuccess && timed) status=hipEventRecord(r.end,r.stream);
+  if (status==hipSuccess && r.consumerLease) {
+    if (timed) status=hipEventRecord(r.consumerBegin,r.stream);
+    if (status==hipSuccess)
+      status=hipModuleLaunchKernel(reinterpret_cast<hipFunction_t>(r.consumerFunction),
+        unsigned(r.rows),1,1,256,1,1,0,r.stream,r.consumerArguments.data(),nullptr);
+    if (status==hipSuccess && timed) status=hipEventRecord(r.consumerEnd,r.stream);
+  }
+  return status;
+}
 int residentInvoke(uint64_t handle,uint64_t *generation,float *kernelMs,
-                   float *producerMs,float *consumerMs) {
+                   float *producerMs,float *consumerMs,bool captured=false) {
   if (!generation || uintptr_t(generation)%alignof(uint64_t) ||
       (kernelMs && uintptr_t(kernelMs)%alignof(float)) ||
       (producerMs && uintptr_t(producerMs)%alignof(float)) ||
@@ -676,30 +706,23 @@ int residentInvoke(uint64_t handle,uint64_t *generation,float *kernelMs,
   std::lock_guard<std::mutex> guard(r->mutex);
   if (!residentContext(*r)) return 2;
   if (!r->ready || r->closing || r->serial==UINT64_MAX) return 10;
-  if (consumerMs && !r->consumerLease) return 10;
+  if (consumerMs && !r->consumerLease && !captured) return 10;
+  if (captured && !r->capturedReady) return 10;
   r->outputGeneration=0;
-  if (hipEventRecord(r->begin,r->stream)!=hipSuccess) return 6;
-  auto elements=r->call->bytes[2]/4;
-  auto status=hipModuleLaunchKernel(reinterpret_cast<hipFunction_t>(r->function),
-    unsigned((elements+255)/256),1,1,256,1,1,0,r->stream,r->arguments.data(),nullptr);
-  if (status!=hipSuccess || hipEventRecord(r->end,r->stream)!=hipSuccess) {
+  hipError_t status=hipSuccess;
+  if (captured) {
+    status=hipEventRecord(r->begin,r->stream);
+    if (status==hipSuccess) status=hipGraphLaunch(r->graphExec,r->stream);
+    if (status==hipSuccess) status=hipEventRecord(r->end,r->stream);
+  } else status=residentEnqueue(*r);
+  if (status!=hipSuccess) {
     if (hipStreamSynchronize(r->stream)!=hipSuccess) r->closing=true;
     return 6;
-  }
-  if (r->consumerLease) {
-    status=hipEventRecord(r->consumerBegin,r->stream);
-    if (status==hipSuccess)
-      status=hipModuleLaunchKernel(reinterpret_cast<hipFunction_t>(r->consumerFunction),
-        unsigned(r->rows),1,1,256,1,1,0,r->stream,r->consumerArguments.data(),nullptr);
-    if (status!=hipSuccess || hipEventRecord(r->consumerEnd,r->stream)!=hipSuccess) {
-      if (hipStreamSynchronize(r->stream)!=hipSuccess) r->closing=true;
-      return 6;
-    }
   }
   if (hipStreamSynchronize(r->stream)!=hipSuccess) {r->closing=true;return 7;}
   float producer=0,consumer=0;
   if (hipEventElapsedTime(&producer,r->begin,r->end)!=hipSuccess || !(producer>0)) return 7;
-  if (r->consumerLease &&
+  if (r->consumerLease && !captured &&
       (hipEventElapsedTime(&consumer,r->consumerBegin,r->consumerEnd)!=hipSuccess || !(consumer>0))) return 7;
   r->outputGeneration=++r->serial;*generation=r->outputGeneration;
   if(kernelMs)*kernelMs=producer+consumer;
@@ -716,6 +739,53 @@ extern "C" int tessera_rocm_movement_resident_invoke_softmax(
     uint64_t handle,uint64_t *generation,float *producerMs,float *consumerMs) try {
   if (!producerMs || !consumerMs) return 1;
   return residentInvoke(handle,generation,nullptr,producerMs,consumerMs);
+} catch (...) { return 12; }
+
+// Capture the compiler-owned ABI and current private addresses once. Uploads
+// replace contents, never addresses. All replay and cleanup share the same
+// owner lock, context check, module leases and synchronous completion policy.
+extern "C" int tessera_rocm_movement_resident_capture(
+    uint64_t handle,uint64_t *kernelNodes) try {
+  if (!kernelNodes || uintptr_t(kernelNodes)%alignof(uint64_t) ||
+      getpid()!=process) return 1;
+  *kernelNodes=0;
+  auto r=residentLookup(handle);if (!r) return 1;
+  std::lock_guard<std::mutex> guard(r->mutex);
+  if (!residentContext(*r)) return 2;
+  if (!r->ready || r->closing) return 10;
+  const size_t expected=r->consumerLease?2:1;
+  if (r->capturedReady) {*kernelNodes=expected;return 0;}
+  // A failed prior construction stays owned for explicit close/cleanup retry.
+  if (r->graph || r->graphExec) return 10;
+  if (hipStreamBeginCapture(r->stream,hipStreamCaptureModeThreadLocal)!=hipSuccess) return 6;
+  auto submitted=residentEnqueue(*r,false);
+  auto ended=hipStreamEndCapture(r->stream,&r->graph);
+  if (submitted!=hipSuccess || ended!=hipSuccess || !r->graph) {
+    r->closing=true;return 6;
+  }
+  size_t count=0;
+  if (hipGraphGetNodes(r->graph,nullptr,&count)!=hipSuccess ||
+      count!=expected) {r->closing=true;return 6;}
+  std::vector<hipGraphNode_t> nodes(count);
+  if (hipGraphGetNodes(r->graph,nodes.data(),&count)!=hipSuccess) {r->closing=true;return 6;}
+  size_t kernels=0;
+  for (auto node:nodes) {
+    hipGraphNodeType type{};
+    if (hipGraphNodeGetType(node,&type)!=hipSuccess) {r->closing=true;return 6;}
+    if (type==hipGraphNodeTypeKernel) ++kernels;
+    else {r->closing=true;return 6;}
+  }
+  if (kernels!=expected ||
+      hipGraphInstantiateWithFlags(&r->graphExec,r->graph,0)!=hipSuccess) {
+    r->closing=true;return 6;
+  }
+  r->capturedReady=true;*kernelNodes=kernels;return 0;
+} catch (...) { return 12; }
+
+extern "C" int tessera_rocm_movement_resident_invoke_captured(
+    uint64_t handle,uint64_t *generation,float *kernelMs) try {
+  if (!kernelMs) return 1;
+  return residentInvoke(handle,generation,kernelMs,nullptr,nullptr,true);
 } catch (...) { return 12; }
 
 extern "C" int tessera_rocm_movement_resident_read(

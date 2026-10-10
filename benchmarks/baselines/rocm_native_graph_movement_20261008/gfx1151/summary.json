@@ -1,0 +1,2376 @@
+{
+  "architecture": "gfx1151",
+  "device": {
+    "name": "AMD Radeon(TM) 8060S Graphics",
+    "pci_bus_id": "0000:c5:00.0",
+    "architecture": "gfx1151",
+    "ordinal": 0
+  },
+  "python": "3.14.4",
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "4005c217d5419f85b961662aa18785096e292eded47213ba8369fceb28f38dbf",
+    "python/tessera/compiler/resident_rocm_movement.py": "6567139782c283a84c6089a54bac81fce2b6601d9325e379e9f7d9618629b603",
+    "benchmarks/rocm/benchmark_native_graph_movement.py": "1c95806862ab83b617f925303578f4fe94808c485a77774c6d0a9f9ecd4dbfec",
+    "tests/unit/test_native_graph_rocm_movement.py": "61def7102ae6569036866396c40c63d231229934b135883d98354d89542b21c8"
+  },
+  "compiler_sha256": {
+    "TESSERA_OPT": "7ffa405de7d77ed0097f25cf7527fb5beb2f70934fecda3e3bdc162c4fc60126",
+    "TESSERA_ROCM_OPT": "e3dd92d5cf2c638785dc79f8746511fbaa801ef531037d718e631e255526dbb8"
+  },
+  "native_runtime_sha256": "4fdb82e96c3f88802a1e40de965213955dddb08aeb074386bb5854e819284fbf",
+  "rows": [
+    {
+      "case": "paged_small",
+      "architecture": "gfx1151",
+      "shape": [
+        5,
+        3,
+        8
+      ],
+      "correctness": "oracle_before_after_every_arm_and_changed_input_replay",
+      "graph_kernel_nodes": 1,
+      "graph_prepare_ms": 0.629001,
+      "producer_image": "569eb12fac92b2c68708dfff8d0a28fd994d5ee364332e61e9cfbe5578b893b5",
+      "producer_entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "producer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011",
+            "output_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83",
+            "output_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60",
+            "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+            "output_digest": "fa31b43d4870a7166f7c9d6557296990638986978d4a974e437875c56c4f925d"
+          }
+        }
+      },
+      "consumer_image": null,
+      "consumer_entry": null,
+      "warm_module_loads": 0,
+      "warm_compiler_subprocesses": "forbidden",
+      "samples": {
+        "direct": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 27.450359,
+            "completed_host_ms_per_call": 0.10722796484375,
+            "device_event_median_ms": 0.010920999571681023,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010920999571681023
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 28.149979,
+            "completed_host_ms_per_call": 0.10996085546875,
+            "device_event_median_ms": 0.010401000268757343,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010401000268757343
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 27.390159,
+            "completed_host_ms_per_call": 0.10699280859375,
+            "device_event_median_ms": 0.008360999636352062,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.008360999636352062
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 27.909036,
+            "completed_host_ms_per_call": 0.109019671875,
+            "device_event_median_ms": 0.010281000286340714,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010281000286340714
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 27.936245,
+            "completed_host_ms_per_call": 0.10912595703125,
+            "device_event_median_ms": 0.010281000286340714,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010281000286340714
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 27.834821,
+            "completed_host_ms_per_call": 0.10872976953125,
+            "device_event_median_ms": 0.010320999659597874,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010320999659597874
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 28.411617,
+            "completed_host_ms_per_call": 0.11098287890625,
+            "device_event_median_ms": 0.010320999659597874,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010320999659597874
+            }
+          }
+        ],
+        "graph": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 30.425338,
+            "completed_host_ms_per_call": 0.1188489765625,
+            "device_event_median_ms": 0.022002000361680984,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.022002000361680984
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 30.79112,
+            "completed_host_ms_per_call": 0.1202778125,
+            "device_event_median_ms": 0.021821999922394753,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021821999922394753
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 30.155569,
+            "completed_host_ms_per_call": 0.11779519140625,
+            "device_event_median_ms": 0.02104100026190281,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02104100026190281
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 30.318244,
+            "completed_host_ms_per_call": 0.118430640625,
+            "device_event_median_ms": 0.02112100087106228,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02112100087106228
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 30.155583,
+            "completed_host_ms_per_call": 0.11779524609375,
+            "device_event_median_ms": 0.02108200080692768,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02108200080692768
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 30.038708,
+            "completed_host_ms_per_call": 0.117338703125,
+            "device_event_median_ms": 0.021000999957323074,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021000999957323074
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 30.750183,
+            "completed_host_ms_per_call": 0.12011790234375,
+            "device_event_median_ms": 0.021121999248862267,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021121999248862267
+            }
+          }
+        ]
+      },
+      "rejected_short_pairs": [
+        {
+          "direct": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 13.152827,
+            "completed_host_ms_per_call": 0.1027564609375,
+            "device_event_median_ms": 0.010881000198423862,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010881000198423862
+            }
+          },
+          "graph": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 14.987121,
+            "completed_host_ms_per_call": 0.1170868828125,
+            "device_event_median_ms": 0.02252200059592724,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02252200059592724
+            }
+          }
+        }
+      ],
+      "host_medians_ms": {
+        "direct": 0.109019671875,
+        "graph": 0.118430640625
+      },
+      "event_medians_ms": {
+        "direct": 0.010320999659597874,
+        "graph": 0.02112100087106228
+      },
+      "graph_over_direct_host_ratio": 1.0863235835161056,
+      "timing_caveat": "HIP event dispatch intervals; graph whole sequence and direct member sums have distinct scopes"
+    },
+    {
+      "case": "paged_large",
+      "architecture": "gfx1151",
+      "shape": [
+        5,
+        4,
+        32
+      ],
+      "correctness": "oracle_before_after_every_arm_and_changed_input_replay",
+      "graph_kernel_nodes": 1,
+      "graph_prepare_ms": 0.575478,
+      "producer_image": "569eb12fac92b2c68708dfff8d0a28fd994d5ee364332e61e9cfbe5578b893b5",
+      "producer_entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "producer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0",
+            "output_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded",
+            "output_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b",
+            "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+            "output_digest": "fa31b43d4870a7166f7c9d6557296990638986978d4a974e437875c56c4f925d"
+          }
+        }
+      },
+      "consumer_image": null,
+      "consumer_entry": null,
+      "warm_module_loads": 0,
+      "warm_compiler_subprocesses": "forbidden",
+      "samples": {
+        "direct": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 26.966422,
+            "completed_host_ms_per_call": 0.1053375859375,
+            "device_event_median_ms": 0.010881000198423862,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010881000198423862
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 26.870206,
+            "completed_host_ms_per_call": 0.1049617421875,
+            "device_event_median_ms": 0.010001000016927719,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010001000016927719
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 27.589557,
+            "completed_host_ms_per_call": 0.10777170703125,
+            "device_event_median_ms": 0.010200999677181244,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010200999677181244
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 27.178054,
+            "completed_host_ms_per_call": 0.1061642734375,
+            "device_event_median_ms": 0.009800000116229057,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.009800000116229057
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 27.589262,
+            "completed_host_ms_per_call": 0.1077705546875,
+            "device_event_median_ms": 0.010239999741315842,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010239999741315842
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 27.796279,
+            "completed_host_ms_per_call": 0.10857921484375,
+            "device_event_median_ms": 0.010280000045895576,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010280000045895576
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 28.064704,
+            "completed_host_ms_per_call": 0.10962775,
+            "device_event_median_ms": 0.010240999981760979,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010240999981760979
+            }
+          }
+        ],
+        "graph": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 31.346411,
+            "completed_host_ms_per_call": 0.12244691796875,
+            "device_event_median_ms": 0.022041000425815582,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.022041000425815582
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 29.391438,
+            "completed_host_ms_per_call": 0.1148103046875,
+            "device_event_median_ms": 0.020521000027656555,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020521000027656555
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 31.97797,
+            "completed_host_ms_per_call": 0.1249139453125,
+            "device_event_median_ms": 0.020920999348163605,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020920999348163605
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 32.354908,
+            "completed_host_ms_per_call": 0.126386359375,
+            "device_event_median_ms": 0.02072099968791008,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02072099968791008
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 30.371969,
+            "completed_host_ms_per_call": 0.11864050390625,
+            "device_event_median_ms": 0.021141499280929565,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021141499280929565
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 30.197151,
+            "completed_host_ms_per_call": 0.11795762109375,
+            "device_event_median_ms": 0.021281500346958637,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021281500346958637
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 30.502263,
+            "completed_host_ms_per_call": 0.11914946484375,
+            "device_event_median_ms": 0.021160999312996864,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021160999312996864
+            }
+          }
+        ]
+      },
+      "rejected_short_pairs": [
+        {
+          "direct": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 13.21718,
+            "completed_host_ms_per_call": 0.10325921875,
+            "device_event_median_ms": 0.010960499756038189,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010960499756038189
+            }
+          },
+          "graph": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 15.066456,
+            "completed_host_ms_per_call": 0.1177066875,
+            "device_event_median_ms": 0.022321000695228577,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.022321000695228577
+            }
+          }
+        }
+      ],
+      "host_medians_ms": {
+        "direct": 0.1077705546875,
+        "graph": 0.11914946484375
+      },
+      "event_medians_ms": {
+        "direct": 0.010239999741315842,
+        "graph": 0.021141499280929565
+      },
+      "graph_over_direct_host_ratio": 1.1055845930202843,
+      "timing_caveat": "HIP event dispatch intervals; graph whole sequence and direct member sums have distinct scopes"
+    },
+    {
+      "case": "dispatched_small",
+      "architecture": "gfx1151",
+      "shape": [
+        9,
+        13
+      ],
+      "correctness": "oracle_before_after_every_arm_and_changed_input_replay",
+      "graph_kernel_nodes": 1,
+      "graph_prepare_ms": 0.581418,
+      "producer_image": "3f98d83231524c655ad923ed5fbea7dfb42193a81f4fa4605a536f135fa6c44b",
+      "producer_entry": "tessera_rocm_moe_dispatch_e59f0cd4b3176780",
+      "compiler_lineage": {
+        "producer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "39a31ac3fb3ddf06fd69310617188515160a44abd0195b0d7bc9c0eb5a6a6b2a"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "39a31ac3fb3ddf06fd69310617188515160a44abd0195b0d7bc9c0eb5a6a6b2a",
+            "output_digest": "e220a728df01406121fba06154c2ae22dfe25a283f899c4b44b87ddfabe36836"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "e220a728df01406121fba06154c2ae22dfe25a283f899c4b44b87ddfabe36836",
+            "output_digest": "0672cb7c684d50bae989f20c3d31a8da391a3e550c4bb8280e7f8c143b9f128b"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "0672cb7c684d50bae989f20c3d31a8da391a3e550c4bb8280e7f8c143b9f128b",
+            "output_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41",
+            "output_digest": "3b19fdbba845daab5dc6c960ecea38121bfcc78f83d250fa01efb4a23cbee703"
+          }
+        }
+      },
+      "consumer_image": null,
+      "consumer_entry": null,
+      "warm_module_loads": 0,
+      "warm_compiler_subprocesses": "forbidden",
+      "samples": {
+        "direct": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 25.645907,
+            "completed_host_ms_per_call": 0.10017932421875,
+            "device_event_median_ms": 0.010320999659597874,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010320999659597874
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 25.562548,
+            "completed_host_ms_per_call": 0.099853703125,
+            "device_event_median_ms": 0.010400000028312206,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010400000028312206
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 27.893565,
+            "completed_host_ms_per_call": 0.10895923828125,
+            "device_event_median_ms": 0.010641000233590603,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010641000233590603
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 26.962247,
+            "completed_host_ms_per_call": 0.10532127734375,
+            "device_event_median_ms": 0.009600999765098095,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.009600999765098095
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 27.483561,
+            "completed_host_ms_per_call": 0.10735766015625,
+            "device_event_median_ms": 0.010001000016927719,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010001000016927719
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 26.837894,
+            "completed_host_ms_per_call": 0.1048355234375,
+            "device_event_median_ms": 0.009561000391840935,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.009561000391840935
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 27.054256,
+            "completed_host_ms_per_call": 0.1056806875,
+            "device_event_median_ms": 0.00976100005209446,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.00976100005209446
+            }
+          }
+        ],
+        "graph": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 32.716268,
+            "completed_host_ms_per_call": 0.127797921875,
+            "device_event_median_ms": 0.021841000765562057,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021841000765562057
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 30.588778,
+            "completed_host_ms_per_call": 0.1194874140625,
+            "device_event_median_ms": 0.021561000496149063,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021561000496149063
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 32.418555,
+            "completed_host_ms_per_call": 0.12663498046875,
+            "device_event_median_ms": 0.02118099946528673,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02118099946528673
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 28.821707,
+            "completed_host_ms_per_call": 0.11258479296875,
+            "device_event_median_ms": 0.020521000027656555,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020521000027656555
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 30.100924,
+            "completed_host_ms_per_call": 0.117581734375,
+            "device_event_median_ms": 0.021061500534415245,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021061500534415245
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 29.646964,
+            "completed_host_ms_per_call": 0.115808453125,
+            "device_event_median_ms": 0.02046149969100952,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02046149969100952
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 30.789948,
+            "completed_host_ms_per_call": 0.120273234375,
+            "device_event_median_ms": 0.02112100087106228,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02112100087106228
+            }
+          }
+        ]
+      },
+      "rejected_short_pairs": [
+        {
+          "direct": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 12.992728,
+            "completed_host_ms_per_call": 0.1015056875,
+            "device_event_median_ms": 0.010359999723732471,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010359999723732471
+            }
+          },
+          "graph": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 15.809098,
+            "completed_host_ms_per_call": 0.123508578125,
+            "device_event_median_ms": 0.021681999787688255,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021681999787688255
+            }
+          }
+        }
+      ],
+      "host_medians_ms": {
+        "direct": 0.10532127734375,
+        "graph": 0.1194874140625
+      },
+      "event_medians_ms": {
+        "direct": 0.010001000016927719,
+        "graph": 0.02112100087106228
+      },
+      "graph_over_direct_host_ratio": 1.1345040344745747,
+      "timing_caveat": "HIP event dispatch intervals; graph whole sequence and direct member sums have distinct scopes"
+    },
+    {
+      "case": "dispatched_large",
+      "architecture": "gfx1151",
+      "shape": [
+        128,
+        256
+      ],
+      "correctness": "oracle_before_after_every_arm_and_changed_input_replay",
+      "graph_kernel_nodes": 1,
+      "graph_prepare_ms": 0.555241,
+      "producer_image": "3f98d83231524c655ad923ed5fbea7dfb42193a81f4fa4605a536f135fa6c44b",
+      "producer_entry": "tessera_rocm_moe_dispatch_e59f0cd4b3176780",
+      "compiler_lineage": {
+        "producer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "09f8b0d048ffe0d249c0e63019196b795bed953a99d3072bd9419e233748cdcd"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "09f8b0d048ffe0d249c0e63019196b795bed953a99d3072bd9419e233748cdcd",
+            "output_digest": "b24c6c8c53baeab49946c449d7fb9b7700dc986754aa84955c9568f6c4e17ca3"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "b24c6c8c53baeab49946c449d7fb9b7700dc986754aa84955c9568f6c4e17ca3",
+            "output_digest": "9dfa98cd540dccff1f754450ddc7ba7de0bfb528472e9757d0d0e4b6edfaba86"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "9dfa98cd540dccff1f754450ddc7ba7de0bfb528472e9757d0d0e4b6edfaba86",
+            "output_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41",
+            "output_digest": "3b19fdbba845daab5dc6c960ecea38121bfcc78f83d250fa01efb4a23cbee703"
+          }
+        }
+      },
+      "consumer_image": null,
+      "consumer_entry": null,
+      "warm_module_loads": 0,
+      "warm_compiler_subprocesses": "forbidden",
+      "samples": {
+        "direct": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 25.742157,
+            "completed_host_ms_per_call": 0.10055530078125,
+            "device_event_median_ms": 0.010720999911427498,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010720999911427498
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 27.697813,
+            "completed_host_ms_per_call": 0.10819458203125,
+            "device_event_median_ms": 0.010800999589264393,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010800999589264393
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 27.29231,
+            "completed_host_ms_per_call": 0.1066105859375,
+            "device_event_median_ms": 0.010320000350475311,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010320000350475311
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 27.643885,
+            "completed_host_ms_per_call": 0.10798392578125,
+            "device_event_median_ms": 0.010320500005036592,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010320500005036592
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 26.996169,
+            "completed_host_ms_per_call": 0.10545378515625,
+            "device_event_median_ms": 0.010359999723732471,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010359999723732471
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 27.703409,
+            "completed_host_ms_per_call": 0.10821644140625,
+            "device_event_median_ms": 0.010320999659597874,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010320999659597874
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 27.924281,
+            "completed_host_ms_per_call": 0.10907922265625,
+            "device_event_median_ms": 0.010360999964177608,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010360999964177608
+            }
+          }
+        ],
+        "graph": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 28.495618,
+            "completed_host_ms_per_call": 0.1113110078125,
+            "device_event_median_ms": 0.021640999242663383,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021640999242663383
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 30.1989,
+            "completed_host_ms_per_call": 0.117964453125,
+            "device_event_median_ms": 0.022001000121235847,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.022001000121235847
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 29.384119,
+            "completed_host_ms_per_call": 0.11478171484375,
+            "device_event_median_ms": 0.02094149962067604,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02094149962067604
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 30.054971,
+            "completed_host_ms_per_call": 0.11740223046875,
+            "device_event_median_ms": 0.021081000566482544,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021081000566482544
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 29.454932,
+            "completed_host_ms_per_call": 0.115058328125,
+            "device_event_median_ms": 0.02008150052279234,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02008150052279234
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 30.127576,
+            "completed_host_ms_per_call": 0.11768584375,
+            "device_event_median_ms": 0.021081000566482544,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021081000566482544
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 29.933055,
+            "completed_host_ms_per_call": 0.11692599609375,
+            "device_event_median_ms": 0.0212009996175766,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.0212009996175766
+            }
+          }
+        ]
+      },
+      "rejected_short_pairs": [
+        {
+          "direct": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 12.091296,
+            "completed_host_ms_per_call": 0.09446325,
+            "device_event_median_ms": 0.010600999929010868,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.010600999929010868
+            }
+          },
+          "graph": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 14.074359,
+            "completed_host_ms_per_call": 0.1099559296875,
+            "device_event_median_ms": 0.021921999752521515,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021921999752521515
+            }
+          }
+        }
+      ],
+      "host_medians_ms": {
+        "direct": 0.10798392578125,
+        "graph": 0.11692599609375
+      },
+      "event_medians_ms": {
+        "direct": 0.010359999723732471,
+        "graph": 0.021081000566482544
+      },
+      "graph_over_direct_host_ratio": 1.0828092722857152,
+      "timing_caveat": "HIP event dispatch intervals; graph whole sequence and direct member sums have distinct scopes"
+    },
+    {
+      "case": "paged_small_softmax",
+      "architecture": "gfx1151",
+      "shape": [
+        5,
+        3,
+        8
+      ],
+      "correctness": "oracle_before_after_every_arm_and_changed_input_replay",
+      "graph_kernel_nodes": 2,
+      "graph_prepare_ms": 0.608695,
+      "producer_image": "569eb12fac92b2c68708dfff8d0a28fd994d5ee364332e61e9cfbe5578b893b5",
+      "producer_entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "producer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011",
+            "output_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83",
+            "output_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60",
+            "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+            "output_digest": "fa31b43d4870a7166f7c9d6557296990638986978d4a974e437875c56c4f925d"
+          }
+        },
+        "consumer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "d21fd449b6fa2fd6e345d8dfc846a45c0da879283009d9192006bb98a6fcdf0c"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "d21fd449b6fa2fd6e345d8dfc846a45c0da879283009d9192006bb98a6fcdf0c",
+            "output_digest": "305497298c6597d4431b54cd727177a7ecffee028616bcd8190a303e4c6b6130"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "305497298c6597d4431b54cd727177a7ecffee028616bcd8190a303e4c6b6130",
+            "output_digest": "d60986aae880fdd539602e34539c0e1e1fba1ea6b7a05d17a81284e67b39aa21"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "d60986aae880fdd539602e34539c0e1e1fba1ea6b7a05d17a81284e67b39aa21",
+            "output_digest": "bd826bb3f3e87df3e90c53480f319fac3d7b98f0bee97c4d6f4b5aa38866b613"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "bd826bb3f3e87df3e90c53480f319fac3d7b98f0bee97c4d6f4b5aa38866b613",
+            "output_digest": "11d7334e76e8aafe16535b97ac129afdf3352e418ab5fb214dad56061bc93398"
+          }
+        }
+      },
+      "consumer_image": "1dc2a931524a40510272dc1da48c1ff5533e3ae4df3c23b1e875dea4cec5943a",
+      "consumer_entry": "tessera_rocm_softmax_c74ef1e2cebe8853",
+      "warm_module_loads": 0,
+      "warm_compiler_subprocesses": "forbidden",
+      "samples": {
+        "direct": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 32.351307,
+            "completed_host_ms_per_call": 0.12637229296875,
+            "device_event_median_ms": 0.019801499787718058,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.019801499787718058,
+              "producer_event_samples_ms": 0.009840999729931355,
+              "consumer_event_samples_ms": 0.010020500048995018
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 32.123425,
+            "completed_host_ms_per_call": 0.12548212890625,
+            "device_event_median_ms": 0.01984100043773651,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.01984100043773651,
+              "producer_event_samples_ms": 0.009840000420808792,
+              "consumer_event_samples_ms": 0.010001000016927719
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 32.345418,
+            "completed_host_ms_per_call": 0.1263492890625,
+            "device_event_median_ms": 0.019802000373601913,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.019802000373601913,
+              "producer_event_samples_ms": 0.009840000420808792,
+              "consumer_event_samples_ms": 0.009960999712347984
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 32.127415,
+            "completed_host_ms_per_call": 0.12549771484375,
+            "device_event_median_ms": 0.019921000115573406,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.019921000115573406,
+              "producer_event_samples_ms": 0.009840500075370073,
+              "consumer_event_samples_ms": 0.010080000385642052
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 32.146636,
+            "completed_host_ms_per_call": 0.125572796875,
+            "device_event_median_ms": 0.01988200005143881,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.01988200005143881,
+              "producer_event_samples_ms": 0.009879999794065952,
+              "consumer_event_samples_ms": 0.010001000016927719
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 32.134364,
+            "completed_host_ms_per_call": 0.125524859375,
+            "device_event_median_ms": 0.01976149994879961,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.01976149994879961,
+              "producer_event_samples_ms": 0.0095210000872612,
+              "consumer_event_samples_ms": 0.010161000303924084
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 33.441955,
+            "completed_host_ms_per_call": 0.13063263671875,
+            "device_event_median_ms": 0.020561999641358852,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020561999641358852,
+              "producer_event_samples_ms": 0.010161000303924084,
+              "consumer_event_samples_ms": 0.010360999964177608
+            }
+          }
+        ],
+        "graph": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 30.663506,
+            "completed_host_ms_per_call": 0.1197793203125,
+            "device_event_median_ms": 0.021081000566482544,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021081000566482544
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 31.212227,
+            "completed_host_ms_per_call": 0.12192276171875,
+            "device_event_median_ms": 0.0212009996175766,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.0212009996175766
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 30.777268,
+            "completed_host_ms_per_call": 0.120223703125,
+            "device_event_median_ms": 0.021042000502347946,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021042000502347946
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 31.158915,
+            "completed_host_ms_per_call": 0.12171451171875,
+            "device_event_median_ms": 0.021160999312996864,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021160999312996864
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 29.604371,
+            "completed_host_ms_per_call": 0.11564207421875,
+            "device_event_median_ms": 0.020322000607848167,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020322000607848167
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 29.954982,
+            "completed_host_ms_per_call": 0.1170116484375,
+            "device_event_median_ms": 0.02070149965584278,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02070149965584278
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 30.188994,
+            "completed_host_ms_per_call": 0.1179257578125,
+            "device_event_median_ms": 0.021141499280929565,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021141499280929565
+            }
+          }
+        ]
+      },
+      "rejected_short_pairs": [
+        {
+          "direct": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 15.880412,
+            "completed_host_ms_per_call": 0.12406571875,
+            "device_event_median_ms": 0.020521999802440405,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020521999802440405,
+              "producer_event_samples_ms": 0.009921000339090824,
+              "consumer_event_samples_ms": 0.010680499952286482
+            }
+          },
+          "graph": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 18.66033,
+            "completed_host_ms_per_call": 0.145783828125,
+            "device_event_median_ms": 0.020601000636816025,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020601000636816025
+            }
+          }
+        }
+      ],
+      "host_medians_ms": {
+        "direct": 0.125572796875,
+        "graph": 0.1197793203125
+      },
+      "event_medians_ms": {
+        "direct": 0.01984100043773651,
+        "graph": 0.021081000566482544
+      },
+      "graph_over_direct_host_ratio": 0.9538636017778035,
+      "timing_caveat": "HIP event dispatch intervals; graph whole sequence and direct member sums have distinct scopes"
+    },
+    {
+      "case": "paged_large_softmax",
+      "architecture": "gfx1151",
+      "shape": [
+        5,
+        4,
+        32
+      ],
+      "correctness": "oracle_before_after_every_arm_and_changed_input_replay",
+      "graph_kernel_nodes": 2,
+      "graph_prepare_ms": 0.654652,
+      "producer_image": "569eb12fac92b2c68708dfff8d0a28fd994d5ee364332e61e9cfbe5578b893b5",
+      "producer_entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "producer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0",
+            "output_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded",
+            "output_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b",
+            "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+            "output_digest": "fa31b43d4870a7166f7c9d6557296990638986978d4a974e437875c56c4f925d"
+          }
+        },
+        "consumer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "637a265afffd8797a5486b553d5d61d7690a5a7c2a9d080aa6d7c6287f99946f"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "637a265afffd8797a5486b553d5d61d7690a5a7c2a9d080aa6d7c6287f99946f",
+            "output_digest": "cd4be88628ec86841bc8b33d082586804784a989808a80cffa52601396f3c6e6"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "cd4be88628ec86841bc8b33d082586804784a989808a80cffa52601396f3c6e6",
+            "output_digest": "21719263b70cc659b0c6bbce956a0efb9681d2afacd0d02f579134e3eec696ae"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "21719263b70cc659b0c6bbce956a0efb9681d2afacd0d02f579134e3eec696ae",
+            "output_digest": "bd826bb3f3e87df3e90c53480f319fac3d7b98f0bee97c4d6f4b5aa38866b613"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "bd826bb3f3e87df3e90c53480f319fac3d7b98f0bee97c4d6f4b5aa38866b613",
+            "output_digest": "11d7334e76e8aafe16535b97ac129afdf3352e418ab5fb214dad56061bc93398"
+          }
+        }
+      },
+      "consumer_image": "1dc2a931524a40510272dc1da48c1ff5533e3ae4df3c23b1e875dea4cec5943a",
+      "consumer_entry": "tessera_rocm_softmax_c74ef1e2cebe8853",
+      "warm_module_loads": 0,
+      "warm_compiler_subprocesses": "forbidden",
+      "samples": {
+        "direct": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 35.767487,
+            "completed_host_ms_per_call": 0.13971674609375,
+            "device_event_median_ms": 0.021380999824032187,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.021380999824032187,
+              "producer_event_samples_ms": 0.00848000030964613,
+              "consumer_event_samples_ms": 0.01281999982893467
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 36.248579,
+            "completed_host_ms_per_call": 0.14159601171875,
+            "device_event_median_ms": 0.028426500037312508,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.028426500037312508,
+              "producer_event_samples_ms": 0.010359999723732471,
+              "consumer_event_samples_ms": 0.01853600051254034
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 36.732396,
+            "completed_host_ms_per_call": 0.143485921875,
+            "device_event_median_ms": 0.024180999491363764,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.024180999491363764,
+              "producer_event_samples_ms": 0.009140499867498875,
+              "consumer_event_samples_ms": 0.014280000235885382
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 35.117374,
+            "completed_host_ms_per_call": 0.1371772421875,
+            "device_event_median_ms": 0.022121000103652477,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.022121000103652477,
+              "producer_event_samples_ms": 0.007660500006750226,
+              "consumer_event_samples_ms": 0.014400999993085861
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 34.637007,
+            "completed_host_ms_per_call": 0.13530080859375,
+            "device_event_median_ms": 0.024265499785542488,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.024265499785542488,
+              "producer_event_samples_ms": 0.008200500160455704,
+              "consumer_event_samples_ms": 0.015030500013381243
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 34.180141,
+            "completed_host_ms_per_call": 0.13351617578125,
+            "device_event_median_ms": 0.0220815003849566,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.0220815003849566,
+              "producer_event_samples_ms": 0.007980500347912312,
+              "consumer_event_samples_ms": 0.014279999770224094
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 33.365304,
+            "completed_host_ms_per_call": 0.13033321875,
+            "device_event_median_ms": 0.02104100026190281,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 256,
+              "consumer_event_samples_ms": 256
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02104100026190281,
+              "producer_event_samples_ms": 0.010100499726831913,
+              "consumer_event_samples_ms": 0.010840999893844128
+            }
+          }
+        ],
+        "graph": [
+          {
+            "pair": 0,
+            "repetitions": 256,
+            "host_window_ms": 33.104695,
+            "completed_host_ms_per_call": 0.12931521484375,
+            "device_event_median_ms": 0.031432000920176506,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.031432000920176506
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 256,
+            "host_window_ms": 34.315479,
+            "completed_host_ms_per_call": 0.13404483984375,
+            "device_event_median_ms": 0.032027000561356544,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.032027000561356544
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 256,
+            "host_window_ms": 31.771075,
+            "completed_host_ms_per_call": 0.12410576171875,
+            "device_event_median_ms": 0.03077699989080429,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.03077699989080429
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 256,
+            "host_window_ms": 30.250483,
+            "completed_host_ms_per_call": 0.11816594921875,
+            "device_event_median_ms": 0.029611999168992043,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.029611999168992043
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 256,
+            "host_window_ms": 29.953701,
+            "completed_host_ms_per_call": 0.11700664453125,
+            "device_event_median_ms": 0.03044700063765049,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.03044700063765049
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 256,
+            "host_window_ms": 30.330042,
+            "completed_host_ms_per_call": 0.1184767265625,
+            "device_event_median_ms": 0.030672000721096992,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.030672000721096992
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 256,
+            "host_window_ms": 29.667895,
+            "completed_host_ms_per_call": 0.11589021484375,
+            "device_event_median_ms": 0.020680999383330345,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 256,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.020680999383330345
+            }
+          }
+        ]
+      },
+      "rejected_short_pairs": [
+        {
+          "direct": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 16.425743,
+            "completed_host_ms_per_call": 0.1283261171875,
+            "device_event_median_ms": 0.02376149990595877,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.02376149990595877,
+              "producer_event_samples_ms": 0.010761000216007233,
+              "consumer_event_samples_ms": 0.012740999925881624
+            }
+          },
+          "graph": {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 15.722602,
+            "completed_host_ms_per_call": 0.122832828125,
+            "device_event_median_ms": 0.024241499602794647,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.024241499602794647
+            }
+          }
+        }
+      ],
+      "host_medians_ms": {
+        "direct": 0.1371772421875,
+        "graph": 0.1184767265625
+      },
+      "event_medians_ms": {
+        "direct": 0.022121000103652477,
+        "graph": 0.030672000721096992
+      },
+      "graph_over_direct_host_ratio": 0.8636762532414867,
+      "timing_caveat": "HIP event dispatch intervals; graph whole sequence and direct member sums have distinct scopes"
+    },
+    {
+      "case": "full_large_softmax",
+      "architecture": "gfx1151",
+      "shape": [
+        1024,
+        8,
+        128
+      ],
+      "correctness": "oracle_before_after_every_arm_and_changed_input_replay",
+      "graph_kernel_nodes": 2,
+      "graph_prepare_ms": 1.341491,
+      "producer_image": "569eb12fac92b2c68708dfff8d0a28fd994d5ee364332e61e9cfbe5578b893b5",
+      "producer_entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "producer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "8009656ccd1c43db8cc8db81de4ee12aaf70508f7f475aafc77e9d61e240f0c8"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "8009656ccd1c43db8cc8db81de4ee12aaf70508f7f475aafc77e9d61e240f0c8",
+            "output_digest": "54d11e813c15b7d2811ce2467c4d3acde6ac37562e808e34cbe4e8fc1c2255ee"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "54d11e813c15b7d2811ce2467c4d3acde6ac37562e808e34cbe4e8fc1c2255ee",
+            "output_digest": "0edce1f01d48cdf78b32c3119c9cb18073a161c4a7d591a891773deb1e7544c5"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "0edce1f01d48cdf78b32c3119c9cb18073a161c4a7d591a891773deb1e7544c5",
+            "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+            "output_digest": "fa31b43d4870a7166f7c9d6557296990638986978d4a974e437875c56c4f925d"
+          }
+        },
+        "consumer": {
+          "graph": {
+            "producer": "graph-ir-renderer.targeted",
+            "input_digest": null,
+            "output_digest": "2ef5b2b4864037d2d610b2c5c30adc39bb68ec6a2b2fcba8027631ea3176a441"
+          },
+          "schedule": {
+            "producer": "tessera-opt.tessera-graph-to-schedule",
+            "input_digest": "2ef5b2b4864037d2d610b2c5c30adc39bb68ec6a2b2fcba8027631ea3176a441",
+            "output_digest": "18f8240dcfae311b6d95884db088a0a54f6024ca24c67b3193b6deed100ac160"
+          },
+          "tile": {
+            "producer": "tessera-opt.tessera-schedule-to-tile",
+            "input_digest": "18f8240dcfae311b6d95884db088a0a54f6024ca24c67b3193b6deed100ac160",
+            "output_digest": "337a3694737b1f127f197dc08ccb7909d16827b1b3094c08349d5fa989d324e0"
+          },
+          "target": {
+            "producer": "rocm_gfx1151.package_scheduled.target",
+            "input_digest": "337a3694737b1f127f197dc08ccb7909d16827b1b3094c08349d5fa989d324e0",
+            "output_digest": "bd826bb3f3e87df3e90c53480f319fac3d7b98f0bee97c4d6f4b5aa38866b613"
+          },
+          "backend": {
+            "producer": "rocm_gfx1151.package_scheduled.backend",
+            "input_digest": "bd826bb3f3e87df3e90c53480f319fac3d7b98f0bee97c4d6f4b5aa38866b613",
+            "output_digest": "11d7334e76e8aafe16535b97ac129afdf3352e418ab5fb214dad56061bc93398"
+          }
+        }
+      },
+      "consumer_image": "1dc2a931524a40510272dc1da48c1ff5533e3ae4df3c23b1e875dea4cec5943a",
+      "consumer_entry": "tessera_rocm_softmax_c74ef1e2cebe8853",
+      "warm_module_loads": 0,
+      "warm_compiler_subprocesses": "forbidden",
+      "samples": {
+        "direct": [
+          {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 26.315285,
+            "completed_host_ms_per_call": 0.2055881640625,
+            "device_event_median_ms": 0.10512600280344486,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.10512600280344486,
+              "producer_event_samples_ms": 0.032101498916745186,
+              "consumer_event_samples_ms": 0.0727740004658699
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 128,
+            "host_window_ms": 28.047448,
+            "completed_host_ms_per_call": 0.2191206875,
+            "device_event_median_ms": 0.10668149776756763,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.10668149776756763,
+              "producer_event_samples_ms": 0.03176200017333031,
+              "consumer_event_samples_ms": 0.07498500123620033
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 128,
+            "host_window_ms": 28.245285,
+            "completed_host_ms_per_call": 0.2206662890625,
+            "device_event_median_ms": 0.1075615007430315,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.1075615007430315,
+              "producer_event_samples_ms": 0.03194200061261654,
+              "consumer_event_samples_ms": 0.07514999806880951
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 128,
+            "host_window_ms": 27.587117,
+            "completed_host_ms_per_call": 0.2155243515625,
+            "device_event_median_ms": 0.10548750124871731,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.10548750124871731,
+              "producer_event_samples_ms": 0.032322000712156296,
+              "consumer_event_samples_ms": 0.07314500212669373
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 128,
+            "host_window_ms": 27.56646,
+            "completed_host_ms_per_call": 0.21536296875,
+            "device_event_median_ms": 0.1056315004825592,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.1056315004825592,
+              "producer_event_samples_ms": 0.03236199915409088,
+              "consumer_event_samples_ms": 0.07332000136375427
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 128,
+            "host_window_ms": 27.805859,
+            "completed_host_ms_per_call": 0.2172332734375,
+            "device_event_median_ms": 0.10619199648499489,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.10619199648499489,
+              "producer_event_samples_ms": 0.03222200088202953,
+              "consumer_event_samples_ms": 0.07395399734377861
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 128,
+            "host_window_ms": 28.52382,
+            "completed_host_ms_per_call": 0.22284234375,
+            "device_event_median_ms": 0.10683399811387062,
+            "event_scope": "sum_of_member_intervals",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 128,
+              "consumer_event_samples_ms": 128
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.10683399811387062,
+              "producer_event_samples_ms": 0.032343000173568726,
+              "consumer_event_samples_ms": 0.07461049780249596
+            }
+          }
+        ],
+        "graph": [
+          {
+            "pair": 0,
+            "repetitions": 128,
+            "host_window_ms": 24.124159,
+            "completed_host_ms_per_call": 0.1884699921875,
+            "device_event_median_ms": 0.0887250006198883,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.0887250006198883
+            }
+          },
+          {
+            "pair": 1,
+            "repetitions": 128,
+            "host_window_ms": 24.441148,
+            "completed_host_ms_per_call": 0.19094646875,
+            "device_event_median_ms": 0.08930600062012672,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.08930600062012672
+            }
+          },
+          {
+            "pair": 2,
+            "repetitions": 128,
+            "host_window_ms": 24.483735,
+            "completed_host_ms_per_call": 0.1912791796875,
+            "device_event_median_ms": 0.08864549919962883,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.08864549919962883
+            }
+          },
+          {
+            "pair": 3,
+            "repetitions": 128,
+            "host_window_ms": 24.868612,
+            "completed_host_ms_per_call": 0.19428603125,
+            "device_event_median_ms": 0.0929655022919178,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.0929655022919178
+            }
+          },
+          {
+            "pair": 4,
+            "repetitions": 128,
+            "host_window_ms": 24.617428,
+            "completed_host_ms_per_call": 0.19232365625,
+            "device_event_median_ms": 0.08552499860525131,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.08552499860525131
+            }
+          },
+          {
+            "pair": 5,
+            "repetitions": 128,
+            "host_window_ms": 23.721922,
+            "completed_host_ms_per_call": 0.185327515625,
+            "device_event_median_ms": 0.08346499875187874,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.08346499875187874
+            }
+          },
+          {
+            "pair": 6,
+            "repetitions": 128,
+            "host_window_ms": 24.791048,
+            "completed_host_ms_per_call": 0.1936800625,
+            "device_event_median_ms": 0.08794699981808662,
+            "event_scope": "whole_sequence",
+            "event_sample_counts": {
+              "device_event_samples_ms": 128,
+              "producer_event_samples_ms": 0,
+              "consumer_event_samples_ms": 0
+            },
+            "member_event_medians_ms": {
+              "device_event_samples_ms": 0.08794699981808662
+            }
+          }
+        ]
+      },
+      "rejected_short_pairs": [],
+      "host_medians_ms": {
+        "direct": 0.2172332734375,
+        "graph": 0.1912791796875
+      },
+      "event_medians_ms": {
+        "direct": 0.10619199648499489,
+        "graph": 0.08864549919962883
+      },
+      "graph_over_direct_host_ratio": 0.8805243168355272,
+      "timing_caveat": "HIP event dispatch intervals; graph whole sequence and direct member sums have distinct scopes"
+    }
+  ],
+  "default_changed": false,
+  "unsupported_profile": null
+}

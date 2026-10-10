@@ -9917,3 +9917,19 @@ this reference-only correction. Existing architecture-owned execution
 envelopes remain unchanged; no new exact-device or timing evidence.
 Generic batching and transpose AD closure remain follow-up required.
 Evidence: benchmarks/baselines/scaled_batch_orientation_20261008/README.md.
+
+
+## Native-owned movement graph replay — 2026-10-08
+
+Owner E2E-REAL-6; sync ROCM-NATIVE-GRAPH-MOVEMENT-20261008.
+The checked ROCm resident owner captures one/two actual compiler kernels and
+retains graph/image/buffer/stream lifetimes through synchronous completion.
+Python owns binding only. 325 host checks pass with seven hardware skips;
+gfx1151 passes 25 owning/guard checks and gfx1201 passes 23, with no owning skips.
+Seven paired timing windows per executed profile use identical images/allocations.
+Paired paged-KV/softmax completed-call ratios are 0.864–0.954 on gfx1151 and
+0.772–0.957 on gfx1201; single movement graphs regress. Direct remains default.
+Graph whole-sequence and direct member event scopes remain distinct.
+Not applicable: CPU movement execution has no HIP graph/module dependency. Existing CPU ABI and caching are unchanged; no new x86 execution claim.
+Evidence: benchmarks/baselines/rocm_native_graph_movement_20261008/README.md.
+Generic scaled-product closure and broader five-slice obligations remain open.

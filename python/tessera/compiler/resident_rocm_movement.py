@@ -87,15 +87,39 @@ class ResidentMovementCall:
             metadata=views(arrays)
             rc=self.lib.tessera_rocm_movement_resident_upload(self.handle,metadata,2)
             if rc:raise RuntimeError(f"native resident upload failed rc={rc}")
-    def execute(self,*,download=True):
+    def capture(self):
+        """Capture the sealed native member sequence on this owner's stream."""
+        self._ready()
+        with self.lock:
+            self._ready()
+            try:
+                fn=self.lib.tessera_rocm_movement_resident_capture
+            except AttributeError as exc:
+                raise RuntimeError("native movement library lacks graph replay support") from exc
+            fn.argtypes=[ct.c_uint64,ct.POINTER(ct.c_uint64)];fn.restype=ct.c_int
+            nodes=ct.c_uint64()
+            rc=fn(self.handle,ct.byref(nodes))
+            if rc:raise RuntimeError(f"native resident capture failed rc={rc}")
+            return nodes.value
+
+    def execute(self,*,download=True,captured=False):
         self._ready()
         if type(download) is not bool:raise TypeError("resident download must be boolean")
+        if type(captured) is not bool:raise TypeError("resident captured execution must be boolean")
         with self.lock:
             self._ready()
             start=time.perf_counter_ns()
             generation=ct.c_uint64();elapsed=ct.c_float()
             consumer_elapsed=ct.c_float()
-            if self.consumer is None:
+            if captured:
+                try:
+                    invoke=self.lib.tessera_rocm_movement_resident_invoke_captured
+                except AttributeError as exc:
+                    raise RuntimeError("native movement library lacks graph replay support") from exc
+                invoke.argtypes=[ct.c_uint64,ct.POINTER(ct.c_uint64),ct.POINTER(ct.c_float)]
+                invoke.restype=ct.c_int
+                rc=invoke(self.handle,ct.byref(generation),ct.byref(elapsed))
+            elif self.consumer is None:
                 rc=self.lib.tessera_rocm_movement_resident_invoke(self.handle,ct.byref(generation),ct.byref(elapsed))
             else:
                 rc=self.lib.tessera_rocm_movement_resident_invoke_softmax(
@@ -109,9 +133,14 @@ class ResidentMovementCall:
             rt._last_profile=rt.RuntimeProfile(launch_overhead_ms=wall,kernel_elapsed_ms=kernel)
             receipt=dict(self.prepared.receipt_fields,native_call_binding="resident_cpp_movement",
                          output=output,elapsed_ms=wall,kernel_elapsed_ms=kernel,
-                         generation=generation.value,residency="native_owned")
+                         generation=generation.value,residency="native_owned",
+                         submission="native_hip_graph" if captured else "native_direct")
+            receipt["device_event_scope"]="whole_sequence" if captured else "individual_members"
             if self.consumer is not None:
                 receipt.update(native_call_binding="resident_cpp_paged_softmax",
+                    consumer_artifact_hash=self.consumer_artifact_hash)
+            if self.consumer is not None and not captured:
+                receipt.update(
                     producer_kernel_elapsed_ms=elapsed.value,
                     consumer_kernel_elapsed_ms=consumer_elapsed.value,
                     consumer_artifact_hash=self.consumer_artifact_hash)

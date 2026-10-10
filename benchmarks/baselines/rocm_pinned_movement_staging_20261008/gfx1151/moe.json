@@ -1,0 +1,115 @@
+{
+  "schema": "tessera.rocm.pinned_moe_staging.v1",
+  "architecture": "gfx1151",
+  "device": {
+    "name": "AMD Radeon(TM) 8060S Graphics",
+    "pci_bus_id": "0000:c5:00.0",
+    "architecture": "gfx1151",
+    "ordinal": 0
+  },
+  "scope": "completed JIT with transfers, compiler forbidden warm; no GPU kernel speedup claim",
+  "source_hashes": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e9a76f3ac03dd6758e699891e501a84488e9fca2b9e44e4fd3dfdc4c83e19ad3",
+    "tests/unit/test_public_movement_frontend.py": "7c7cc0798727451d31cf1c54ec242890c7d5abf6f164fda5beb6304eb100c533",
+    "recorder": "b5d0388a4dc5a954623eefd8b067367136676540dee3eecf3b5960245bd79a63"
+  },
+  "runtime_sha256": "a4b578a24fdada95e4982b76d7341c6b131065bee5aeb856c53344cc1eae4f3e",
+  "cases": [
+    {
+      "profile": "small",
+      "input_shape": [
+        7,
+        13
+      ],
+      "output_shape": [
+        9,
+        13
+      ],
+      "image_digest": "1ade605188c524f97473d2757c730d8b5ab6b3bcb38f769d05bdac3b8e542973",
+      "abi_id": "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          65.295315,
+          69.896771,
+          64.766385,
+          63.857134,
+          63.817931,
+          63.244659,
+          64.029043
+        ],
+        "pinned": [
+          65.03113,
+          66.551156,
+          62.732459,
+          62.627724,
+          63.125492,
+          63.663453,
+          62.92257
+        ]
+      },
+      "repeats": 128,
+      "paired_ratios": [
+        0.995953997618359,
+        0.9521349133567273,
+        0.9685959622418326,
+        0.9807474917367885,
+        0.9891497735957626,
+        1.0066218081751377,
+        0.9827192013474261
+      ],
+      "public_median_ms": {
+        "pageable": 0.5002268984375,
+        "pinned": 0.49316790625
+      },
+      "correctness": "passed_before_and_after_timing"
+    },
+    {
+      "profile": "large",
+      "input_shape": [
+        64,
+        256
+      ],
+      "output_shape": [
+        128,
+        256
+      ],
+      "image_digest": "1ade605188c524f97473d2757c730d8b5ab6b3bcb38f769d05bdac3b8e542973",
+      "abi_id": "tessera.rocm.moe_dispatch.x_token_o_t_s_h.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          155.053203,
+          154.345604,
+          142.020553,
+          156.133159,
+          155.60263,
+          153.85488,
+          154.049576
+        ],
+        "pinned": [
+          58.383618,
+          58.262896,
+          58.443497,
+          58.663558,
+          58.786225,
+          58.088517,
+          59.339312
+        ]
+      },
+      "repeats": 128,
+      "paired_ratios": [
+        0.3765392579474801,
+        0.3774833522307509,
+        0.4115143601785581,
+        0.3757277337865174,
+        0.3777971169253373,
+        0.3775539456402033,
+        0.38519620462960574
+      ],
+      "public_median_ms": {
+        "pageable": 1.20582503125,
+        "pinned": 0.4565898203125
+      },
+      "correctness": "passed_before_and_after_timing"
+    }
+  ]
+}

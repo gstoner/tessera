@@ -25,7 +25,20 @@ struct hipDeviceProp_t {char gcnArchName[256];};
 inline thread_local int device=0;
 inline thread_local uintptr_t context=1;
 inline bool failAllocate=false,failCopy=false,failFree=false,failCompletion=false,failAfterLaunch=false;
-inline std::map<void*,size_t> allocations;
+inline std::map<void*,size_t> allocations,hostAllocations;
+constexpr unsigned hipHostMallocDefault=0;
+inline int hostAllocationsMade=0,failHostAllocateAfter=-1;
+inline bool failHostFree=false;
+inline int hipHostMalloc(void** p,size_t n,unsigned){
+ if(failHostAllocateAfter==0)return 1;
+ if(failHostAllocateAfter>0)--failHostAllocateAfter;
+ *p=std::malloc(n);if(!*p)return 1;
+ hostAllocations[*p]=n;++hostAllocationsMade;return 0;
+}
+inline int hipHostFree(void* p){
+ if(failHostFree)return 1;
+ if(!hostAllocations.erase(p))return 1;std::free(p);return 0;
+}
 inline int leaseCount=0,synchronizations=0,launches=0,copies=0;
 inline bool failConsumer=false;
 inline void (*launchHook)()=nullptr;
@@ -297,6 +310,64 @@ int main(){
  assert(tessera_rocm_movement_resident_invoke_softmax(edge,&generation,&producerMs,&consumerMs)==0);
  assert(tessera_rocm_movement_clear_current()==0&&allocations.empty()&&leaseCount==0);
  assert(tessera_rocm_movement_resident_invoke_softmax(edge,&generation,&producerMs,&consumerMs)==1);
+
+ // Pinned scratch is private and re-copies input/table/output on every call.
+ setenv("TESSERA_ROCM_MOVEMENT_PINNED_STAGING","1",1);
+ assert(paged()==0&&hostAllocations.size()==3&&allocations.size()==3);
+ auto pinnedAllocated=hostAllocationsMade;
+ pages[0]=-17;table[0]=0;
+ assert(paged()==0&&hostAllocationsMade==pinnedAllocated);
+ for(int t=0;t<5;++t)for(int c=0;c<3;++c)
+  assert(out[t*3+c]==pages[(table[(1+t)/2]*2+(1+t)%2)*3+c]);
+ // Changing policy keeps the same device arena and never reads old input bytes.
+ setenv("TESSERA_ROCM_MOVEMENT_PINNED_STAGING","0",1);
+ pages[0]=31;assert(paged()==0&&hostAllocationsMade==pinnedAllocated);
+ assert(tessera_rocm_movement_clear_current()==0&&allocations.empty()&&hostAllocations.empty());
+ setenv("TESSERA_ROCM_MOVEMENT_PINNED_STAGING","1",1);
+ failHostAllocateAfter=1;
+ assert(paged()==4&&hostAllocations.size()==1&&leaseCount==0);
+ failHostAllocateAfter=-1;
+ assert(tessera_rocm_movement_clear_current()==0&&hostAllocations.empty()&&allocations.empty());
+ assert(paged()==0&&hostAllocations.size()==3);
+ failCopy=true;assert(paged()==5&&leaseCount==0);failCopy=false;
+ assert(paged()==0);
+ failAfterLaunch=true;
+ assert(paged()==7&&leaseCount==1&&hostAllocations.size()==3);
+ assert(tessera_rocm_movement_clear_current()==7&&hostAllocations.size()==3);
+ failAfterLaunch=false;failCompletion=false;
+ assert(paged()==10&&leaseCount==1);
+ assert(tessera_rocm_movement_clear_current()==0&&hostAllocations.empty()&&allocations.empty()&&leaseCount==0);
+ assert(paged()==0);
+ failHostFree=true;
+ assert(moe()==9&&hostAllocations.size()==4);
+ assert(paged()==10);
+ assert(tessera_rocm_movement_clear_current()==9&&hostAllocations.size()==4);
+ failHostFree=false;
+ assert(tessera_rocm_movement_clear_current()==0&&hostAllocations.empty()&&allocations.empty());
+ assert(paged()==0);
+ assert(paged("gfx1151",0)==0&&hostAllocations.empty()&&allocations.empty());
+ // Per-context cleanup cannot retire another context's pinned borrow owner.
+ device=1;context=2;assert(paged("gfx1201")==0&&hostAllocations.size()==3);
+ device=0;context=1;assert(paged()==0&&hostAllocations.size()==6);
+ assert(tessera_rocm_movement_clear_current()==0&&hostAllocations.size()==3);
+ device=1;context=2;
+ assert(tessera_rocm_movement_clear_current()==0&&hostAllocations.empty()&&allocations.empty());
+ device=0;context=1;
+ unsetenv("TESSERA_ROCM_MOVEMENT_PINNED_STAGING");
+ // Automatic mode preserves the native pageable route if pinned memory is
+ // unavailable, including a partially allocated host scratch triple.
+ for(int failureAfter: {0,1,2}) {
+  failHostAllocateAfter=failureAfter;
+  assert(paged()==0&&leaseCount==0);
+  for(int t=0;t<5;++t)for(int c=0;c<3;++c)
+   assert(out[t*3+c]==pages[(table[(1+t)/2]*2+(1+t)%2)*3+c]);
+  failHostAllocateAfter=-1;
+  assert(tessera_rocm_movement_clear_current()==0&&hostAllocations.empty()&&allocations.empty());
+ }
+ setenv("TESSERA_ROCM_MOVEMENT_PINNED_STAGING","invalid",1);
+ assert(paged()==1&&hostAllocations.empty()&&allocations.empty());
+ unsetenv("TESSERA_ROCM_MOVEMENT_PINNED_STAGING");
+
  // Math shares the same checked capacity arena without retaining input content.
  float mathA[17],mathB[17],mathOut[17];int64_t mathDims[]={17};
  for(int i=0;i<17;++i){mathA[i]=float(i+1);mathB[i]=float(i+2);}

@@ -16350,3 +16350,34 @@ padded/offset, permuted, Fortran and read-only self-aliasing pages. Follow-up
 required: symbolic extents, other storage dtypes/device-buffer carriers,
 negative/zero-stride semantics, host-cost attribution and coalescing work.
 Broader image families, W8A8 and MXFP4 obligations remain open.
+
+
+## Native pinned movement staging — 2026-10-08
+
+Owner E2E-REAL-6; synchronization ROCM-PINNED-MOVEMENT-STAGING-20261008.
+Native private pinned scratch now accelerates completed host movement calls;
+all borrowed source/index data is recopied, and completed output remains a
+separate caller array. Default is best-effort pinned with native pageable
+fallback after allocation failure. Explicit 0/1 controls select pageable/strict
+pinned behavior. The 128 MiB retained budget counts host and device scratch;
+shared math ownership and process/context cleanup remain checked.
+Graph/Schedule/Tile/Target/LLVM images, descriptor ABI and physical schedules
+are unchanged. Twenty source hashes and sixteen unchanged image digests are
+verified. Seven rotating paired rounds per profile have compiler recovery
+forbidden; public calls and resident kernel events remain separate scopes.
+Native failure/binding gates pass seven host tests, including partial pinned
+allocation fallback and free/completion quarantine. The controlled HIP graph
+fixture now declares the required API surface and refuses graph execution;
+physical graph proof remains architecture-specific.
+Evidence: benchmarks/baselines/rocm_pinned_movement_staging_20261008/README.md.
+Owning gfx1151: 52 movement + 6 mixed-dtype arena cases pass, 4 foreign
+cases skip. Owning gfx1201: 48 + 6 pass, 6 foreign/family cases skip.
+Named pinned/pageable completed-call medians are 0.224–0.390; no GPU kernel
+speedup is claimed. Follow-up required for broader native transfer families,
+symbolic layouts, image keys and W8A8/MXFP4 program closure.
+
+ROCM-PINNED-MOVEMENT-STAGING-20261008 MoE follow-up: existing gfx1151 small/large
+MoE host staging executes with changed-index/value and retained-output proof.
+Small paired completed-call ratio is 0.983 (minor effect); large is 0.378.
+No gfx1201 MoE admission is added. Final host gates pass 445 with 17 hardware/tool
+skips; generated docs and ownership plan checks pass.

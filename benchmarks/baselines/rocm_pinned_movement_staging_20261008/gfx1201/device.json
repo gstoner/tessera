@@ -1,0 +1,510 @@
+{
+  "schema": "tessera.rocm.pinned_staging.v1",
+  "architecture": "gfx1201",
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "pci_bus_id": "0000:03:00.0",
+    "architecture": "gfx1201",
+    "ordinal": 0
+  },
+  "source_hashes": {
+    "python/tessera/compiler/scheduled_paged_kv.py": "f96cb9712c5fb604dc09efbf41802376d327d986f5c50cda3be8867ca0846231",
+    "python/tessera/compiler/graph_ir.py": "c129203ed12603270692451c6a1b0c9f36ed5f03ac19e96acdd848cab229d50d",
+    "python/tessera/compiler/paged_host_span.py": "a93a3545e29809b41392b73bcc34bfd3be63fecfead73f2b079d1cb47d18db68",
+    "python/tessera/compiler/prepared_rocm_movement.py": "30f0efdcdf6d4d00f8e9f1cbecacf799e28632362b31562377c8aef88e9fc258",
+    "python/tessera/compiler/resident_rocm_movement.py": "ec3aa8e605958ea5444de8c41dd1bf7e2fc153d867bce5d5c05f66659edf553d",
+    "python/tessera/compiler/rocm_native.py": "1281eb58e7693e4a94c546b0f3a2668f91f2a46db567b5cfe76dff01e82214d6",
+    "python/tessera/compiler/jit.py": "e7c2b769ef6410a05c31470f0ff2dd187fb4c20e2c4d354f5832a5059990a6e6",
+    "python/tessera/runtime.py": "95e6172d80267c6d4460f92bb037426a3ac6617d921e8581bf360f74536a79d0",
+    "src/compiler/programming_model/lib/NativePagedKV.h": "57b158ce0dff9837d1a7dd14364aa95260614acb26086f3e1b3c09be10cb9817",
+    "src/compiler/ir/TileOps.cpp": "ac8708e4b4e70a1c5b4db88fd436a46d996bf2b6de856d8d0b6dcab0c4e25571",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "9e0ce22bc4cf63537f2155ad33741a72a2f102213be8d19570c539be8c59aa27",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "bdd91663848559a5b8779b5c8e463ce42bead9999a018c9fa9260e884723b058",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "6f9352d1a32bed930de105c7bab11fe66b58e0a0bce78bbc6fc9d07796f8ed83",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp": "3d03098a4c95f2c3f863b57e180512482cab95eaadecbbcefb01583c61f0bf92",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/MovementPhysicalSpan.h": "6516084ee88c87f5d3280ece25e0abd2b2f3b8d29f01945fef982d0186120080",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e9a76f3ac03dd6758e699891e501a84488e9fca2b9e44e4fd3dfdc4c83e19ad3",
+    "benchmarks/rocm/benchmark_strided_paged_kv.py": "b3717813c3bad3d46539c07eb36fe15f3869b510194d78c5802923b47211e8f5",
+    "benchmarks/rocm/benchmark_pinned_staging.py": "3bbb0710dcbbd6a9ff9f866b16344faceba3b9dc45e8dbdc46d2814903470fca",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "e77d9e19742f78da1f05cb23f766032827bd51b58b60f178161c7139698ef425",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "a4d5618c9c664027fc856822ff9999d52b7409afd01a8dce2c210ef2a5b49f46"
+  },
+  "compiler_sha256": "2d40aa3e23704fa92a087a672728f66fbbc3c97177cdeb4286757f78937c29b4",
+  "target_compiler_sha256": "40b90a1277505c4e340ce7e202f2736f7a3b92f3ae5a9366a82eb408c4c56790",
+  "runtime_sha256": "5c269011bad2681c8fcbf6a8c96bb353e7817f86131a9630112b4f1ff805c049",
+  "candidate_source": ".transfer/native_movement_pinned.cpp",
+  "rounds": 7,
+  "repeats": 128,
+  "comparison": "same candidate runtime, compiler images and device arenas; pageable vs pinned native-owned staging",
+  "public_scope": "completed public JIT including transfers, excluding compilation",
+  "event_scope": "one resident kernel excluding host transfers; diagnostic scope separate from public calls",
+  "default_staging_policy": "best_effort_pinned",
+  "compiler_route_changed": false,
+  "physical_schedule_promotion": false,
+  "cases": [
+    {
+      "profile": "small",
+      "layout": "compact",
+      "shape": [
+        4,
+        256,
+        3,
+        8
+      ],
+      "image_digest": "8a57d7404c8e863c7e9096856d9d19b4549aac6a445e6dc54bc6dccb9895a5fd",
+      "image_cache_key": "1d927e6b9448d2dfe279ce59e8c4bba1591705535167d0d6eb0ee259ab990c2a",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          317.811027,
+          320.611126,
+          315.343397,
+          307.122331,
+          319.781638,
+          321.999518,
+          309.368478
+        ],
+        "pinned": [
+          73.471605,
+          66.120765,
+          68.016762,
+          63.666575,
+          74.091636,
+          72.005572,
+          69.678047
+        ]
+      },
+      "device_event_ms": [
+        0.01655999943614006,
+        0.01152000017464161,
+        0.010599999688565731,
+        0.01155999954789877,
+        0.010479999706149101,
+        0.011719999834895134,
+        0.010400000028312206
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.4828986484375,
+        "pinned": 0.5443597421875
+      },
+      "paired_pinned_over_pageable": [
+        0.23118016292115626,
+        0.2062335322698689,
+        0.21569109309747178,
+        0.2073003769953804,
+        0.2316944664596408,
+        0.22362012355558866,
+        0.2252267181532309
+      ],
+      "paired_ratio_median": 0.22362012355558866,
+      "device_event_median_ms": 0.01152000017464161
+    },
+    {
+      "profile": "small",
+      "layout": "padded",
+      "shape": [
+        4,
+        256,
+        3,
+        8
+      ],
+      "image_digest": "ead4bdf3bbf6a4a93578e3b6664e15b014ca0c2493bbb550874ec40562bc749b",
+      "image_cache_key": "26783965d8baf337e12aecd6d7a7096bef839d9dd9c1fc7ee8950e1039f8b67c",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims_strides.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          325.8856,
+          340.633992,
+          320.936625,
+          321.669659,
+          316.365872,
+          336.318402,
+          326.514247
+        ],
+        "pinned": [
+          87.747011,
+          85.82518,
+          85.388768,
+          85.432723,
+          85.626703,
+          85.920144,
+          83.67605
+        ]
+      },
+      "device_event_ms": [
+        0.012880000285804272,
+        0.012640000320971012,
+        0.011760000139474869,
+        0.012559999711811543,
+        0.012040000408887863,
+        0.012520000338554382,
+        0.011880000121891499
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.54598125,
+        "pinned": 0.6689586171875
+      },
+      "paired_pinned_over_pageable": [
+        0.2692570981964223,
+        0.2519571798929568,
+        0.26606115148123094,
+        0.265591486824065,
+        0.2706572060339049,
+        0.25547262204225146,
+        0.25627074704645275
+      ],
+      "paired_ratio_median": 0.265591486824065,
+      "device_event_median_ms": 0.012520000338554382
+    },
+    {
+      "profile": "small",
+      "layout": "permuted",
+      "shape": [
+        4,
+        256,
+        3,
+        8
+      ],
+      "image_digest": "ead4bdf3bbf6a4a93578e3b6664e15b014ca0c2493bbb550874ec40562bc749b",
+      "image_cache_key": "26783965d8baf337e12aecd6d7a7096bef839d9dd9c1fc7ee8950e1039f8b67c",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims_strides.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          332.330764,
+          334.71082,
+          334.436427,
+          329.578501,
+          331.950019,
+          337.900979,
+          324.212648
+        ],
+        "pinned": [
+          85.662169,
+          86.937563,
+          85.574894,
+          84.03888,
+          85.690982,
+          86.050519,
+          82.958571
+        ]
+      },
+      "device_event_ms": [
+        0.012040000408887863,
+        0.012280000373721123,
+        0.01155999954789877,
+        0.012199999764561653,
+        0.011359999887645245,
+        0.012079999782145023,
+        0.011359999887645245
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.59633409375,
+        "pinned": 0.6692356953125
+      },
+      "paired_pinned_over_pageable": [
+        0.2577617791652897,
+        0.25973932662230637,
+        0.2558779100938069,
+        0.2549889624020106,
+        0.2581442298396133,
+        0.2546619404733953,
+        0.2558770347540544
+      ],
+      "paired_ratio_median": 0.2558779100938069,
+      "device_event_median_ms": 0.012040000408887863
+    },
+    {
+      "profile": "small",
+      "layout": "fortran",
+      "shape": [
+        4,
+        256,
+        3,
+        8
+      ],
+      "image_digest": "ead4bdf3bbf6a4a93578e3b6664e15b014ca0c2493bbb550874ec40562bc749b",
+      "image_cache_key": "26783965d8baf337e12aecd6d7a7096bef839d9dd9c1fc7ee8950e1039f8b67c",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims_strides.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          329.331473,
+          334.73746,
+          337.093925,
+          305.946176,
+          322.930022,
+          324.535602,
+          329.082887
+        ],
+        "pinned": [
+          85.068246,
+          82.387023,
+          86.897707,
+          84.075996,
+          85.381797,
+          86.043181,
+          80.849153
+        ]
+      },
+      "device_event_ms": [
+        0.012120000086724758,
+        0.012559999711811543,
+        0.01128000020980835,
+        0.012400000356137753,
+        0.01143999956548214,
+        0.012319999746978283,
+        0.011479999870061874
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.5709600546875,
+        "pinned": 0.664595671875
+      },
+      "paired_pinned_over_pageable": [
+        0.2583058498025787,
+        0.24612429992149668,
+        0.2577848503202779,
+        0.274806494067767,
+        0.2643972104891505,
+        0.2651270938218976,
+        0.24568021065161008
+      ],
+      "paired_ratio_median": 0.2583058498025787,
+      "device_event_median_ms": 0.012120000086724758
+    },
+    {
+      "profile": "large",
+      "layout": "compact",
+      "shape": [
+        32,
+        16,
+        8,
+        128
+      ],
+      "image_digest": "8a57d7404c8e863c7e9096856d9d19b4549aac6a445e6dc54bc6dccb9895a5fd",
+      "image_cache_key": "1d927e6b9448d2dfe279ce59e8c4bba1591705535167d0d6eb0ee259ab990c2a",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          347.623259,
+          344.55113,
+          333.969216,
+          333.74598,
+          319.855153,
+          339.036525,
+          333.584395
+        ],
+        "pinned": [
+          118.156476,
+          106.482285,
+          113.272707,
+          103.819797,
+          116.816589,
+          119.140489,
+          112.975828
+        ]
+      },
+      "device_event_ms": [
+        0.026399999856948853,
+        0.025359999388456345,
+        0.025599999353289604,
+        0.026040000841021538,
+        0.026119999587535858,
+        0.024720000103116035,
+        0.025439999997615814
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.6091345,
+        "pinned": 0.8849430234375
+      },
+      "paired_pinned_over_pageable": [
+        0.33989807339099826,
+        0.30904639610382356,
+        0.3391711019257535,
+        0.31107429968145234,
+        0.3652171550289202,
+        0.35140900821821486,
+        0.3386724010276321
+      ],
+      "paired_ratio_median": 0.3391711019257535,
+      "device_event_median_ms": 0.025599999353289604
+    },
+    {
+      "profile": "large",
+      "layout": "padded",
+      "shape": [
+        32,
+        16,
+        8,
+        128
+      ],
+      "image_digest": "ead4bdf3bbf6a4a93578e3b6664e15b014ca0c2493bbb550874ec40562bc749b",
+      "image_cache_key": "26783965d8baf337e12aecd6d7a7096bef839d9dd9c1fc7ee8950e1039f8b67c",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims_strides.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          375.016877,
+          362.311047,
+          338.921382,
+          366.720829,
+          374.699534,
+          334.478372,
+          341.382351
+        ],
+        "pinned": [
+          144.333177,
+          141.327231,
+          139.452946,
+          141.641751,
+          145.080783,
+          132.037032,
+          142.237561
+        ]
+      },
+      "device_event_ms": [
+        0.03508000075817108,
+        0.0342399999499321,
+        0.03415999934077263,
+        0.0342399999499321,
+        0.034359999001026154,
+        0.034359999001026154,
+        0.034279998391866684
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.8305550546875,
+        "pinned": 1.1065761796875
+      },
+      "paired_pinned_over_pageable": [
+        0.3848711507455703,
+        0.3900715481082199,
+        0.41146104496882996,
+        0.3862386311304941,
+        0.3871923230094009,
+        0.3947550665547966,
+        0.41665177061247666
+      ],
+      "paired_ratio_median": 0.3900715481082199,
+      "device_event_median_ms": 0.034279998391866684
+    },
+    {
+      "profile": "large",
+      "layout": "permuted",
+      "shape": [
+        32,
+        16,
+        8,
+        128
+      ],
+      "image_digest": "ead4bdf3bbf6a4a93578e3b6664e15b014ca0c2493bbb550874ec40562bc749b",
+      "image_cache_key": "26783965d8baf337e12aecd6d7a7096bef839d9dd9c1fc7ee8950e1039f8b67c",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims_strides.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          374.189809,
+          351.244908,
+          333.511342,
+          349.757938,
+          357.189474,
+          341.934735,
+          363.399552
+        ],
+        "pinned": [
+          121.667979,
+          130.047114,
+          116.973948,
+          130.787218,
+          132.845374,
+          132.028216,
+          117.363119
+        ]
+      },
+      "device_event_ms": [
+        0.04887999966740608,
+        0.07756000012159348,
+        0.04851999878883362,
+        0.0626399964094162,
+        0.07503999769687653,
+        0.07816000282764435,
+        0.060759998857975006
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.74410084375,
+        "pinned": 1.015993078125
+      },
+      "paired_pinned_over_pageable": [
+        0.32515043454857956,
+        0.37024626133512517,
+        0.3507345426351347,
+        0.3739363822530312,
+        0.3719185017193423,
+        0.3861210999812581,
+        0.3229588984193354
+      ],
+      "paired_ratio_median": 0.37024626133512517,
+      "device_event_median_ms": 0.0626399964094162
+    },
+    {
+      "profile": "large",
+      "layout": "fortran",
+      "shape": [
+        32,
+        16,
+        8,
+        128
+      ],
+      "image_digest": "ead4bdf3bbf6a4a93578e3b6664e15b014ca0c2493bbb550874ec40562bc749b",
+      "image_cache_key": "26783965d8baf337e12aecd6d7a7096bef839d9dd9c1fc7ee8950e1039f8b67c",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims_strides.f32_i32.v1",
+      "public_window_ms": {
+        "pageable": [
+          360.933082,
+          359.841256,
+          330.458979,
+          335.941022,
+          364.19647,
+          332.211938,
+          346.444307
+        ],
+        "pinned": [
+          132.372968,
+          131.218219,
+          129.53136,
+          118.027634,
+          132.08354,
+          131.151012,
+          128.73862
+        ]
+      },
+      "device_event_ms": [
+        0.038359999656677246,
+        0.03612000122666359,
+        0.03791999816894531,
+        0.03587999939918518,
+        0.0376800000667572,
+        0.03784000128507614,
+        0.03784000128507614
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "public_median_ms": {
+        "pageable": 2.7065961484375,
+        "pinned": 1.02461728125
+      },
+      "paired_pinned_over_pageable": [
+        0.3667521061424898,
+        0.3646558498006132,
+        0.3919740973356938,
+        0.35133438987989984,
+        0.36267111540098124,
+        0.39478115322875607,
+        0.3715997561478186
+      ],
+      "paired_ratio_median": 0.3667521061424898,
+      "device_event_median_ms": 0.03784000128507614
+    }
+  ]
+}

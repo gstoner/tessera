@@ -33,6 +33,7 @@ func.func @symdim_transpose_ok(%x: tensor<2x4x64xf32>) -> tensor<4x2x64xf32>
                             B = 2 : i64, T = 4 : i64 }
     } {
   %y = "tessera.transpose"(%x) {
+    permutation = array<i64: 1, 0, 2>,
     tessera.dim_names_in = ["B", "T", "D"],
     tessera.dim_names_out = ["T", "B", "D"]
   } : (tensor<2x4x64xf32>) -> tensor<4x2x64xf32>

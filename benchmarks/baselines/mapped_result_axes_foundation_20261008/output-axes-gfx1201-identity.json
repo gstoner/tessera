@@ -1,0 +1,28 @@
+{
+  "architecture": "gfx1201",
+  "gpu_lines": [
+    "Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor",
+    "Name:                    gfx1201",
+    "Marketing Name:          AMD Radeon RX 9070 XT",
+    "Name:                    amdgcn-amd-amdhsa--gfx1201"
+  ],
+  "source_sha256": {
+    "python/tessera/compiler/graph_ir.py": "bc2575717ee82cff344864c76e9dde72993f377f2594908b398d7aeacd770ebb",
+    "python/tessera/compiler/trace.py": "cde3d94324dadc4d2961a91c9e17350637a3c4bb09810e8e4908a1c17b734b6f",
+    "src/compiler/ir/TesseraOps.cpp": "92cf4b790fff9bf646f3d3037f642ab2380031a1880503420b89ecdc824972d6",
+    "src/compiler/ir/TesseraOps.td": "b4e792234d2b0e469ca968475cdbc6303885a4a424fa9f63175e4d7ce95ba504",
+    "src/compiler/ir/include/Tessera/IR/TransposeUtils.h": "c74c1198dedb2830d7c908e008f9ec3d583fd6fcb827ecbeb9ee8b2e505061ad",
+    "src/compiler/ir/LinearTransposeInterface.cpp": "4942f5464f888b4233ac4d20509be3345eae6e690c2f6aa1c6879ba586c56f4b",
+    "src/transforms/lib/TesseraToLinalgPass.cpp": "d1883eaff79df07ab7801c96ebbd4c954e147f64c874ca2730ba9e635f0f96a4",
+    "src/transforms/lib/SymbolicDimEqualityPass.cpp": "c901f7294e8f7748fc6edab927f4241a54687786f76deebe2917bb5369d33fe5",
+    "src/compiler/diagnostics/ShapeInferencePass.cpp": "bb67e55b49f4606e94988dad3a13c3936653e6cdb3c38331e4b64c4a8e7fac15",
+    "python/tessera/compiler/diagnostic_codes.py": "3d1c2fc5f5955d28eabb56e6188df1f096ae95e3a12e3364594e12165115a18c",
+    "tests/tessera-ir/phase2/sprint_v5_symdim_equality.mlir": "64459ee71ac6ca1d899be451d617af369818543dcbfdbf06d08fd185c5ade4db",
+    "tests/unit/test_graph_transpose_axis_contract.py": "6cfd0ee4cee268482438eb7b70a76863df46d29eb453344458006d2a241e34b0",
+    "benchmarks/compiler/benchmark_native_transpose_axes.py": "e81f9b67e93c70455f42e4722f87b611f5b6239bfe8c8c05adacd34c574c60f6"
+  },
+  "compiler_sha256": "353d6d396b47ba84f4071968bc84b8d8e14b64a02669fb40722f47039d67c595",
+  "rocm_compiler_sha256": "9905cf2a953879123803340b8a24d833c1fcc2e102d7bc2d49c4b6a00140492c",
+  "test_command": "pytest -q tests/device/rocm/test_scaled_map_axes.py",
+  "scope": "24 existing scaled primal/JVP/VJP cases; not native mapped-output permutation execution"
+}

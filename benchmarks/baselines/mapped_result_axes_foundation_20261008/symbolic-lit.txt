@@ -1,0 +1,10 @@
+module {
+  func.func @symdim_transpose_ok(%arg0: tensor<2x4x64xf32>) -> tensor<4x2x64xf32> attributes {tessera.dim_bindings = ["D = H * Dh"], tessera.dim_sizes = {B = 2 : i64, D = 64 : i64, Dh = 16 : i64, H = 4 : i64, T = 4 : i64}} {
+    %0 = tessera.transpose %arg0 {permutation = array<i64: 1, 0, 2>, tessera.dim_names_in = ["B", "T", "D"], tessera.dim_names_out = ["T", "B", "D"]} : (tensor<2x4x64xf32>) -> tensor<4x2x64xf32>
+    return %0 : tensor<4x2x64xf32>
+  }
+}
+
+// -----
+// -----
+// -----

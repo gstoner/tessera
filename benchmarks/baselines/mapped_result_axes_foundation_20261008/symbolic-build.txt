@@ -1,0 +1,4 @@
+[1/4] Building CXX object src/transforms/lib/CMakeFiles/TesseraPasses.dir/SymbolicDimEqualityPass.cpp.o
+[2/4] Linking CXX static library src/transforms/lib/libTesseraPasses.a
+[3/4] Linking CXX executable src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt
+[4/4] Linking CXX executable tools/tessera-opt/tessera-opt

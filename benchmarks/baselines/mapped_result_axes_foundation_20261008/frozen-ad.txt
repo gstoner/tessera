@@ -1,0 +1,24 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+__________________ test_reverse_ad_uses_inverse_declared_axes __________________
+tests/unit/test_graph_transpose_axis_contract.py:105: in test_reverse_ad_uses_inverse_declared_axes
+    assert "permutation = array<i64: 1, 2, 0>" in compiled.stdout
+E   assert 'permutation = array<i64: 1, 2, 0>' in 'module {\n  func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<5x2x3xf32> attributes {tessera.autodiff = "reverse", ...%1 = tessera.transpose %arg1 : (tensor<5x2x3xf32>) -> tensor<2x3x5xf32>\n    return %1 : tensor<2x3x5xf32>\n  }\n}\n\n'
+E    +  where 'module {\n  func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<5x2x3xf32> attributes {tessera.autodiff = "reverse", ...%1 = tessera.transpose %arg1 : (tensor<5x2x3xf32>) -> tensor<2x3x5xf32>\n    return %1 : tensor<2x3x5xf32>\n  }\n}\n\n' = CompletedProcess(args=['/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt', '....transpose %arg1 : (tensor<5x2x3xf32>) -> tensor<2x3x5xf32>\n    return %1 : tensor<2x3x5xf32>\n  }\n}\n\n', stderr='').stdout
+____________________ test_forward_ad_retains_declared_axes _____________________
+tests/unit/test_graph_transpose_axis_contract.py:117: in test_forward_ad_retains_declared_axes
+    assert "tessera.transpose" not in lowered.stdout
+E   AssertionError: assert 'tessera.transpose' not in 'module {\n ...\n  }\n}\n\n'
+E     
+E     'tessera.transpose' is contained here:
+E       
+E           %0 = tessera.transpose %arg0 {permutation = array<i64: 2, 0, 1>} : (tensor<2x3x5xf32>) -> tensor<5x2x3xf32>
+E     ?          +++++++++++++++++
+E           return %0 : tensor<5x2x3xf32>
+E         }...
+E     
+E     ...Full output truncated (7 lines hidden), use '-vv' to show
+=========================== short test summary info ============================
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_reverse_ad_uses_inverse_declared_axes
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_forward_ad_retains_declared_axes
+2 failed, 23 deselected in 0.32s

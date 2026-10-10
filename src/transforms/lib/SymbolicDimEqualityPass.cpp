@@ -16,7 +16,7 @@
 //      `tessera.transpose`, or `tessera.matmul` ops carry dim-name
 //      attributes the pass checks the local contract:
 //
-//        transpose : in_dim_names ↔ out_dim_names must be a permutation
+//        transpose : out_dim_names must follow the declared axis permutation
 //                    (`SYMDIM_TRANSPOSE_VIOLATION` on mismatch).
 //
 //        reshape   : product of in_dim_names sizes (resolved via
@@ -54,6 +54,7 @@
 //   SYMDIM_DIM_SIZES_MALFORMED
 
 #include "Tessera/Transforms/Passes.h"
+#include "Tessera/IR/TransposeUtils.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/Dialect/SCF/IR/SCF.h"
 #include "mlir/Analysis/Presburger/IntegerRelation.h"
@@ -568,16 +569,19 @@ struct SymbolicDimEquality
           << out->size();
       return failure();
     }
-    // Multiset equality via sorting copies.
-    SmallVector<std::string> a(in->begin(), in->end());
-    SmallVector<std::string> b(out->begin(), out->end());
-    std::sort(a.begin(), a.end());
-    std::sort(b.begin(), b.end());
-    if (a != b) {
-      op->emitOpError(
-          "SYMDIM_TRANSPOSE_VIOLATION: dim_names_in and "
-          "dim_names_out are not a permutation");
+    auto axes = tessera::transposePermutation(op);
+    // Unranked tensors have no axis proof. Leave their annotations unproved;
+    // do not infer positional facts from a multiset of symbolic names.
+    if (!axes) return success();
+    if (in->size() != axes->size()) {
+      op->emitOpError("SYMDIM_TRANSPOSE_VIOLATION: dim-name count does not match tensor rank");
       return failure();
+    }
+    for (size_t i = 0; i < axes->size(); ++i) {
+      if ((*out)[i] != (*in)[(*axes)[i]]) {
+        op->emitOpError("SYMDIM_TRANSPOSE_VIOLATION: dim_names_out does not follow the declared axis permutation");
+        return failure();
+      }
     }
     return success();
   }
@@ -653,9 +657,8 @@ struct SymbolicDimEquality
   //                                explicit per-op annotation.
   //
   // Propagation rules (V2 minimal):
-  //   transpose: out_names = in_names (multiset preserved; positional
-  //              info isn't tracked in V2 since the op carries no
-  //              `perm` attribute).
+  //   transpose: out_names follow the verified canonical axis permutation;
+  //              unranked tensors stop propagation without an axis proof.
   //   matmul:    out_names = lhs_names[:-1] + rhs_names[-1:]
   //              (canonical matmul shape; transposeA/B not handled
   //              in V2 — those declare it via explicit per-op attrs).
@@ -780,8 +783,17 @@ struct SymbolicDimEquality
       DimNameList inputNames = it->second;
       if (mlir::failed(crossCheck(op, "tessera.dim_names_in", inputNames)))
         failed = true;
-      auto declared = readDimNames(op, "tessera.dim_names_out");
-      valueDims[op->getResult(0)] = declared ? *declared : inputNames;
+      auto axes = tessera::transposePermutation(op);
+      if (!axes) return failed;
+      if (inputNames.size() != axes->size()) {
+        op->emitOpError("SYMDIM_TRANSPOSE_VIOLATION: dim-name count does not match tensor rank");
+        return true;
+      }
+      DimNameList outputNames;
+      for (int64_t axis : *axes) outputNames.push_back(inputNames[axis]);
+      if (mlir::failed(crossCheck(op, "tessera.dim_names_out", outputNames)))
+        failed = true;
+      valueDims[op->getResult(0)] = std::move(outputNames);
 
     } else if (name == "tessera.matmul") {
       if (op->getNumOperands() < 2 || op->getNumResults() < 1) return false;

@@ -1,0 +1,91 @@
+FFF                                                                      [100%]
+=================================== FAILURES ===================================
+_ test_native_shape_inference_uses_the_verified_axis_contract[2x3x5xf32-5x2x3xf32-permutation = array<i64: 2, 0, 1>-expected0] _
+
+opt = '/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'
+source_type = '2x3x5xf32', result_type = '5x2x3xf32'
+attrs = 'permutation = array<i64: 2, 0, 1>', expected = [5, 2, 3]
+
+    @pytest.mark.parametrize(("source_type", "result_type", "attrs", "expected"), [
+        ("2x3x5xf32", "5x2x3xf32", "permutation = array<i64: 2, 0, 1>", [5, 2, 3]),
+        ("2x3x5xf32", "5x3x2xf32", "", [5, 3, 2]),
+        ("2x3x4x5xf32", "3x5x2x4xf32", "permutation = array<i64: 1, 3, 0, 2>", [3, 5, 2, 4]),
+    ])
+    def test_native_shape_inference_uses_the_verified_axis_contract(opt, source_type, result_type, attrs, expected):
+        import re
+        compiled = invoke(opt, module(source_type, result_type, attrs), "--tessera-shape-inference")
+        assert compiled.returncode == 0, compiled.stderr
+        shape = re.search(r"tessera.inferred_shape = \[([^\]]*)\]", compiled.stdout)
+>       assert shape is not None, compiled.stdout
+E       AssertionError: module {
+E           func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<5x2x3xf32> {
+E             %0 = tessera.transpose %arg0 {permutation = array<i64: 2, 0, 1>} : (tensor<2x3x5xf32>) -> tensor<5x2x3xf32>
+E             return %0 : tensor<5x2x3xf32>
+E           }
+E         }
+E         
+E         
+E       assert None is not None
+
+tests/unit/test_graph_transpose_axis_contract.py:315: AssertionError
+_ test_native_shape_inference_uses_the_verified_axis_contract[2x3x5xf32-5x3x2xf32--expected1] _
+
+opt = '/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'
+source_type = '2x3x5xf32', result_type = '5x3x2xf32', attrs = ''
+expected = [5, 3, 2]
+
+    @pytest.mark.parametrize(("source_type", "result_type", "attrs", "expected"), [
+        ("2x3x5xf32", "5x2x3xf32", "permutation = array<i64: 2, 0, 1>", [5, 2, 3]),
+        ("2x3x5xf32", "5x3x2xf32", "", [5, 3, 2]),
+        ("2x3x4x5xf32", "3x5x2x4xf32", "permutation = array<i64: 1, 3, 0, 2>", [3, 5, 2, 4]),
+    ])
+    def test_native_shape_inference_uses_the_verified_axis_contract(opt, source_type, result_type, attrs, expected):
+        import re
+        compiled = invoke(opt, module(source_type, result_type, attrs), "--tessera-shape-inference")
+        assert compiled.returncode == 0, compiled.stderr
+        shape = re.search(r"tessera.inferred_shape = \[([^\]]*)\]", compiled.stdout)
+>       assert shape is not None, compiled.stdout
+E       AssertionError: module {
+E           func.func @axis(%arg0: tensor<2x3x5xf32>) -> tensor<5x3x2xf32> {
+E             %0 = tessera.transpose %arg0 : (tensor<2x3x5xf32>) -> tensor<5x3x2xf32>
+E             return %0 : tensor<5x3x2xf32>
+E           }
+E         }
+E         
+E         
+E       assert None is not None
+
+tests/unit/test_graph_transpose_axis_contract.py:315: AssertionError
+_ test_native_shape_inference_uses_the_verified_axis_contract[2x3x4x5xf32-3x5x2x4xf32-permutation = array<i64: 1, 3, 0, 2>-expected2] _
+
+opt = '/home/angstorms/scratch/rocm-strided-paged-kv/.build-strided/tools/tessera-opt/tessera-opt'
+source_type = '2x3x4x5xf32', result_type = '3x5x2x4xf32'
+attrs = 'permutation = array<i64: 1, 3, 0, 2>', expected = [3, 5, 2, 4]
+
+    @pytest.mark.parametrize(("source_type", "result_type", "attrs", "expected"), [
+        ("2x3x5xf32", "5x2x3xf32", "permutation = array<i64: 2, 0, 1>", [5, 2, 3]),
+        ("2x3x5xf32", "5x3x2xf32", "", [5, 3, 2]),
+        ("2x3x4x5xf32", "3x5x2x4xf32", "permutation = array<i64: 1, 3, 0, 2>", [3, 5, 2, 4]),
+    ])
+    def test_native_shape_inference_uses_the_verified_axis_contract(opt, source_type, result_type, attrs, expected):
+        import re
+        compiled = invoke(opt, module(source_type, result_type, attrs), "--tessera-shape-inference")
+        assert compiled.returncode == 0, compiled.stderr
+        shape = re.search(r"tessera.inferred_shape = \[([^\]]*)\]", compiled.stdout)
+>       assert shape is not None, compiled.stdout
+E       AssertionError: module {
+E           func.func @axis(%arg0: tensor<2x3x4x5xf32>) -> tensor<3x5x2x4xf32> {
+E             %0 = tessera.transpose %arg0 {permutation = array<i64: 1, 3, 0, 2>} : (tensor<2x3x4x5xf32>) -> tensor<3x5x2x4xf32>
+E             return %0 : tensor<3x5x2x4xf32>
+E           }
+E         }
+E         
+E         
+E       assert None is not None
+
+tests/unit/test_graph_transpose_axis_contract.py:315: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_native_shape_inference_uses_the_verified_axis_contract[2x3x5xf32-5x2x3xf32-permutation = array<i64: 2, 0, 1>-expected0]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_native_shape_inference_uses_the_verified_axis_contract[2x3x5xf32-5x3x2xf32--expected1]
+FAILED tests/unit/test_graph_transpose_axis_contract.py::test_native_shape_inference_uses_the_verified_axis_contract[2x3x4x5xf32-3x5x2x4xf32-permutation = array<i64: 1, 3, 0, 2>-expected2]
+3 failed, 50 deselected in 0.48s

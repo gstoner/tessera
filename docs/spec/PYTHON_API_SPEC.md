@@ -1501,7 +1501,7 @@ uses the clipped weight as a detached multiplier on the log-prob objective.
 | `cispo_policy_loss(logp_new, logp_old, rewards=None, advantages=None, ...)` | `(array,array,optional array) → scalar/array` | `pure` | CISPO loss; clips importance-sampling weights directly and detaches the clipped weight from the log-prob gradient |
 | `rmsnorm(x, eps=1e-5)` | `(array) → array` | `pure` | NumPy RMSNorm reference |
 | `rmsnorm_safe(x, eps=1e-6)` | `(array) → array` | `pure` | NumPy RMSNorm reference with safer default epsilon |
-| `transpose(x, axes=None)` | `(array) → array` | `pure` | `np.transpose(x, axes)` |
+| `transpose(x, axes=None)` | `(array) → array` | `pure` | `np.transpose(x, axes)`. Explicit axes, including negative aliases, normalize to a canonical Graph permutation; absent axes reverse all dimensions. |
 | `cast(x, dtype)` | `(array, str) → array` | `pure` | `x.astype(dtype)` |
 | `arange(start, stop=None, step=1, dtype="fp32")` | `(...) → 1-D array` | `pure` | Theme 9 — `numpy.arange` over `[start, stop)`. Single-arg form starts at 0 |
 | `gather(x, indices, axis=0)` | `(array, int-array) → array` | `pure` | Theme 9 — `numpy.take(x, indices, axis=axis)`. VJP scatters via `np.add.at` (correct under repeated indices) |

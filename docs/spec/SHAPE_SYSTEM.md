@@ -472,6 +472,10 @@ items:**
    symbol → i64), validates each equation when both sides are
    bound, and walks `tessera.reshape` / `tessera.transpose` /
    `tessera.matmul` ops checking the per-op dim-name contract.
+   Ranked transpose names follow the exact canonical axis permutation (or
+   full reversal by default), including SSA propagation through unannotated
+   transpose operations. Equal-sized dimensions do not relax this constraint;
+   unranked tensors do not gain a positional proof.
    Four stable diagnostic codes: `SYMDIM_BINDING_VIOLATION`,
    `SYMDIM_RESHAPE_VIOLATION`, `SYMDIM_TRANSPOSE_VIOLATION`,
    `SYMDIM_MATMUL_CONTRACT_VIOLATION`.

@@ -1,0 +1,11 @@
+{
+  "head_revision": "e8d5d145fb2e253ca29949f1e03be28767fba681",
+  "run_id": 37837797842,
+  "job_id": 113519437685,
+  "conclusion": "success",
+  "passed": 345,
+  "skipped": 0,
+  "execution_gate": "every selected proof test executed",
+  "log_sha256": "ccd64c1ea15e0c6f565c929aaa71a8aa50190af71d2f7af5f633dc01cb8a2254",
+  "device_execution_claim": false
+}

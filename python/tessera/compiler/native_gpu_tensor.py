@@ -29,6 +29,31 @@ class IndexSpec:
     maximum: int = (1 << 31) - 1
 
 
+@dataclass(frozen=True)
+class GridProduct:
+    """Checked native row-grid expression over declared scalar ABI extents."""
+    factors: tuple[int | str, ...]
+
+
+def geometry_json(geometry):
+    return [dict(product=list(d.factors)) if isinstance(d, GridProduct) else d
+            for d in geometry]
+
+
+def geometry_from_json(geometry, *, schema):
+    if not isinstance(geometry, list) or len(geometry) != 3:
+        raise ValueError('native launch geometry requires three dimensions')
+    out = []
+    for dim in geometry:
+        if isinstance(dim, dict):
+            if schema != 2 or set(dim) != {'product'} or not isinstance(dim['product'], list):
+                raise ValueError('unsupported native grid expression')
+            out.append(GridProduct(tuple(dim['product'])))
+        else:
+            out.append(dim)
+    return tuple(out)
+
+
 def validate_tensor_signature(abi, signature, specs, grid, block):
     if len(specs) != len(abi) or len({s.name for s in specs}) != len(specs):
         raise ValueError('native tensor ABI argument count or names disagree')
@@ -47,9 +72,27 @@ def validate_tensor_signature(abi, signature, specs, grid, block):
             raise ValueError('invalid native index bounds')
     if len(grid) != 3 or len(block) != 3:
         raise ValueError('native launch geometry requires three dimensions')
-    for dim in grid + block:
-        if not ((type(dim) is int and dim > 0) or (isinstance(dim, str) and dim in names)):
+    bounds = {s.name: s for s in specs if isinstance(s, IndexSpec)}
+    for axis, dim in enumerate(grid):
+        if isinstance(dim, GridProduct):
+            if type(dim.factors) is not tuple or len(dim.factors) < 2:
+                raise ValueError('native grid product requires at least two factors')
+            maximum = 1
+            for factor in dim.factors:
+                if type(factor) is int and factor > 0:
+                    upper = factor
+                elif isinstance(factor, str) and factor in bounds and bounds[factor].minimum > 0:
+                    upper = bounds[factor].maximum
+                else:
+                    raise ValueError('native grid product requires positive constants or bounded indices')
+                maximum *= upper
+                if maximum > ((1 << 31) - 1 if axis == 0 else 65535):
+                    raise ValueError('native grid product exceeds the launch envelope')
+        elif not ((type(dim) is int and dim > 0) or (isinstance(dim, str) and dim in names)):
             raise ValueError('launch geometry must use constants or declared indices')
+    for dim in block:
+        if not ((type(dim) is int and dim > 0) or (isinstance(dim, str) and dim in names)):
+            raise ValueError('block geometry must use constants or declared indices')
 
 
 class NativeTensorCall:
@@ -60,13 +103,13 @@ class NativeTensorCall:
     """
     def __init__(self, package: NativeGPUStoragePackage, signature: inspect.Signature,
                  specs: tuple[TensorSpec | IndexSpec, ...], *,
-                 grid: tuple[int | str, int | str, int | str],
+                 grid: tuple[int | str | GridProduct, int | str | GridProduct, int | str | GridProduct],
                  block: tuple[int | str, int | str, int | str]):
         package.validate()
         validate_tensor_signature(package.abi, signature, specs, grid, block)
         self.package, self.signature, self.specs = package, signature, specs
         self.grid, self.block = grid, block
-        data = {'package': package.binding_digest, 'specs': [asdict(s) for s in specs], 'grid': grid, 'block': block}
+        data = {'package': package.binding_digest, 'specs': [asdict(s) for s in specs], 'grid': geometry_json(grid), 'block': geometry_json(block)}
         self.binding_digest = hashlib.sha256(json.dumps(data, sort_keys=True).encode()).hexdigest()
         self._bound: Any = None
         self._lock = threading.RLock()
@@ -84,6 +127,8 @@ class NativeTensorCall:
                     raise ValueError(f'{spec.name} violates native index bounds')
                 indices[spec.name] = v
         def resolve(d):
+            if isinstance(d, GridProduct):
+                return math.prod(indices[f] if isinstance(f, str) else f for f in d.factors)
             return indices[d] if isinstance(d, str) else d
         raw: list[int] = []
         allocations: list[tuple[int, int]] = []

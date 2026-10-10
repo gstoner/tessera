@@ -9881,6 +9881,30 @@ IR and working-directory identity participate, with bounded entry/byte retention
 Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
 and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
 
+## Matmul native replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-MATMUL-REPLAY-CACHE-2026-10-08.
+Not applicable: this backend retains its existing native matmul replay path.
+Only artifact.target == rocm enters the bounded ROCm cache; sibling physical
+schedules and execution capabilities are unchanged.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+ROCM-MATMUL-REPLAY-CACHE-2026-10-08 synchronized rerun: both gfx1151 and
+gfx1201 retain numerical parity, equal images/fingerprints and three-to-one
+replay subprocess counts after PR894 and explicit cwd identity. Owning tests
+pass 23 gfx1151 / 22 gfx1201 (one unavailable NVIDIA-dialect skip).
+Not applicable to x86 physical execution; no sibling performance claim.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+## Native math Graph replay reuse — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Sync ROCM-MATH-REPLAY-2026-10-08.
+Shared contract: bounded pure replay additionally admits Graph-to-Schedule;
+MathRecipe retains per-call Graph/Schedule/Tile and descriptor validation.
+68 host regressions and 19 owning cache tests per architecture pass.
+Not applicable: CPU packaging retains its separate native compile cache. No AVX-512 ABI, selector or execution state is changed.
+Evidence: benchmarks/baselines/rocm_math_replay_cache_20261008/README.md.
+
 ## Named scaled-batch frontend orientation — 2026-10-08
 
 Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

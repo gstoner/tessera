@@ -1,4 +1,4 @@
-"""Bounded reuse of pure native MLIR replay passes for ROCm unary packages.
+"""Bounded reuse of pure native MLIR replay passes for ROCm package ancestry.
 
 Only pass output is cached. Callers still compare the returned Tile text and
 project every descriptor field on each invocation. The key binds exact input
@@ -17,7 +17,7 @@ from .scheduled_matmul import run_tessera_opt
 
 _LIMIT_ENTRIES = 256
 _LIMIT_BYTES = 16 * 1024 * 1024
-_PASSES = {"--tessera-schedule-to-tile", "--canonicalize"}
+_PASSES = {"--tessera-graph-to-schedule", "--tessera-schedule-to-tile", "--canonicalize"}
 _lock = threading.Lock()
 _outputs: OrderedDict[str, tuple[str, int]] = OrderedDict()
 _bytes = 0

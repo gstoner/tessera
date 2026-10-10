@@ -6,8 +6,7 @@ import pytest
 from tessera.compiler.scheduled_matmul import find_tessera_opt, run_tessera_opt
 from tessera.compiler.native_gpu_storage import _decode_image
 
-ROOT=Path(__file__).resolve().parents[2]
-ARTIFACTS=ROOT/"benchmarks/baselines/nvidia_public_attention_vjp_20261006/artifacts"
+ARTIFACTS=Path(__file__).resolve().parent/"fixtures/attention_jvp"
 
 @pytest.fixture
 def compiler():
@@ -16,7 +15,7 @@ def compiler():
     return tool
 
 def source(case):
-    return json.loads((ARTIFACTS/(case+".json")).read_text())["graph_ir"].replace(
+    return (ARTIFACTS/(case+".mlir")).read_text().replace(
         'tessera.autodiff = "reverse"','tessera.autodiff = "forward"')
 
 @pytest.mark.parametrize("case,activity,bias",[

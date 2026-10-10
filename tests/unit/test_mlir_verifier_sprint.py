@@ -137,7 +137,7 @@ _V1_DIAGNOSTIC_PHRASES = (
     # TransposeOp
     "transpose must preserve rank",
     "transpose must preserve element type",
-    "dimensions matching the declared input axes",
+    "requires a rank-sized unique nonnegative i64 permutation",
     # LayerNormOp
     "layer_norm must preserve rank",
     "layer_norm must preserve dim",

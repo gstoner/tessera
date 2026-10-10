@@ -1173,6 +1173,8 @@ def Tile_ESLowRankCorrectionKernelOp
 
 // Canonical logical-page gather. Inputs are physical pages, i32 page table,
 // output, and P/LP/page-size/H/D/start/token-count dimensions.
+// page_layout = "strided" adds four positive source element strides. The
+// checked host ABI must prove the physical span; output stays compact.
 def Tile_PagedKVReadKernelOp : Tile_Op<"paged_kv_read_kernel"> {
   let summary = "Launch-level typed paged-KV logical-to-physical gather";
   let arguments = (ins Variadic<AnyType>:$inputs);

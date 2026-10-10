@@ -1,0 +1,48 @@
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp: In function ‘int {anonymous}::identity(Identity&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:49:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   49 |       hipCtxGetCurrent(&context) != hipSuccess ||
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp: In function ‘bool {anonymous}::residentContext(const ResidentMovement&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:542:26: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  542 |          hipCtxGetCurrent(&context)==hipSuccess &&
+      |          ~~~~~~~~~~~~~~~~^~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp: In function ‘bool {anonymous}::identity(const Program&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:88:21: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   88 |     hipCtxGetCurrent(&ctx)==hipSuccess && device==p.device && ctx==p.context;
+      |     ~~~~~~~~~~~~~~~~^~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp: In function ‘int tessera_rocm_nvfp4_prepare(const void* const*, const size_t*, const char* const*, const int64_t*, const unsigned int*, const void* const*, const size_t*, uint64_t*)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp:180:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  180 |       hipCtxGetCurrent(&p->context)!=hipSuccess)return 2;
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp: In function ‘bool {anonymous}::identity(const Program&)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:93:26: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   93 |          hipCtxGetCurrent(&context) == hipSuccess &&
+      |          ~~~~~~~~~~~~~~~~^~~~~~~~~~
+In file included from /opt/rocm/include/hip/hip_runtime.h:49,
+                 from src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:3:
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp: In function ‘int tessera_rocm_program_prepare(const char*, uint32_t, uint32_t, const TesseraRocmProgramBuffer*, uint32_t, const TesseraRocmProgramStep*, const void* const*, const uint64_t*, uint64_t*)’:
+src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp:221:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+  221 |       hipCtxGetCurrent(&p->context) != hipSuccess) return 2;
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~~~~
+/opt/rocm/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~

@@ -3663,12 +3663,14 @@ struct LowerTileToROCMPass
         auto storage = op->getAttrOfType<StringAttr>("storage");
         auto tableStorage = op->getAttrOfType<StringAttr>("table_storage");
         auto route = op->getAttrOfType<StringAttr>("route");
-        if (op->getNumOperands() != 10 || !storage ||
+        auto pageLayout = op->getAttrOfType<StringAttr>("page_layout");
+        bool strided = pageLayout && pageLayout.getValue() == "strided";
+        if ((op->hasAttr("page_layout") && !strided) || op->getNumOperands() != (strided ? 14u : 10u) || !storage ||
             storage.getValue() != "f32" || !tableStorage ||
             tableStorage.getValue() != "i32" || !route ||
             route.getValue() != "direct") {
           op->emitError("ROCm paged_kv_read_kernel requires f32 pages, i32 "
-                        "table, route=direct, and the canonical ten-operand ABI");
+                        "table, route=direct, and a canonical compact/strided operand ABI");
           signalPassFailure();
           return;
         }
@@ -3689,6 +3691,7 @@ struct LowerTileToROCMPass
         state.addAttribute("name", symbol);
         state.addAttribute("storage", storage);
         state.addAttribute("table_storage", tableStorage);
+        if (strided) state.addAttribute("page_layout", pageLayout);
         state.addAttribute("route", route);
         state.addAttribute("arch", builder.getStringAttr(arch));
         state.addAttribute("source",

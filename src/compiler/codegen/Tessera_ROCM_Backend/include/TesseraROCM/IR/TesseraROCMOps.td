@@ -1120,14 +1120,17 @@ def ROCM_PagedKVReadKernelOp : TesseraROCM_Op<"paged_kv_read"> {
   let summary = "Direct paged-KV cache gather";
   let description = [{
     The directive `generate-rocm-paged-kv-read-kernel` expands the shared
-    ten-operand paged-KV launch contract into a direct f32 gather. The rank-1
+    compact ten-operand or strided fourteen-operand paged-KV launch contract into a direct f32 gather. The rank-1
     i32 logical-to-physical page table is bounds-validated by the descriptor
-    launcher before device submission.
+    launcher before device submission. With page_layout = "strided", four
+    positive runtime element strides follow the seven dimensions. The runtime
+    must validate and retain the entire physical source span before submission.
   }];
   let arguments = (ins StrAttr:$name,
                        DefaultValuedAttr<StrAttr, "\"f32\"">:$storage,
                        DefaultValuedAttr<StrAttr, "\"i32\"">:$table_storage,
-                       DefaultValuedAttr<StrAttr, "\"direct\"">:$route);
+                       DefaultValuedAttr<StrAttr, "\"direct\"">:$route,
+                       OptionalAttr<StrAttr>:$page_layout);
   let assemblyFormat = "attr-dict";
 }
 

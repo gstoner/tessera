@@ -17,7 +17,7 @@ namespace {
 
 static constexpr int64_t BlockSize = 256;
 
-void emitBody(OpBuilder &b, Location loc, gpu::GPUFuncOp function) {
+void emitBody(OpBuilder &b, Location loc, gpu::GPUFuncOp function, bool strided) {
   b.setInsertionPointToStart(&function.getBody().front());
   Value pages = function.getArgument(0);
   Value table = function.getArgument(1);
@@ -62,9 +62,19 @@ void emitBody(OpBuilder &b, Location loc, gpu::GPUFuncOp function) {
                                               ValueRange{logicalPage});
   Value physical = b.create<arith::IndexCastUIOp>(
       loc, b.getIndexType(), physical32);
-  Value pageIndex = add(
-      mul(add(mul(physical, pageSize), pageOffset), elementsPerToken),
-      tokenOffset);
+  Value pageIndex;
+  if (strided) {
+    Value head = b.create<arith::DivUIOp>(loc, tokenOffset, dim);
+    Value feature = b.create<arith::RemUIOp>(loc, tokenOffset, dim);
+    pageIndex = add(add(mul(physical, function.getArgument(10)),
+                        mul(pageOffset, function.getArgument(11))),
+                    add(mul(head, function.getArgument(12)),
+                        mul(feature, function.getArgument(13))));
+  } else {
+    pageIndex = add(
+        mul(add(mul(physical, pageSize), pageOffset), elementsPerToken),
+        tokenOffset);
+  }
   Value value = b.create<memref::LoadOp>(loc, pages, ValueRange{pageIndex});
   b.create<memref::StoreOp>(loc, value, output, ValueRange{linear});
 
@@ -101,7 +111,9 @@ struct GenerateROCMPagedKVReadKernelPass
       auto storage = op->getAttrOfType<StringAttr>("storage");
       auto tableStorage = op->getAttrOfType<StringAttr>("table_storage");
       auto route = op->getAttrOfType<StringAttr>("route");
-      if (!name || !storage || storage.getValue() != "f32" ||
+      auto pageLayout = op->getAttrOfType<StringAttr>("page_layout");
+      bool strided = pageLayout && pageLayout.getValue() == "strided";
+      if ((op->hasAttr("page_layout") && !strided) || !name || !storage || storage.getValue() != "f32" ||
           !tableStorage || tableStorage.getValue() != "i32" || !route ||
           route.getValue() != "direct") {
         op->emitError("paged-KV generator requires name, f32 storage, i32 "
@@ -120,11 +132,12 @@ struct GenerateROCMPagedKVReadKernelPass
       auto table = MemRefType::get({ShapedType::kDynamic}, b.getI32Type());
       SmallVector<Type> arguments{pages, table, pages, index, index, index,
                                   index, index, index, index};
+      if (strided) arguments.append(4, index);
       auto gpuFunction = b.create<gpu::GPUFuncOp>(
           loc, kernelName, b.getFunctionType(arguments, {}));
       gpuFunction.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunction.getContext());
-      emitBody(body, loc, gpuFunction);
+      emitBody(body, loc, gpuFunction, strided);
       op->erase();
     }
   }

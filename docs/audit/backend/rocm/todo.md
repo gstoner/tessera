@@ -16323,3 +16323,30 @@ Graph whole-sequence and direct member event scopes remain distinct.
 Owning gfx1151 and gfx1201 execution/changed-input/lifetime proof is recorded. Native graph replay is explicit; direct defaults stay unchanged. gfx1201 prepared MoE dispatch and general paged layouts remain follow-up required.
 Evidence: benchmarks/baselines/rocm_native_graph_movement_20261008/README.md.
 Generic scaled-product closure and broader five-slice obligations remain open.
+
+## Checked strided paged-KV execution — 2026-10-08
+
+Owner E2E-REAL-6; synchronization key ROCM-STRIDED-PAGED-KV-20261008.
+Static rank-4 f32 pages now execute with four positive whole-element strides
+through public JIT, serialized Graph/Schedule/Tile/ROCm/LLVM packages and
+checked prepared/resident native ownership. Page-table/output storage stays
+compact. Backing-span/overflow, sealed pitch and writable/disjoint output
+checks precede GPU access. Read-only self-aliasing input is numerically proved.
+Native HIP graph replay captures the gather alone or its compact softmax
+consumer. Shape/pitch values reuse the named strided image per architecture.
+
+Matching LLVM/MLIR 23.1.1 tools were built on Super-Bear and installed unchanged
+on the GPU hosts; native movement runtimes were freshly built on each device.
+Final owning regressions: gfx1151 52 pass / 4 other-architecture skips;
+gfx1201 48 pass / 6 other-architecture/family skips. Earlier focused host gate:
+140 pass / 32 hardware skips; six-file mypy zero errors. These scopes are
+separate. Seventeen packet source hashes match delivered bytes.
+Seven rotating timing rounds per profile separate resident kernel events from
+completed public JIT calls. Host calls remain approximately 2–3 ms; no physical
+selector promotion or broad performance closure is claimed.
+Evidence: benchmarks/baselines/rocm_strided_paged_kv_20261008/README.md.
+Owning gfx1151/gfx1201 numerical and separate timing proof is recorded for
+padded/offset, permuted, Fortran and read-only self-aliasing pages. Follow-up
+required: symbolic extents, other storage dtypes/device-buffer carriers,
+negative/zero-stride semantics, host-cost attribution and coalescing work.
+Broader image families, W8A8 and MXFP4 obligations remain open.

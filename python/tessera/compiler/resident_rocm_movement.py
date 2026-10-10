@@ -9,12 +9,16 @@ import math
 import numpy as np
 from .prepared_rocm_movement import HostView
 
-def views(arrays):
+def views(arrays, *, strided_pages=False):
     result=(HostView*len(arrays))()
-    for view,array in zip(result,arrays,strict=True):
+    for role,(view,array) in enumerate(zip(result,arrays,strict=True)):
         if not isinstance(array,np.ndarray) or array.ndim>4:
             raise TypeError("resident movement requires host tensor arrays of rank at most four")
-        view.data,view.bytes,view.rank=array.ctypes.data,array.nbytes,array.ndim
+        physical_bytes=array.nbytes
+        if role==0 and strided_pages:
+            from .paged_host_span import checked_page_span
+            physical_bytes,_=checked_page_span(array)
+        view.data,view.bytes,view.rank=array.ctypes.data,physical_bytes,array.ndim
         view.dtype=1 if array.dtype==np.dtype("float32") else 2 if array.dtype==np.dtype("int32") else 0
         for axis,(extent,stride) in enumerate(zip(array.shape,array.strides,strict=True)):
             view.shape[axis],view.strides[axis]=extent,stride
@@ -84,7 +88,7 @@ class ResidentMovementCall:
             if len(ordered)!=len(self.prepared.input_positions):
                 raise ValueError("resident movement input arity differs")
             arrays=tuple(ordered[i] for i in self.prepared.input_positions)
-            metadata=views(arrays)
+            metadata=views(arrays,strided_pages=self.prepared._page_strides is not None)
             rc=self.lib.tessera_rocm_movement_resident_upload(self.handle,metadata,2)
             if rc:raise RuntimeError(f"native resident upload failed rc={rc}")
     def capture(self):
@@ -171,10 +175,10 @@ def validate_softmax_consumer(prepared,artifact):
     """Seal the existing f32 row-softmax descriptor to the producer extent."""
     from .native_artifact import (BufferBinding,ShapeGuard,ScalarArgument,
                                   LaunchGeometry,OrderingSemantics,WorkspaceRequirement)
-    from .rocm_native import GFX_PAGED_KV_F32_ABI,GFX_SOFTMAX_F32_ABI
+    from .rocm_native import GFX_PAGED_KV_F32_ABI,GFX_PAGED_KV_STRIDED_F32_ABI,GFX_SOFTMAX_F32_ABI
     producer=prepared.artifact
     image,descriptor=artifact.native_image,artifact.launch_descriptor
-    if (producer.launch_descriptor.abi_id!=GFX_PAGED_KV_F32_ABI
+    if (producer.launch_descriptor.abi_id not in {GFX_PAGED_KV_F32_ABI,GFX_PAGED_KV_STRIDED_F32_ABI}
             or image is None or descriptor is None):
         raise ValueError("resident edge requires native paged read and softmax packages")
     descriptor.validate_image(image)

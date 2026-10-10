@@ -4106,8 +4106,11 @@ def _shape_kv_cache_read(operand_types: List[IRType],
             page_size, logical_pages = _dim(pages.shape[1]), _dim(table.shape[0])
             if page_size is not None and logical_pages is not None and end > page_size * logical_pages:
                 raise ValueError("paged kv_cache_read interval exceeds logical page capacity")
+            # The gather materializes an owned compact output. A source
+            # storage view cannot become the output's physical layout.
+            output_layout = "row_major" if pages.layout == "strided" else pages.layout
             return tensor_ir_type((str(end-start), pages.shape[2], pages.shape[3]),
-                                  pages.dtype, layout=pages.layout)
+                                  pages.dtype, layout=output_layout)
     return (TENSOR_OPAQUE, TENSOR_OPAQUE)
 
 

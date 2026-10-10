@@ -4592,7 +4592,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         rn.GFX_MATMUL_BF16_F32_ABI, rn.GFX_MATMUL_BF16_F32_FUSED_ABI,
         rn.GFX_MATMUL_I8_I32_ABI, rn.GFX_MATMUL_I4_I32_ABI,
         rn.GFX_ATTN_F16_ABI, rn.GFX_ATTN_BF16_ABI, rn.GFX_DEPTH_ATTN_F32_ABI,
-        rn.GFX_PAGED_KV_F32_ABI, rn.GFX_SPARSE_MATMUL_2TO4_ABI,
+        rn.GFX_PAGED_KV_F32_ABI, rn.GFX_PAGED_KV_STRIDED_F32_ABI, rn.GFX_SPARSE_MATMUL_2TO4_ABI,
         GFX_MXFP4_W4A8_EXACT_ABI, GFX_MXFP4_W4A8_WMMA_ABI,
         GFX_MXFP4_W4A8_WMMA_FRAGMENT_ABI,
         GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI,
@@ -4956,6 +4956,7 @@ def _submit_rocm_gfx1151_native(
         GFX_NORM_BF16_ABI,
         GFX_NORM_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
+        GFX_PAGED_KV_STRIDED_F32_ABI,
         GFX_REDUCE_BF16_ABI,
         GFX_REDUCE_F16_ABI,
         GFX_REDUCE_F32_ABI,
@@ -5022,6 +5023,7 @@ def _submit_rocm_gfx1151_native(
         GFX_REDUCE_BF16_ABI,
         GFX_REDUCE_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
+        GFX_PAGED_KV_STRIDED_F32_ABI,
         GFX_MOE_DISPATCH_F32_ABI,
         GFX_NORM_F16_ABI,
         GFX_NORM_BF16_ABI,
@@ -5056,7 +5058,8 @@ def _submit_rocm_gfx1151_native(
     if native_math and math_family not in {"unary", "binary", "scan"}:
         raise RuntimeError("native ROCm math family contract differs")
     math_binary = native_math and math_family == "binary"
-    paged_kv = descriptor.abi_id == GFX_PAGED_KV_F32_ABI
+    paged_strided = descriptor.abi_id == GFX_PAGED_KV_STRIDED_F32_ABI
+    paged_kv = descriptor.abi_id in {GFX_PAGED_KV_F32_ABI, GFX_PAGED_KV_STRIDED_F32_ABI}
     moe_dispatch = descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
     normalization = descriptor.abi_id in {GFX_NORM_F16_ABI, GFX_NORM_BF16_ABI, GFX_NORM_F32_ABI}
     attention = descriptor.abi_id in {
@@ -5374,8 +5377,22 @@ def _submit_rocm_gfx1151_native(
             raise RuntimeError("gfx1151 paged-KV arrays disagree with descriptor scalars")
         if pages.dtype != np.float32 or table.dtype != np.int32 or output.dtype != np.float32:
             raise RuntimeError("gfx1151 paged-KV requires f32 pages/output and i32 table")
-        input_arrays = [np.ascontiguousarray(pages), np.ascontiguousarray(table)]
         dimensions = (p, logical_pages, page_size, heads, dim, start, tokens)
+        page_input_bytes = pages.nbytes
+        if paged_strided:
+            if stream is not None:
+                raise ValueError("strided pages require synchronous native movement submission")
+            if not output.flags.writeable:
+                raise ValueError("strided page output must be writable")
+            from tessera.compiler.paged_host_span import checked_page_span
+            page_input_bytes, page_strides = checked_page_span(pages)
+            supplied = tuple(scalars[name] for name in ("StrideP", "StridePage", "StrideH", "StrideD"))
+            if any(type(value) is not int for value in supplied) or supplied != page_strides:
+                raise ValueError("page stride scalars differ from the actual storage view")
+            dimensions += page_strides
+            input_arrays = [pages, np.ascontiguousarray(table)]
+        else:
+            input_arrays = [np.ascontiguousarray(pages), np.ascontiguousarray(table)]
         grid_x = (tokens * heads * dim + 255) // 256
     elif normalization:
         x = buffers[ordered[0].name]
@@ -5495,14 +5512,17 @@ def _submit_rocm_gfx1151_native(
             rc = movement.tessera_rocm_movement_launch(
                 ctypes.cast(ctypes.c_char_p(image.payload), ctypes.c_void_p), len(image.payload),
                 descriptor.entry_symbol.encode(), image.architecture.encode(),
-                0 if paged_kv else 1,
-                input_arrays[0].ctypes.data_as(ctypes.c_void_p), int(input_arrays[0].nbytes),
+                2 if paged_strided else 0 if paged_kv else 1,
+                input_arrays[0].ctypes.data_as(ctypes.c_void_p),
+                int(page_input_bytes if paged_kv else input_arrays[0].nbytes),
                 input_arrays[1].ctypes.data_as(ctypes.c_void_p), int(input_arrays[1].nbytes),
                 output.ctypes.data_as(ctypes.c_void_p), int(output.nbytes),
                 dims, len(dimensions), int(reuse))
             if rc:
                 raise RuntimeError(f"ROCm native movement submission failed rc={rc}")
             return output
+    if paged_strided:
+        raise RuntimeError("strided pages require the matching native movement runtime")
     native_loader = _load_rocm_native_image_runtime()
     module, function, lease = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
     if native_loader is not None:
@@ -6544,6 +6564,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         GFX_NORM_BF16_ABI,
         GFX_NORM_F32_ABI,
         GFX_PAGED_KV_F32_ABI,
+        GFX_PAGED_KV_STRIDED_F32_ABI,
         GFX_REDUCE_BF16_ABI,
         GFX_REDUCE_F16_ABI,
         GFX_REDUCE_F32_ABI,
@@ -6583,6 +6604,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_REDUCE_BF16_ABI,
             GFX_REDUCE_F32_ABI,
             GFX_PAGED_KV_F32_ABI,
+        GFX_PAGED_KV_STRIDED_F32_ABI,
             GFX_MOE_DISPATCH_F32_ABI,
             GFX_NORM_F16_ABI,
             GFX_NORM_BF16_ABI,
@@ -35651,6 +35673,19 @@ def _split_native_arguments(
     contracts: dict[str, BufferArgument] = {}
     for name, value in buffer_source.items():
         raw, contract = _native_buffer_value(value)
+        from tessera.compiler.rocm_native import GFX_PAGED_KV_STRIDED_F32_ABI
+        if descriptor.abi_id == GFX_PAGED_KV_STRIDED_F32_ABI and any(
+                binding.name == str(name) and binding.ordinal == 0 for binding in descriptor.buffers):
+            from tessera.compiler.paged_host_span import checked_page_span
+            try:
+                _, strides = checked_page_span(raw)
+                supplied = tuple(scalar_source[key] for key in ("StrideP", "StridePage", "StrideH", "StrideD"))
+                if any(type(item) is not int for item in supplied) or supplied != strides:
+                    raise ValueError("page stride scalars differ from the actual storage view")
+            except (ValueError, TypeError, KeyError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", str(exc)) from exc
+            from dataclasses import replace
+            contract = replace(contract, layout="strided")
         values[str(name)] = raw
         contracts[str(name)] = contract
     return values, contracts, {str(name): value for name, value in scalar_source.items()}

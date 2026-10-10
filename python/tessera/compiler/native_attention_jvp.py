@@ -8,11 +8,13 @@ from pathlib import Path
 from .native_gpu_storage import build_native_gpu_storage
 
 
-def source(dims, scale, causal, *, compiler=None):
+def source(dims, scale, causal, *, compiler=None, shape_bounds=()):
     import math
     import struct
-    if (len(dims)!=7 or any(type(d) is not int or not 0<d<=65536 for d in dims) or
-            type(causal) is not bool or type(scale) not in (int,float) or not math.isfinite(scale) or scale<=0):
+    from .attention_shape_contract import attention_dimensions, DYNAMIC_DIM
+    capacities=attention_dimensions(dims,shape_bounds)
+    if (any(d>65536 for d in capacities) or type(causal) is not bool or
+            type(scale) not in (int,float) or not math.isfinite(scale) or scale<=0):
         raise ValueError('invalid native attention JVP policy')
     try:
         rounded_scale=struct.unpack('f',struct.pack('f',scale))[0]
@@ -21,18 +23,18 @@ def source(dims, scale, causal, *, compiler=None):
     if not math.isfinite(rounded_scale) or rounded_scale==0:
         raise ValueError('native attention JVP scale must be representable in fp32')
     b,hq,hkv,sq,sk,d,dv=dims
-    if hq%hkv or b*hq*sq>2147483647:
+    if hq%hkv or capacities[0]*capacities[1]*capacities[3]>2147483647:
         raise ValueError('invalid native attention JVP head or launch geometry')
     qshape=(b,hq,sq,d)
     kshape=(b,hkv,sk,d)
     vshape=(b,hkv,sk,dv)
     oshape=(b,hq,sq,dv)
-    if any(math.prod(shape)>((1<<63)-1)//4 for shape in (qshape,kshape,vshape,oshape)):
-        raise ValueError('native attention JVP tensor byte extent overflows')
     def tensor(shape):
-        return "tensor<" + "x".join(map(str,shape)) + "xf32>"
+        return "tensor<" + "x".join("?" if d==DYNAMIC_DIM else str(d) for d in shape) + "xf32>"
+    bounds_attr=(", tessera.attention_shape_bounds = array<i64: " +
+                 ", ".join(map(str,shape_bounds)) + ">") if shape_bounds else ""
     qt,kt,vt,ot,lt=map(tensor,(qshape,kshape,vshape,oshape,(b,hq,sq)))
-    graph=f"""module attributes {{tessera.target = "nvidia_sm120", tessera.arch = "sm_120"}} {{
+    graph=f"""module attributes {{tessera.target = "nvidia_sm120", tessera.arch = "sm_120"{bounds_attr}}} {{
       func.func @attention_jvp(%q: {qt}, %k: {kt}, %v: {vt},
           %dq: {qt}, %dk: {kt}, %dv: {vt}) -> {ot} {{
         %o, %lse = "tessera_attn.checkpoint_forward"(%q, %k, %v)
@@ -58,12 +60,12 @@ def _lower_graph(graph, *, compiler=None):
         "--pass-pipeline=builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile)")
 
 
-def materialize(dims, scale, causal, *, compiler, llvm_bin):
-    return build_native_gpu_storage(source(dims,scale,causal,compiler=compiler),compiler=Path(compiler),
+def materialize(dims, scale, causal, *, compiler, llvm_bin, shape_bounds=()):
+    return build_native_gpu_storage(source(dims,scale,causal,compiler=compiler,shape_bounds=shape_bounds),compiler=Path(compiler),
                                     llvm_bin=Path(llvm_bin),backend='nvidia',chip='sm_120')
 
 
-def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_bin, bias_shape=()):
+def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_bin, bias_shape=(), shape_bounds=()):
     """Lower the native AD contract of one isolated attention function.
 
     The compiler verifies the source's complete argument/return mapping and the
@@ -83,12 +85,18 @@ def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_b
         raise ValueError('native automatic JVP contract is missing or ambiguous')
     contract=json.loads(_decode_image(fields[0]).decode())
     biased=bool(bias_shape)
-    logical=(dims[0],dims[1],dims[3],dims[4])
-    if biased and (len(bias_shape)!=4 or any(type(x) is not int or x not in (1,d)
-            for x,d in zip(bias_shape,logical,strict=True))):
-        raise ValueError('automatic JVP physical bias shape is invalid')
-    if (contract.get('schema')!=(2 if biased else 1) or
-            contract.get('bias_shape',[])!=list(bias_shape) or contract.get('dims')!=list(dims) or
+    from .attention_shape_contract import attention_dimensions, physical_attention_bias_shape, DYNAMIC_DIM
+    attention_dimensions(dims,shape_bounds)
+    if biased:
+        physical_attention_bias_shape(dims,bias_shape)
+    # AD's portable JSON sentinel is -1; native checkpoint policy retains
+    # MLIR's kDynamic. Convert only at this adapter boundary.
+    portable=lambda shape:[-1 if d==DYNAMIC_DIM else d for d in shape]
+    expected_schema=(3 if shape_bounds else 1)+int(biased)
+    if (contract.get('schema')!=expected_schema or
+            contract.get('bias_shape',[])!=portable(bias_shape) or contract.get('dims')!=portable(dims) or
+            contract.get('shape_bounds',[])!=list(shape_bounds) or
+            (bool(shape_bounds) and contract.get('shape_policy')!='bounded_sequences_v1') or
             contract.get('causal') is not causal or
             struct.pack('f',contract['scale'])!=struct.pack('f',scale)):
         raise ValueError('automatic JVP policy differs from the resident forward generation')

@@ -1,0 +1,3640 @@
+{
+  "architecture": "gfx1201",
+  "host": "tajasarus",
+  "rocminfo": {
+    "architecture": "gfx1201",
+    "bindings": [
+      "a",
+      "out"
+    ],
+    "columns": 257,
+    "elements": 16448,
+    "family": "scan",
+    "kind": "max",
+    "numeric_policy": "f32_inclusive_scan",
+    "output_storage": "f32",
+    "roles": [
+      0
+    ],
+    "rows": 64,
+    "schedule_digest": "a8bde8353efff5f44aeafece418ece130997a26aff0d6e43f172868169d1ec5d",
+    "shape": [
+      64,
+      257
+    ],
+    "storage": "bf16"
+  },
+  "measurement": "warm-image package wall time; only native ancestry replay cache is varied",
+  "source_sha256": "a3c9b84651c47fab66f7d458bf359baac698c8a5bad01930cbf75469f660f605",
+  "replay_cache_sha256": "9748c2ab380eb97a46d2cc483c5feba547e1059b759fedcbb49062d036467b89",
+  "ancestry_sha256": "6ddb8a07035f28224edc20cbba72379d990f657c647b2358e0f25c39a796f534",
+  "recorder_sha256": "a5978ea9135351a3a290815150c5e50a91aef6a239d9ba5732af0f755d040987",
+  "compiler_sha256": "76d1d508bd01cb171d31ed6c375de9fc7380dcd716e7cae7150b272ba075c285",
+  "rows": [
+    {
+      "family": "sqrt_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 5.0172987986485396e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          45.3692,
+          44.477107,
+          43.34673,
+          43.15364,
+          43.093697,
+          44.519478,
+          42.289832
+        ],
+        "cached_replay": [
+          17.831871,
+          16.834026,
+          16.895253,
+          17.0193,
+          18.053514,
+          17.245141,
+          16.900392
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.34673,
+        "cached_replay": 17.0193
+      },
+      "uncached_over_cached": 2.5469161481377025,
+      "image_digest": "d959d1d1ab76b0d1abe77b2cfdc295d578b4ea043eea8220388e492c7e25ee6e",
+      "entry": "tessera_rocm_scalar_unary_12153ed29f1c5345",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "sqrt_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 5.958250026694145e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.328444,
+          42.186575,
+          44.126498,
+          42.318445,
+          43.580076,
+          43.816185,
+          44.094537
+        ],
+        "cached_replay": [
+          17.990364,
+          16.084796,
+          17.204883,
+          17.099043,
+          17.009992,
+          17.472306,
+          16.508324
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.580076,
+        "cached_replay": 17.099043
+      },
+      "uncached_over_cached": 2.548685093078016,
+      "image_digest": "d959d1d1ab76b0d1abe77b2cfdc295d578b4ea043eea8220388e492c7e25ee6e",
+      "entry": "tessera_rocm_scalar_unary_12153ed29f1c5345",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "sqrt_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 5.2429788510721664e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.644166,
+          43.261276,
+          42.903804,
+          42.737429,
+          44.756841,
+          43.282947,
+          42.623698
+        ],
+        "cached_replay": [
+          16.39039,
+          17.125432,
+          16.845727,
+          17.014867,
+          16.43265,
+          16.774624,
+          15.953124
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.261276,
+        "cached_replay": 16.774624
+      },
+      "uncached_over_cached": 2.5789714273178346,
+      "image_digest": "f07321360f5deab9be821f9d29107fcd81a9d193eaab70589f4ec465d539b7c8",
+      "entry": "tessera_rocm_scalar_unary_9a154caac0e76d49",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "sqrt_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 5.939846992042419e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.91241,
+          44.046153,
+          43.897972,
+          43.240666,
+          45.331177,
+          42.874016,
+          43.276515
+        ],
+        "cached_replay": [
+          16.436356,
+          16.333692,
+          17.248999,
+          16.679943,
+          17.824187,
+          16.307161,
+          16.845619
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.276515,
+        "cached_replay": 16.679943
+      },
+      "uncached_over_cached": 2.594524153949447,
+      "image_digest": "f07321360f5deab9be821f9d29107fcd81a9d193eaab70589f4ec465d539b7c8",
+      "entry": "tessera_rocm_scalar_unary_9a154caac0e76d49",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "sqrt_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 5.747921338894457e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          44.039352,
+          43.060622,
+          44.013532,
+          43.382276,
+          42.776961,
+          41.631465,
+          43.264872
+        ],
+        "cached_replay": [
+          17.500328,
+          16.97162,
+          16.706713,
+          16.426278,
+          16.227568,
+          17.06106,
+          16.770194
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.264872,
+        "cached_replay": 16.770194
+      },
+      "uncached_over_cached": 2.5798671142385112,
+      "image_digest": "5c928c92034294f88afae508bb20c178894ba109804686dfa72a33926d9811fc",
+      "entry": "tessera_rocm_scalar_unary_f4f8c004a85b257c",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "sqrt_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 5.873093922303951e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          41.599924,
+          42.858508,
+          43.7458,
+          43.680686,
+          42.0435,
+          44.236837,
+          42.535439
+        ],
+        "cached_replay": [
+          16.561597,
+          17.349119,
+          16.511139,
+          16.224231,
+          17.3968,
+          17.073202,
+          16.629144
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.858508,
+        "cached_replay": 16.629144
+      },
+      "uncached_over_cached": 2.57731293925893,
+      "image_digest": "5c928c92034294f88afae508bb20c178894ba109804686dfa72a33926d9811fc",
+      "entry": "tessera_rocm_scalar_unary_f4f8c004a85b257c",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "exp_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 1.4501366063512933e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.286232,
+          43.487065,
+          44.267415,
+          42.755658,
+          42.441049,
+          42.416602,
+          42.756591
+        ],
+        "cached_replay": [
+          17.027364,
+          16.618594,
+          16.318341,
+          16.05059,
+          17.657187,
+          16.179516,
+          16.468017
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.756591,
+        "cached_replay": 16.468017
+      },
+      "uncached_over_cached": 2.5963411988219347,
+      "image_digest": "63febc9c6f99fd5442ac5302eebae1c4ff1662477db0ac4c9e065b4d9135d2c8",
+      "entry": "tessera_rocm_scalar_unary_a616a205aa7313d4",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "exp_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 1.8328941031597878e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.740881,
+          42.848576,
+          41.760881,
+          43.6412,
+          43.379781,
+          42.775988,
+          41.946474
+        ],
+        "cached_replay": [
+          16.839206,
+          16.666816,
+          16.516339,
+          17.142004,
+          16.982649,
+          16.584489,
+          16.202982
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.775988,
+        "cached_replay": 16.666816
+      },
+      "uncached_over_cached": 2.5665362838348966,
+      "image_digest": "63febc9c6f99fd5442ac5302eebae1c4ff1662477db0ac4c9e065b4d9135d2c8",
+      "entry": "tessera_rocm_scalar_unary_a616a205aa7313d4",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "exp_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 1.359537646905551e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.460865,
+          43.713559,
+          43.975367,
+          43.958956,
+          41.3883,
+          43.275416,
+          41.478472
+        ],
+        "cached_replay": [
+          16.684501,
+          17.026904,
+          16.991567,
+          16.892337,
+          16.258066,
+          16.35778,
+          15.985386
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.460865,
+        "cached_replay": 16.684501
+      },
+      "uncached_over_cached": 2.60486453865177,
+      "image_digest": "7163a33cbcf75627b736c76c053d0269e8f91b3f83130595be5ec36378ae867c",
+      "entry": "tessera_rocm_scalar_unary_a7ee68e7fcf4496e",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "exp_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 1.8153027170342284e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.700503,
+          43.325148,
+          43.010195,
+          43.189618,
+          44.07637,
+          42.181793,
+          43.327852
+        ],
+        "cached_replay": [
+          17.797596,
+          16.838835,
+          16.101257,
+          15.927435,
+          15.894232,
+          16.941471,
+          16.767319
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.189618,
+        "cached_replay": 16.767319
+      },
+      "uncached_over_cached": 2.5758213343468923,
+      "image_digest": "7163a33cbcf75627b736c76c053d0269e8f91b3f83130595be5ec36378ae867c",
+      "entry": "tessera_rocm_scalar_unary_a7ee68e7fcf4496e",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "exp_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 1.3055774683579102e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          45.21345,
+          43.875427,
+          44.248719,
+          43.282234,
+          42.566589,
+          43.75695,
+          42.86612
+        ],
+        "cached_replay": [
+          17.238379,
+          17.319722,
+          16.402141,
+          15.854916,
+          17.216386,
+          17.374748,
+          16.956089
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.75695,
+        "cached_replay": 17.216386
+      },
+      "uncached_over_cached": 2.541587415616727,
+      "image_digest": "f0e83a23620cee548154f38067c7d81344c5df50433597ae458ddb3d02bbd4a2",
+      "entry": "tessera_rocm_scalar_unary_f37b95fba1ed4c0e",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "exp_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 1.3116255637157792e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.899002,
+          44.660355,
+          42.302234,
+          43.657149,
+          42.589983,
+          42.103018,
+          43.07075
+        ],
+        "cached_replay": [
+          17.209513,
+          16.428081,
+          17.72665,
+          17.112888,
+          17.151052,
+          16.738158,
+          16.654663
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.899002,
+        "cached_replay": 17.112888
+      },
+      "uncached_over_cached": 2.50682421342324,
+      "image_digest": "f0e83a23620cee548154f38067c7d81344c5df50433597ae458ddb3d02bbd4a2",
+      "entry": "tessera_rocm_scalar_unary_f37b95fba1ed4c0e",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "add_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 1.1920928955078125e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.630399,
+          43.052577,
+          43.04429,
+          42.081502,
+          43.595444,
+          41.961583,
+          42.875038
+        ],
+        "cached_replay": [
+          17.208445,
+          16.826887,
+          16.615037,
+          16.754544,
+          17.050148,
+          16.756488,
+          16.220635
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.04429,
+        "cached_replay": 16.756488
+      },
+      "uncached_over_cached": 2.5688133456127558,
+      "image_digest": "a5a638f2700a393d937215e70bbc6c4fcf36daa6beccb746c2c16ec05a4b7a68",
+      "entry": "tessera_rocm_scalar_binary_3f395b0e58f52c52",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "add_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 1.1920928955078125e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.647292,
+          41.81273,
+          41.920595,
+          43.095077,
+          41.265444,
+          43.157817,
+          42.480555
+        ],
+        "cached_replay": [
+          17.589207,
+          16.493005,
+          15.869515,
+          15.995003,
+          18.148415,
+          17.592274,
+          16.692656
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.480555,
+        "cached_replay": 16.692656
+      },
+      "uncached_over_cached": 2.5448649394080847,
+      "image_digest": "a5a638f2700a393d937215e70bbc6c4fcf36daa6beccb746c2c16ec05a4b7a68",
+      "entry": "tessera_rocm_scalar_binary_3f395b0e58f52c52",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "add_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.058417,
+          43.8092,
+          42.423174,
+          42.944651,
+          42.056444,
+          42.26862,
+          42.194307
+        ],
+        "cached_replay": [
+          16.733133,
+          16.25984,
+          16.80491,
+          15.801334,
+          16.038427,
+          17.39668,
+          16.45912
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.423174,
+        "cached_replay": 16.45912
+      },
+      "uncached_over_cached": 2.5774873747806692,
+      "image_digest": "d6035bdefd194e577fe7024d95e8f7ea40486c1f87bb4e5211489b4952855549",
+      "entry": "tessera_rocm_scalar_binary_5b1623ccbdfd5310",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "add_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.266475,
+          42.015746,
+          42.498839,
+          41.965671,
+          42.172426,
+          42.255244,
+          43.51606
+        ],
+        "cached_replay": [
+          16.492233,
+          16.514325,
+          16.534223,
+          16.156302,
+          16.080828,
+          16.863262,
+          17.314893
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.255244,
+        "cached_replay": 16.514325
+      },
+      "uncached_over_cached": 2.5587024598341137,
+      "image_digest": "d6035bdefd194e577fe7024d95e8f7ea40486c1f87bb4e5211489b4952855549",
+      "entry": "tessera_rocm_scalar_binary_5b1623ccbdfd5310",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "add_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          44.121427,
+          43.235666,
+          43.73017,
+          44.011126,
+          43.587017,
+          44.306179,
+          43.125745
+        ],
+        "cached_replay": [
+          16.704358,
+          17.180206,
+          17.044468,
+          16.351234,
+          17.284225,
+          17.126665,
+          16.918136
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.73017,
+        "cached_replay": 17.044468
+      },
+      "uncached_over_cached": 2.5656517997510986,
+      "image_digest": "8cf6c8297a50a91e52a7bf2e78758874a887c37945a8d094675e7cd51ef05203",
+      "entry": "tessera_rocm_scalar_binary_c5c4a017860b94a0",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "add_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          41.551611,
+          43.376914,
+          41.557914,
+          42.583641,
+          42.31047,
+          43.425117,
+          42.069981
+        ],
+        "cached_replay": [
+          16.564091,
+          16.699169,
+          16.524254,
+          17.06694,
+          16.484919,
+          16.491993,
+          16.235854
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.31047,
+        "cached_replay": 16.524254
+      },
+      "uncached_over_cached": 2.5605071188085105,
+      "image_digest": "8cf6c8297a50a91e52a7bf2e78758874a887c37945a8d094675e7cd51ef05203",
+      "entry": "tessera_rocm_scalar_binary_c5c4a017860b94a0",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "div_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 1.1663830123964658e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.594962,
+          42.623668,
+          42.531851,
+          42.958341,
+          43.011397,
+          43.056985,
+          41.486356
+        ],
+        "cached_replay": [
+          16.598025,
+          16.51708,
+          16.943244,
+          16.559076,
+          17.032905,
+          17.138687,
+          16.136253
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.958341,
+        "cached_replay": 16.598025
+      },
+      "uncached_over_cached": 2.5881597961203213,
+      "image_digest": "0cd81d8db3d8e870ee49600ba6a068c5dd2c0f454012b4a55444efd02cfde21a",
+      "entry": "tessera_rocm_scalar_binary_0625a0d06354ce2e",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "div_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 1.190597274103311e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.336609,
+          42.126709,
+          42.648043,
+          43.465745,
+          43.018751,
+          42.736413,
+          41.999305
+        ],
+        "cached_replay": [
+          16.907074,
+          17.061409,
+          16.131134,
+          16.261973,
+          16.273866,
+          16.778129,
+          16.629816
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.648043,
+        "cached_replay": 16.629816
+      },
+      "uncached_over_cached": 2.564552909064057,
+      "image_digest": "0cd81d8db3d8e870ee49600ba6a068c5dd2c0f454012b4a55444efd02cfde21a",
+      "entry": "tessera_rocm_scalar_binary_0625a0d06354ce2e",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "div_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 5.71090268408625e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.884696,
+          42.771702,
+          42.188861,
+          41.955776,
+          42.162371,
+          42.737458,
+          42.03018
+        ],
+        "cached_replay": [
+          16.682687,
+          16.643051,
+          17.086149,
+          17.058496,
+          17.057834,
+          16.330898,
+          16.290168
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.188861,
+        "cached_replay": 16.682687
+      },
+      "uncached_over_cached": 2.528900829944241,
+      "image_digest": "af87d5f1ceba44d4935fdc2587f77d002279720783099313ab7d5e1b5abdb802",
+      "entry": "tessera_rocm_scalar_binary_dba7b37ae41fda59",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "div_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 1.1909880814897633e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.183652,
+          41.700139,
+          43.077719,
+          42.970554,
+          43.233085,
+          41.705109,
+          41.983118
+        ],
+        "cached_replay": [
+          16.949869,
+          16.446758,
+          16.010405,
+          16.643273,
+          17.220245,
+          16.477546,
+          17.156944
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.183652,
+        "cached_replay": 16.643273
+      },
+      "uncached_over_cached": 2.534576702551235,
+      "image_digest": "af87d5f1ceba44d4935fdc2587f77d002279720783099313ab7d5e1b5abdb802",
+      "entry": "tessera_rocm_scalar_binary_dba7b37ae41fda59",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "div_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 5.6467558184891686e-08,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.610035,
+          42.675702,
+          41.989481,
+          42.016053,
+          41.449019,
+          42.340221,
+          42.90594
+        ],
+        "cached_replay": [
+          16.447881,
+          16.203784,
+          16.271183,
+          16.901365,
+          16.747392,
+          16.708327,
+          16.345124
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.340221,
+        "cached_replay": 16.447881
+      },
+      "uncached_over_cached": 2.5742052122094026,
+      "image_digest": "29235ebf678454c416074ea5a81c15006f243012db58017107e5859aba936b9a",
+      "entry": "tessera_rocm_scalar_binary_d255d5a8b0d52e0f",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "div_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 1.1598741700424853e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          41.722151,
+          42.514633,
+          41.891254,
+          42.283802,
+          42.153985,
+          42.059975,
+          41.698847
+        ],
+        "cached_replay": [
+          16.736902,
+          16.260323,
+          16.962782,
+          17.371574,
+          16.082181,
+          16.592787,
+          16.512202
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.059975,
+        "cached_replay": 16.592787
+      },
+      "uncached_over_cached": 2.5348348652941786,
+      "image_digest": "29235ebf678454c416074ea5a81c15006f243012db58017107e5859aba936b9a",
+      "entry": "tessera_rocm_scalar_binary_d255d5a8b0d52e0f",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cumsum_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 7.450580596923828e-07,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.310584,
+          42.66215,
+          42.375188,
+          41.390132,
+          42.747603,
+          42.841653,
+          46.194242
+        ],
+        "cached_replay": [
+          16.104284,
+          16.227209,
+          17.145953,
+          17.172503,
+          16.873614,
+          16.9139,
+          18.03458
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.747603,
+        "cached_replay": 16.9139
+      },
+      "uncached_over_cached": 2.5273652439709346,
+      "image_digest": "38be32fd989c001ea13b3194df85da940db23f76c9bbd9b56f1e3cce70a75a08",
+      "entry": "tessera_rocm_scan_902ca2b7a8a49483",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cumsum_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 3.0279159545898438e-05,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.592517,
+          43.844287,
+          43.898686,
+          44.182232,
+          43.631811,
+          44.247723,
+          43.143794
+        ],
+        "cached_replay": [
+          16.746865,
+          16.156564,
+          17.012288,
+          16.893566,
+          17.768993,
+          16.65493,
+          17.492871
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.844287,
+        "cached_replay": 16.893566
+      },
+      "uncached_over_cached": 2.595324575048276,
+      "image_digest": "38be32fd989c001ea13b3194df85da940db23f76c9bbd9b56f1e3cce70a75a08",
+      "entry": "tessera_rocm_scan_902ca2b7a8a49483",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cumsum_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.515019,
+          43.749691,
+          42.467389,
+          42.949594,
+          43.702998,
+          44.210958,
+          43.082698
+        ],
+        "cached_replay": [
+          17.038427,
+          17.483428,
+          16.573725,
+          16.48145,
+          16.475538,
+          16.790299,
+          16.603152
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.515019,
+        "cached_replay": 16.603152
+      },
+      "uncached_over_cached": 2.620889033600367,
+      "image_digest": "8bf8565d5b9c1066eed0719f0b319eedf767f0183226a4f1c3f8e6ceb19960be",
+      "entry": "tessera_rocm_scan_d5b940f07cea8500",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cumsum_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.232779,
+          42.863169,
+          44.380036,
+          44.856474,
+          44.234492,
+          45.548651,
+          43.676927
+        ],
+        "cached_replay": [
+          16.453246,
+          16.839243,
+          16.896106,
+          16.427437,
+          16.813322,
+          16.747417,
+          17.188635
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 44.234492,
+        "cached_replay": 16.813322
+      },
+      "uncached_over_cached": 2.6309192198900373,
+      "image_digest": "8bf8565d5b9c1066eed0719f0b319eedf767f0183226a4f1c3f8e6ceb19960be",
+      "entry": "tessera_rocm_scan_d5b940f07cea8500",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cumsum_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          44.708116,
+          45.614155,
+          45.116371,
+          44.145216,
+          44.811003,
+          42.855425,
+          43.047511
+        ],
+        "cached_replay": [
+          16.586695,
+          16.223884,
+          16.993442,
+          17.066051,
+          17.092937,
+          16.700096,
+          16.179173
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 44.708116,
+        "cached_replay": 16.700096
+      },
+      "uncached_over_cached": 2.677117305193934,
+      "image_digest": "01cd29967236eca8bb495211f3ce05288d843a74893bf15b36e8acf001df28df",
+      "entry": "tessera_rocm_scan_f9430228edb48faa",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cumsum_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.662897,
+          45.017411,
+          44.111293,
+          44.126836,
+          44.759279,
+          43.004655,
+          43.080698
+        ],
+        "cached_replay": [
+          16.523835,
+          17.451577,
+          16.087887,
+          17.096319,
+          16.315783,
+          19.090094,
+          17.850523
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 44.111293,
+        "cached_replay": 17.096319
+      },
+      "uncached_over_cached": 2.58016319185434,
+      "image_digest": "01cd29967236eca8bb495211f3ce05288d843a74893bf15b36e8acf001df28df",
+      "entry": "tessera_rocm_scan_f9430228edb48faa",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cummax_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.807516,
+          45.292937,
+          43.952379,
+          43.226592,
+          42.210102,
+          43.346617,
+          44.038552
+        ],
+        "cached_replay": [
+          17.216868,
+          16.91868,
+          16.875526,
+          17.173105,
+          16.234768,
+          16.77503,
+          16.702181
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.807516,
+        "cached_replay": 16.875526
+      },
+      "uncached_over_cached": 2.5959200323592877,
+      "image_digest": "d7f3e3523e92b55e6674ecf6c23cc4b59e27a65d288e724a21b561c37c4f53b5",
+      "entry": "tessera_rocm_scan_181f095b467699d6",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cummax_f32",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.101379,
+          44.571955,
+          43.851792,
+          42.661975,
+          42.591571,
+          44.284568,
+          42.862603
+        ],
+        "cached_replay": [
+          17.100327,
+          17.208904,
+          16.087617,
+          17.001412,
+          16.466706,
+          17.274098,
+          17.325175
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.862603,
+        "cached_replay": 17.100327
+      },
+      "uncached_over_cached": 2.50653703873616,
+      "image_digest": "d7f3e3523e92b55e6674ecf6c23cc4b59e27a65d288e724a21b561c37c4f53b5",
+      "entry": "tessera_rocm_scan_181f095b467699d6",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cummax_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.68869,
+          43.935672,
+          42.006854,
+          42.553748,
+          44.703984,
+          44.068635,
+          41.71305
+        ],
+        "cached_replay": [
+          16.444825,
+          16.396637,
+          18.066771,
+          16.361596,
+          16.813668,
+          16.796647,
+          16.556292
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.68869,
+        "cached_replay": 16.556292
+      },
+      "uncached_over_cached": 2.638796778892279,
+      "image_digest": "0048982ea69a9e26efbed5772b54ec2924af9314e531154f20b315d2ba94630f",
+      "entry": "tessera_rocm_scan_553c73cba2467cc7",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cummax_f16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.882615,
+          42.849864,
+          41.921181,
+          42.306572,
+          42.741311,
+          42.834775,
+          43.31936
+        ],
+        "cached_replay": [
+          16.132859,
+          16.578579,
+          16.156795,
+          16.654299,
+          16.779544,
+          17.910016,
+          17.139802
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 42.834775,
+        "cached_replay": 16.654299
+      },
+      "uncached_over_cached": 2.571995074665106,
+      "image_digest": "0048982ea69a9e26efbed5772b54ec2924af9314e531154f20b315d2ba94630f",
+      "entry": "tessera_rocm_scan_553c73cba2467cc7",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cummax_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        3,
+        17
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          43.724529,
+          44.004437,
+          43.347825,
+          44.053623,
+          42.535067,
+          42.797073,
+          44.000835
+        ],
+        "cached_replay": [
+          17.157614,
+          17.035072,
+          17.109198,
+          16.826978,
+          16.529872,
+          16.479786,
+          17.024341
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.724529,
+        "cached_replay": 17.024341
+      },
+      "uncached_over_cached": 2.5683536884041502,
+      "image_digest": "59060367786dde46dafdcdddf8000a3a9f398af582b1664ab2677973abd7a65e",
+      "entry": "tessera_rocm_scan_2324ed5987378279",
+      "identity_equal_all_arms": true
+    },
+    {
+      "family": "cummax_bf16",
+      "role": "math_replay_candidate",
+      "shape": [
+        64,
+        257
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "native_gpu_against_float64_before_timing",
+      "samples_ms": {
+        "uncached_replay": [
+          42.17576,
+          43.894606,
+          45.796313,
+          44.785593,
+          43.384418,
+          42.558432,
+          43.742431
+        ],
+        "cached_replay": [
+          16.623034,
+          16.367436,
+          16.859735,
+          16.30635,
+          16.169378,
+          16.261814,
+          16.968158
+        ]
+      },
+      "subprocess_counts": {
+        "uncached_replay": [
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          },
+          {
+            "version": 0,
+            "other": 3
+          }
+        ],
+        "cached_replay": [
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          },
+          {
+            "version": 0,
+            "other": 1
+          }
+        ]
+      },
+      "medians_ms": {
+        "uncached_replay": 43.742431,
+        "cached_replay": 16.367436
+      },
+      "uncached_over_cached": 2.6725280001094855,
+      "image_digest": "59060367786dde46dafdcdddf8000a3a9f398af582b1664ab2677973abd7a65e",
+      "entry": "tessera_rocm_scan_2324ed5987378279",
+      "identity_equal_all_arms": true
+    }
+  ],
+  "limitations": [
+    "No kernel speed claim",
+    "Owning-host compiler snapshot identified by content hash",
+    "Static math profiles; no generic cache closure claim"
+  ]
+}

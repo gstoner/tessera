@@ -1,0 +1,5 @@
+All 12 delivered source hashes match this worktree.
+Live architecture: gfx1201; AMD Radeon RX 9070 XT.
+LLVM/MLIR 23.1.1 assertions; native HIP runtime freshly built on Tajasaurus.
+TESSERA_ROCM_PROGRAM_CACHE and TESSERA_ROCM_PROGRAM_PINNED unset (native defaults).
+Twelve profiles, seven numerical-gated timing windows per scope; event windows >20ms.

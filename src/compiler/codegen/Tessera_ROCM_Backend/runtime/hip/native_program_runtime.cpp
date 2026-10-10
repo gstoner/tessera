@@ -9,6 +9,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <unistd.h>
 extern "C" int tessera_rocm_image_acquire(const void *, size_t, const char *,
@@ -157,6 +158,74 @@ int upload(Program &p, const void *const *inputs, const uint64_t *bytes) {
   return 0;
 }
 } // namespace
+
+extern "C" int tessera_rocm_program_pack_host_view(
+    const void *source, uint64_t sourceSpan, uint32_t rank,
+    const uint64_t *shape, const uint64_t *strides, uint32_t itemBytes,
+    void *destination, uint64_t destinationBytes) {
+  constexpr uint64_t limit = INT64_MAX;
+  if (!source || !destination || !shape || !strides || rank < 2 || rank > 32 ||
+      !itemBytes || itemBytes > 8 || sourceSpan > limit ||
+      destinationBytes > limit) return 1;
+  uint64_t count = 1, span = itemBytes;
+  for (uint32_t axis = 0; axis < rank; ++axis) {
+    if (!shape[axis] || shape[axis] > limit || !strides[axis] ||
+        strides[axis] % itemBytes || strides[axis] > limit ||
+        count > limit / shape[axis]) return 1;
+    count *= shape[axis];
+    if (shape[axis] - 1 > (limit - span) / strides[axis]) return 1;
+    span += (shape[axis] - 1) * strides[axis];
+  }
+  if (count > limit / itemBytes || count * itemBytes != destinationBytes ||
+      span > sourceSpan) return 1;
+  uintptr_t src = reinterpret_cast<uintptr_t>(source);
+  uintptr_t dst = reinterpret_cast<uintptr_t>(destination);
+  if (src > UINTPTR_MAX - sourceSpan || dst > UINTPTR_MAX - destinationBytes ||
+      (src < dst + destinationBytes && dst < src + sourceSpan)) return 1;
+  const auto *input = static_cast<const unsigned char *>(source);
+  auto *output = static_cast<unsigned char *>(destination);
+  // Collapse an actually contiguous suffix; singleton axes contribute no
+  // offset. The validated total byte count bounds every block multiplication.
+  uint32_t prefix = rank;
+  uint64_t blockBytes = itemBytes;
+  while (prefix && (shape[prefix-1] == 1 || strides[prefix-1] == blockBytes)) {
+    blockBytes *= shape[--prefix];
+  }
+  if (!prefix) {
+    std::memcpy(output, input, destinationBytes);
+    return 0;
+  }
+  const uint64_t columns = shape[prefix-1];
+  const uint64_t rows = destinationBytes / blockBytes / columns;
+  for (uint64_t row = 0; row < rows; ++row) {
+    uint64_t remaining = row, offset = 0;
+    for (uint32_t axis = prefix-1; axis-- > 0;) {
+      offset += (remaining % shape[axis]) * strides[axis];
+      remaining /= shape[axis];
+    }
+    auto *outRow = output + row * columns * blockBytes;
+    const auto *inRow = input + offset;
+    // Fixed-width memcpy keeps unaligned byte inputs legal while avoiding a
+    // dynamic libc call for each interleaved scalar. Only storage is moved.
+    auto fixed = [&](auto width) {
+      constexpr size_t bytes = decltype(width)::value;
+      for (uint64_t column = 0; column < columns; ++column)
+        std::memcpy(outRow + column * bytes,
+                    inRow + column * strides[prefix-1], bytes);
+    };
+    switch (blockBytes) {
+    case 1: fixed(std::integral_constant<size_t, 1>{}); break;
+    case 2: fixed(std::integral_constant<size_t, 2>{}); break;
+    case 4: fixed(std::integral_constant<size_t, 4>{}); break;
+    case 8: fixed(std::integral_constant<size_t, 8>{}); break;
+    default:
+      for (uint64_t column = 0; column < columns; ++column)
+        std::memcpy(outRow + column * blockBytes,
+                    inRow + column * strides[prefix-1], blockBytes);
+    }
+  }
+  return 0;
+}
 
 extern "C" int tessera_rocm_program_prepare(
     const char *architecture, uint32_t arguments, uint32_t buffers,

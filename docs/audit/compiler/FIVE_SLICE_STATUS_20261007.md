@@ -1539,3 +1539,21 @@ cases skip. Owning gfx1201: 48 + 6 pass, 6 foreign/family cases skip.
 Named pinned/pageable completed-call medians are 0.224–0.390; no GPU kernel
 speedup is claimed. Follow-up required for broader native transfer families,
 symbolic layouts, image keys and W8A8/MXFP4 program closure.
+
+### Native scaled JVP frame follow-up (2026-10-08)
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization
+SCALED-MAP-AXIS-INTEGRATION-20261008; PR902.
+Typed gfx1201 JVP binding retains checked positive-stride primal/seed views;
+native C++ owns byte packing. Cold backing validation precedes numerical
+certification. Row-block copies remove most of the measured 42% large-case
+packing gap, but matched public calls remain 2.3–4.5% slower than the frozen
+Python preparation control. Arithmetic stays in the same MLIR/native program.
+Evidence: benchmarks/baselines/native_scaled_jvp_frame_20261008/README.md.
+Generic scaled_matmul batching/transpose closure remains open.
+
+Current-source host and owning device proof is in the linked packet. This
+continues frontend/AD integration in the ROCm route slice; all five programs
+retain the wider dynamic/composed/storage and performance obligations recorded
+above. Native host preparation is now owned below the Python binding for this
+admitted family, with remaining matched cost explicitly measured.

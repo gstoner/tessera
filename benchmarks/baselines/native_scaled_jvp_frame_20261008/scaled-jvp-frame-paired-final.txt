@@ -1,0 +1,9 @@
+single False {'reference_python_frame': 1.5287422138499096, 'native_frame': 1.602523378096521} 1.0311621629694232
+single True {'reference_python_frame': 1.5234921884257346, 'native_frame': 1.5803764035808854} 1.0351882573011006
+nested False {'reference_python_frame': 1.5349340901593678, 'native_frame': 1.6007857484510168} 1.0421561278644378
+nested True {'reference_python_frame': 1.5580413455609232, 'native_frame': 1.626659810426645} 1.041442244177192
+cartesian False {'reference_python_frame': 1.7078097807825543, 'native_frame': 1.7578932238393463} 1.0311258895396243
+cartesian True {'reference_python_frame': 1.7190371581818908, 'native_frame': 1.7605304674361832} 1.0234137999878608
+composed False {'reference_python_frame': 2.9225462858448736, 'native_frame': 3.009368279890623} 1.0314430035844693
+partial False {'reference_python_frame': 3.0963320314185694, 'native_frame': 3.1813546520425007} 1.0266664765667446
+large False {'reference_python_frame': 3.6182231197017245, 'native_frame': 3.7581401848001406} 1.0451407013104663

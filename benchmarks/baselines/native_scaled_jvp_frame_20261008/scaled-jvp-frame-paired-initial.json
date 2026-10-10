@@ -1,0 +1,1270 @@
+{
+  "schema": "tessera.rocm.native_scaled_jvp_frame.v1",
+  "architecture": "gfx1201",
+  "device_lines": [
+    "Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor",
+    "Name:                    gfx1201",
+    "Marketing Name:          AMD Radeon RX 9070 XT"
+  ],
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "7d35cb91a577c7a8a05c2cf18200d5290f80e56d5b871f63705672a9fbec1917",
+    "python/tessera/compiler/native_vmap.py": "c89ddc04c61abfae78b30de6ba4dc971fd1de8a85464b50706e88cd957271e7f",
+    "python/tessera/compiler/paged_host_span.py": "fa4f39e3c0296d790598d330665c2aaf530b380dc92e43c0bd81c6b92812b395",
+    "python/tessera/compiler/native_scaled_program.py": "15ac9c2c834f6d4adf22ff0c744bf07376eac3a24958b8523b36cb57e5b39584",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "1b21a7849493fbf5bc864d81f22ae8f351d1dcd07a7ec58cbb2c7a7ed30de874",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "cee2a5f585cf6029b3ee40bdac24484651508e533b34a3e847fd7729cc4749ed",
+    "tests/unit/test_native_scaled_jvp_frame.py": "03dca792db85e5af18f913f5909a0a955ba452e06c330358852523c8b94f5c11",
+    "tests/device/rocm/test_native_scaled_jvp_frame.py": "9dcb22bfa73f6b7c85ba46901b9ddccaffa2caa5cfd823ead17186650acf8643",
+    "benchmarks/rocm/benchmark_native_scaled_jvp_frame.py": "b76a35c2344d72fe925cce86282ffa03cab33205f60f6fce60bceffcd8b7b6f7"
+  },
+  "reference_commit": "747c3364e4c20a55c57b112c3032a08838ee60c1",
+  "reference_file_sha256": "b32bdc6a9e628328e34b354d441d837edc4679cd4294bd5a7179c04c6853f7ae",
+  "reference_method_sha256": "a72d27cf3ee250618d97500dd3cc011021375d5e37894710024512ac383634ec",
+  "runtime_path": "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.transfer/libtessera_rocm_scaled_map_pack.so",
+  "runtime_sha256": "9d80998bfa923a6a620486dd656ba16c4cac697a3129c315f9853780c383ba68",
+  "compiler_sha256": {
+    "TESSERA_OPT": "2d40aa3e23704fa92a087a672728f66fbbc3c97177cdeb4286757f78937c29b4",
+    "TESSERA_ROCM_OPT": "40b90a1277505c4e340ce7e202f2736f7a3b92f3ae5a9366a82eb408c4c56790"
+  },
+  "rows": [
+    {
+      "profile": "single",
+      "rhs_transposed": false,
+      "input_shapes": [
+        [
+          3,
+          3,
+          256
+        ],
+        [
+          256,
+          5,
+          3
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          1
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          768,
+          1
+        ],
+        [
+          5,
+          1,
+          1280
+        ],
+        [
+          8,
+          4,
+          24
+        ],
+        [
+          4,
+          8,
+          4
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          48,
+          24,
+          8
+        ],
+        [
+          24,
+          8,
+          8
+        ]
+      ],
+      "wrt": [
+        "sa",
+        "sb"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "91de27997cd85460b3d0d5c48020083c4b223457e205397acb3bb39940022737",
+      "image_sha256": [
+        "79069e7fad593e2c08ec4c7843237084f37fa25070432221f8bedb263e6a5e69",
+        "b527e0f6e7c3a96018c6890dfee8727625417e5cb03f8a5461971820b41d6690",
+        "7b82e3172f7918b9142436b1aaedce71a8aaa5359be96859f3f94eb03279a35f",
+        "762a940f5f155e35b5fe7b45416254e710917a6d53d597a8ea6cf5042cf6dee1"
+      ],
+      "program_sha256": "a2fd25c7cbdf77ede5efa9f3d97639ab8aeee6bfb0b40621df330051ad23d99e",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          1.4661383102065884,
+          1.4843621902400628,
+          1.5535185957560316,
+          1.6182048784685321,
+          1.5252755911205895,
+          1.5410716878250241,
+          1.5072189416969195
+        ],
+        "native_frame": [
+          1.8197134049842134,
+          1.4855162517051212,
+          1.5891849689069204,
+          1.6161535022547469,
+          1.6306251927744597,
+          1.5733874679426663,
+          1.632762658118736
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 1.5252755911205895,
+        "native_frame": 1.6161535022547469
+      },
+      "paired_native_over_reference_samples": [
+        1.241160804759139,
+        1.000777479696429,
+        1.0229584462318788,
+        0.9987323136636896,
+        1.0690692241239315,
+        1.020969679978516,
+        1.0832949433879007
+      ],
+      "paired_native_over_reference_median": 1.0229584462318788,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.031966667622327805,
+        0.03685103729367256,
+        0.03693169727921486,
+        0.036812350153923035,
+        0.0368654690682888,
+        0.036775004118680954,
+        0.0367521233856678
+      ],
+      "native_event_repetitions": 1024,
+      "native_event_windows_ms": [
+        32.73386764526367,
+        37.7354621887207,
+        37.818058013916016,
+        37.69584655761719,
+        37.750240325927734,
+        37.6576042175293,
+        37.63417434692383
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "single",
+      "rhs_transposed": true,
+      "input_shapes": [
+        [
+          3,
+          3,
+          256
+        ],
+        [
+          5,
+          256,
+          3
+        ],
+        [
+          3,
+          2,
+          3
+        ],
+        [
+          2,
+          3,
+          1
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          768,
+          1
+        ],
+        [
+          256,
+          1,
+          1280
+        ],
+        [
+          8,
+          4,
+          24
+        ],
+        [
+          4,
+          8,
+          4
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          48,
+          24,
+          8
+        ],
+        [
+          24,
+          8,
+          8
+        ]
+      ],
+      "wrt": [
+        "sa",
+        "sb"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "a07c95c89a9d41425be2aaf47d4de11ee36842896d477c22d38f4284139baf8a",
+      "image_sha256": [
+        "baabd20e245d94e73832bed6a386b4dac3b91e1226ad64ecf7fd5d3fcd3087bb",
+        "f5523c9b44c4b946541bd3f933b1d8b93565c24504b6c70cfc47a55cab629eba",
+        "c43aaf2103d029ce3aab61d5ebfe9b5b3fe503a03a38d32c251362463bad9094",
+        "762a940f5f155e35b5fe7b45416254e710917a6d53d597a8ea6cf5042cf6dee1"
+      ],
+      "program_sha256": "41f38a2ab21e43e48271e6a58490821204efa8953dca42a16d875188cb8db403",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          1.3954599344288,
+          1.3979465657030232,
+          1.4769542831345461,
+          1.6944423477980308,
+          1.5035960968816653,
+          1.5145460638450459,
+          1.5028349080239423
+        ],
+        "native_frame": [
+          1.7490951213403605,
+          1.4329276891658083,
+          1.5130895335460082,
+          1.5401508717332035,
+          1.5606594097334892,
+          1.544615653983783,
+          1.5567679365631193
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 1.5028349080239423,
+        "native_frame": 1.544615653983783
+      },
+      "paired_native_over_reference_samples": [
+        1.2534183735316724,
+        1.0250232192853475,
+        1.0244660588510377,
+        0.9089426227659307,
+        1.0379512243814468,
+        1.0198538630528002,
+        1.0358875271336976
+      ],
+      "paired_native_over_reference_median": 1.0250232192853475,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.05921259894967079,
+        0.062393881380558014,
+        0.06606248766183853,
+        0.06596044450998306,
+        0.06607793271541595,
+        0.06616531312465668,
+        0.06618820130825043
+      ],
+      "native_event_repetitions": 256,
+      "native_event_windows_ms": [
+        15.158425331115723,
+        15.972833633422852,
+        16.911996841430664,
+        16.885873794555664,
+        16.915950775146484,
+        16.93832015991211,
+        16.94417953491211
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "nested",
+      "rhs_transposed": false,
+      "input_shapes": [
+        [
+          3,
+          3,
+          2,
+          256
+        ],
+        [
+          2,
+          256,
+          5,
+          3
+        ],
+        [
+          3,
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          512,
+          1536,
+          256,
+          1
+        ],
+        [
+          3840,
+          5,
+          1,
+          1280
+        ],
+        [
+          48,
+          16,
+          8,
+          4
+        ],
+        [
+          8,
+          4,
+          4,
+          16
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          96,
+          32,
+          16,
+          8
+        ],
+        [
+          48,
+          24,
+          24,
+          8
+        ]
+      ],
+      "wrt": [
+        "sa",
+        "sb"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "2030923a1b143e59b13f596b03c553d2b111408eceb8228320aae0f0b9004e74",
+      "image_sha256": [
+        "af27717391b5daeed22d720d1e83a14ebb6c795f0a3bbc80c7f5ce5d3d96199c",
+        "d152f89d381ba707eb28817de845ce30c28ca36b151cd63626435b265ee8d409",
+        "1fe0984cadd1981589791b1ec623d4f17436ef6554bd56e838ffe9b3912a4c15",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "program_sha256": "d74a994b98b6716f2a9bdd29a74805d64d0d22dbdc59832fe65f512c34ae5715",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          1.4932438134565018,
+          1.5277916536433622,
+          1.4907070944900624,
+          1.525173218396958,
+          1.4998680344433524,
+          1.5478318091481924,
+          1.5147667800192721
+        ],
+        "native_frame": [
+          1.7201542141265236,
+          1.5821078777662478,
+          1.6130112198879942,
+          1.586918908287771,
+          1.58610830840189,
+          1.6134411271195859,
+          1.6138738137669861
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 1.5147667800192721,
+        "native_frame": 1.6130112198879942
+      },
+      "paired_native_over_reference_samples": [
+        1.1519580383492622,
+        1.0355521147097226,
+        1.0820443706546987,
+        1.0404843785256808,
+        1.057498574526621,
+        1.0423878858049183,
+        1.0654272559016993
+      ],
+      "paired_native_over_reference_median": 1.057498574526621,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.03542207553982735,
+        0.035401903092861176,
+        0.0354003980755806,
+        0.03530699387192726,
+        0.03539507836103439,
+        0.035382382571697235,
+        0.035357434302568436
+      ],
+      "native_event_repetitions": 1024,
+      "native_event_windows_ms": [
+        36.2722053527832,
+        36.251548767089844,
+        36.25000762939453,
+        36.154361724853516,
+        36.24456024169922,
+        36.23155975341797,
+        36.20601272583008
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "nested",
+      "rhs_transposed": true,
+      "input_shapes": [
+        [
+          3,
+          3,
+          2,
+          256
+        ],
+        [
+          2,
+          5,
+          256,
+          3
+        ],
+        [
+          3,
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          512,
+          1536,
+          256,
+          1
+        ],
+        [
+          3840,
+          256,
+          1,
+          1280
+        ],
+        [
+          48,
+          16,
+          8,
+          4
+        ],
+        [
+          8,
+          4,
+          4,
+          16
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          96,
+          32,
+          16,
+          8
+        ],
+        [
+          48,
+          24,
+          24,
+          8
+        ]
+      ],
+      "wrt": [
+        "sa",
+        "sb"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "8662abb6199a4586e9b9de0eab36921461b21f5def9983e4e133197495f81e20",
+      "image_sha256": [
+        "bc821ddb0e4c6be03790dd387d03eb5b588b3491b9407dec2002bee31c7550e5",
+        "581a2030db71b3898724481f825aa6651aab3c2eac488de7b1fe35e9a8feabfb",
+        "f990fa2f6ced1782aebcfc57b4bf569789b261b789f7d3ef7f552f4481605373",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "program_sha256": "aab6de80b1a692ca4f18611110db12c352b987620f6d85a399ff955979f7bdf8",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          1.5002562795416452,
+          1.5040043435874395,
+          1.5202400609268807,
+          1.550786655570846,
+          1.7821388464653865,
+          1.514796844276134,
+          1.5215084058581851
+        ],
+        "native_frame": [
+          1.757095094944816,
+          1.5877893165452406,
+          1.619290400412865,
+          1.6143963730428368,
+          1.6344390023732558,
+          1.611391533515416,
+          1.5899252830422483
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 1.5202400609268807,
+        "native_frame": 1.6143963730428368
+      },
+      "paired_native_over_reference_samples": [
+        1.1711966274733006,
+        1.0557079328361194,
+        1.0651544068807093,
+        1.041017710104409,
+        0.9171221454573689,
+        1.0637674217531403,
+        1.0449664799225828
+      ],
+      "paired_native_over_reference_median": 1.0557079328361194,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.06489761918783188,
+        0.06480199843645096,
+        0.06495586037635803,
+        0.06487096101045609,
+        0.06470703333616257,
+        0.06527747958898544,
+        0.06490100175142288
+      ],
+      "native_event_repetitions": 256,
+      "native_event_windows_ms": [
+        16.61379051208496,
+        16.589311599731445,
+        16.628700256347656,
+        16.606966018676758,
+        16.565000534057617,
+        16.711034774780273,
+        16.614656448364258
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "cartesian",
+      "rhs_transposed": false,
+      "input_shapes": [
+        [
+          3,
+          2,
+          256
+        ],
+        [
+          256,
+          3,
+          5
+        ],
+        [
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          2304,
+          1
+        ],
+        [
+          5,
+          1280,
+          1
+        ],
+        [
+          8,
+          4,
+          72
+        ],
+        [
+          4,
+          4,
+          8
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          32,
+          16,
+          8
+        ],
+        [
+          24,
+          24,
+          8
+        ]
+      ],
+      "wrt": [
+        "sa",
+        "sb"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "003d1ed1eed80890ed5567dcf426f663b3835cf711056dbd7bfc92d71b6b26db",
+      "image_sha256": [
+        "ce09dc17e0519a60130bf6ca63ac43327bcf3e8d7d119860c6ad9839eb5525fe",
+        "5a84e95b60ed2e15addf4b63b0724f9a1b22d082d41f7b3311652dcbf3e76d93",
+        "0bdd21f7d247e4760667ecefc5829bd96a15f786fd2fad7ecb90d4210fe67d2b",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "program_sha256": "b3c64aea466ac2c81d3f1031fdd0f29482d8cac3e252f68d35253fa6f2baaa6f",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          1.5365699655376375,
+          1.5503259055549279,
+          1.5271222509909421,
+          1.5454415915883146,
+          1.5007772453827783,
+          1.5486289339605719,
+          1.5306768400478177
+        ],
+        "native_frame": [
+          1.7461911556893028,
+          1.5981065298547037,
+          1.6105405884445645,
+          1.6201360631384887,
+          1.6051471247919835,
+          1.5877298428677022,
+          1.6153707474586554
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 1.5365699655376375,
+        "native_frame": 1.6105405884445645
+      },
+      "paired_native_over_reference_samples": [
+        1.1364215068972274,
+        1.030819729018637,
+        1.0546245314672698,
+        1.04833212200107,
+        1.0695438844973861,
+        1.0252487268251735,
+        1.05533101775303
+      ],
+      "paired_native_over_reference_median": 1.0546245314672698,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.03696567937731743,
+        0.036973804235458374,
+        0.036973707377910614,
+        0.036934930831193924,
+        0.0370054766535759,
+        0.03694704920053482,
+        0.03695378452539444
+      ],
+      "native_event_repetitions": 1024,
+      "native_event_windows_ms": [
+        37.85285568237305,
+        37.861175537109375,
+        37.86107635498047,
+        37.82136917114258,
+        37.89360809326172,
+        37.833778381347656,
+        37.840675354003906
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "cartesian",
+      "rhs_transposed": true,
+      "input_shapes": [
+        [
+          3,
+          2,
+          256
+        ],
+        [
+          5,
+          3,
+          256
+        ],
+        [
+          3,
+          2,
+          2
+        ],
+        [
+          2,
+          1,
+          3
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          256,
+          2304,
+          1
+        ],
+        [
+          256,
+          1280,
+          1
+        ],
+        [
+          8,
+          4,
+          72
+        ],
+        [
+          4,
+          4,
+          8
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          32,
+          16,
+          8
+        ],
+        [
+          24,
+          24,
+          8
+        ]
+      ],
+      "wrt": [
+        "sa",
+        "sb"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "7e3cf48a9f9ab261c0f407849461073543a47fa71578a0be3b52b7bbb339ca27",
+      "image_sha256": [
+        "daf0c573659133b9b013e552213d7c993262d7b75a38c57fb95817eb1dc98df8",
+        "93fc5a15b45e931cd4f67d55fab27284fb91feab76ba098d203fd3c2bc7ac41b",
+        "523a8b7a2e036663b7837d75ef41b0f61da693b6f975a9f083a0b69473c10af9",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ],
+      "program_sha256": "f4a3ece08fe90ed35406d33ce04062836360f92b024e61816298614381d96bd1",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          1.5511744059040211,
+          1.5760002497700043,
+          1.573797591845505,
+          1.561155033414252,
+          1.5211236241157167,
+          1.530682471639011,
+          1.5495569678023458
+        ],
+        "native_frame": [
+          1.750115341565106,
+          1.604299592145253,
+          1.6277816612273455,
+          1.619796377781313,
+          1.6188573426916264,
+          1.6207309745368548,
+          1.621018091100268
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 1.5511744059040211,
+        "native_frame": 1.6207309745368548
+      },
+      "paired_native_over_reference_samples": [
+        1.1282518167550235,
+        1.0179564326714914,
+        1.0343017867491693,
+        1.0375627936444032,
+        1.0642510030259544,
+        1.058828989399364,
+        1.0461171320466338
+      ],
+      "paired_native_over_reference_median": 1.0461171320466338,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.06497955322265625,
+        0.06496808677911758,
+        0.06499999761581421,
+        0.06487787514925003,
+        0.06497334688901901,
+        0.06503015756607056,
+        0.06487207114696503
+      ],
+      "native_event_repetitions": 512,
+      "native_event_windows_ms": [
+        33.26953125,
+        33.2636604309082,
+        33.279998779296875,
+        33.217472076416016,
+        33.266353607177734,
+        33.295440673828125,
+        33.214500427246094
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "composed",
+      "rhs_transposed": false,
+      "input_shapes": [
+        [
+          17,
+          256
+        ],
+        [
+          256,
+          19
+        ],
+        [
+          17,
+          2
+        ],
+        [
+          2,
+          1
+        ],
+        [
+          17,
+          2
+        ],
+        [
+          2,
+          1
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          512,
+          2
+        ],
+        [
+          38,
+          2
+        ],
+        [
+          16,
+          8
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          16,
+          8
+        ],
+        [
+          8,
+          8
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          8,
+          8
+        ],
+        [
+          16,
+          8
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          16,
+          8
+        ]
+      ],
+      "wrt": [
+        "sb1",
+        "sa0",
+        "sb0",
+        "sa1"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "431afc8131d149dedc445926c0495340a3a1c50a94727e2cd14c836b64c66ea9",
+      "image_sha256": [
+        "6aa2008b25e172926b4c866aa1b4180dfba5da9f544443672f7f1640afdbc567",
+        "c8386e1b7c35207342cdde6a339cd53eeda995ae8eef2ecf5e2cce5303641da8",
+        "5ba09a3c018cbf64285b602f739f93d390417ff148d38e16c1ac77aeea1c6d2a",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2",
+        "f9a44c66bb77e8a131265477cd98efbe4d022eac066dd34d02826167f62cb12c",
+        "8a319bae98ae5ca5ffc4ef619a9197eeec5b62ffe2a87c9f193a3db98fc26b28",
+        "636d21278e34199cf97dea6d55c90ef1b0ea61574a782ad0ea8dbe657f50ab98",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2"
+      ],
+      "program_sha256": "5e52975347624c8075dd23b6a1a5789af2438c4cbf9631efef44c013538be350",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          2.9412960284389555,
+          2.9354458092711866,
+          2.9315868741832674,
+          2.9473285321728326,
+          2.9645545364473946,
+          2.969466724607628,
+          2.963086124509573
+        ],
+        "native_frame": [
+          3.139796906907577,
+          3.0363243786268868,
+          3.0491006255033426,
+          3.0396494330489077,
+          3.0420180337387137,
+          3.0325449697556905,
+          3.2182438735617325
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 2.9473285321728326,
+        "native_frame": 3.0420180337387137
+      },
+      "paired_native_over_reference_samples": [
+        1.067487555332529,
+        1.03436567251117,
+        1.0400853723131824,
+        1.0313235867221133,
+        1.026129894504875,
+        1.0212422805163435,
+        1.0861121608790199
+      ],
+      "paired_native_over_reference_median": 1.03436567251117,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.06712742149829865,
+        0.06718823313713074,
+        0.0672384649515152,
+        0.06727121770381927,
+        0.06721268594264984,
+        0.06725709140300751,
+        0.06721961498260498
+      ],
+      "native_event_repetitions": 256,
+      "native_event_windows_ms": [
+        17.184619903564453,
+        17.20018768310547,
+        17.21304702758789,
+        17.221431732177734,
+        17.20644760131836,
+        17.217815399169922,
+        17.208221435546875
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "partial",
+      "rhs_transposed": false,
+      "input_shapes": [
+        [
+          3,
+          37
+        ],
+        [
+          37,
+          5
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          1,
+          1
+        ],
+        [
+          3,
+          1
+        ],
+        [
+          1,
+          1
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          74,
+          2
+        ],
+        [
+          10,
+          2
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ],
+        [
+          8,
+          8
+        ]
+      ],
+      "wrt": [
+        "sb1",
+        "sa0",
+        "sb0",
+        "sa1"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "54a3106e40e8f7eba9b02245a5f87faadcc5b925396d5fb48812d96e3ae21b34",
+      "image_sha256": [
+        "74f6e257fb4ff242c35dae1caa6678c93ea791dc26fe0d1d07ca0cabc3c502d4",
+        "c5acbf6aca24415d12dfad68a95dd728e2cb058052f455e5dfb085e25d725b7f",
+        "0187401d5bad495c99aaf7346cad47e57dc0b08f4fa77cb4426548533c370033",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "ac5c5cb055a3a4f542b8bf534e0176af436fc0720eb0c611f07ae58d744555ed",
+        "2978634a052b0ec7f0776e6f8eb8bfcea1a6ec5f88cfe55f5260f8ce25936150",
+        "5f4fe4e51cdbdcb551817e7ccb86d3ee10b2284a7ea60e787ef472b0e1e3b4b2",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827"
+      ],
+      "program_sha256": "9fb05944ba939aae13ab9fb629e8fdfde98a1d09396031bbd3ff10bf3faf7788",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          3.067567122343462,
+          3.1361800647573546,
+          3.1424297485500574,
+          3.185932189808227,
+          3.122869245999027,
+          3.1432523392140865,
+          3.1973787845345214
+        ],
+        "native_frame": [
+          3.37026209308533,
+          3.2359050965169445,
+          3.3084958777180873,
+          3.2014505632105283,
+          3.2453237145091407,
+          3.2716041896492243,
+          3.233827563235536
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 3.1424297485500574,
+        "native_frame": 3.2453237145091407
+      },
+      "paired_native_over_reference_samples": [
+        1.0986759078675432,
+        1.0317982480917611,
+        1.052846409452639,
+        1.0048709051159168,
+        1.0392121663969762,
+        1.040834090484517,
+        1.011399581081014
+      ],
+      "paired_native_over_reference_median": 1.0392121663969762,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.09792368859052658,
+        0.09802065789699554,
+        0.09759627282619476,
+        0.097635917365551,
+        0.09799690544605255,
+        0.09803012758493423,
+        0.09794817864894867
+      ],
+      "native_event_repetitions": 256,
+      "native_event_windows_ms": [
+        25.068464279174805,
+        25.09328842163086,
+        24.98464584350586,
+        24.994794845581055,
+        25.087207794189453,
+        25.095712661743164,
+        25.07473373413086
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    },
+    {
+      "profile": "large",
+      "rhs_transposed": false,
+      "input_shapes": [
+        [
+          200,
+          1536
+        ],
+        [
+          1536,
+          129
+        ],
+        [
+          200,
+          12
+        ],
+        [
+          12,
+          2
+        ],
+        [
+          200,
+          12
+        ],
+        [
+          12,
+          2
+        ]
+      ],
+      "input_byte_strides": [
+        [
+          3072,
+          2
+        ],
+        [
+          258,
+          2
+        ],
+        [
+          96,
+          8
+        ],
+        [
+          16,
+          8
+        ],
+        [
+          96,
+          8
+        ],
+        [
+          16,
+          8
+        ]
+      ],
+      "seed_byte_strides": [
+        [
+          16,
+          8
+        ],
+        [
+          96,
+          8
+        ],
+        [
+          16,
+          8
+        ],
+        [
+          96,
+          8
+        ]
+      ],
+      "wrt": [
+        "sb1",
+        "sa0",
+        "sb0",
+        "sa1"
+      ],
+      "correctness": "passed_before_and_after_timing",
+      "artifact_hash": "6d2bd43b7d06bf9d2742d90ef58d09df7151e324ae6758025a8adf02a0899b02",
+      "image_sha256": [
+        "c5010afd46d5d6e51d12fd94b1a3189eb52c9fd4a675f918785316a68d8834f6",
+        "a6c7aac7cae398488261c075dac70d6721ff552b3354d91598a1c59e3094fd28",
+        "b46508935ff5303e69d348784590040f8eaced540230a4e9a24a2fe2ebf2f1a5",
+        "a3aba9e8eac4f173d4a9d9e5de4e17dc18eeee5ad919c696b188156e7cb134c3",
+        "4ba88fc2ae8be4dc4ae12af14cd14e2859eedad2f4a528001a9a34945b276fb8",
+        "b239ccdcf8948a79611e6b0a882265193aa6ad5547aa46fefd93556ff487bac7",
+        "7a68f83575753651acdf28cfa0e803f490faf12c8330ddb7dbc9668bf1e01364",
+        "a3aba9e8eac4f173d4a9d9e5de4e17dc18eeee5ad919c696b188156e7cb134c3",
+        "a3aba9e8eac4f173d4a9d9e5de4e17dc18eeee5ad919c696b188156e7cb134c3",
+        "a3aba9e8eac4f173d4a9d9e5de4e17dc18eeee5ad919c696b188156e7cb134c3"
+      ],
+      "program_sha256": "544cc473e08c9505c0551e9a663806386256526477b78683d5d3c24b2e435656",
+      "public_completed_samples_ms": {
+        "reference_python_frame": [
+          3.540413687005639,
+          3.4033194388030097,
+          3.5015848770854063,
+          3.5290688756504096,
+          3.6374714982230216,
+          3.500825281662401,
+          3.539992590958718
+        ],
+        "native_frame": [
+          5.213834003370721,
+          5.0052541846525855,
+          5.011183966416866,
+          4.955080905347131,
+          5.005976534448564,
+          4.96233665762702,
+          4.857039028138388
+        ]
+      },
+      "public_completed_medians_ms": {
+        "reference_python_frame": 3.5290688756504096,
+        "native_frame": 5.0052541846525855
+      },
+      "paired_native_over_reference_samples": [
+        1.4726623678207513,
+        1.470697733390844,
+        1.4311188054330402,
+        1.4040759984980193,
+        1.3762242637211275,
+        1.417476240136899,
+        1.3720477948297007
+      ],
+      "paired_native_over_reference_median": 1.417476240136899,
+      "calls_per_window": 32,
+      "native_resident_event_samples_ms": [
+        0.22768540680408478,
+        0.23432128131389618,
+        0.23385387659072876,
+        0.23443959653377533,
+        0.23372814059257507,
+        0.2277747541666031,
+        0.2354108691215515
+      ],
+      "native_event_repetitions": 128,
+      "native_event_windows_ms": [
+        29.14373207092285,
+        29.99312400817871,
+        29.93329620361328,
+        30.008268356323242,
+        29.91720199584961,
+        29.155168533325195,
+        30.132591247558594
+      ],
+      "scope": "completed public JVP includes all frame preparation/transfers; resident event excludes them"
+    }
+  ],
+  "closure": "native frame preparation extension; generic batching/transpose closure remains open"
+}

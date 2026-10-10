@@ -34,7 +34,9 @@ toolkit aliases resolve that failure; the same two tests then pass. Both
 logs are preserved. An invalid archive is rejected by its hash before any
 installation, and no Python install directory is created.
 
-The hosted GitHub runner must still confirm this change after publication.
+Hosted GitHub job 113519437685 at PR895 head e8d5d145f now also passes
+all 345 cases with zero skips and the unchanged execution gate. Its raw log
+and head-bound receipt are preserved here. This remains image compiler proof.
 Generic scaled_matmul batching/transpose closure remains open. Tests,
 coverage states, no-skip gate and required-check aggregation are unchanged.
 

@@ -1,0 +1,22 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2202,8 +2202,17 @@
+   };
+   if (prefetch != 0) {
+     // Prologue: slab 0 into buffer 0.
+-    drain(b, loc, planA, issue(b, loc, planA, c0), Value());
+-    drain(b, loc, planB, issue(b, loc, planB, c0), Value());
++    if (foldedFullK) {
++      // Keep first-slab A/B global fetches in flight together before either
++      // LDS drain. This changes no loop buffering or collective fence.
++      auto firstA = issue(b, loc, planA, c0);
++      auto firstB = issue(b, loc, planB, c0);
++      drain(b, loc, planA, firstA, Value());
++      drain(b, loc, planB, firstB, Value());
++    } else {
++      drain(b, loc, planA, issue(b, loc, planA, c0), Value());
++      drain(b, loc, planB, issue(b, loc, planB, c0), Value());
++    }
+     barrier(b, loc);
+   }
+   auto stage = [&](OpBuilder &kb, Location l, Value k0,

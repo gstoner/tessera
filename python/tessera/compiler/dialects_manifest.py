@@ -122,7 +122,7 @@ REGISTERED_DIALECTS: tuple[DialectSpec, ...] = (
         sprint="Phase 1",
     ),
     DialectSpec(
-        name="tessera.attn",
+        name="tessera_attn",
         target="TesseraAttnDialect",
         header="src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/AttnDialect.h",
         cpp_dir="src/compiler/tile_opt_fa4/lib/Dialect/Attn",

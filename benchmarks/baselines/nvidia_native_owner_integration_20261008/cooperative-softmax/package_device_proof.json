@@ -1,0 +1,693 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "compiler_sha256": "b8fe61ff3e13322eb43b096a035e75ac2bdbd0bd3810eb810b8714317918029e",
+  "runtime_sha256": "2b99f69437817d0f14edb71dbb62746baea93b52a60aecb7650ebc0534b8f827",
+  "source_sha256": {
+    "scheduled_kernel.py": "94c9177d8f2a0481580db78a8194630a2fbc1fa9c0d208a3d8acb90c5535708a",
+    "nvidia_native.py": "1eb682bc64e659271bcb2ebfd50329fddf7d986e5e939742c039a6989dde221c",
+    "runtime.py": "b8a443edd08d3452e25f39d0a3f767d13f385afc8c1629901d70ff56b91db5b0",
+    "tessera_nvidia_ptx_launch.cpp": "b8f9314793ecddf152de492eec4849414c6b16fbf080fe03033281152849a47d",
+    "PMPasses.cpp": "7c5188717217fd7aa247cbdb9e72f60667492a97ddbaac55289619c1c674394d",
+    "TileOps.cpp": "e18f9fbf548817d04b2b955aa5bea6cfde46d1d31ab477b51daa1b4ecda79b40",
+    "NVIDIALowering.cpp": "4afde7ceb8e1f698e5d1fe8856689a42db627d13066075d1bd5f599425ff56b2"
+  },
+  "rows": [
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        1
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.0,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "fe8b9cad324c8fdf2126435fc5a80c74022567eef631eb6b00f87e61083b8bd1"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00010772569186667802,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "1a24f89a3f96bf5a6a95246258e30cfd536da36a7f027cb1f8e97a547ee42a13"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00010772569186667802,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "1a24f89a3f96bf5a6a95246258e30cfd536da36a7f027cb1f8e97a547ee42a13"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00010772569186667802,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "1a24f89a3f96bf5a6a95246258e30cfd536da36a7f027cb1f8e97a547ee42a13"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00010772569186667802,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "1a24f89a3f96bf5a6a95246258e30cfd536da36a7f027cb1f8e97a547ee42a13"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 5.806388525009254e-05,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "3b691b2ca124b913af2c69c44064eedec1690ee5ed348e39def134668fa48fd2"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 5.438779702335306e-05,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "3b691b2ca124b913af2c69c44064eedec1690ee5ed348e39def134668fa48fd2"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 5.438779702335306e-05,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "3b691b2ca124b913af2c69c44064eedec1690ee5ed348e39def134668fa48fd2"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 5.438779702335306e-05,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "3b691b2ca124b913af2c69c44064eedec1690ee5ed348e39def134668fa48fd2"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.7837202220523947e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "5d4b5b0c6e27f8a753abc9c21809a85a293fd2be2af32b5f9989f4e46f3889c4"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.7837202220523947e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "5d4b5b0c6e27f8a753abc9c21809a85a293fd2be2af32b5f9989f4e46f3889c4"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.7837202220523947e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "5d4b5b0c6e27f8a753abc9c21809a85a293fd2be2af32b5f9989f4e46f3889c4"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.7837202220523947e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "5d4b5b0c6e27f8a753abc9c21809a85a293fd2be2af32b5f9989f4e46f3889c4"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.585610509702214e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "568c5fcbc444ac9e631f8b5f493cf5fac8c849cd5b6bc4163fbff54b1e9dc24d"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.3652567351868945e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "568c5fcbc444ac9e631f8b5f493cf5fac8c849cd5b6bc4163fbff54b1e9dc24d"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.3652567351868945e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "568c5fcbc444ac9e631f8b5f493cf5fac8c849cd5b6bc4163fbff54b1e9dc24d"
+    },
+    {
+      "dtype": "fp16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 3.3652567351868945e-06,
+      "entry": "tessera_tile_softmax_f16_cooperative_128",
+      "schedule_digest": "568c5fcbc444ac9e631f8b5f493cf5fac8c849cd5b6bc4163fbff54b1e9dc24d"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        1
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.0,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "af493aacaa718e70c5f0f7a3d93917c8791b866480c3125a8e7af735156f30c3"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00034835526802948213,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "7c541ac3748ebcf2260470ca3e491056bc2a0dc3a00514a5eff7e093f218833d"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00012840545642317513,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "7c541ac3748ebcf2260470ca3e491056bc2a0dc3a00514a5eff7e093f218833d"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00012840545642317513,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "7c541ac3748ebcf2260470ca3e491056bc2a0dc3a00514a5eff7e093f218833d"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00012840545642317513,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "7c541ac3748ebcf2260470ca3e491056bc2a0dc3a00514a5eff7e093f218833d"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00047218898346171323,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "0344d2668ad96945015129fdd45dd280be759656b9c84becd5edb931f6d795ae"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00039439382653314037,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "0344d2668ad96945015129fdd45dd280be759656b9c84becd5edb931f6d795ae"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00039439382653314037,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "0344d2668ad96945015129fdd45dd280be759656b9c84becd5edb931f6d795ae"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.00039439382653314037,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "0344d2668ad96945015129fdd45dd280be759656b9c84becd5edb931f6d795ae"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 2.2562984471681535e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "fc862a306ec8db2169672489a03f4b67f08267387c10b7e21b5041c0db181cdf"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.766264946626364e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "fc862a306ec8db2169672489a03f4b67f08267387c10b7e21b5041c0db181cdf"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.766264946626364e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "fc862a306ec8db2169672489a03f4b67f08267387c10b7e21b5041c0db181cdf"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.766264946626364e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "fc862a306ec8db2169672489a03f4b67f08267387c10b7e21b5041c0db181cdf"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 2.2499931692418138e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "ce63d9b8fb7e42ea3e83fb0b4581d4537ef8df6ca4382974d224e13735d3acaa"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.6746799847866534e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "ce63d9b8fb7e42ea3e83fb0b4581d4537ef8df6ca4382974d224e13735d3acaa"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.6746799847866534e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "ce63d9b8fb7e42ea3e83fb0b4581d4537ef8df6ca4382974d224e13735d3acaa"
+    },
+    {
+      "dtype": "bf16",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.6746799847866534e-05,
+      "entry": "tessera_tile_softmax_bf16_cooperative_128",
+      "schedule_digest": "ce63d9b8fb7e42ea3e83fb0b4581d4537ef8df6ca4382974d224e13735d3acaa"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        1
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 0.0,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "9cd0b73b6e0ba0a44c363c56ecdf102cf1e851c1076bfa08fe596db4ac115e95"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 2.4399700593313867e-08,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "7f477688edaedad3e50d94789c913c35fec89bde27f0b530a25b6df278e289b3"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 2.4399700593313867e-08,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "7f477688edaedad3e50d94789c913c35fec89bde27f0b530a25b6df278e289b3"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 2.4399700593313867e-08,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "7f477688edaedad3e50d94789c913c35fec89bde27f0b530a25b6df278e289b3"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        17
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 2.4399700593313867e-08,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "7f477688edaedad3e50d94789c913c35fec89bde27f0b530a25b6df278e289b3"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 7.966850693041927e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "8eb7c01dea24542d8531e891071b860d723599c98bb11955b8ac46a9b51f9d78"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 7.966850693041927e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "8eb7c01dea24542d8531e891071b860d723599c98bb11955b8ac46a9b51f9d78"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 7.966850693041927e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "8eb7c01dea24542d8531e891071b860d723599c98bb11955b8ac46a9b51f9d78"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        2,
+        3,
+        257
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 7.966850693041927e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "8eb7c01dea24542d8531e891071b860d723599c98bb11955b8ac46a9b51f9d78"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 9.78401030332643e-10,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "c9e559baab1579212e1b8a1e2e08e6af189afe84a8dc9a1def4f7f7e094f907a"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 9.78401030332643e-10,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "c9e559baab1579212e1b8a1e2e08e6af189afe84a8dc9a1def4f7f7e094f907a"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 9.78401030332643e-10,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "c9e559baab1579212e1b8a1e2e08e6af189afe84a8dc9a1def4f7f7e094f907a"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4096
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 9.78401030332643e-10,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "c9e559baab1579212e1b8a1e2e08e6af189afe84a8dc9a1def4f7f7e094f907a"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "finite",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.1999153476383029e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "29eb5b7164d5680be61d17335e259a1d9e6d5a90bdbad87b61bfdf5e85edb820"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "nan",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.1999153476383029e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "29eb5b7164d5680be61d17335e259a1d9e6d5a90bdbad87b61bfdf5e85edb820"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "positive_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.1999153476383029e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "29eb5b7164d5680be61d17335e259a1d9e6d5a90bdbad87b61bfdf5e85edb820"
+    },
+    {
+      "dtype": "fp32",
+      "shape": [
+        3,
+        4097
+      ],
+      "probe": "negative_infinity",
+      "host": "passed",
+      "resident": "passed",
+      "max_abs_error": 1.1999153476383029e-09,
+      "entry": "tessera_tile_softmax_f32_cooperative_128",
+      "schedule_digest": "29eb5b7164d5680be61d17335e259a1d9e6d5a90bdbad87b61bfdf5e85edb820"
+    }
+  ],
+  "timing": "not_run",
+  "integration": "isolated_candidate"
+}

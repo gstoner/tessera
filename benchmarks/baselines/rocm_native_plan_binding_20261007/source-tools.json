@@ -1,0 +1,12 @@
+{
+  "architecture": "gfx1201",
+  "gpu_uuid": "GPU-28d9e7efbf2ef716",
+  "source_tools_sha256": {
+    "python/tessera/compiler/native_scaled_program.py": "c8cd05eecf4dc109fdcae1fd7ff2415080c084de8e759f28f06586f23c1df6aa",
+    "tests/device/rocm/test_public_typed_scaled_primal.py": "cff93f6769b503afd8a882e5f0614ed9fe3bee96f426a74792215c74d9b06e84",
+    "tests/device/rocm/test_public_scaled_jvp.py": "ec55597de1ced3b36a276cc298fb332ff2fba3cd499c5989e14368b56c4d7d2b",
+    "benchmarks/rocm/benchmark_native_plan_binding.py": "97c3642880769efe596eb3f4d87c57b34a11471cb57b58e23c94ca95af1e4e4a",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt": "a760556c6b8bdc800d05fabb77a7d5bd4e3fba6309c9f625be82b052d557cf89",
+    ".build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c"
+  }
+}

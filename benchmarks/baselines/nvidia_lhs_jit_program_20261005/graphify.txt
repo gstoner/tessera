@@ -1,0 +1,1 @@
+graphify unavailable on authoritative WSL host (127); no fresh graph proof

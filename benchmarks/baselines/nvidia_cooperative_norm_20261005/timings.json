@@ -1,0 +1,2867 @@
+{
+  "bridge_sha256": "b39bb672ebcaeed8263b3b38fadf719c1ee391ab678c3ddf930feccd9310c6cc",
+  "compiler_sha256": "c10c99687e13ba4c6c928d832083c7dc2cf876c972cc505e579d2b53db8ace2a",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "nvidia_opt_sha256": "400b7cf73cfc23431af60acc82a6e9a3bfc26f4bad34ee5d6d0798cec8c1f2b2",
+  "rows": [
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.524176,
+        "serial": 0.460983
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.470074,
+          0.524176,
+          0.587309,
+          0.469054,
+          0.623637
+        ],
+        "serial": [
+          0.514265,
+          0.456553,
+          0.421932,
+          0.493005,
+          0.460983
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 1.000375828388406,
+      "image_digests": {
+        "cooperative_128": "d28281555c48242fca81f963b7e23a40d7625f754cd15621a9e855ffc4af9457",
+        "serial": "5eae5b2338a3405f97c25f57510b27d56876607765345aa25ec32a0cc5e1a57e"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009367039427161217,
+        "serial": 0.009370559826493263
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.01285472046583891,
+          0.009003520011901855,
+          0.009367039427161217,
+          0.010117119178175926,
+          0.009030399844050407
+        ],
+        "serial": [
+          0.009482559747993946,
+          0.009408640675246716,
+          0.007735360413789749,
+          0.009370559826493263,
+          0.00839008018374443
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "df6591052cb41a23884a286d087dcf7865da1a5f9adc96f04a96ea3e8622e4a5",
+        "serial": "a96fe1999dce6bbd2c5b5f50d0ff85e0adfb404f39a74c2fce4dd22ee1fa5ea6"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.461693,
+        "serial": 0.469844
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.463813,
+          0.467233,
+          0.461693,
+          0.441202,
+          0.443662
+        ],
+        "serial": [
+          0.647433,
+          0.433402,
+          0.456653,
+          0.469844,
+          0.551467
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 1.0340765673866048,
+      "image_digests": {
+        "cooperative_128": "6033a9df6f0e0d2451b12f95a1fd3a3ac3ae34efdd8fc8d75a3cdf2cb523e252",
+        "serial": "23a68890f5d078ab3e1fda7613a09c0e9d775e1c78b1e62ce1131fca8f4fd1d0"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009615999646484852,
+        "serial": 0.00994367990642786
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009807039983570576,
+          0.009615999646484852,
+          0.008132480084896088,
+          0.010428800247609615,
+          0.008470719680190086
+        ],
+        "serial": [
+          0.009282879531383514,
+          0.00994367990642786,
+          0.01087551936507225,
+          0.00919967982918024,
+          0.01033823937177658
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "8b8a306a0bbd2a97c4b94369a2d24072661ce9d4ffe6543f7ab7316ba037dd86",
+        "serial": "715d41677006d1d7b6ed13a7f8c1645be268bc7343c0e6664c6cf6f404424780"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.513935,
+        "serial": 0.532537
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.517236,
+          0.513935,
+          0.500516,
+          0.502215,
+          0.524176
+        ],
+        "serial": [
+          0.58913,
+          0.509576,
+          0.533977,
+          0.532537,
+          0.519546
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 4.478775301697776,
+      "image_digests": {
+        "cooperative_128": "e025cc12cdb75fd6dc4614d24a3e2bec96132b317bd3f0060b345637b36a84b9",
+        "serial": "9a86db7d28d415c28d4232b6338d6ce4c7782452b8f5ab00463ca82f6ece599e"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.00048828125,
+        "serial": 0.0009765625
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.010056320577859879,
+        "serial": 0.04504000023007393
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.010056320577859879,
+          0.009724480099976063,
+          0.008930560201406479,
+          0.010383679531514645,
+          0.010140479542315006
+        ],
+        "serial": [
+          0.04496736079454422,
+          0.04504000023007393,
+          0.04513055831193924,
+          0.045088957995176315,
+          0.0449705608189106
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "a8761e06128e085e2912ad18ed5cb3fb1666a0aa1415f1f94a8e3eb7dc3b930b",
+        "serial": "9cfaeab38825bae94365ad4de843abccee81d497ab5d2279606c73ed908dc189"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.559768,
+        "serial": 0.825252
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.569119,
+          0.569428,
+          0.555677,
+          0.527046,
+          0.559768
+        ],
+        "serial": [
+          1.031522,
+          0.78941,
+          0.825252,
+          0.782659,
+          1.161898
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 23.739144858224098,
+      "image_digests": {
+        "cooperative_128": "2f35245ea5371ca2ad16656624ae2b158a70e49ea41c7b351c4514429666fe36",
+        "serial": "17d9a226f6216e935878147acce5a12378f17793afa24ab1f0019ed218055764"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0009765625,
+        "serial": 0.001953125
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.00874784030020237,
+        "serial": 0.20766624808311462
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.007556159980595112,
+          0.00874784030020237,
+          0.007985279895365238,
+          0.008943039923906326,
+          0.009990080259740353
+        ],
+        "serial": [
+          0.20780959725379944,
+          0.2074681669473648,
+          0.20773984491825104,
+          0.20745249092578888,
+          0.20766624808311462
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "serial": "c2e66acb3795505b1e56af4acaab18937d1a123b20fa8fa8d6a6be3fb5318ef9"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 2.20617,
+        "serial": 3.80351
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          2.109116,
+          2.030651,
+          2.20617,
+          2.220382,
+          2.236852
+        ],
+        "serial": [
+          3.816932,
+          3.971199,
+          3.777649,
+          3.77226,
+          3.80351
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 79.95850541717783,
+      "image_digests": {
+        "cooperative_128": "2f57887fede32a0a48023099420778f2f030b437d81a3e7d86ae6ef55969e71c",
+        "serial": "f0d1f4832bea62deff8cc9f4f0d9931066a4e7d01564289675f9589e8087d414"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.001953125,
+        "serial": 0.001953125
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.011714559979736805,
+        "serial": 0.9366787075996399
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.011287679895758629,
+          0.011907520703971386,
+          0.011714559979736805,
+          0.011833280324935913,
+          0.010758399963378906
+        ],
+        "serial": [
+          0.9366787075996399,
+          0.9367126226425171,
+          0.9367680549621582,
+          0.9365385174751282,
+          0.9366304278373718
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "61f49518badd2474e15509e2983d700dc8f87ef768870363693857d5ad70f8db",
+        "serial": "19b2b2b2148f2b385be6f12df3d5de85be592b83ae6bdb43286b33cc68ad9b80"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.461383,
+        "serial": 0.681645
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.458493,
+          0.461383,
+          0.535207,
+          0.456023,
+          0.477894
+        ],
+        "serial": [
+          0.681645,
+          0.681634,
+          1.176389,
+          1.027312,
+          0.657723
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 19.23460644375156,
+      "image_digests": {
+        "cooperative_128": "5cfc695095dbeee4247b39c05903671f3fcfcbc931e83a68d562a61b44271229",
+        "serial": "f4448b147b73a4472537d0e59671f68dcd076ac1fd503ea03e1fa138043ea0d8"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.001953125
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009156479500234127,
+        "serial": 0.1761212795972824
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009277120232582092,
+          0.00911903940141201,
+          0.008151999674737453,
+          0.01009311992675066,
+          0.009156479500234127
+        ],
+        "serial": [
+          0.17614175379276276,
+          0.17609921097755432,
+          0.17612864077091217,
+          0.1761212795972824,
+          0.17612096667289734
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "2e473faf4064c3a6dccbcb9db1742017b2da9126bcee48e949258482a45b6944",
+        "serial": "539c3c6e5c6c372782e23bfb256e9f63f8470237a40cfe8f9c67f4307fc744f1"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.485055,
+        "serial": 0.435462
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.474204,
+          0.510836,
+          0.463063,
+          0.485055,
+          0.494085
+        ],
+        "serial": [
+          0.524326,
+          0.432712,
+          0.435462,
+          0.453073,
+          0.416311
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 1.0330603717111877,
+      "image_digests": {
+        "cooperative_128": "fca904f7ed6fc01e7c35d710bf25c1a7f80ef245dad5864ba2d3846bcf7ef2d6",
+        "serial": "2591046f33d9854585e17a010ef2ca478f04d2090489e39671db9b32c7c87a42"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008672639727592468,
+        "serial": 0.008959360420703888
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008576960302889347,
+          0.00791712012141943,
+          0.008672639727592468,
+          0.009755520150065422,
+          0.00874784030020237
+        ],
+        "serial": [
+          0.008744959719479084,
+          0.009765120223164558,
+          0.009008640423417091,
+          0.008959360420703888,
+          0.008115519769489765
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "f0fd7b1b291a2d35ed03ffde0ccb5c77df417c8b8b8c2e3d6870b75271a0ee70",
+        "serial": "8340640d7ce8c2318439b1fb433d3ad4262f0c4712cd3f0f0f7d4db9512920f4"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.460093,
+        "serial": 0.434282
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.484424,
+          0.493215,
+          0.440192,
+          0.460093,
+          0.457683
+        ],
+        "serial": [
+          0.455243,
+          0.427742,
+          0.446662,
+          0.434282,
+          0.426441
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 1.0251940832724695,
+      "image_digests": {
+        "cooperative_128": "d8c4afa136f45e41254eda68797b14abfbef628ad24c8e04df207e6fa0649be1",
+        "serial": "f86a02e94cc5b8cc4d9ca23dabcdcebc6e005c9687b4c7b222deddb52b11ec6d"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008738559670746326,
+        "serial": 0.008958719670772552
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008341760374605656,
+          0.008971840143203735,
+          0.008151999674737453,
+          0.01021375972777605,
+          0.008738559670746326
+        ],
+        "serial": [
+          0.008162880316376686,
+          0.009514880366623402,
+          0.008373440243303776,
+          0.008958719670772552,
+          0.009606719948351383
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "95f813f592e70edb0dae355c44f5ce5bdc2e8a0da80aea8c590e0514d335d990",
+        "serial": "cc3d8851a207daabc9d51cfdd09f1b6bef3c25e28a38bd6860d9195fce16805c"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.535957,
+        "serial": 0.551598
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.560388,
+          0.513266,
+          0.535957,
+          0.542637,
+          0.515316
+        ],
+        "serial": [
+          0.645422,
+          0.551598,
+          0.556488,
+          0.528257,
+          0.533427
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 5.932376654086647,
+      "image_digests": {
+        "cooperative_128": "d1bc83d619a849071d5cb07b4323dc8e18e086234e6aef857ce0930897497132",
+        "serial": "54e2360e1bb1705e8ad65f0c1d5152c3f8f6819f9583e047b7dce5eb87487bd1"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.00048828125,
+        "serial": 0.0009765625
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008144000545144081,
+        "serial": 0.04831327870488167
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.00928959995508194,
+          0.00783551950007677,
+          0.008144000545144081,
+          0.009236159734427929,
+          0.008038399741053581
+        ],
+        "serial": [
+          0.04824639856815338,
+          0.048344001173973083,
+          0.04823455959558487,
+          0.04831488057971001,
+          0.04831327870488167
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "a7333ca565fa1298c37670278ba4fb5df8a8be012e2f5b546482ffab6b5ff412",
+        "serial": "a756cf17e2c22bad23d8d6703e0b359964094d596ff8b6db7b9a4b3f780fb882"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.566478,
+        "serial": 1.027402
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.565328,
+          0.558398,
+          0.608481,
+          0.579139,
+          0.566478
+        ],
+        "serial": [
+          1.027402,
+          1.362778,
+          1.002051,
+          1.251712,
+          0.931237
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 28.348473466765224,
+      "image_digests": {
+        "cooperative_128": "313f40d8ba5d57546d4ca1c7757813210a373616c0b3faf46a9705aae2a80ae4",
+        "serial": "fc0db4203579898bb30226ffe875564e9656be165c07a028f1effd204067dbc6"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0009765625,
+        "serial": 0.0009765625
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.00899839960038662,
+        "serial": 0.2550908923149109
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009516799822449684,
+          0.008270720019936562,
+          0.009462079964578152,
+          0.008407999761402607,
+          0.00899839960038662
+        ],
+        "serial": [
+          0.25488096475601196,
+          0.2552131414413452,
+          0.2552102506160736,
+          0.25490623712539673,
+          0.2550908923149109
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "serial": "63e41f119592248ac8a931eedc5560562eb1dd5ad666d121282b2a0cd9de4c1e"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 2.141907,
+        "serial": 3.999091
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          2.141907,
+          2.104986,
+          2.242074,
+          2.052013,
+          2.19038
+        ],
+        "serial": [
+          3.992041,
+          4.020162,
+          3.999091,
+          4.102076,
+          3.935197
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 100.69256041495717,
+      "image_digests": {
+        "cooperative_128": "a9edefe901d903867fe1d1cd9e2e01ebebc9e9ecd0d851d102d6f75da260c152",
+        "serial": "390240899117059b7f46cff18d52a347a689bbcea5f8a0fe4e72b83bc26efc1a"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.001953125,
+        "serial": 0.001953125
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.011170560494065285,
+        "serial": 1.1247923374176025
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.01149791944772005,
+          0.012110400013625622,
+          0.010885759256780148,
+          0.011170560494065285,
+          0.010787840001285076
+        ],
+        "serial": [
+          1.1245698928833008,
+          1.1247929334640503,
+          1.1247923374176025,
+          1.124809980392456,
+          1.124680995941162
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "7a8cbb442975b1a17a6f9efe7b41c5300ba562c3c2a65553fd2a38794b4b89b6",
+        "serial": "13f5cd4b63f03af8fef49e6cd63fc0347f91276893f95f7e3532379183d45f0f"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.477564,
+        "serial": 0.707236
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.477564,
+          0.468934,
+          0.563768,
+          0.474084,
+          0.521126
+        ],
+        "serial": [
+          0.701876,
+          0.739677,
+          0.707236,
+          0.663363,
+          0.875754
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_serial_over_cooperative": 19.42829783704157,
+      "image_digests": {
+        "cooperative_128": "5b694b2bd8b22534c2e292eeeee18531e8d5653d51acbaf573dfacc138503d76",
+        "serial": "3fb0956885d59b865baec2ea97dea0488008ea9b23d9d86678f3c660dce04b81"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.000244140625,
+        "serial": 0.001953125
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.010037120431661606,
+        "serial": 0.1950041651725769
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.010363520123064518,
+          0.009790400043129921,
+          0.009554880671203136,
+          0.010610239580273628,
+          0.010037120431661606
+        ],
+        "serial": [
+          0.19505472481250763,
+          0.19485920667648315,
+          0.19497151672840118,
+          0.19502945244312286,
+          0.1950041651725769
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "daa5f5faf9ab1ed354951fc8bbfdda7a25c8a457d389b2e61c8f9f2b166ab304",
+        "serial": "2734d7d5ef2af3c0d24d5dc08b74fefc93c946507807f22819aa940bc0584719"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.486314,
+        "serial": 0.453593
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.453263,
+          0.589369,
+          0.486314,
+          0.451302,
+          0.504095
+        ],
+        "serial": [
+          0.453593,
+          0.450993,
+          0.41111,
+          0.458673,
+          0.468123
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 0.9325651140469149,
+      "image_digests": {
+        "cooperative_128": "ddc299897c48721ba0fa5d5ff0c7b443a688c2a82ae427452c6a3e97b0065b8c",
+        "serial": "2dca5f6ee4b0db9091e1dd02d08634ecc7ca82b4e58f44f6c08ff2f535bc8365"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009191679768264294,
+        "serial": 0.008571839891374111
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009191679768264294,
+          0.00901792012155056,
+          0.00925855990499258,
+          0.009285119362175465,
+          0.007647039834409952
+        ],
+        "serial": [
+          0.008571839891374111,
+          0.008341760374605656,
+          0.008415039628744125,
+          0.010482880286872387,
+          0.008680319413542747
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "c5d9a7de67f0b11bf5c07be6b0804974f1cafe91beaecb59cbfe3bccea1762da",
+        "serial": "71a762e359638549984bd32ecdf988d65958f88f0e42cc25194726ef11b14fb6"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.486034,
+        "serial": 0.440172
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.458003,
+          0.486034,
+          0.451512,
+          0.563738,
+          0.497825
+        ],
+        "serial": [
+          0.460743,
+          0.440172,
+          0.433771,
+          0.428951,
+          0.522616
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 0.9858664518605472,
+      "image_digests": {
+        "cooperative_128": "6a561164519d917211fc286ad319220c866b2bdb4ad9c33de69b85a8bdf42957",
+        "serial": "f94a0f68512fa41330def4643792c81f8bdc9616433d901d90618fb5e96247fa"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009011199697852135,
+        "serial": 0.008883839473128319
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009011199697852135,
+          0.008927999995648861,
+          0.008560960181057453,
+          0.00967200007289648,
+          0.009139839559793472
+        ],
+        "serial": [
+          0.008380159735679626,
+          0.008883839473128319,
+          0.009843840263783932,
+          0.00836991984397173,
+          0.01035488024353981
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "57c2738ca41340f6476f48836a1312c7ab74808d91f4bafce2455708fa7fe0ab",
+        "serial": "39a59cedded7e2eb62a170bc16502a012588e6ea84840c5f9d9936a2b9683b1b"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.509575,
+        "serial": 0.60378
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.514826,
+          0.575899,
+          0.509575,
+          0.499125,
+          0.497004
+        ],
+        "serial": [
+          0.571368,
+          0.734627,
+          0.719386,
+          0.533766,
+          0.60378
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 4.430717671620358,
+      "image_digests": {
+        "cooperative_128": "f4689da85319506cb09f8dfede1d8573dcbb72848c31abf880a22921123ea8a0",
+        "serial": "82866312dbb3dfc2ff4d4076b979cc4625f3d6de49c2f5a75d72ca5aa8dad5b6"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.00390625,
+        "serial": 0.00390625
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.01018207985907793,
+        "serial": 0.04511392116546631
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009255999699234962,
+          0.009195520542562008,
+          0.011752639897167683,
+          0.010928640142083168,
+          0.01018207985907793
+        ],
+        "serial": [
+          0.04508672282099724,
+          0.04511392116546631,
+          0.04523424059152603,
+          0.04512767866253853,
+          0.04504992067813873
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "84cfcd3839df695a6b3dd601bfc7aa95caf78ee8094992cd05c0e4dc676488df",
+        "serial": "2c95329c7bd8c44c4dbf3f4c4f3fc735a5defb8af884ae6ab5a7379763043322"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.564118,
+        "serial": 0.80966
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.553148,
+          0.59945,
+          0.577279,
+          0.564118,
+          0.535427
+        ],
+        "serial": [
+          0.99543,
+          0.767639,
+          1.467314,
+          0.80966,
+          0.79692
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 23.563696889656843,
+      "image_digests": {
+        "cooperative_128": "9c3ee849e6e8c7ee6b7a401f97fc023550b05386b725419c4e2430191a1354f4",
+        "serial": "a9bf95f5051f0d4ddcb800eb6cbfb2c3f76c94a019c36d461e484a1c72e37ff7"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0078125
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008809279650449753,
+        "serial": 0.20757919549942017
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008809279650449753,
+          0.009719680063426495,
+          0.007960000075399876,
+          0.009019199758768082,
+          0.008291839621961117
+        ],
+        "serial": [
+          0.20749472081661224,
+          0.20781631767749786,
+          0.20786912739276886,
+          0.20757919549942017,
+          0.20726878941059113
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "serial": "dae8b2b99fbc7ddb899caad04cfdf9fa18a6e0aa55afff522170a2521356c09f"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 2.196589,
+        "serial": 3.702224
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          2.196589,
+          2.571889,
+          2.471239,
+          2.136366,
+          2.108626
+        ],
+        "serial": [
+          3.815191,
+          3.702224,
+          3.838468,
+          3.468464,
+          3.556538
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 81.38695609023029,
+      "image_digests": {
+        "cooperative_128": "345edcec0009facac4b507c69a6026e0c62c89e0c186eac3bec7bdb2cc3fd86d",
+        "serial": "9d68afe524305d7afb6dd9de4507da65659ca4902fc0ef5fb22903eb8e5b54db"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.015625
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.01150464080274105,
+        "serial": 0.9363276958465576
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.01152511965483427,
+          0.01150464080274105,
+          0.011764800176024437,
+          0.01138175930827856,
+          0.011015679687261581
+        ],
+        "serial": [
+          0.9364470839500427,
+          0.9363276958465576,
+          0.9362822771072388,
+          0.9366025328636169,
+          0.9362877011299133
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "8152519ee7e76958eddc7ad26aa6eb098e6c34140b20cf44d41c33f4201accb5",
+        "serial": "a139a476590415507f8aa15a0ed48fbb99a6fe81a493743f423b8c13e7df47b7"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.468404,
+        "serial": 0.624331
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.491685,
+          0.468404,
+          0.471283,
+          0.462353,
+          0.450932
+        ],
+        "serial": [
+          0.925966,
+          0.702265,
+          0.624262,
+          0.624331,
+          0.617221
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 19.151899207536115,
+      "image_digests": {
+        "cooperative_128": "bc97d4bb2a2991509eef88b72c6aa8b974426ae53e065819eefeafa68d2c443d",
+        "serial": "3a8863f2fbd01d84f699650d1a23e4c70d6997836dc8151341b9507cc6c04c0d"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0078125
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009090240113437176,
+        "serial": 0.17409536242485046
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.010473599657416344,
+          0.00824608001857996,
+          0.009065920487046242,
+          0.009090240113437176,
+          0.009523199871182442
+        ],
+        "serial": [
+          0.17409536242485046,
+          0.1741068810224533,
+          0.17410559952259064,
+          0.17405632138252258,
+          0.17408384382724762
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "2c31157d897b67a6032115c2c91aaf0d0ad33e36083c2a32f43d8d3210b66654",
+        "serial": "dd935bfb4161925dbddf28ab8cdd9694d7a0ec03f95874d868665be0f04ef668"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.475904,
+        "serial": 0.451983
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.520816,
+          0.475904,
+          0.444102,
+          0.498485,
+          0.465043
+        ],
+        "serial": [
+          0.433312,
+          0.460763,
+          0.443352,
+          0.455502,
+          0.451983
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 1.019190684264237,
+      "image_digests": {
+        "cooperative_128": "0bbd586bd12b0551848a6886ee7489340a0c49499c0806e3de6a2c953b5f3aae",
+        "serial": "70e2b885316b9939e6805455788ba8d1b957c32774b0f8e0108da2980f165e41"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008904320187866688,
+        "serial": 0.00907520018517971
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009927039965987206,
+          0.008904320187866688,
+          0.00798271968960762,
+          0.008854079991579056,
+          0.00920127984136343
+        ],
+        "serial": [
+          0.008330239914357662,
+          0.00907520018517971,
+          0.010270080529153347,
+          0.008189760148525238,
+          0.009094079956412315
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "e4e9a769088039c7aa3278a67a562d55c1366263cff619714b29eb6e3502d40a",
+        "serial": "30c5db2fdfef33b36b74d097b465116c404c37c72c16059783d75057eb493f6f"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.477014,
+        "serial": 0.431671
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.461873,
+          0.477014,
+          0.457743,
+          0.503195,
+          0.493785
+        ],
+        "serial": [
+          0.455423,
+          0.421701,
+          0.438902,
+          0.421181,
+          0.431671
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 1.030777968151655,
+      "image_digests": {
+        "cooperative_128": "1dde05026c3e23237ac806064a5298b0806adac33b145b8687fe5486240cb9ae",
+        "serial": "5854a49c67297fa50b2121555c5b885c36324fffa040186d465ef27266a780b9"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009045439772307873,
+        "serial": 0.009323840029537678
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008647040463984013,
+          0.009780799970030785,
+          0.009045439772307873,
+          0.008273599669337273,
+          0.009432639926671982
+        ],
+        "serial": [
+          0.009697919711470604,
+          0.008808320388197899,
+          0.009323840029537678,
+          0.009718719869852066,
+          0.00907744001597166
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "7a20e64b415d4a2493f25cc5ed9c0ac3356a664a1efd602f21eb504d252ec8e4",
+        "serial": "be4de8fa0bda4216a684d980a967aa81902905efece09264427c2d1c7193479c"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.543788,
+        "serial": 0.548307
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.59238,
+          0.522586,
+          0.538547,
+          0.543788,
+          0.587299
+        ],
+        "serial": [
+          0.715775,
+          0.549907,
+          0.526416,
+          0.548307,
+          0.547037
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 5.523108336061042,
+      "image_digests": {
+        "cooperative_128": "483e4f847e7caeb931584330a09299269905a87de3e2222d2f0b3724eeb085c0",
+        "serial": "79e4f54996692a3fc1477933a619806c47ca80bee57631f1ea6ed6b95fffc645"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008751999586820602,
+        "serial": 0.04833824187517166
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009372159838676453,
+          0.008751999586820602,
+          0.007877440191805363,
+          0.009090879932045937,
+          0.008227519690990448
+        ],
+        "serial": [
+          0.04814239963889122,
+          0.04831615835428238,
+          0.04833824187517166,
+          0.04834495857357979,
+          0.04844127967953682
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "b0206224f767217eccd14e8d42495fccc59479e009b553a8ca3344c63a178767",
+        "serial": "1a484f0041a9bb562f2b9d1a68cf8c2d0722b1b979154069505b752dc1713b0b"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.564459,
+        "serial": 0.880274
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.577349,
+          0.577648,
+          0.561218,
+          0.558618,
+          0.564459
+        ],
+        "serial": [
+          1.315466,
+          0.857872,
+          0.880274,
+          0.835431,
+          0.901875
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 29.219211514106103,
+      "image_digests": {
+        "cooperative_128": "83d51493877aeb15dbdcccd8d73e4658abf641ead2aa8d6ef469884483636f6e",
+        "serial": "158e28ae591acbe14669fad234c1f5f82e1b931061cb1be7f4a8ac215f487072"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.015625
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008735359646379948,
+        "serial": 0.2552403211593628
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.00853792019188404,
+          0.008735359646379948,
+          0.008703360334038734,
+          0.009658560156822205,
+          0.011216959916055202
+        ],
+        "serial": [
+          0.25554272532463074,
+          0.2552403211593628,
+          0.2553228735923767,
+          0.25504159927368164,
+          0.2550716698169708
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "serial": "acec7d30743273e01c738d6bdef87be5903772f35e98b7fc5113b2edc3c5c06d"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 2.202059,
+        "serial": 3.874054
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          2.19749,
+          2.204744,
+          2.142726,
+          2.353428,
+          2.202059
+        ],
+        "serial": [
+          3.950128,
+          4.07825,
+          3.759858,
+          3.863634,
+          3.874054
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 96.26326376034393,
+      "image_digests": {
+        "cooperative_128": "30b5ebe75cd9724a0e0988b0a9ae1e9b1a9f4a06695e4368b0fffdb94b93702f",
+        "serial": "6cd1d26cd6092cc6463c9dfa249a2bd3002e93611370e8e4ce8dc36222add380"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0009765625,
+        "serial": 0.015625
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.01168223936110735,
+        "serial": 1.1245704889297485
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.011542719788849354,
+          0.01196352019906044,
+          0.010978560894727707,
+          0.01168223936110735,
+          0.01186400093138218
+        ],
+        "serial": [
+          1.1245852708816528,
+          1.1245704889297485,
+          1.1248518228530884,
+          1.1245628595352173,
+          1.1245096921920776
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "8bd967958ac183c3cc3ac0ed76d3baed1829eef95de96696a03b6b1c04916529",
+        "serial": "1e590c859c136608278d00e111f739d7494b2fbbae31760395d52f35c23b5f0e"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.476323,
+        "serial": 0.685064
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.484154,
+          0.476323,
+          0.552048,
+          0.468974,
+          0.470414
+        ],
+        "serial": [
+          0.671963,
+          0.99918,
+          0.685064,
+          0.660563,
+          0.689115
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_serial_over_cooperative": 19.903185136025552,
+      "image_digests": {
+        "cooperative_128": "6292c958e26fc32e108a8ba36bba97e9070fef8a497f8da55005efff806ad7c8",
+        "serial": "ddd9c01e3836102ad4deb0ab8800e1ca2793f01578e24b808df09c7ae1602120"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 0.0,
+        "serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009813440032303333,
+        "serial": 0.19531871378421783
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009347840212285519,
+          0.009813440032303333,
+          0.009851199574768543,
+          0.010021120309829712,
+          0.009674560278654099
+        ],
+        "serial": [
+          0.19540289044380188,
+          0.1954435110092163,
+          0.19530080258846283,
+          0.19520512223243713,
+          0.19531871378421783
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "815afe6a56787ea2f78f8dc8e8441d8efcfdc893522f9e8b3bf1b5aec1761bac",
+        "serial": "043c6a5c7a0319302c1899e3671523fb9be38ccfd9583a5646c10d17e6314fb5"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.453973,
+        "serial": 0.456882
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.539337,
+          0.484624,
+          0.453973,
+          0.443562,
+          0.436792
+        ],
+        "serial": [
+          0.456882,
+          0.610241,
+          0.425551,
+          0.429132,
+          0.482245
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 0.9635087765833167,
+      "image_digests": {
+        "cooperative_128": "9c3a9847bfd769383f2f5c5bf4a6df6e395006956b07b5553dc2571a5fc0235f",
+        "serial": "ca374ad488658a9b0fbf2506987764ca2ee1416375c7893bfc16b6f1d60c56db"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 5.960464477539063e-08,
+        "serial": 5.960464477539063e-08
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.00898848008364439,
+        "serial": 0.008660479448735714
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008745919913053513,
+          0.0093251196667552,
+          0.00898848008364439,
+          0.008228479884564877,
+          0.009013759903609753
+        ],
+        "serial": [
+          0.00874784030020237,
+          0.009075840003788471,
+          0.008660479448735714,
+          0.008439679630100727,
+          0.008419839665293694
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "84bb0ca007a76d27eae2fcc1a35d69a644d95bd8d1a96d3955e09576a178538b",
+        "serial": "1baa054d14b5f2de07dab2bc5aeb065bc4a958e59b8dd16fb99223b7d3890005"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.445852,
+        "serial": 0.450803
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.448192,
+          0.461943,
+          0.445852,
+          0.437652,
+          0.442142
+        ],
+        "serial": [
+          0.455492,
+          0.421561,
+          0.428892,
+          0.454562,
+          0.450803
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 1.1440389182503845,
+      "image_digests": {
+        "cooperative_128": "38577e9b981cac9c05f17760216a4af72216d7b2d70af52d47e91cb8cb59580c",
+        "serial": "54722b74b3aede966c043c599e1eb907b78275888a5c2d9de43fb6ef2c48ac5c"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 2.384185791015625e-07,
+        "serial": 2.384185791015625e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008626559749245644,
+        "serial": 0.009869120083749294
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008632959797978401,
+          0.008503359742462635,
+          0.008996480144560337,
+          0.00779935996979475,
+          0.008626559749245644
+        ],
+        "serial": [
+          0.009871680289506912,
+          0.009964480064809322,
+          0.009869120083749294,
+          0.008815360255539417,
+          0.009258880279958248
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "864a2cb82f291b17eca3266a1cb0c96f26be714d85336f6e5d98329b3e782238",
+        "serial": "41695aaf206e88daf206be7b6bd7307b9d88603b2c2047f2e309691bc01cf55f"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.511796,
+        "serial": 0.558638
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.563158,
+          0.580849,
+          0.511796,
+          0.509946,
+          0.505036
+        ],
+        "serial": [
+          0.872384,
+          0.691815,
+          0.558638,
+          0.545157,
+          0.555338
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 5.6104632039721265,
+      "image_digests": {
+        "cooperative_128": "49095f71a958f35e47bea83d2957f6c8a9f83636d978b0ef66b65a74ec44eb2e",
+        "serial": "f81437c3d69e1097363ceab04e25e33a90eb434ea8769614913b13f227ac0ad2"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 4.76837158203125e-07,
+        "serial": 1.1920928955078125e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008777599781751633,
+        "serial": 0.049246400594711304
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.00873055960983038,
+          0.00860000029206276,
+          0.008917760103940964,
+          0.008777599781751633,
+          0.009188800118863583
+        ],
+        "serial": [
+          0.04924287647008896,
+          0.04927840083837509,
+          0.0492534413933754,
+          0.04920767620205879,
+          0.049246400594711304
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "aaf48bdee8da876eda70684eb49b0ef9c8bd5c111ff7172e2a711f9410b75101",
+        "serial": "5cd600393926c9ca0f59c19490e0bee1097caf67b9e8054c6b0e81a83cc90fd5"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 1.216401,
+        "serial": 1.444453
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          1.440292,
+          1.248983,
+          1.216401,
+          1.196321,
+          1.180649
+        ],
+        "serial": [
+          1.700616,
+          1.38717,
+          1.428442,
+          1.455334,
+          1.444453
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 18.550096771709995,
+      "image_digests": {
+        "cooperative_128": "2e700c9cf91dec012260c1a848e3f848b36266a3019461c589a38fde3090c2e9",
+        "serial": "50c0afb768f206ef8ca745f1a971311ac026a941ce804516e91f6666a4f10830"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 4.76837158203125e-07,
+        "serial": 2.6226043701171875e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008370880037546158,
+        "serial": 0.15528063476085663
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008370880037546158,
+          0.00984704028815031,
+          0.008202239871025085,
+          0.008496959693729877,
+          0.00831103976815939
+        ],
+        "serial": [
+          0.15529024600982666,
+          0.1553187221288681,
+          0.15528063476085663,
+          0.1551145613193512,
+          0.15510687232017517
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "779ec85707996962748b2726cbf5124c69ad99a2457af8543b3bdbc354ad9eaa",
+        "serial": "dfcdebbea5c10917b93dbcb20be3ddb956507d1a63772c5b72e801e3b20b10d0"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 2.614842,
+        "serial": 3.564421
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          2.828063,
+          2.614842,
+          2.652565,
+          2.390691,
+          2.4874
+        ],
+        "serial": [
+          3.75233,
+          3.534299,
+          3.829313,
+          3.564421,
+          3.340668
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 52.86148451300669,
+      "image_digests": {
+        "cooperative_128": "59025c1de3e8bc51d6164c171cf312d5b24585db05b748f9d8abe3492e6006b2",
+        "serial": "f923f29f0c7be871745de12181ab273ec7e192089c893f8d7ec2331197a71a6f"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 4.76837158203125e-07,
+        "serial": 6.67572021484375e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.011678400449454784,
+        "serial": 0.6173375844955444
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.011663360521197319,
+          0.012425919994711876,
+          0.011678400449454784,
+          0.011008000001311302,
+          0.012058880180120468
+        ],
+        "serial": [
+          0.6173375844955444,
+          0.6176691055297852,
+          0.6174457669258118,
+          0.6170070171356201,
+          0.6170246601104736
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "0953fea58a8f695634ba25055e2bca06ef5b263d933dbca38c2109987a95db9d",
+        "serial": "7930d248b633a33b6ca273855db1a744b372e6c95df9b5629a52400bae6adc72"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.466084,
+        "serial": 0.739757
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.467704,
+          0.458123,
+          0.483054,
+          0.466084,
+          0.461353
+        ],
+        "serial": [
+          0.79347,
+          0.663863,
+          0.675625,
+          0.739757,
+          0.777159
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 21.78702035520692,
+      "image_digests": {
+        "cooperative_128": "83dc0a9c9c57666ce8272bfda83bec9d979cd2a580a27c08478d804a871eb013",
+        "serial": "724b54286cfa1c96214c6acd78965385d135deccfbc75f71173e4546449c04ec"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "cooperative_128": 2.384185791015625e-07,
+        "serial": 1.1920928955078125e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009486719965934753,
+        "serial": 0.20668736100196838
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.010177279822528362,
+          0.008867840282619,
+          0.010291200131177902,
+          0.009456959553062916,
+          0.009486719965934753
+        ],
+        "serial": [
+          0.20667648315429688,
+          0.20666944980621338,
+          0.20668767392635345,
+          0.2067331075668335,
+          0.20668736100196838
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "176a61235d7018b3e29d0e64dc2f3dd1322fee484afd4063e0d98b52acb6cf4a",
+        "serial": "36796c2cd897c9c808436fc5ab5ea0ffce640f58415ea6d9639b0543bbdf9a17"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "cooperative_128": 9,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.469094,
+        "serial": 0.430892
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.458853,
+          0.495935,
+          0.469094,
+          0.463864,
+          0.513786
+        ],
+        "serial": [
+          0.442933,
+          0.444673,
+          0.430892,
+          0.420861,
+          0.417461
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 1.0090409008167955,
+      "image_digests": {
+        "cooperative_128": "488bc73efcb946c3cc82b9b035670a549850eb3eb7de152c618ede8163a9a0c7",
+        "serial": "9f917fa60f23fddeda06491e53b5e829dfbc7081a9cba6e16a1b68f9381dbda4"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 2.384185791015625e-07,
+        "serial": 2.384185791015625e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008848640136420727,
+        "serial": 0.008928639814257622
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.008421439677476883,
+          0.008131200447678566,
+          0.009914559312164783,
+          0.009029120206832886,
+          0.008848640136420727
+        ],
+        "serial": [
+          0.009301120415329933,
+          0.010777280665934086,
+          0.008526080287992954,
+          0.008928639814257622,
+          0.008590400218963623
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "187e5e59de21603f5719a2f09a0cdd5a91c38b9b4a11cdc95dbd65c2a6af68c9",
+        "serial": "9df08369f72746bd90143e088aa69a8a7409123066e9c9e01cd9f87c57280a98"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.473313,
+        "serial": 0.456493
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.582699,
+          0.482375,
+          0.473313,
+          0.469794,
+          0.468883
+        ],
+        "serial": [
+          0.467974,
+          0.436112,
+          0.449273,
+          0.507555,
+          0.456493
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 0.968697155436136,
+      "image_digests": {
+        "cooperative_128": "6705788cf4236d5aa6d2e05ba0f9353818f22a680863abe10be87be0714bbeba",
+        "serial": "5b8c482cdefce5e3e94e224911ebbeaa7785b6cf19b4cb75fea47c20b69ecad6"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 2.384185791015625e-07,
+        "serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009282240644097328,
+        "serial": 0.008991680108010769
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009529920294880867,
+          0.00933856051415205,
+          0.008007040247321129,
+          0.009282240644097328,
+          0.00866719987243414
+        ],
+        "serial": [
+          0.008888959884643555,
+          0.009635199792683125,
+          0.00982687994837761,
+          0.00807263981550932,
+          0.008991680108010769
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "ce2f7b1afc3475cfb56cf8899553337c55302c17acce12c41b3f4c80c381faf2",
+        "serial": "0aafd20ccaae925d43d8839499e8dcc7ee7d17d46a9bf3af28597c8f2305f7d1"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.545888,
+        "serial": 0.60042
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.556208,
+          0.560468,
+          0.531697,
+          0.533857,
+          0.545888
+        ],
+        "serial": [
+          0.60042,
+          0.577759,
+          0.60053,
+          0.553268,
+          0.621002
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 7.349932433001589,
+      "image_digests": {
+        "cooperative_128": "997d6bfe5f321dae069c1b68a1f53c22c2bb051e79d0c7b6660d52fdef0c5f85",
+        "serial": "08ad0a0a46539fd13ee42e35076445b5acbd4f1d913b18b6790af92942aa413a"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 4.76837158203125e-07,
+        "serial": 1.9073486328125e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.00807103980332613,
+        "serial": 0.05932159721851349
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.007700480055063963,
+          0.009219840168952942,
+          0.007984000258147717,
+          0.00807103980332613,
+          0.00815775990486145
+        ],
+        "serial": [
+          0.05939199775457382,
+          0.05932159721851349,
+          0.05936672165989876,
+          0.0592816025018692,
+          0.059311043471097946
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "f40fe2372bf4e6a92c7d0fdd9f88877e25a80ffde83c2652d8fede62458dcd5a",
+        "serial": "364dc94e162c86b78edc950df113114d13c7c6093272446fd83834d41fde38e3"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 1.20381,
+        "serial": 1.56938
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          1.276865,
+          1.166539,
+          1.20381,
+          1.197581,
+          1.256944
+        ],
+        "serial": [
+          1.88865,
+          1.609201,
+          1.470555,
+          1.56938,
+          1.502986
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 23.342989641879548,
+      "image_digests": {
+        "cooperative_128": "b0e45b8836d2c2e60eb835b156aa281fd6c23d2a746023986315dfb17564d512",
+        "serial": "7eb3b76f8a8e954842583c7fd0db7ebb38376169866160db957c807a3746541c"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 4.76837158203125e-07,
+        "serial": 2.384185791015625e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.008726079948246479,
+        "serial": 0.20369279384613037
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.010454080067574978,
+          0.0076265595853328705,
+          0.00872064009308815,
+          0.008726079948246479,
+          0.009429439902305603
+        ],
+        "serial": [
+          0.2038400024175644,
+          0.20376159250736237,
+          0.20369279384613037,
+          0.20360511541366577,
+          0.20366720855236053
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "3e13b0fbc4ab48b8dfe8f319c37de9daf75ffd5068ba3317321e64e6f412c5aa",
+        "serial": "5b412d17fd9dd419a76e99db5d50bb1e4c45f549a662e68d5bc5c1a171550f4b"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 2.571759,
+        "serial": 4.084266
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          2.631383,
+          2.459014,
+          2.711237,
+          2.484025,
+          2.571759
+        ],
+        "serial": [
+          4.084266,
+          4.119027,
+          4.009681,
+          4.459774,
+          4.013412
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 65.25238692732117,
+      "image_digests": {
+        "cooperative_128": "b9f9b1d0cfe08a858af4219c297dfa553ebc259a5d597981d23ead92bc138a6f",
+        "serial": "e11c8593f96ffe663c1dab25863b916cd687dde837a4283b0be98f628cc3bec7"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 7.152557373046875e-07,
+        "serial": 6.67572021484375e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.012444479390978813,
+        "serial": 0.8120319843292236
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.011912640184164047,
+          0.013373119756579399,
+          0.012350399047136307,
+          0.012444479390978813,
+          0.012591039761900902
+        ],
+        "serial": [
+          0.811443567276001,
+          0.8102253079414368,
+          0.812427818775177,
+          0.8123610019683838,
+          0.8120319843292236
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "6a1435e1dd537ac2124ccdb03d6764cad75ef9901b85f6eb85b60298ae2a99fb",
+        "serial": "5f7b8c0707c8cfd7fc7f4e61dd284bbef772291afded8bc55ce91681abffb1ba"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "cooperative_128": 0.498316,
+        "serial": 0.829502
+      },
+      "checked_host_wall_samples_ms": {
+        "cooperative_128": [
+          0.495434,
+          0.560248,
+          0.498316,
+          0.464663,
+          0.498655
+        ],
+        "serial": [
+          0.829502,
+          0.706976,
+          0.715106,
+          1.066384,
+          1.137827
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_serial_over_cooperative": 24.675313046596486,
+      "image_digests": {
+        "cooperative_128": "f9981884002883be7d442937c6f1bb17e705be7d16b010cd5956506e7adebfda",
+        "serial": "c031217b8c57185e935c67e56aed10c2b35eb2f08912858b35cc03180374864a"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "cooperative_128": 2.384185791015625e-07,
+        "serial": 2.384185791015625e-06
+      },
+      "resident_event_dispatch_median_ms": {
+        "cooperative_128": 0.009510720148682594,
+        "serial": 0.23467999696731567
+      },
+      "resident_event_dispatch_samples_ms": {
+        "cooperative_128": [
+          0.009003199636936188,
+          0.009698240086436272,
+          0.010057279840111732,
+          0.009503999724984169,
+          0.009510720148682594
+        ],
+        "serial": [
+          0.23475776612758636,
+          0.23462048172950745,
+          0.23460257053375244,
+          0.23467999696731567,
+          0.2348041534423828
+        ]
+      },
+      "resources": {
+        "cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "cooperative_128": "b6861afa5725013eb42c7b8b6ad12c61380b5d4b49bd00fc7429ee6a0688bd17",
+        "serial": "9400c7b1acff42be2e7643e1a7d67f892e2dd017dc6765b00e0d1a1f152b263f"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "cooperative_128": 18,
+        "serial": 0
+      }
+    }
+  ],
+  "schema": "tessera.nvidia.cooperative_norm.v1",
+  "scope": "Explicit serial/cooperative_128 norm schedule candidate only. No automatic/default strategy promotion; no FP8/MXFP8/MXFP4 or sibling architecture performance inference.",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_cooperative_norm.py": "3284755fa33b002d9db317d8682fbc50673f0adc33d9d204a1d9498ad54d3748",
+    "python/tessera/compiler/nvidia_native.py": "fe502cce6eba530d39425e77e21b8becf9238728a43ace3ec4282ce9856befa8",
+    "python/tessera/compiler/scheduled_kernel.py": "ed117df9ad6c1612f3a124b372a1ecf44affd842418eaae8c822dab6a57c0bc0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "65f3a68e48de558da2690356f2e938d094491166aca1162a5eb3a8a6fbe638da",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "bf917ff27d6f52bbe8b05e3ca3582fab26a1d846ed472fecc836a402d7add7d3",
+    "src/compiler/ir/TileOps.cpp": "e1b2fa06a6d3e2fcf07d83f46cc7e1330fc594cc8372bf4cb6c7360de3e7886d",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "0b9fe1fbd590cd9f5547311561e07fde8db98aeab5216b5711d91f330b09465f",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "985e618d139899b6cc05e9d29e267cd9ce1061e4689cc291d26459bfa2d7141b",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "f2da82abae6c9a61f4136cf469d8c3e10eb56938f8b9552ec177533e917deb65",
+    "tests/device/nvidia/test_cooperative_norm.py": "59d423c753c294686db6c009e553c4d317b26201b08a15ccb2949032315fb40a"
+  },
+  "timing_scope": "Alternating schedule order over five trials. CUDA event windows include resident dispatch; checked host wall includes module loading, allocation, upload, launch, readback and cleanup."
+}

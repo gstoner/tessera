@@ -1,0 +1,7 @@
+Owning host: angstorms@192.168.1.166
+Checkout: /home/angstorms/scratch/next-five-compiler-slices-rocm
+source scripts/_rocm_env.sh
+export LD_LIBRARY_PATH=/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm231/deps:$LD_LIBRARY_PATH
+export TESSERA_OPT=$PWD/.build-gfx1201-current/tools/tessera-opt/tessera-opt
+export TESSERA_ROCM_CHIP=gfx1201 TESSERA_GFX1201_DEVICE_PROOF=1 PYTHONPATH=$PWD/python:$PWD OPENBLAS_NUM_THREADS=8
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.venv/bin/python benchmarks/rocm/benchmark_gfx1201_checkpoint_formats.py --compiler "$TESSERA_OPT" --llvm-bin /home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/bin --m 128 256 --include-native-packed --native-ingest --windows 3 --output benchmarks/baselines/rocm_checkpoint_native_ingest_20261005/gfx1201.json

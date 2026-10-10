@@ -1,0 +1,2814 @@
+{
+  "compiler_sha256": "d875e9c5caaf2e472c64446d87d8c304cc8524571939157a204418807d9d98bc",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 834.693575,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.026012800633907318,
+        "producer": 0.01004799921065569
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.025847360491752625,
+          0.026012800633907318,
+          0.026030398905277252
+        ],
+        "producer": [
+          0.010046400129795074,
+          0.010209599509835243,
+          0.01004799921065569
+        ]
+      },
+      "contract_digest": "9f0fdc3eee2893f79c6dbebd12df080d512fd9cdd089dee8c1d74ced7d8b7df9",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0010490721178939566,
+      "owner_scratch_stats": [
+        688128,
+        2
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.669265,
+      "public_warm_wall_samples_ms": [
+        0.669704,
+        0.630975,
+        0.669265
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 834.693575,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.009420800022780895,
+        "producer": 0.009912960231304169
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009783679619431496,
+          0.00916192028671503,
+          0.009420800022780895
+        ],
+        "producer": [
+          0.009912960231304169,
+          0.01032096054404974,
+          0.009545919485390186
+        ]
+      },
+      "contract_digest": "9f0fdc3eee2893f79c6dbebd12df080d512fd9cdd089dee8c1d74ced7d8b7df9",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 4.023313522338867e-07,
+      "owner_scratch_stats": [
+        688128,
+        2
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.455514,
+      "public_warm_wall_samples_ms": [
+        0.403053,
+        0.455514,
+        0.465833
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 834.693575,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.00940959993749857,
+        "producer": 0.008824000135064125
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.010311679914593697,
+          0.00940959993749857,
+          0.00823840033262968
+        ],
+        "producer": [
+          0.008343040011823177,
+          0.009962240234017372,
+          0.008824000135064125
+        ]
+      },
+      "contract_digest": "9f0fdc3eee2893f79c6dbebd12df080d512fd9cdd089dee8c1d74ced7d8b7df9",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        688128,
+        2
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.422483,
+      "public_warm_wall_samples_ms": [
+        0.422483,
+        0.401143,
+        0.463693
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 834.693575,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.015209279954433441,
+        "producer": 0.009087679907679558
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.015209279954433441,
+          0.015068160369992256,
+          0.015706559643149376
+        ],
+        "producer": [
+          0.009129920043051243,
+          0.008577920496463776,
+          0.009087679907679558
+        ]
+      },
+      "contract_digest": "9f0fdc3eee2893f79c6dbebd12df080d512fd9cdd089dee8c1d74ced7d8b7df9",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 5.319889169186354e-05,
+      "owner_scratch_stats": [
+        688128,
+        2
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.498944,
+      "public_warm_wall_samples_ms": [
+        0.498944,
+        0.502833,
+        0.479664
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 441.297795,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.02715519815683365,
+        "producer": 0.009568640030920506
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.027482878416776657,
+          0.026991359889507294,
+          0.02715519815683365
+        ],
+        "producer": [
+          0.010114239528775215,
+          0.009568640030920506,
+          0.00872447993606329
+        ]
+      },
+      "contract_digest": "18703ca47109fe98f16eb46712f6130c15ce952700de9a5544da4437fd0667d4",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0078125,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.698845,
+      "public_warm_wall_samples_ms": [
+        0.698845,
+        0.767715,
+        0.686325
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 441.297795,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.009139199741184711,
+        "producer": 0.008593600243330002
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009139199741184711,
+          0.008882240392267704,
+          0.009447679854929447
+        ],
+        "producer": [
+          0.008593600243330002,
+          0.00833887979388237,
+          0.00892960000783205
+        ]
+      },
+      "contract_digest": "18703ca47109fe98f16eb46712f6130c15ce952700de9a5544da4437fd0667d4",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.538843,
+      "public_warm_wall_samples_ms": [
+        0.538843,
+        0.569874,
+        0.536923
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 441.297795,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.009792639873921871,
+        "producer": 0.008708800189197063
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009792639873921871,
+          0.009282879531383514,
+          0.010038400068879128
+        ],
+        "producer": [
+          0.006839999929070473,
+          0.009544960223138332,
+          0.008708800189197063
+        ]
+      },
+      "contract_digest": "18703ca47109fe98f16eb46712f6130c15ce952700de9a5544da4437fd0667d4",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.623465,
+      "public_warm_wall_samples_ms": [
+        0.623465,
+        3.546886,
+        0.520364
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 441.297795,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.01519583910703659,
+        "producer": 0.010298880748450756
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.01514688041061163,
+          0.015544960275292397,
+          0.01519583910703659
+        ],
+        "producer": [
+          0.010983999818563461,
+          0.010298880748450756,
+          0.00875615980476141
+        ]
+      },
+      "contract_digest": "18703ca47109fe98f16eb46712f6130c15ce952700de9a5544da4437fd0667d4",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "d270bcbfd30505c2635528932f6f3d3e7cf7209c1104f7be85b8e7613e48ad4f",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.001953125,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.544474,
+      "public_warm_wall_samples_ms": [
+        0.541533,
+        0.544474,
+        0.567134
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 474.96046,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.025672640651464462,
+        "producer": 0.011419199407100677
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.02603071928024292,
+          0.025672640651464462,
+          0.025184961035847664
+        ],
+        "producer": [
+          0.009861759841442108,
+          0.012273279018700123,
+          0.011419199407100677
+        ]
+      },
+      "contract_digest": "9c94bb3805a1ad750f7908810f46a31dff7d561186d137f0c18676864684aad0",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0005960400303592905,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.655085,
+      "public_warm_wall_samples_ms": [
+        0.670495,
+        0.631664,
+        0.655085
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 474.96046,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.009289280511438847,
+        "producer": 0.009207360446453094
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.011232320219278336,
+          0.009289280511438847,
+          0.008496959693729877
+        ],
+        "producer": [
+          0.009683839976787567,
+          0.009207360446453094,
+          0.009031039662659168
+        ]
+      },
+      "contract_digest": "9c94bb3805a1ad750f7908810f46a31dff7d561186d137f0c18676864684aad0",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 4.5006163418293e-07,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.514044,
+      "public_warm_wall_samples_ms": [
+        0.496894,
+        0.514044,
+        0.525824
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 474.96046,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.009531520307064056,
+        "producer": 0.010039360262453556
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009531520307064056,
+          0.0082656005397439,
+          0.010625599883496761
+        ],
+        "producer": [
+          0.010039360262453556,
+          0.010391999036073685,
+          0.007584319915622473
+        ]
+      },
+      "contract_digest": "9c94bb3805a1ad750f7908810f46a31dff7d561186d137f0c18676864684aad0",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.479634,
+      "public_warm_wall_samples_ms": [
+        0.479634,
+        0.470793,
+        0.485693
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 474.96046,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.015558719635009766,
+        "producer": 0.00997088011354208
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.014592640101909637,
+          0.015558719635009766,
+          0.015801919624209404
+        ],
+        "producer": [
+          0.00997088011354208,
+          0.01045215968042612,
+          0.00976576004177332
+        ]
+      },
+      "contract_digest": "9c94bb3805a1ad750f7908810f46a31dff7d561186d137f0c18676864684aad0",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 1.3681987184099853e-05,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.516814,
+      "public_warm_wall_samples_ms": [
+        0.506424,
+        0.516814,
+        0.531643
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 347.695091,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.02653440088033676,
+        "producer": 0.009247999638319016
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.02634591981768608,
+          0.02653440088033676,
+          0.026698239147663116
+        ],
+        "producer": [
+          0.009826240129768848,
+          0.00860224012285471,
+          0.009247999638319016
+        ]
+      },
+      "contract_digest": "6846491cca955480b305cfe934be459adabf14e5f651eb82c4f971f06370ddc2",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.015625,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.699245,
+      "public_warm_wall_samples_ms": [
+        0.699245,
+        0.712365,
+        0.695465
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 347.695091,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008970559574663639,
+        "producer": 0.009855680167675018
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008118079975247383,
+          0.009096959605813026,
+          0.008970559574663639
+        ],
+        "producer": [
+          0.009602239355444908,
+          0.01011584047228098,
+          0.009855680167675018
+        ]
+      },
+      "contract_digest": "6846491cca955480b305cfe934be459adabf14e5f651eb82c4f971f06370ddc2",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.555174,
+      "public_warm_wall_samples_ms": [
+        0.592374,
+        0.555174,
+        0.512013
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 347.695091,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008824319578707218,
+        "producer": 0.009215999394655228
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009221440181136131,
+          0.008824319578707218,
+          0.008215679787099361
+        ],
+        "producer": [
+          0.008825920522212982,
+          0.009215999394655228,
+          0.009419839829206467
+        ]
+      },
+      "contract_digest": "6846491cca955480b305cfe934be459adabf14e5f651eb82c4f971f06370ddc2",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.494374,
+      "public_warm_wall_samples_ms": [
+        0.494374,
+        0.528204,
+        0.490253
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.f16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 347.695091,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.015025599859654903,
+        "producer": 0.008875200524926186
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.015543680638074875,
+          0.014865599572658539,
+          0.015025599859654903
+        ],
+        "producer": [
+          0.00858335942029953,
+          0.009512640535831451,
+          0.008875200524926186
+        ]
+      },
+      "contract_digest": "6846491cca955480b305cfe934be459adabf14e5f651eb82c4f971f06370ddc2",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "2d600231f20d790e09aff189fdbfafde09706a8b37299c29beee384a89d9e564",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 7.62939453125e-06,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.552844,
+      "public_warm_wall_samples_ms": [
+        0.585964,
+        0.552844,
+        0.481714
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 424.720068,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.025517120957374573,
+        "producer": 0.2504883110523224
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.025233600288629532,
+          0.025517120957374573,
+          0.02625375986099243
+        ],
+        "producer": [
+          0.2504406273365021,
+          0.250512957572937,
+          0.2504883110523224
+        ]
+      },
+      "contract_digest": "b30bf46b6ebdff06820c8fb39e5de4e822ee5581fde38a7c7b0f223151e86dd7",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 9.404730008100159e-07,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.898286,
+      "public_warm_wall_samples_ms": [
+        0.894087,
+        0.930216,
+        0.898286
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 424.720068,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008344960398972034,
+        "producer": 0.009962559677660465
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009861440397799015,
+          0.008344960398972034,
+          0.008273599669337273
+        ],
+        "producer": [
+          0.010101759806275368,
+          0.009639679454267025,
+          0.009962559677660465
+        ]
+      },
+      "contract_digest": "b30bf46b6ebdff06820c8fb39e5de4e822ee5581fde38a7c7b0f223151e86dd7",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 8.149072527885437e-09,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.447073,
+      "public_warm_wall_samples_ms": [
+        0.462483,
+        0.433563,
+        0.447073
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 424.720068,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008852159604430199,
+        "producer": 0.009714880026876926
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009083200246095657,
+          0.008348479866981506,
+          0.008852159604430199
+        ],
+        "producer": [
+          0.010063359513878822,
+          0.008134080097079277,
+          0.009714880026876926
+        ]
+      },
+      "contract_digest": "b30bf46b6ebdff06820c8fb39e5de4e822ee5581fde38a7c7b0f223151e86dd7",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.419163,
+      "public_warm_wall_samples_ms": [
+        0.419163,
+        0.462353,
+        0.408933
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 424.720068,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.015347839333117008,
+        "producer": 0.09523807466030121
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.01479967962950468,
+          0.015347839333117008,
+          0.015534400008618832
+        ],
+        "producer": [
+          0.09523807466030121,
+          0.09516703337430954,
+          0.09551327675580978
+        ]
+      },
+      "contract_digest": "b30bf46b6ebdff06820c8fb39e5de4e822ee5581fde38a7c7b0f223151e86dd7",
+      "dtype": "fp16",
+      "fused": false,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "b4cae923f81f001053b5900ea3e3d3f3a575e07e09ebedc0b68a3aa1c345f630"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 1.330152940681728e-06,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.576364,
+      "public_warm_wall_samples_ms": [
+        0.577374,
+        0.575024,
+        0.576364
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "82cc63d32dc0be5bedd27ab168b8d8448fe96f3558236318726cd846588dbbab"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.422643,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.026575999334454536,
+        "producer": 0.2505660951137543
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.02637631818652153,
+          0.026575999334454536,
+          0.026804480701684952
+        ],
+        "producer": [
+          0.2505660951137543,
+          0.2507990598678589,
+          0.2504352033138275
+        ]
+      },
+      "contract_digest": "b6a4f999f2d96c62329a44fe98c8f0038a52d128ff0e8bdd4a66e8fd0bfd5318",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 3.814697265625e-06,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.951116,
+      "public_warm_wall_samples_ms": [
+        0.964746,
+        0.951116,
+        0.931147
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.422643,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008843840099871159,
+        "producer": 0.0097980797290802
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008843840099871159,
+          0.01041376031935215,
+          0.008023999631404877
+        ],
+        "producer": [
+          0.011128639802336693,
+          0.00935519952327013,
+          0.0097980797290802
+        ]
+      },
+      "contract_digest": "b6a4f999f2d96c62329a44fe98c8f0038a52d128ff0e8bdd4a66e8fd0bfd5318",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.478693,
+      "public_warm_wall_samples_ms": [
+        0.478693,
+        0.484643,
+        0.457853
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.422643,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008788160048425198,
+        "producer": 0.009407039731740952
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008788160048425198,
+          0.008993599563837051,
+          0.007593920454382896
+        ],
+        "producer": [
+          0.009407039731740952,
+          0.008855040185153484,
+          0.009568319655954838
+        ]
+      },
+      "contract_digest": "b6a4f999f2d96c62329a44fe98c8f0038a52d128ff0e8bdd4a66e8fd0bfd5318",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.497804,
+      "public_warm_wall_samples_ms": [
+        0.503704,
+        0.489464,
+        0.497804
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.f16.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.422643,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.014920959249138832,
+        "producer": 0.09540575742721558
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.014920959249138832,
+          0.014543360099196434,
+          0.015287679620087147
+        ],
+        "producer": [
+          0.09551423788070679,
+          0.09539808332920074,
+          0.09540575742721558
+        ]
+      },
+      "contract_digest": "b6a4f999f2d96c62329a44fe98c8f0038a52d128ff0e8bdd4a66e8fd0bfd5318",
+      "dtype": "fp16",
+      "fused": true,
+      "image_digests": [
+        "86ef4fa482d1a86b04777df86d152276959108db7b5bd1e0117dbf8f10e460c0",
+        "85adfdf5294386050d328811a9c17526db49f1b008315feab832d0793f8978e4"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.628484,
+      "public_warm_wall_samples_ms": [
+        0.602294,
+        0.628484,
+        0.629484
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "c7433f2a52c158dd2744eb6974016d7f3e325945c218555e9d5aff91cbcd8390",
+        "8ac930affc496569114a02f2469c6290335a23b478c9e14537011d7bb132dc0e"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 522.335649,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.025234879925847054,
+        "producer": 0.007371199782937765
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.025423359125852585,
+          0.024874238297343254,
+          0.025234879925847054
+        ],
+        "producer": [
+          0.0070915198884904385,
+          0.007371199782937765,
+          0.007597759831696749
+        ]
+      },
+      "contract_digest": "038d14ff023720742694f489a5706d32d56fd94fc232e30a7847868bd7549b56",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 3.2092444598674774e-05,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.612204,
+      "public_warm_wall_samples_ms": [
+        0.641295,
+        0.607465,
+        0.612204
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 522.335649,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008531520143151283,
+        "producer": 0.007028480060398579
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009134720079600811,
+          0.008531520143151283,
+          0.0074988799169659615
+        ],
+        "producer": [
+          0.007738239597529173,
+          0.006913919933140278,
+          0.007028480060398579
+        ]
+      },
+      "contract_digest": "038d14ff023720742694f489a5706d32d56fd94fc232e30a7847868bd7549b56",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 2.4586915969848633e-07,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.479174,
+      "public_warm_wall_samples_ms": [
+        0.493503,
+        0.477674,
+        0.479174
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 522.335649,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.007753599900752306,
+        "producer": 0.007727360352873802
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.0075833601877093315,
+          0.007896319963037968,
+          0.007753599900752306
+        ],
+        "producer": [
+          0.006766719743609428,
+          0.007727360352873802,
+          0.009362880140542984
+        ]
+      },
+      "contract_digest": "038d14ff023720742694f489a5706d32d56fd94fc232e30a7847868bd7549b56",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.467203,
+      "public_warm_wall_samples_ms": [
+        0.452313,
+        0.469124,
+        0.467203
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 522.335649,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.014709440059959888,
+        "producer": 0.007616320159286261
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.014392640441656113,
+          0.015881279483437538,
+          0.014709440059959888
+        ],
+        "producer": [
+          0.008795520290732384,
+          0.007400959730148315,
+          0.007616320159286261
+        ]
+      },
+      "contract_digest": "038d14ff023720742694f489a5706d32d56fd94fc232e30a7847868bd7549b56",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 1.169741153717041e-05,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.496783,
+      "public_warm_wall_samples_ms": [
+        0.519403,
+        0.480333,
+        0.496783
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 446.205678,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.02654687874019146,
+        "producer": 0.007734079845249653
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.02654687874019146,
+          0.02626912109553814,
+          0.02672928012907505
+        ],
+        "producer": [
+          0.007734079845249653,
+          0.00675136037170887,
+          0.008927680552005768
+        ]
+      },
+      "contract_digest": "7b11d17e87095f9443fad797811d271d5e942bc80a25b5ce596cffe413eb90fd",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.001953125,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.650605,
+      "public_warm_wall_samples_ms": [
+        0.650605,
+        0.662355,
+        0.614545
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 446.205678,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008286720141768456,
+        "producer": 0.0076310401782393456
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.00848447997123003,
+          0.007758719846606255,
+          0.008286720141768456
+        ],
+        "producer": [
+          0.008622400462627411,
+          0.0076310401782393456,
+          0.006747839972376823
+        ]
+      },
+      "contract_digest": "7b11d17e87095f9443fad797811d271d5e942bc80a25b5ce596cffe413eb90fd",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.552164,
+      "public_warm_wall_samples_ms": [
+        0.507434,
+        0.552164,
+        1.197368
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 446.205678,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008477759547531605,
+        "producer": 0.007003840059041977
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008477759547531605,
+          0.008468160405755043,
+          0.016975680366158485
+        ],
+        "producer": [
+          0.007118719629943371,
+          0.0067235203459858894,
+          0.007003840059041977
+        ]
+      },
+      "contract_digest": "7b11d17e87095f9443fad797811d271d5e942bc80a25b5ce596cffe413eb90fd",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.498274,
+      "public_warm_wall_samples_ms": [
+        0.414913,
+        0.524604,
+        0.498274
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 446.205678,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.015320960432291031,
+        "producer": 0.008600320667028427
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.015320960432291031,
+          0.014660480432212353,
+          0.01584607921540737
+        ],
+        "producer": [
+          0.013023359701037407,
+          0.00788608007133007,
+          0.008600320667028427
+        ]
+      },
+      "contract_digest": "7b11d17e87095f9443fad797811d271d5e942bc80a25b5ce596cffe413eb90fd",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "2aff5e2352c0412ee4504e292f9a7a8f50efda00b16e2c81c92a48eda421face",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "rmsnorm",
+      "max_abs_error": 0.00048828125,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.558574,
+      "public_warm_wall_samples_ms": [
+        0.562634,
+        0.558574,
+        0.557614
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 444.187815,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.026259519159793854,
+        "producer": 0.009688000194728374
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.025306880474090576,
+          0.026328958570957184,
+          0.026259519159793854
+        ],
+        "producer": [
+          0.009688000194728374,
+          0.00920575950294733,
+          0.009996159933507442
+        ]
+      },
+      "contract_digest": "f413fe5cf68690c1c737f2968b6d49d2fc3d5be94888f2c75e85f2cc176bf524",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0010070018470287323,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.633025,
+      "public_warm_wall_samples_ms": [
+        0.654285,
+        0.633025,
+        0.613625
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 444.187815,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008685119450092316,
+        "producer": 0.010545920580625534
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.010200640186667442,
+          0.008198079653084278,
+          0.008685119450092316
+        ],
+        "producer": [
+          0.009336959570646286,
+          0.010560959577560425,
+          0.010545920580625534
+        ]
+      },
+      "contract_digest": "f413fe5cf68690c1c737f2968b6d49d2fc3d5be94888f2c75e85f2cc176bf524",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 2.980232238769531e-07,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.487153,
+      "public_warm_wall_samples_ms": [
+        0.438923,
+        0.522584,
+        0.487153
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 444.187815,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008433599956333637,
+        "producer": 0.008776640519499779
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008433599956333637,
+          0.011201280169188976,
+          0.008126719854772091
+        ],
+        "producer": [
+          0.008887359872460365,
+          0.008636480197310448,
+          0.008776640519499779
+        ]
+      },
+      "contract_digest": "f413fe5cf68690c1c737f2968b6d49d2fc3d5be94888f2c75e85f2cc176bf524",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.444903,
+      "public_warm_wall_samples_ms": [
+        0.492013,
+        0.444903,
+        0.407363
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 444.187815,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.015046720393002033,
+        "producer": 0.008694720454514027
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.015446079894900322,
+          0.014819839969277382,
+          0.015046720393002033
+        ],
+        "producer": [
+          0.010521600022912025,
+          0.008694720454514027,
+          0.00830879993736744
+        ]
+      },
+      "contract_digest": "f413fe5cf68690c1c737f2968b6d49d2fc3d5be94888f2c75e85f2cc176bf524",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 1.1086463928222656e-05,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.495864,
+      "public_warm_wall_samples_ms": [
+        0.495864,
+        0.495854,
+        0.513903
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.289582,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.026594560593366623,
+        "producer": 0.008275840431451797
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.02663584053516388,
+          0.026594560593366623,
+          0.026543039828538895
+        ],
+        "producer": [
+          0.009022079408168793,
+          0.008275840431451797,
+          0.008194239810109138
+        ]
+      },
+      "contract_digest": "71436f86efe85132bd7e172ff7ce1878f5d67f1298411bbf53fb8efc02d75705",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0078125,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.675865,
+      "public_warm_wall_samples_ms": [
+        0.677465,
+        0.675865,
+        0.658594
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.289582,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008374080061912537,
+        "producer": 0.009157120250165462
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008374080061912537,
+          0.007717439904808998,
+          0.010442240163683891
+        ],
+        "producer": [
+          0.010824319906532764,
+          0.009157120250165462,
+          0.007818560115993023
+        ]
+      },
+      "contract_digest": "71436f86efe85132bd7e172ff7ce1878f5d67f1298411bbf53fb8efc02d75705",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.552064,
+      "public_warm_wall_samples_ms": [
+        0.570064,
+        0.552064,
+        0.525853
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.289582,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008366400375962257,
+        "producer": 0.009152320213615894
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008257600478827953,
+          0.008845440112054348,
+          0.008366400375962257
+        ],
+        "producer": [
+          0.00892576016485691,
+          0.01013247948139906,
+          0.009152320213615894
+        ]
+      },
+      "contract_digest": "71436f86efe85132bd7e172ff7ce1878f5d67f1298411bbf53fb8efc02d75705",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.515274,
+      "public_warm_wall_samples_ms": [
+        0.515274,
+        0.523184,
+        0.515244
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.289582,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.014883840456604958,
+        "producer": 0.00869120005518198
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.014804479666054249,
+          0.014883840456604958,
+          0.01632768101990223
+        ],
+        "producer": [
+          0.008274559862911701,
+          0.00925248023122549,
+          0.00869120005518198
+        ]
+      },
+      "contract_digest": "71436f86efe85132bd7e172ff7ce1878f5d67f1298411bbf53fb8efc02d75705",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "97330358e5358c406e5e4ffb6965c97e3fa71e5cf9a42507a20c96ad738a0dfc",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "layernorm",
+      "max_abs_error": 0.000244140625,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.570004,
+      "public_warm_wall_samples_ms": [
+        0.549443,
+        0.570004,
+        0.601474
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 430.346547,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.02492768131196499,
+        "producer": 0.25049152970314026
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.02488991990685463,
+          0.025239359587430954,
+          0.02492768131196499
+        ],
+        "producer": [
+          0.2503465712070465,
+          0.25052255392074585,
+          0.25049152970314026
+        ]
+      },
+      "contract_digest": "4f328b1ab5633401d7cf6fbf0d53c94f47c4815cd83cf658444814879727b85c",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 6.3611287259845994e-06,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.898836,
+      "public_warm_wall_samples_ms": [
+        0.919996,
+        0.898836,
+        0.878126
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 430.346547,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008307520300149918,
+        "producer": 0.009928000159561634
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.00890335999429226,
+          0.008307520300149918,
+          0.007913920097053051
+        ],
+        "producer": [
+          0.011047040112316608,
+          0.009928000159561634,
+          0.009333119727671146
+        ]
+      },
+      "contract_digest": "4f328b1ab5633401d7cf6fbf0d53c94f47c4815cd83cf658444814879727b85c",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 5.587935447692871e-09,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.464144,
+      "public_warm_wall_samples_ms": [
+        0.465123,
+        0.464144,
+        0.456313
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 430.346547,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.009934719651937485,
+        "producer": 0.00988479983061552
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.010003520175814629,
+          0.009934719651937485,
+          0.00978752039372921
+        ],
+        "producer": [
+          0.00988479983061552,
+          0.10646176338195801,
+          0.009050239808857441
+        ]
+      },
+      "contract_digest": "4f328b1ab5633401d7cf6fbf0d53c94f47c4815cd83cf658444814879727b85c",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.434743,
+      "public_warm_wall_samples_ms": [
+        0.409923,
+        0.434743,
+        0.439883
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 430.346547,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.015315840020775795,
+        "producer": 0.09530431777238846
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.015142399817705154,
+          0.015315840020775795,
+          0.016685759648680687
+        ],
+        "producer": [
+          0.09528320282697678,
+          0.09530431777238846,
+          0.09545183926820755
+        ]
+      },
+      "contract_digest": "4f328b1ab5633401d7cf6fbf0d53c94f47c4815cd83cf658444814879727b85c",
+      "dtype": "bf16",
+      "fused": false,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "1b9b7aa6d786c1d3f609f5941c42e05f41c00161c3752439dd6ef9fb1bca0a25"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 1.1326555977575481e-05,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.574894,
+      "public_warm_wall_samples_ms": [
+        0.574894,
+        0.586294,
+        0.566414
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "13dd40e58c96c4b36bee3d2993159f4edcd6d0b64f37fb7920e8dd2792f82c58"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.327028,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.026400959119200706,
+        "producer": 0.25031328201293945
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.02731647901237011,
+          0.026364801451563835,
+          0.026400959119200706
+        ],
+        "producer": [
+          0.2501532733440399,
+          0.25031328201293945,
+          0.2506684958934784
+        ]
+      },
+      "contract_digest": "a24a13fa5a5d3ba10fa130653745d98c7853758ca2ceda2d64a76a0463b57aea",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 6.103515625e-05,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.875166,
+      "public_warm_wall_samples_ms": [
+        0.904366,
+        0.875166,
+        0.873506
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        17,
+        35,
+        19
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.327028,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.009108159691095352,
+        "producer": 0.010145599953830242
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008690239861607552,
+          0.009108159691095352,
+          0.009796800091862679
+        ],
+        "producer": [
+          0.010145599953830242,
+          0.017410559579730034,
+          0.009351360611617565
+        ]
+      },
+      "contract_digest": "a24a13fa5a5d3ba10fa130653745d98c7853758ca2ceda2d64a76a0463b57aea",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.484573,
+      "public_warm_wall_samples_ms": [
+        0.474193,
+        0.495603,
+        0.484573
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        1,
+        1,
+        1
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.327028,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.008390720002353191,
+        "producer": 0.009958719834685326
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008390720002353191,
+          0.008308160118758678,
+          0.008625599555671215
+        ],
+        "producer": [
+          0.009495679289102554,
+          0.009958719834685326,
+          0.010949120856821537
+        ]
+      },
+      "contract_digest": "a24a13fa5a5d3ba10fa130653745d98c7853758ca2ceda2d64a76a0463b57aea",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 0.0,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.481924,
+      "public_warm_wall_samples_ms": [
+        0.481924,
+        0.439193,
+        0.515393
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    },
+    {
+      "abi_ids": [
+        "tessera.nvidia.softmax.x_o_rows_k.bf16_f32acc.v2",
+        "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+      ],
+      "active_mkn": [
+        63,
+        511,
+        31
+      ],
+      "capacity_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "cold_public_wall_ms": 349.327028,
+      "component_event_dispatch_median_ms": {
+        "consumer": 0.014933439902961254,
+        "producer": 0.09549152106046677
+      },
+      "component_event_dispatch_samples_ms": {
+        "consumer": [
+          0.015528960153460503,
+          0.014669439755380154,
+          0.014933439902961254
+        ],
+        "producer": [
+          0.09545663744211197,
+          0.09549152106046677,
+          0.09556480497121811
+        ]
+      },
+      "contract_digest": "a24a13fa5a5d3ba10fa130653745d98c7853758ca2ceda2d64a76a0463b57aea",
+      "dtype": "bf16",
+      "fused": true,
+      "image_digests": [
+        "c13da0b99deae87a9ddf137fb8d41791e85842fd3bb0fa7749fc263f237320a4",
+        "feba17ba5467e97f0e4ea0e903b803d4c73afc769d2a630576e0e07be819432a"
+      ],
+      "kind": "softmax",
+      "max_abs_error": 3.0517578125e-05,
+      "owner_scratch_stats": [
+        704768,
+        3
+      ],
+      "public_binding": "prepared_cpp_dynamic_tensor_matmul",
+      "public_warm_wall_median_ms": 0.623454,
+      "public_warm_wall_samples_ms": [
+        0.623454,
+        0.605705,
+        0.651394
+      ],
+      "rhs_storage_order": "row_major",
+      "schedule_digests": [
+        "4f6ff5769287fddcbe95989e0d35bc307c5624aa0ab70c6da21b48a9c285d15c",
+        "ec876f3075835d2f37de90350066837e78f8b0e4f35a9bfb05dceedfc1e6d385"
+      ]
+    }
+  ],
+  "runtime_sha256": "646a37fd34427db3154ad895b4362b28f20f7162ca2f4c892e7bac4bfcf39f32",
+  "schema": "tessera.nvidia.dynamic_rhs_lhs.v1",
+  "scope": "Ordinary bounded M/N/K JIT and portable replay; static capacity-specialized producer, dynamic native strided consumer. Native dynamic owner selected by public prepared control; no general composed AD.",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_dynamic_row_lhs.py": "17d0f5f8f6a74d111f5c720cb71797c14cc00a996fc17b83f5e1c975a9f65a59",
+    "python/tessera/compiler/bounded_nvidia_lhs.py": "722a404fa9eba3daa105a91f594412fdbc61376c61822aa4675001eeaa18300b",
+    "python/tessera/compiler/jit.py": "abdb778fb0536ffb169a284567b82b52f66afeac4e7fbe0b5d75cddbceefcde9",
+    "python/tessera/compiler/nvidia_native.py": "3da7676f968209464fdedfbfccf49d2e8fce5ffb6f81efe0c1881c7ac187a915",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "b7f36cd346b5725a20605dd2a6622b267140a14aa4eaddd1292d1d28141eb99e",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "c0f0f9019c91c791f7d9d4b2d634fa2e16a70b7761f7b12ee3849f2dcc71f2f5",
+    "python/tessera/compiler/prepared_nvidia_matmul.py": "95a6d75285617bceecaf647d88ed3f2c05e13e8f6ab4075705963ce56d4dc6ce",
+    "python/tessera/compiler/scheduled_matmul.py": "bb7b69b123046449afceb3e3eca77a5af787fccf080b3426eeedcfdb3af74727",
+    "python/tessera/runtime.py": "f5485bafb2ccca41ac5b362e86fcc4b1f5763110a434425e9058c29a81427c4c",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "19dd5ae9f964c123af69ac62b4dff7dfe29b98a9b8d5f80b78703b04fd83e6fe",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "8d72c7ff05d9ad66ea3f0d89440d82898b0b65ebdc7d95d02ca50cd809514a84",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "e2e65a7fbb8d455aa223c1d9ad61569e17f4110082f88973849a2e1c69c75c24",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "6bcfb9e6b7c426d4f31405a32074c03b702485ed6c938ef74dad7644cac85b18",
+    "tests/device/nvidia/test_bounded_lhs_jit.py": "284c6d488e06460a20c64c774a3f61df7fc44ea01229b89a4186499d3d347dd9",
+    "tests/device/nvidia/test_dynamic_lhs_frontend.py": "e29fb17b769a50c914514d118927afc7f7370a48b140bd729299dde9a21a6a21",
+    "tests/device/nvidia/test_dynamic_row_lhs.py": "13b73d94d6bd19bbbf71544ceb023f17d2cf6854966eedd1f124ef47c61fe511",
+    "tests/device/nvidia/test_lhs_tensor_jit.py": "e1bf4c6830af5ec062e43dea6ed15fae0c5df71f6e6e58e6bd60c4c9dc6a9ab6",
+    "tests/device/nvidia/test_prepared_dynamic_lhs_owner.py": "f4e12899edcdb975f82a54e3a4ef109e521515bb24bb9554825db484e2815181"
+  },
+  "timing_scope": "Warm public wall follows an untimed correctness-gated call; it includes route-specific admission/binding/packing/transfers/two launches/readback/cleanup. CUDA event windows include device dispatch gaps; cold public trace/compile wall reported separately."
+}

@@ -1,4 +1,4 @@
-"""Correctness-gated SM120 RMSNorm -> matmul tensor-edge benchmark.
+"""Correctness-gated SM120 normalization -> matmul tensor-edge benchmark.
 
 Each stage is compiled from Graph IR through the production Schedule and Tile
 passes and packaged behind its checked native ABI. CUDA-event timings are
@@ -41,6 +41,7 @@ def _numpy_storage_dtype(dtype: str) -> np.dtype[Any]:
 def _modules(
     m: int, k: int, n: int, *, dtype: str = "fp16",
     dynamic_n: bool = False, dynamic_k: bool = False,
+    producer_kind: str = "rmsnorm",
 ):
     element = {"fp16": "f16", "bf16": "bf16"}.get(dtype)
     if element is None:
@@ -66,7 +67,11 @@ def _modules(
         args=[IRArg("x", a)],
         result_types=[a],
         body=[IROp(
-            result="normalized", op_name="tessera.rmsnorm",
+            result="normalized",
+            op_name={
+                "rmsnorm": "tessera.rmsnorm",
+                "layernorm": "tessera.layer_norm",
+            }[producer_kind],
             operands=["%x"], operand_types=[str(a)], result_type=str(a),
             kwargs={"eps": 1e-5},
         )],
@@ -164,7 +169,11 @@ def _dynamic_n_benchmark(args: argparse.Namespace, program: Any, m: int, k: int,
             ) for _ in range(args.samples)
         ]
         packet: dict[str, Any] = {
-            "schema": "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1",
+            "schema": (
+            "tessera.nvidia.scheduled-layernorm-matmul-edge.v1"
+            if args.producer_kind == "layernorm"
+            else "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1"
+        ),
             "target": "nvidia_sm120",
             "architecture": program.consumer.image.architecture,
             "device": _version([
@@ -535,6 +544,10 @@ def _dynamic_k_benchmark(args: argparse.Namespace, program: Any, m: int,
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dtype", choices=("fp16", "bf16"), default="fp16")
+    parser.add_argument(
+        "--producer-kind", choices=("rmsnorm", "layernorm"), default="rmsnorm",
+        help="shape-preserving scheduled normalization producer",
+    )
     parser.add_argument("--m", type=int, default=512)
     parser.add_argument("--k", type=int, default=256)
     parser.add_argument("--n", type=int, default=512, help="static N or dynamic-N capacity bound")
@@ -545,12 +558,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--dynamic-k", action="store_true", help="package one bounded dynamic-K producer/consumer edge")
     parser.add_argument("--dynamic-mk", action="store_true", help="package jointly bounded dynamic-M/K producer/consumer edge")
     parser.add_argument("--dynamic-mnk", action="store_true", help="package jointly bounded dynamic-M/N/K producer/consumer edge")
+    parser.add_argument("--require-typed-sm120-producer", action="store_true", help="require the static typed-fragment Schedule-to-Tile matmul route and record structural evidence")
     parser.add_argument("--warmup", type=int, default=30)
     parser.add_argument("--reps", type=int, default=500)
     parser.add_argument("--samples", type=int, default=7)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     m, k, n = args.m, args.k, args.n
+    if args.producer_kind == "layernorm" and any((
+        args.dynamic_m, args.dynamic_n, args.dynamic_k, args.dynamic_mk, args.dynamic_mnk,
+    )):
+        parser.error("LayerNorm benchmark currently uses the static producer envelope")
     if sum((args.dynamic_m, args.dynamic_n, args.dynamic_k, args.dynamic_mk, args.dynamic_mnk)) > 1:
         parser.error("choose one dynamic extent envelope; --dynamic-mnk combines M, N, and K")
     if args.dynamic_mnk and (args.active_m is not None or args.active_n is not None):
@@ -589,22 +607,22 @@ def main(argv: list[str] | None = None) -> int:
         active_n = n
     producer_module, consumer_module = _modules(
         m, k, n, dtype=args.dtype, dynamic_n=args.dynamic_n,
-        dynamic_k=args.dynamic_k
+        dynamic_k=args.dynamic_k, producer_kind=args.producer_kind,
     )
     if args.dynamic_m:
-        program = nvidia_native.package_scheduled_rmsnorm_matmul(
+        program = nvidia_native.package_scheduled_tensor_matmul(
             producer_module, consumer_module,
             pipeline_name="tessera-lower-to-nvidia-sm120",
             dynamic_m_bound=m,
         )
     elif args.dynamic_mnk:
-        program = nvidia_native.package_scheduled_rmsnorm_matmul(
+        program = nvidia_native.package_scheduled_tensor_matmul(
             producer_module, consumer_module,
             pipeline_name="tessera-lower-to-nvidia-sm120",
             dynamic_m_bound=m, dynamic_n_bound=n, dynamic_k_bound=k,
         )
     elif args.dynamic_k or args.dynamic_mk:
-        program = nvidia_native.package_scheduled_rmsnorm_matmul(
+        program = nvidia_native.package_scheduled_tensor_matmul(
             producer_module, consumer_module,
             pipeline_name="tessera-lower-to-nvidia-sm120",
             dynamic_m_bound=m if args.dynamic_mk else None,
@@ -617,11 +635,67 @@ def main(argv: list[str] | None = None) -> int:
         consumer_ir = scheduled_matmul.lower_scheduled_matmul(
             consumer_module, target="nvidia_sm120",
         )
-        program = nvidia_native.package_scheduled_rmsnorm_matmul(
+        program = nvidia_native.package_scheduled_tensor_matmul(
             producer_ir, consumer_ir,
             pipeline_name="tessera-lower-to-nvidia-sm120",
         )
     program.validate()
+    typed_route_evidence = None
+    if args.require_typed_sm120_producer:
+        if any((args.dynamic_m, args.dynamic_n, args.dynamic_k, args.dynamic_mk, args.dynamic_mnk)):
+            parser.error("typed SM120 producer evidence currently requires the static envelope")
+        tile_text = program.consumer.tile_ir
+        target_text = program.consumer.target_ir
+        ptx_text = program.consumer.backend_ir
+        required_tile = (
+            "tile.view", "tile.fragment_pack", "tile.fragment_zero",
+            "tile.mma", "tile.fragment_unpack", "tile.store",
+        )
+        missing_tile = [marker for marker in required_tile if marker not in tile_text]
+        ptx_instruction = "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"
+        loop_header = any(
+            " = scf.for " in line
+            and "iter_args(" in line
+            and ") -> (!tile.fragment<" in line
+            for line in tile_text.splitlines()
+        )
+        typed_mma = any(
+            " = tile.mma " in line
+            and ": (!tile.fragment<" in line
+            and "-> !tile.fragment<" in line
+            for line in tile_text.splitlines()
+        )
+        typed_yield = any(
+            line.lstrip().startswith("scf.yield ")
+            and ": !tile.fragment<" in line
+            for line in tile_text.splitlines()
+        )
+        loop_carried_accumulator = loop_header and typed_mma and typed_yield
+        if (missing_tile or "nvvm.mma.sync" not in target_text
+                or ptx_instruction not in ptx_text
+                or not loop_carried_accumulator
+                or k < 16 or k % 16 != 0):
+            raise RuntimeError(
+                "typed SM120 producer route missing expected compiler evidence: "
+                f"tile={missing_tile}, target_mma={'nvvm.mma.sync' in target_text}, "
+                f"ptx_mma={ptx_instruction in ptx_text}, "
+                f"loop_header={loop_header}, typed_mma={typed_mma}, "
+                f"typed_yield={typed_yield}"
+            )
+        typed_route_evidence = {
+            "route": "Schedule matmul -> Tile view/typed fragments -> NVVM MMA -> PTX MMA",
+            "tile_markers": list(required_tile),
+            "target_marker": "nvvm.mma.sync",
+            "ptx_instruction": ptx_instruction,
+            "loop_carried_typed_accumulator": {
+                "scf_for_iter_args_is_fragment": loop_header,
+                "mma_accepts_and_returns_fragment": typed_mma,
+                "scf_yield_returns_fragment": typed_yield,
+            },
+            "k_iterations": k // 16,
+            "schedule_digest": program.consumer.descriptor.provenance["schedule_digest"],
+            "tile_digest": program.consumer.descriptor.provenance["tile_ir_digest"],
+        }
     if args.dynamic_m:
         return _dynamic_m_benchmark(args, program, m, k, n, first_active_m)
     if args.dynamic_n:
@@ -650,12 +724,22 @@ def main(argv: list[str] | None = None) -> int:
         raise RuntimeError("consumer output allocation was replaced")
 
     source_f32 = source.astype(np.float32)
-    norm_reference = (
-        source_f32 / np.sqrt(np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5)
-    ).astype(storage_dtype)
+    if args.producer_kind == "layernorm":
+        centered = source_f32 - np.mean(source_f32, axis=-1, keepdims=True)
+        norm_values = centered / np.sqrt(
+            np.mean(centered * centered, axis=-1, keepdims=True) + 1e-5
+        )
+    else:
+        norm_values = source_f32 / np.sqrt(
+            np.mean(source_f32 * source_f32, axis=-1, keepdims=True) + 1e-5
+        )
+    norm_reference = norm_values.astype(storage_dtype)
     norm_error = float(np.max(np.abs(intermediate.astype(np.float32) - norm_reference.astype(np.float32))))
     if norm_error > norm_tolerance:
-        raise RuntimeError(f"RMSNorm producer disagrees with oracle: max_abs_error={norm_error}")
+        raise RuntimeError(
+            f"{args.producer_kind} producer disagrees with oracle: "
+            f"max_abs_error={norm_error}"
+        )
     matmul_reference = intermediate.astype(np.float32) @ weights.astype(np.float32)
     matmul_error = float(np.max(np.abs(output - matmul_reference)))
     if matmul_error > matmul_tolerance:
@@ -741,7 +825,11 @@ def main(argv: list[str] | None = None) -> int:
         resident.close()
 
     packet: dict[str, Any] = {
-        "schema": "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1",
+        "schema": (
+            "tessera.nvidia.scheduled-layernorm-matmul-edge.v1"
+            if args.producer_kind == "layernorm"
+            else "tessera.nvidia.scheduled-rmsnorm-matmul-edge.v1"
+        ),
         "target": "nvidia_sm120",
         "architecture": program.producer.image.architecture,
         "device": _version([
@@ -761,8 +849,12 @@ def main(argv: list[str] | None = None) -> int:
             text=True, check=True,
         ).stdout.strip()),
         "method": "two checked native packages; numerical oracle before separate CUDA-event timing",
+        "typed_sm120_producer_evidence": typed_route_evidence,
         "edge": {
-            "producer": "tessera.rmsnorm",
+            "producer": (
+                "tessera.layer_norm"
+                if args.producer_kind == "layernorm" else "tessera.rmsnorm"
+            ),
             "consumer": "tessera.matmul",
             "shape": [m, k],
             "dtype": args.dtype,
@@ -780,6 +872,7 @@ def main(argv: list[str] | None = None) -> int:
                 "schedule_digest": program.producer.descriptor.provenance["schedule_digest"],
                 "tile_digest": program.producer.descriptor.provenance["tile_ir_digest"],
             },
+            "typed_sm120_producer_evidence": typed_route_evidence,
             "consumer": {
                 "compiler_fingerprint": program.consumer.image.compiler_fingerprint,
                 "toolchain_fingerprint": program.consumer.image.toolchain_fingerprint,

@@ -1,0 +1,250 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "shape_mnk": [
+    17,
+    19,
+    256
+  ],
+  "execution": "native_cpp_owned_sequence",
+  "compiler_package_projection": "not_yet_integrated",
+  "numerical_max_abs_error": [
+    1.987880096976369e-06,
+    1.7086885293338128e-06
+  ],
+  "finite_difference_max_abs_error": 1.6137992719933436e-06,
+  "negative_contract_checks": {
+    "future_input": 1,
+    "forged_lifetime": 1,
+    "wrong_bytes": 1,
+    "wrong_architecture": 2,
+    "missing_symbol": 3,
+    "private_scratch_read": 1,
+    "stale_generation": 10,
+    "invalid_update": 1,
+    "fork_identity": "passed",
+    "read_after_update": 10
+  },
+  "device_native_launch_window_ms": [
+    0.029492469504475594,
+    0.029310300946235657,
+    0.02926403097808361,
+    0.029309198260307312,
+    0.029288409277796745,
+    0.02885422855615616,
+    0.02776522934436798,
+    0.026741499081254005,
+    0.026236779987812042,
+    0.026109760627150536,
+    0.026150738820433617
+  ],
+  "device_native_launch_window_median_ms": 0.02885422855615616,
+  "warm_invoke_and_two_readbacks_ms": [
+    0.4194399807602167,
+    0.4187091253697872,
+    0.3880700096487999,
+    0.4272949881851673,
+    0.428707804530859,
+    0.41708583012223244,
+    0.4017059691250324,
+    0.5089009646326303,
+    0.3804159350693226,
+    0.42486004531383514,
+    0.40306919254362583
+  ],
+  "warm_invoke_and_two_readbacks_median_ms": 0.4187091253697872,
+  "update_invoke_two_readbacks_ms": [
+    0.5052229389548302,
+    0.501926988363266,
+    0.45026885345578194,
+    0.49562519416213036,
+    0.46687107533216476,
+    0.4605778958648443,
+    0.42342813685536385,
+    0.44379616156220436,
+    0.5762591026723385,
+    0.5452600307762623,
+    0.4793750122189522
+  ],
+  "update_invoke_two_readbacks_median_ms": 0.4793750122189522,
+  "timing_note": "HIP event interval includes native C++ enqueue gaps across four kernels. Host intervals exclude prepare/compilation.",
+  "runtime_sha256": "e7e822e798daf7e5b78d0d952c1b0ec2aaf20e74ed95adb9741f9ba681e7428f",
+  "member_image_sha256": [
+    "56be70a98a4d945db9642499d19e3d335f112b5bf43cb7f64f992cc94e8d4c0b",
+    "c8c3a3cc36a8382fb982e8f928e7bda2ad96498a840d02d6e4f4d4b53a4f896d",
+    "a4f249a33ec9d11c8718798209062b09879c3e6002177ab4740a5b014623e707",
+    "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2"
+  ],
+  "buffer_contract": [
+    {
+      "id": 0,
+      "bytes": 4352,
+      "elements": 4352,
+      "ownership": 0,
+      "first_write": -1,
+      "last_read": 2
+    },
+    {
+      "id": 1,
+      "bytes": 4864,
+      "elements": 4864,
+      "ownership": 0,
+      "first_write": -1,
+      "last_read": 2
+    },
+    {
+      "id": 2,
+      "bytes": 136,
+      "elements": 34,
+      "ownership": 0,
+      "first_write": -1,
+      "last_read": 2
+    },
+    {
+      "id": 3,
+      "bytes": 8,
+      "elements": 2,
+      "ownership": 0,
+      "first_write": -1,
+      "last_read": 1
+    },
+    {
+      "id": 4,
+      "bytes": 136,
+      "elements": 34,
+      "ownership": 0,
+      "first_write": -1,
+      "last_read": 1
+    },
+    {
+      "id": 5,
+      "bytes": 8,
+      "elements": 2,
+      "ownership": 0,
+      "first_write": -1,
+      "last_read": 2
+    },
+    {
+      "id": 6,
+      "bytes": 1292,
+      "elements": 323,
+      "ownership": 2,
+      "first_write": 0,
+      "last_read": 4
+    },
+    {
+      "id": 7,
+      "bytes": 1292,
+      "elements": 323,
+      "ownership": 1,
+      "first_write": 1,
+      "last_read": 3
+    },
+    {
+      "id": 8,
+      "bytes": 1292,
+      "elements": 323,
+      "ownership": 1,
+      "first_write": 2,
+      "last_read": 3
+    },
+    {
+      "id": 9,
+      "bytes": 1292,
+      "elements": 323,
+      "ownership": 2,
+      "first_write": 3,
+      "last_read": 4
+    }
+  ],
+  "step_contract": [
+    {
+      "entry": "scales__jvp__member_0",
+      "inputs": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "output": 6,
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "scalars": [
+        17,
+        19,
+        256
+      ]
+    },
+    {
+      "entry": "scales__jvp__member_1",
+      "inputs": [
+        0,
+        1,
+        4,
+        3
+      ],
+      "output": 7,
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "scalars": [
+        17,
+        19,
+        256
+      ]
+    },
+    {
+      "entry": "scales__jvp__member_2",
+      "inputs": [
+        0,
+        1,
+        2,
+        5
+      ],
+      "output": 8,
+      "geometry": [
+        2,
+        2,
+        1,
+        32,
+        1,
+        1
+      ],
+      "scalars": [
+        17,
+        19,
+        256
+      ]
+    },
+    {
+      "entry": "tessera_tile_rocm_math_add_c9f50d7555e1",
+      "inputs": [
+        7,
+        8
+      ],
+      "output": 9,
+      "geometry": [
+        2,
+        1,
+        1,
+        256,
+        1,
+        1
+      ],
+      "scalars": [
+        323
+      ]
+    }
+  ]
+}

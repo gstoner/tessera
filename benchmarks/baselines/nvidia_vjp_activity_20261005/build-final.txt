@@ -1,0 +1,147 @@
+[  3%] Built target TesseraLinalgSolverTableGen
+[ 10%] Built target tessera_solvers_passes
+[ 11%] Built target tessera_layout_algebra
+[ 11%] Building Tessera/AdjointInterface.h.inc...
+[ 11%] Built target mlir-headers
+[ 13%] Building Tessera/AdjointInterface.cpp.inc...
+[ 13%] Built target mlir-generic-headers
+[ 13%] Built target TesseraAdjointInterfaceTableGen
+[ 15%] Built target TesseraCollectiveTypesIncGen
+[ 18%] Built target TesseraNVIDIATableGen
+[ 18%] Building ScheduleDialect.h.inc...
+[ 20%] Building AttnDialect.cpp.inc...
+[ 22%] Building ScheduleDialect.cpp.inc...
+[ 22%] Building AttnDialect.h.inc...
+[ 25%] Built target TesseraPMTableGen
+[ 27%] Built target TesseraAttnTableGen
+[ 32%] Built target TesseraNeighbors
+[ 33%] Built target DialectSR
+[ 33%] Built target TPPGen
+[ 38%] Built target TesseraTPPPasses
+[ 38%] Building Tessera/LinearTransposeInterface.h.inc...
+[ 40%] Built target tessera_linalg_solver_passes
+[ 42%] Building Tessera/LinearTransposeInterface.cpp.inc...
+[ 44%] Built target TesseraCollectiveOpsIncGen
+[ 44%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 44%] Built target obj.TesseraNVIDIAIR
+[ 47%] Built target TesseraSR
+[ 47%] Built target TPPTypesGen
+[ 47%] Building Tessera/TangentInterface.h.inc...
+[ 49%] Built target obj.TesseraCollectiveDialect
+[ 49%] Building Tessera/TangentInterface.cpp.inc...
+[ 49%] Built target TesseraNVIDIAIR
+[ 49%] Built target TesseraTangentInterfaceTableGen
+[ 50%] Built target TesseraCollectiveDialect
+[ 50%] Built target TPPAttrsGen
+[ 52%] Building TesseraOpsDialect.h.inc...
+[ 52%] Built target TPPOpsGen
+[ 52%] Built target obj.TesseraTPPDialect
+[ 54%] Building TesseraOpsDialect.cpp.inc...
+[ 55%] Building TesseraOpsEnums.h.inc...
+[ 55%] Building TesseraOpsEnums.cpp.inc...
+[ 55%] Building TesseraOpsTypes.h.inc...
+[ 55%] Building TesseraOpsTypes.cpp.inc...
+[ 55%] Built target TesseraTPPDialect
+[ 55%] Built target TesseraIRTableGen
+[ 57%] Built target TesseraTPPInit
+[ 59%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 59%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 62%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 62%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 62%] Built target TesseraTileIRTableGen
+[ 66%] Built target obj.TesseraIR
+[ 66%] Built target TesseraIR
+[ 66%] Built target obj.TesseraAttnDialect
+[ 66%] Built target TesseraScheduleIR
+[ 66%] Built target TesseraAttnDialect
+[ 66%] Built target TesseraPM
+[ 67%] Building CXX object src/transforms/lib/CMakeFiles/TesseraPasses.dir/AutodiffPairedPass.cpp.o
+In file included from /home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:72:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/NativeStorageJVP.h: In function ‘llvm::LogicalResult tessera::emitNativeStorageJVP(mlir::ModuleOp, bool)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/NativeStorageJVP.h:26:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::FuncOp; Args = {const char (&)[18], mlir::FunctionType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   26 |     auto combined = builder.create<mlir::func::FuncOp>(fwd.getLoc(), "__native_vjp_pair", pairType);
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/../../compiler/tile_opt_fa4/include/tessera/Dialect/Attn/AttnDialect.h:27,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:35:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/NativeStorageJVP.h:45:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::ReturnOp; Args = {mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   45 |     builder.create<mlir::func::ReturnOp>(fwd.getLoc(), mlir::ValueRange{primal, cotangent});
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: In function ‘void tessera::{anonymous}::accumulateCotangent(mlir::OpBuilder&, CotangentMap&, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:1584:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1584 |           ? builder.create<mlir::arith::AddFOp>(loc, it->second, g).getResult()
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:1585:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1585 |           : builder.create<mlir::arith::AddIOp>(loc, it->second, g).getResult();
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: In member function ‘llvm::LogicalResult tessera::{anonymous}::AutodiffPairedPass::buildBackward(mlir::func::FuncOp)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2328:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::FuncOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, mlir::FunctionType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2328 |     auto bwd = builder.create<mlir::func::FuncOp>(fwd.getLoc(), bwdName, bwdType);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2446:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2446 |             zero = builder.create<mlir::arith::ConstantOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 2447 |                 fwd.getLoc(), mlir::DenseElementsAttr::get(shaped, z));
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2485:57: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::TypedAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2485 |           zero = builder.create<mlir::arith::ConstantOp>(
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 2486 |               fwd.getLoc(), builder.getZeroAttr(ty));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2492:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::ReturnOp; Args = {llvm::SmallVector<mlir::Value, 6>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2492 |     builder.create<mlir::func::ReturnOp>(fwd.getLoc(), results);
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: In member function ‘mlir::Value tessera::{anonymous}::AutodiffPairedPass::buildZeroLike(mlir::OpBuilder&, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2525:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2524 |       return builder
+      |              ~~~~~~~                       
+ 2525 |           .create<mlir::arith::ConstantOp>(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 2526 |               primal.getLoc(), mlir::DenseElementsAttr::get(shaped, zero))
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2531:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::TypedAttr&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2530 |       return builder
+      |              ~~~~~~~                       
+ 2531 |           .create<mlir::arith::ConstantOp>(primal.getLoc(), zero)
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: At global scope:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:132:6: warning: ‘bool tessera::{anonymous}::carriesKeyedRngProduct(mlir::Operation*)’ defined but not used [-Wunused-function]
+  132 | bool carriesKeyedRngProduct(mlir::Operation *op) {
+      |      ^~~~~~~~~~~~~~~~~~~~~~
+[ 69%] Linking CXX static library libTesseraPasses.a
+[ 98%] Built target TesseraPasses
+[100%] Built target obj.TesseraNVIDIAConversion
+[100%] Built target TesseraNVIDIAConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt

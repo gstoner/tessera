@@ -1,0 +1,2804 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid_hex": "32386439653765666266326566373136",
+  "hip_runtime_version": 71526333,
+  "hip_driver_version": 71526333,
+  "compiler_sha256": "ed1c775c7e092b2e1e4971baaab0402966f7526d4ccdb5dbe470b7affe920ec8",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "package_file_sha256": "7f584474fbb58f55a8d95bc4aaee35c9d40eff606190f196d12f65a6ad0cc371",
+  "recorder_sha256": "1ac66ecc9e17ae56d26cea587f84142c6b39913c6a29f9fc1742880673e5cc46",
+  "adapter_source_sha256": {
+    "/home/angstorms/scratch/independent-primal-native-20261007/python/tessera/runtime.py": "d8b57debe1eff8b13efe3d6e4f816e93117c7e6e6c49323eef2f54b3f66b6837",
+    "/home/angstorms/scratch/independent-primal-native-20261007/python/tessera/compiler/native_scaled_program.py": "3c7577ca87731172c3d8501b288825918a22ba0e3a6e11ba7fcab85f50c4d4f9"
+  },
+  "compiler_free_replay": true,
+  "route": "Graph native scale transpose -> Schedule -> Tile structured reduction -> ROCm Target -> LLVM -> HSACO -> native HIP owner",
+  "timing_scope": "two-member native launch windows and prepared host update/invoke/read; no isolated kernel or speedup claim",
+  "rows": [
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.198572728375538e-08,
+      "native_launch_window_samples_ms": [
+        0.07650019973516464,
+        0.07217475026845932,
+        0.07613609731197357,
+        0.07638619840145111,
+        0.0763889029622078
+      ],
+      "native_launch_window_median_ms": 0.07638619840145111,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5504597909748554,
+        0.54811742156744,
+        0.5335777997970581,
+        0.5377495661377907,
+        0.5503196269273758
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.54811742156744
+    },
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.895668779900333e-08,
+      "native_launch_window_samples_ms": [
+        0.04588260129094124,
+        0.045960597693920135,
+        0.04589254781603813,
+        0.045908600091934204,
+        0.04609859734773636
+      ],
+      "native_launch_window_median_ms": 0.045908600091934204,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.521286204457283,
+        0.5296241957694292,
+        0.5324196070432663,
+        0.5232659634202719,
+        0.5239031743258238
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5239031743258238
+    },
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.311192184999982e-08,
+      "native_launch_window_samples_ms": [
+        0.049625951796770096,
+        0.04971195012331009,
+        0.04968395084142685,
+        0.04972194880247116,
+        0.04966995120048523
+      ],
+      "native_launch_window_median_ms": 0.04968395084142685,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5364131648093462,
+        0.5452239885926247,
+        0.5434566177427769,
+        0.5314836278557777,
+        0.5310130305588245
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5364131648093462
+    },
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.514854701209714e-08,
+      "native_launch_window_samples_ms": [
+        0.07601495087146759,
+        0.07654444873332977,
+        0.07634444534778595,
+        0.07549040019512177,
+        0.07623644918203354
+      ],
+      "native_launch_window_median_ms": 0.07623644918203354,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5545297637581825,
+        0.5516622215509415,
+        0.5279909819364548,
+        0.5372988060116768,
+        0.53142961114645
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5372988060116768
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.3062923860425215e-08,
+      "native_launch_window_samples_ms": [
+        0.0745188444852829,
+        0.07381830364465714,
+        0.0699380487203598,
+        0.07345835119485855,
+        0.0736803486943245
+      ],
+      "native_launch_window_median_ms": 0.0736803486943245,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5423965863883495,
+        0.5535919684916735,
+        0.524977408349514,
+        0.542150205001235,
+        0.5378639791160822
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.542150205001235
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.931771459462439e-08,
+      "native_launch_window_samples_ms": [
+        0.07400684803724289,
+        0.07316035032272339,
+        0.0730823501944542,
+        0.07307034730911255,
+        0.07304634898900986
+      ],
+      "native_launch_window_median_ms": 0.0730823501944542,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5491213873028755,
+        0.5291852168738842,
+        0.5514777731150389,
+        0.5317242350429296,
+        0.5615791771560907
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5491213873028755
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.991353334480529e-08,
+      "native_launch_window_samples_ms": [
+        0.05051425099372864,
+        0.05018270015716553,
+        0.050420649349689484,
+        0.05016870051622391,
+        0.05020869895815849
+      ],
+      "native_launch_window_median_ms": 0.05020869895815849,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5495904013514519,
+        0.5617774091660976,
+        0.5420538131147623,
+        0.5380983930081129,
+        0.549700390547514
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5495904013514519
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.87723213535196e-08,
+      "native_launch_window_samples_ms": [
+        0.05142120271921158,
+        0.050854701548814774,
+        0.05082870274782181,
+        0.05086870118975639,
+        0.050850700587034225
+      ],
+      "native_launch_window_median_ms": 0.050854701548814774,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5612404085695744,
+        0.5640137940645218,
+        0.5398598033934832,
+        0.5498308222740889,
+        0.5353270098567009
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5498308222740889
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.530922586594045e-08,
+      "native_launch_window_samples_ms": [
+        0.07782555371522903,
+        0.07780809700489044,
+        0.07751809805631638,
+        0.07762210071086884,
+        0.07715009897947311
+      ],
+      "native_launch_window_median_ms": 0.07762210071086884,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5492717958986759,
+        0.5499288439750671,
+        0.5357338115572929,
+        0.5362448282539845,
+        0.5348861683160067
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5362448282539845
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.6288600780440845e-08,
+      "native_launch_window_samples_ms": [
+        0.0856022983789444,
+        0.08511229604482651,
+        0.08375629782676697,
+        0.08551435172557831,
+        0.13636569678783417
+      ],
+      "native_launch_window_median_ms": 0.08551435172557831,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5682500079274178,
+        0.5698568187654018,
+        0.572684220969677,
+        0.65009999088943,
+        0.6153617985546589
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.572684220969677
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.50864949819163e-08,
+      "native_launch_window_samples_ms": [
+        0.055903248488903046,
+        0.054805200546979904,
+        0.05520324781537056,
+        0.055875249207019806,
+        0.055917251855134964
+      ],
+      "native_launch_window_median_ms": 0.055875249207019806,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6713766139000654,
+        0.6142535712569952,
+        0.6909457966685295,
+        0.6469579879194498,
+        0.6445254199206829
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6469579879194498
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.240477702310841e-08,
+      "native_launch_window_samples_ms": [
+        0.05550525337457657,
+        0.05579925328493118,
+        0.055771250277757645,
+        0.055517248809337616,
+        0.055813245475292206
+      ],
+      "native_launch_window_median_ms": 0.055771250277757645,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6286791991442442,
+        0.6258897949010134,
+        0.6469117943197489,
+        0.614123372361064,
+        0.6436458323150873
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6286791991442442
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.3700635010115434e-08,
+      "native_launch_window_samples_ms": [
+        0.12273009866476059,
+        0.12234214693307877,
+        0.12298209965229034,
+        0.12301609665155411,
+        0.12300814688205719
+      ],
+      "native_launch_window_median_ms": 0.12298209965229034,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.7308480329811573,
+        0.7320863660424948,
+        0.6983781699091196,
+        0.723562017083168,
+        0.7092747837305069
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.723562017083168
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 6.178317946137213e-08,
+      "native_launch_window_samples_ms": [
+        0.04156605154275894,
+        0.04149005189538002,
+        0.041562050580978394,
+        0.04152804985642433,
+        0.04154599830508232
+      ],
+      "native_launch_window_median_ms": 0.04154599830508232,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5984475836157799,
+        0.6341355852782726,
+        0.6610128097236156,
+        0.6235194392502308,
+        0.626567006111145
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.626567006111145
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.809732635444817e-08,
+      "native_launch_window_samples_ms": [
+        0.0405801497399807,
+        0.045166149735450745,
+        0.044422149658203125,
+        0.0451461486518383,
+        0.045110151171684265
+      ],
+      "native_launch_window_median_ms": 0.045110151171684265,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.7402020040899515,
+        0.7254675962030888,
+        0.6965965963900089,
+        0.6907675880938768,
+        0.6957911886274815
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6965965963900089
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.8098749649838624e-08,
+      "native_launch_window_samples_ms": [
+        0.1223083958029747,
+        0.12203644216060638,
+        0.12197045236825943,
+        0.1217883974313736,
+        0.10503239929676056
+      ],
+      "native_launch_window_median_ms": 0.12197045236825943,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6560191977769136,
+        0.6216255947947502,
+        0.6472805980592966,
+        0.6800411734730005,
+        0.607444578781724
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6472805980592966
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.854220709254008e-08,
+      "native_launch_window_samples_ms": [
+        0.12365200370550156,
+        0.12417194992303848,
+        0.12416994571685791,
+        0.123601995408535,
+        0.12417395412921906
+      ],
+      "native_launch_window_median_ms": 0.12416994571685791,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6943624000996351,
+        0.7277840282768011,
+        0.703830411657691,
+        0.7285918109118938,
+        0.7352083921432495
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.7277840282768011
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.552449354797375e-08,
+      "native_launch_window_samples_ms": [
+        0.0456399992108345,
+        0.0410120002925396,
+        0.048451997339725494,
+        0.04095999896526337,
+        0.041029997169971466
+      ],
+      "native_launch_window_median_ms": 0.041029997169971466,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6317450199276209,
+        0.6208861712366343,
+        0.6442408077418804,
+        0.6252286024391651,
+        0.6400748156011105
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6317450199276209
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.8883687552827553e-08,
+      "native_launch_window_samples_ms": [
+        0.08029119670391083,
+        0.08358325064182281,
+        0.0885513499379158,
+        0.07086104899644852,
+        0.0843532532453537
+      ],
+      "native_launch_window_median_ms": 0.08358325064182281,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.7140600122511387,
+        0.7224539760500193,
+        0.6650986149907112,
+        0.7142703980207443,
+        0.682297395542264
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.7140600122511387
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 6.854275985679337e-08,
+      "native_launch_window_samples_ms": [
+        0.1220618486404419,
+        0.122177854180336,
+        0.10960964858531952,
+        0.1220998540520668,
+        0.12214000523090363
+      ],
+      "native_launch_window_median_ms": 0.1220998540520668,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6534384097903967,
+        0.6403414066880941,
+        0.6397102028131485,
+        0.6539873778820038,
+        0.6592254154384136
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6534384097903967
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.2379005799352285e-08,
+      "native_launch_window_samples_ms": [
+        0.12327799946069717,
+        0.12321200221776962,
+        0.11946799606084824,
+        0.12378200143575668,
+        0.12373404204845428
+      ],
+      "native_launch_window_median_ms": 0.12327799946069717,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6461525801569223,
+        0.632838997989893,
+        0.6499235983937979,
+        0.6207137834280729,
+        0.65064518712461
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6461525801569223
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.1894316904489415e-08,
+      "native_launch_window_samples_ms": [
+        0.12367600202560425,
+        0.1226034015417099,
+        0.12324140220880508,
+        0.12319345772266388,
+        0.1231694445014
+      ],
+      "native_launch_window_median_ms": 0.12319345772266388,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6477877963334322,
+        0.7081769872456789,
+        0.7123427931219339,
+        0.7143925875425339,
+        0.6859024055302143
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.7081769872456789
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.125116731008461e-08,
+      "native_launch_window_samples_ms": [
+        0.06562875211238861,
+        0.06594675034284592,
+        0.044208500534296036,
+        0.04848659783601761,
+        0.05741865187883377
+      ],
+      "native_launch_window_median_ms": 0.05741865187883377,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6227979902178049,
+        0.6070619914680719,
+        0.5787077825516462,
+        0.619583809748292,
+        0.6249862257391214
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.619583809748292
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.1651828597277785e-08,
+      "native_launch_window_samples_ms": [
+        0.07079784572124481,
+        0.06183185055851936,
+        0.09235984832048416,
+        0.07530985027551651,
+        0.07533784955739975
+      ],
+      "native_launch_window_median_ms": 0.07530985027551651,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.7004119921475649,
+        0.7047302089631557,
+        0.7131463848054409,
+        0.6585059687495232,
+        0.7174022030085325
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.7047302089631557
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.8364646237631916e-08,
+      "native_launch_window_samples_ms": [
+        0.12440774589776993,
+        0.12389375269412994,
+        0.1250617504119873,
+        0.12492574751377106,
+        0.12502789497375488
+      ],
+      "native_launch_window_median_ms": 0.12492574751377106,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.639435788616538,
+        0.6264388095587492,
+        0.6495567969977856,
+        0.6413594353944063,
+        0.6634213961660862
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6413594353944063
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 6.294055865385673e-08,
+      "native_launch_window_samples_ms": [
+        0.12248389422893524,
+        0.12214989960193634,
+        0.1218498945236206,
+        0.11001989990472794,
+        0.12217185646295547
+      ],
+      "native_launch_window_median_ms": 0.12214989960193634,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6451026070863008,
+        0.631933193653822,
+        0.6589207798242569,
+        0.6475009955465794,
+        0.6705048028379679
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6475009955465794
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.319981134453087e-08,
+      "native_launch_window_samples_ms": [
+        0.12181179225444794,
+        0.12186174094676971,
+        0.12184175103902817,
+        0.12187174707651138,
+        0.10460779815912247
+      ],
+      "native_launch_window_median_ms": 0.12184175103902817,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6693406030535698,
+        0.6919218227267265,
+        0.6430965848267078,
+        0.6263826042413712,
+        0.6115023978054523
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6430965848267078
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.080986915067086e-08,
+      "native_launch_window_samples_ms": [
+        0.12278775125741959,
+        0.12233774363994598,
+        0.12254774570465088,
+        0.12253974378108978,
+        0.12253584712743759
+      ],
+      "native_launch_window_median_ms": 0.12253974378108978,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6652648095041513,
+        0.6724406033754349,
+        0.67638223990798,
+        0.6592836230993271,
+        0.6652068346738815
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6652648095041513
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.77674327367572e-08,
+      "native_launch_window_samples_ms": [
+        0.02762795053422451,
+        0.0272599495947361,
+        0.027635950595140457,
+        0.027302000671625137,
+        0.027747949585318565
+      ],
+      "native_launch_window_median_ms": 0.02762795053422451,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5385734140872955,
+        0.5509288050234318,
+        0.5438293796032667,
+        0.5181241780519485,
+        0.5304737947881222
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5385734140872955
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.1253839349876245e-08,
+      "native_launch_window_samples_ms": [
+        0.025745999068021774,
+        0.025765949860215187,
+        0.025457998737692833,
+        0.025765949860215187,
+        0.025713950395584106
+      ],
+      "native_launch_window_median_ms": 0.025745999068021774,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5436248145997524,
+        0.5246405955404043,
+        0.5512034054845572,
+        0.5213903728872538,
+        0.5052096210420132
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5246405955404043
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.398042269786572e-08,
+      "native_launch_window_samples_ms": [
+        0.029298150911927223,
+        0.028730198740959167,
+        0.02874619886279106,
+        0.028746148571372032,
+        0.028692150488495827
+      ],
+      "native_launch_window_median_ms": 0.028746148571372032,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6279216147959232,
+        0.6131596397608519,
+        0.5814911797642708,
+        0.6307109724730253,
+        0.620030565187335
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.620030565187335
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.66523344400116e-08,
+      "native_launch_window_samples_ms": [
+        0.030782198533415794,
+        0.030406201258301735,
+        0.030454199761152267,
+        0.030414199456572533,
+        0.030448202043771744
+      ],
+      "native_launch_window_median_ms": 0.030448202043771744,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6360591854900122,
+        0.6380389910191298,
+        0.6100975908339024,
+        0.6286630406975746,
+        0.5858873948454857
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6286630406975746
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.070220993579454e-08,
+      "native_launch_window_samples_ms": [
+        0.027224000543355942,
+        0.027210000902414322,
+        0.027182001620531082,
+        0.02720795013010502,
+        0.027230000123381615
+      ],
+      "native_launch_window_median_ms": 0.027210000902414322,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5888012237846851,
+        0.6252363789826632,
+        0.6231104023754597,
+        0.6100616417825222,
+        0.6013710051774979
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6100616417825222
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.81659404635748e-08,
+      "native_launch_window_samples_ms": [
+        0.026866000145673752,
+        0.027149949222803116,
+        0.02682195045053959,
+        0.02717599831521511,
+        0.02716599963605404
+      ],
+      "native_launch_window_median_ms": 0.027149949222803116,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5180561915040016,
+        0.5059510003775358,
+        0.5226008128374815,
+        0.5101750139147043,
+        0.5158320069313049
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5158320069313049
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.8853950007068363e-08,
+      "native_launch_window_samples_ms": [
+        0.029809948056936264,
+        0.02932414971292019,
+        0.029058149084448814,
+        0.029088148847222328,
+        0.02904214896261692
+      ],
+      "native_launch_window_median_ms": 0.029088148847222328,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5794172175228596,
+        0.6347625982016325,
+        0.5799440201371908,
+        0.6102217826992273,
+        0.619672005996108
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6102217826992273
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.77322460498597e-08,
+      "native_launch_window_samples_ms": [
+        0.037881698459386826,
+        0.03125014901161194,
+        0.031224150210618973,
+        0.031216200441122055,
+        0.031210150569677353
+      ],
+      "native_launch_window_median_ms": 0.031224150210618973,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5967301782220602,
+        0.6070378236472607,
+        0.5836351774632931,
+        0.637545995414257,
+        0.6238657981157303
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6070378236472607
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.890979771714598e-08,
+      "native_launch_window_samples_ms": [
+        0.027496149763464928,
+        0.027462100610136986,
+        0.027160098776221275,
+        0.027128100395202637,
+        0.027174100279808044
+      ],
+      "native_launch_window_median_ms": 0.027174100279808044,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5537259858101606,
+        0.605532806366682,
+        0.5905464291572571,
+        0.6169887725263834,
+        0.5767459981143475
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5905464291572571
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.766698105673761e-08,
+      "native_launch_window_samples_ms": [
+        0.02788810059428215,
+        0.027932098135352135,
+        0.02790210023522377,
+        0.027880098670721054,
+        0.027922099456191063
+      ],
+      "native_launch_window_median_ms": 0.02790210023522377,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5291591864079237,
+        0.5519748199731112,
+        0.5510851740837097,
+        0.5126878153532743,
+        0.5471938289701939
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5471938289701939
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 6.047260669994614e-08,
+      "native_launch_window_samples_ms": [
+        0.029636099934577942,
+        0.029314100742340088,
+        0.029256049543619156,
+        0.029322048649191856,
+        0.029214099049568176
+      ],
+      "native_launch_window_median_ms": 0.029314100742340088,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5351128056645393,
+        0.5239253863692284,
+        0.6511639803647995,
+        0.5989945959299803,
+        0.5799142178148031
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5799142178148031
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.547930787524024e-08,
+      "native_launch_window_samples_ms": [
+        0.03071410022675991,
+        0.031094050034880638,
+        0.030978050082921982,
+        0.03067604824900627,
+        0.03100604936480522
+      ],
+      "native_launch_window_median_ms": 0.030978050082921982,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5087224300950766,
+        0.5465826019644737,
+        0.5432022269815207,
+        0.5650657694786787,
+        0.5398797802627087
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5432022269815207
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.6259016872319805e-08,
+      "native_launch_window_samples_ms": [
+        0.028210049495100975,
+        0.028534099459648132,
+        0.02852809987962246,
+        0.028672048822045326,
+        0.02818005159497261
+      ],
+      "native_launch_window_median_ms": 0.02852809987962246,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5361026152968407,
+        0.5389799829572439,
+        0.5287184379994869,
+        0.6175220012664795,
+        0.6218059919774532
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5389799829572439
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.7764627291704258e-08,
+      "native_launch_window_samples_ms": [
+        0.0283400509506464,
+        0.0279440488666296,
+        0.027932098135352135,
+        0.027654048055410385,
+        0.027924099937081337
+      ],
+      "native_launch_window_median_ms": 0.027932098135352135,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5327059887349606,
+        0.5512775853276253,
+        0.5583328194916248,
+        0.5330206360667944,
+        0.5411222111433744
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5411222111433744
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.8419892328379603e-08,
+      "native_launch_window_samples_ms": [
+        0.03007810190320015,
+        0.029732048511505127,
+        0.029802098870277405,
+        0.02984209917485714,
+        0.02976999804377556
+      ],
+      "native_launch_window_median_ms": 0.029802098870277405,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.521388603374362,
+        0.5442821886390448,
+        0.5360763985663652,
+        0.5531027913093567,
+        0.6195698399096727
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5442821886390448
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.515036350349888e-08,
+      "native_launch_window_samples_ms": [
+        0.031106049194931984,
+        0.0306620504707098,
+        0.030287999659776688,
+        0.030630048364400864,
+        0.03032805025577545
+      ],
+      "native_launch_window_median_ms": 0.030630048364400864,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5349684040993452,
+        0.5175572354346514,
+        0.5549803841859102,
+        0.6123020313680172,
+        0.5377737805247307
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5377737805247307
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.7030727756691704e-08,
+      "native_launch_window_samples_ms": [
+        0.016137998551130295,
+        0.015734000131487846,
+        0.015737999230623245,
+        0.016009999439120293,
+        0.01604599878191948
+      ],
+      "native_launch_window_median_ms": 0.016009999439120293,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.545590603724122,
+        0.5112230312079191,
+        0.522103812545538,
+        0.5202041938900948,
+        0.5258992314338684
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.522103812545538
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.114329531235139e-08,
+      "native_launch_window_samples_ms": [
+        0.015401950106024742,
+        0.015193949453532696,
+        0.015919450670480728,
+        0.015193900093436241,
+        0.015177950263023376
+      ],
+      "native_launch_window_median_ms": 0.015193949453532696,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5090449936687946,
+        0.5026265978813171,
+        0.5068727768957615,
+        0.5031757988035679,
+        0.5199016071856022
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5068727768957615
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.293367943970395e-08,
+      "native_launch_window_samples_ms": [
+        0.014423949643969536,
+        0.014433950185775757,
+        0.01599140092730522,
+        0.01441195048391819,
+        0.01394595019519329
+      ],
+      "native_launch_window_median_ms": 0.014423949643969536,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5203785840421915,
+        0.5057947710156441,
+        0.525834783911705,
+        0.5278428085148335,
+        0.49894177354872227
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5203785840421915
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.6311236507067264e-08,
+      "native_launch_window_samples_ms": [
+        0.015597949735820293,
+        0.015577949583530426,
+        0.01527394913136959,
+        0.015573998913168907,
+        0.015270049683749676
+      ],
+      "native_launch_window_median_ms": 0.015573998913168907,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5214086268097162,
+        0.5141767673194408,
+        0.5197934340685606,
+        0.6098931655287743,
+        0.6111295893788338
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5214086268097162
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.287374095162221e-08,
+      "native_launch_window_samples_ms": [
+        0.015912050381302834,
+        0.01555004995316267,
+        0.015848049893975258,
+        0.015560050494968891,
+        0.015532049350440502
+      ],
+      "native_launch_window_median_ms": 0.015560050494968891,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.542228203266859,
+        0.5056766327470541,
+        0.5212781950831413,
+        0.5278008058667183,
+        0.502694770693779
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5212781950831413
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.7663833163392724e-08,
+      "native_launch_window_samples_ms": [
+        0.014202049002051353,
+        0.014166000299155712,
+        0.014128049835562706,
+        0.014190049842000008,
+        0.014164050109684467
+      ],
+      "native_launch_window_median_ms": 0.014166000299155712,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5277466028928757,
+        0.519258389249444,
+        0.5174307618290186,
+        0.5316520109772682,
+        0.5746942013502121
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5277466028928757
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.917520262688214e-08,
+      "native_launch_window_samples_ms": [
+        0.014971999451518059,
+        0.014535950496792793,
+        0.014471950009465218,
+        0.01476999931037426,
+        0.015181949362158775
+      ],
+      "native_launch_window_median_ms": 0.01476999931037426,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5230056121945381,
+        0.5123712122440338,
+        0.5509947892278433,
+        0.5365774035453796,
+        0.5129483994096518
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5230056121945381
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.992536689618632e-08,
+      "native_launch_window_samples_ms": [
+        0.015137949958443642,
+        0.014640000648796558,
+        0.014651949517428875,
+        0.014643949456512928,
+        0.014925949275493622
+      ],
+      "native_launch_window_median_ms": 0.014651949517428875,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5481615662574768,
+        0.5296883638948202,
+        0.4918060265481472,
+        0.5542089696973562,
+        0.503826979547739
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5296883638948202
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.847242103198866e-08,
+      "native_launch_window_samples_ms": [
+        0.016665998846292496,
+        0.016623999923467636,
+        0.016607999801635742,
+        0.01645199954509735,
+        0.016630049794912338
+      ],
+      "native_launch_window_median_ms": 0.016623999923467636,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5128961987793446,
+        0.524804973974824,
+        0.46533960849046707,
+        0.47869980335235596,
+        0.4317073617130518
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.47869980335235596
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.0009119683936945e-08,
+      "native_launch_window_samples_ms": [
+        0.014138050377368927,
+        0.014156049117445946,
+        0.014112000353634357,
+        0.01387999951839447,
+        0.014406000263988972
+      ],
+      "native_launch_window_median_ms": 0.014138050377368927,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5425007548183203,
+        0.5370061844587326,
+        0.5375993903726339,
+        0.5505479872226715,
+        0.5324835889041424
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5375993903726339
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.245974583039214e-08,
+      "native_launch_window_samples_ms": [
+        0.014997999183833599,
+        0.015230000019073486,
+        0.015289999544620514,
+        0.014917999505996704,
+        0.014903999865055084
+      ],
+      "native_launch_window_median_ms": 0.014997999183833599,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5527722183614969,
+        0.5441240034997463,
+        0.533050624653697,
+        0.49850898794829845,
+        0.5986739881336689
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5441240034997463
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.7538578800955236e-08,
+      "native_launch_window_samples_ms": [
+        0.015399999916553497,
+        0.015658000484108925,
+        0.015705998986959457,
+        0.01568000018596649,
+        0.015644000843167305
+      ],
+      "native_launch_window_median_ms": 0.015658000484108925,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5188918206840754,
+        0.502935191616416,
+        0.5480133928358555,
+        0.5459152162075043,
+        0.5505079869180918
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5459152162075043
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.719655372602659e-08,
+      "native_launch_window_samples_ms": [
+        0.01549800019711256,
+        0.01515599898993969,
+        0.01484999991953373,
+        0.01515399944037199,
+        0.014878000132739544
+      ],
+      "native_launch_window_median_ms": 0.01515399944037199,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5470073781907558,
+        0.545849185436964,
+        0.5259772296994925,
+        0.5385170225054026,
+        0.546578411012888
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.545849185436964
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.332997387088369e-08,
+      "native_launch_window_samples_ms": [
+        0.015607999637722969,
+        0.015480050817131996,
+        0.015244049951434135,
+        0.015248049981892109,
+        0.015252049081027508
+      ],
+      "native_launch_window_median_ms": 0.015252049081027508,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6761256139725447,
+        0.6759532261639833,
+        0.651494599878788,
+        0.6627982016652822,
+        0.632576597854495
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6627982016652822
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 3.40585628588741e-08,
+      "native_launch_window_samples_ms": [
+        0.014528000727295876,
+        0.01443404983729124,
+        0.01445004902780056,
+        0.013278000056743622,
+        0.01301604975014925
+      ],
+      "native_launch_window_median_ms": 0.01443404983729124,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.8104677777737379,
+        1.0638132225722075,
+        1.0158516000956297,
+        1.0353447869420052,
+        0.6540795788168907
+      ],
+      "prepared_host_update_invoke_read_median_ms": 1.0158516000956297
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.24079417138401e-08,
+      "native_launch_window_samples_ms": [
+        0.014659998938441277,
+        0.014134000055491924,
+        0.014146000146865845,
+        0.014159999787807465,
+        0.014139999635517597
+      ],
+      "native_launch_window_median_ms": 0.014146000146865845,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6328309886157513,
+        0.6274688057601452,
+        0.6505026016384363,
+        0.6659179925918579,
+        0.6411970127373934
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6411970127373934
+    },
+    {
+      "mask": "singleton",
+      "prefixes": [
+        [
+          2,
+          1
+        ],
+        [
+          3
+        ],
+        [],
+        [
+          1,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.7210594988911225e-08,
+      "native_launch_window_samples_ms": [
+        0.03287599980831146,
+        0.033146001398563385,
+        0.03322800248861313,
+        0.03318000212311745,
+        0.03311404958367348
+      ],
+      "native_launch_window_median_ms": 0.033146001398563385,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5378999747335911,
+        0.5467969924211502,
+        0.5176714155822992,
+        0.5636369809508324,
+        0.5425068084150553
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5425068084150553
+    },
+    {
+      "mask": "unbatched",
+      "prefixes": [
+        [],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.3439070129249728e-08,
+      "native_launch_window_samples_ms": [
+        0.01458400022238493,
+        0.014885999262332916,
+        0.014538000337779522,
+        0.014543999917805195,
+        0.014530000276863575
+      ],
+      "native_launch_window_median_ms": 0.014543999917805195,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5256745964288712,
+        0.6121475715190172,
+        0.6024910137057304,
+        0.6044368259608746,
+        0.6156641989946365
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.6044368259608746
+    },
+    {
+      "mask": "singleton",
+      "prefixes": [
+        [
+          2,
+          1
+        ],
+        [
+          3
+        ],
+        [],
+        [
+          1,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.519246536524804e-08,
+      "native_launch_window_samples_ms": [
+        0.030848000198602676,
+        0.03081200085580349,
+        0.03081599995493889,
+        0.03077000007033348,
+        0.030935999006032944
+      ],
+      "native_launch_window_median_ms": 0.03081599995493889,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5476306192576885,
+        0.5434886086732149,
+        0.5371406208723783,
+        0.5346178077161312,
+        0.5255281925201416
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5371406208723783
+    },
+    {
+      "mask": "unbatched",
+      "prefixes": [
+        [],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.7615990083319488e-08,
+      "native_launch_window_samples_ms": [
+        0.014258000068366528,
+        0.013697999529540539,
+        0.014465999789536,
+        0.013655999675393105,
+        0.013674050569534302
+      ],
+      "native_launch_window_median_ms": 0.013697999529540539,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5146275740116835,
+        0.5199798382818699,
+        0.5297244060784578,
+        0.6005594041198492,
+        0.5782930180430412
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5297244060784578
+    },
+    {
+      "mask": "singleton",
+      "prefixes": [
+        [
+          2,
+          1
+        ],
+        [
+          3
+        ],
+        [],
+        [
+          1,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.2406427863971317e-08,
+      "native_launch_window_samples_ms": [
+        0.033994048833847046,
+        0.03370805084705353,
+        0.03369005024433136,
+        0.03403005003929138,
+        0.03398805111646652
+      ],
+      "native_launch_window_median_ms": 0.03398805111646652,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5445806309580803,
+        0.5628416314721107,
+        0.5256365984678268,
+        0.5402746144682169,
+        0.5277866031974554
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5402746144682169
+    },
+    {
+      "mask": "unbatched",
+      "prefixes": [
+        [],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.0003168621496314e-08,
+      "native_launch_window_samples_ms": [
+        0.014346050098538399,
+        0.014058050699532032,
+        0.01405004970729351,
+        0.014626050367951393,
+        0.014023999683558941
+      ],
+      "native_launch_window_median_ms": 0.014058050699532032,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.5197051912546158,
+        0.5181241780519485,
+        0.6252706050872803,
+        0.5327071994543076,
+        0.5292295943945646
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.5292295943945646
+    },
+    {
+      "mask": "singleton",
+      "prefixes": [
+        [
+          2,
+          1
+        ],
+        [
+          3
+        ],
+        [],
+        [
+          1,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.3043555992005054e-08,
+      "native_launch_window_samples_ms": [
+        0.03616400063037872,
+        0.035659998655319214,
+        0.0356299988925457,
+        0.035645999014377594,
+        0.0356220006942749
+      ],
+      "native_launch_window_median_ms": 0.035645999014377594,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.6169066298753023,
+        0.5912238266319036,
+        0.62461718916893,
+        0.6351654417812824,
+        0.6270579993724823
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.62461718916893
+    },
+    {
+      "mask": "unbatched",
+      "prefixes": [
+        [],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_timing",
+      "changed_frame_replay": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.726941767365986e-08,
+      "native_launch_window_samples_ms": [
+        0.01443600095808506,
+        0.014368000440299511,
+        0.014392000623047352,
+        0.014386000111699104,
+        0.014361999928951263
+      ],
+      "native_launch_window_median_ms": 0.014386000111699104,
+      "prepared_host_update_invoke_read_samples_ms": [
+        0.604807585477829,
+        0.6177501752972603,
+        0.6050239782780409,
+        0.594291603192687,
+        0.5715081933885813
+      ],
+      "prepared_host_update_invoke_read_median_ms": 0.604807585477829
+    }
+  ]
+}

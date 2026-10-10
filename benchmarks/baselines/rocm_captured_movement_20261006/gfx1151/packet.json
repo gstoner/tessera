@@ -1,0 +1,668 @@
+{
+  "device": {
+    "name": "AMD Radeon(TM) 8060S Graphics",
+    "pci_bus_id": "0000:c5:00.0",
+    "architecture": "gfx1151",
+    "ordinal": 0
+  },
+  "architecture": "gfx1151",
+  "rows": [
+    {
+      "family": "paged",
+      "large": false,
+      "dims": [
+        4,
+        4,
+        4,
+        3,
+        8,
+        1,
+        5
+      ],
+      "image_digest": "0414daf06b8c23a961c39dfb52a3575d3f3d6e8c89e8ccb6da28061b4b779de6",
+      "entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "graph": {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011"
+        },
+        "schedule": {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011",
+          "output_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83"
+        },
+        "tile": {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83",
+          "output_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60"
+        },
+        "target": {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60",
+          "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+        },
+        "backend": {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+          "output_digest": "dc337b9ed7065645a9009eec6424439d7a7a2fbcd5a4aa74024eaca59d25c58f"
+        }
+      },
+      "first_compile_host_call_ms": 868.062548,
+      "graph_prepare_ms": 11.853533,
+      "graph_kernel_nodes": 256,
+      "launch_block_threads": 256,
+      "correctness": "bit_exact_before_and_after_each_arm",
+      "resident_rebind_bit_exact": true,
+      "samples": {
+        "loop": [
+          {
+            "device_event_ms_per_kernel": 0.002758004004135728,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00384431640625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0026949492748826742,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00297872265625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0026248320937156677,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0028955546875
+          },
+          {
+            "device_event_ms_per_kernel": 0.0025164687540382147,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002725
+          },
+          {
+            "device_event_ms_per_kernel": 0.0025457656010985374,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00280371484375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0024939219001680613,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00276984375
+          },
+          {
+            "device_event_ms_per_kernel": 0.002586078131571412,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00294981640625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0024346639402210712,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0027128515625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0025741602294147015,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002825828125
+          }
+        ],
+        "captured": [
+          {
+            "device_event_ms_per_kernel": 0.0023772032000124454,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0025769453125
+          },
+          {
+            "device_event_ms_per_kernel": 0.002056480385363102,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00225567578125
+          },
+          {
+            "device_event_ms_per_kernel": 0.002003507921472192,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00223434375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020539765246212482,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00227145703125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020267500076442957,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00225977734375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020219844300299883,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00226102734375
+          },
+          {
+            "device_event_ms_per_kernel": 0.00206357822753489,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00226926953125
+          },
+          {
+            "device_event_ms_per_kernel": 0.002039089798927307,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00227032421875
+          },
+          {
+            "device_event_ms_per_kernel": 0.002040769439190626,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0022392265625
+          }
+        ]
+      },
+      "event_medians_ms": {
+        "loop": 0.0025741602294147015,
+        "captured": 0.002040769439190626
+      },
+      "captured_over_loop_event_ratio": 0.7927903694070533
+    },
+    {
+      "family": "paged",
+      "large": true,
+      "dims": [
+        8,
+        4,
+        8,
+        4,
+        32,
+        1,
+        5
+      ],
+      "image_digest": "0414daf06b8c23a961c39dfb52a3575d3f3d6e8c89e8ccb6da28061b4b779de6",
+      "entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "graph": {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0"
+        },
+        "schedule": {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0",
+          "output_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded"
+        },
+        "tile": {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded",
+          "output_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b"
+        },
+        "target": {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b",
+          "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+        },
+        "backend": {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+          "output_digest": "dc337b9ed7065645a9009eec6424439d7a7a2fbcd5a4aa74024eaca59d25c58f"
+        }
+      },
+      "first_compile_host_call_ms": 258.229723,
+      "graph_prepare_ms": 11.592329,
+      "graph_kernel_nodes": 256,
+      "launch_block_threads": 256,
+      "correctness": "bit_exact_before_and_after_each_arm",
+      "resident_rebind_bit_exact": true,
+      "samples": {
+        "loop": [
+          {
+            "device_event_ms_per_kernel": 0.002395699266344309,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00349996484375
+          },
+          {
+            "device_event_ms_per_kernel": 0.002579539082944393,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00281656640625
+          },
+          {
+            "device_event_ms_per_kernel": 0.002695753937587142,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00295712109375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0025468398816883564,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00279707421875
+          },
+          {
+            "device_event_ms_per_kernel": 0.002563171787187457,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00279230859375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0025105858221650124,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0027739453125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0025065625086426735,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0027958203125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0024546445347368717,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00270054296875
+          },
+          {
+            "device_event_ms_per_kernel": 0.002551058540120721,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00278394921875
+          }
+        ],
+        "captured": [
+          {
+            "device_event_ms_per_kernel": 0.002317101461812854,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00254717578125
+          },
+          {
+            "device_event_ms_per_kernel": 0.002094820374622941,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00232555859375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0021076719276607037,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0023451328125
+          },
+          {
+            "device_event_ms_per_kernel": 0.002097632735967636,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00232887890625
+          },
+          {
+            "device_event_ms_per_kernel": 0.002094820374622941,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00229891796875
+          },
+          {
+            "device_event_ms_per_kernel": 0.0021045077592134476,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002316265625
+          },
+          {
+            "device_event_ms_per_kernel": 0.002099234377965331,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0023234921875
+          },
+          {
+            "device_event_ms_per_kernel": 0.002089859452098608,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0023276328125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020598946139216423,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00228571484375
+          }
+        ]
+      },
+      "event_medians_ms": {
+        "loop": 0.0025468398816883564,
+        "captured": 0.002097632735967636
+      },
+      "captured_over_loop_event_ratio": 0.8236217561416028
+    },
+    {
+      "family": "full",
+      "large": true,
+      "dims": [
+        32,
+        64,
+        16,
+        8,
+        128,
+        0,
+        1024
+      ],
+      "image_digest": "0414daf06b8c23a961c39dfb52a3575d3f3d6e8c89e8ccb6da28061b4b779de6",
+      "entry": "tessera_rocm_paged_kv_e1bb17598f3770bc",
+      "compiler_lineage": {
+        "graph": {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "8009656ccd1c43db8cc8db81de4ee12aaf70508f7f475aafc77e9d61e240f0c8"
+        },
+        "schedule": {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "8009656ccd1c43db8cc8db81de4ee12aaf70508f7f475aafc77e9d61e240f0c8",
+          "output_digest": "54d11e813c15b7d2811ce2467c4d3acde6ac37562e808e34cbe4e8fc1c2255ee"
+        },
+        "tile": {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "54d11e813c15b7d2811ce2467c4d3acde6ac37562e808e34cbe4e8fc1c2255ee",
+          "output_digest": "0edce1f01d48cdf78b32c3119c9cb18073a161c4a7d591a891773deb1e7544c5"
+        },
+        "target": {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "0edce1f01d48cdf78b32c3119c9cb18073a161c4a7d591a891773deb1e7544c5",
+          "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+        },
+        "backend": {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+          "output_digest": "dc337b9ed7065645a9009eec6424439d7a7a2fbcd5a4aa74024eaca59d25c58f"
+        }
+      },
+      "first_compile_host_call_ms": 239.471264,
+      "graph_prepare_ms": 12.388877,
+      "graph_kernel_nodes": 256,
+      "launch_block_threads": 256,
+      "correctness": "bit_exact_before_and_after_each_arm",
+      "resident_rebind_bit_exact": true,
+      "samples": {
+        "loop": [
+          {
+            "device_event_ms_per_kernel": 0.033124376088380814,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0343505859375
+          },
+          {
+            "device_event_ms_per_kernel": 0.03864065185189247,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03942012890625
+          },
+          {
+            "device_event_ms_per_kernel": 0.03920220583677292,
+            "resident_submission_completion_wall_ms_per_kernel": 0.04010743359375
+          },
+          {
+            "device_event_ms_per_kernel": 0.03823128715157509,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03899877734375
+          },
+          {
+            "device_event_ms_per_kernel": 0.037817131727933884,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0386607890625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0371050201356411,
+            "resident_submission_completion_wall_ms_per_kernel": 0.037921921875
+          },
+          {
+            "device_event_ms_per_kernel": 0.037182219326496124,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0383988203125
+          },
+          {
+            "device_event_ms_per_kernel": 0.037773314863443375,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03882998046875
+          },
+          {
+            "device_event_ms_per_kernel": 0.0373677983880043,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0387400859375
+          }
+        ],
+        "captured": [
+          {
+            "device_event_ms_per_kernel": 0.03836704045534134,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03923316796875
+          },
+          {
+            "device_event_ms_per_kernel": 0.03626909852027893,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03738770703125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0368889719247818,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03753552734375
+          },
+          {
+            "device_event_ms_per_kernel": 0.03874034434556961,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0393066875
+          },
+          {
+            "device_event_ms_per_kernel": 0.036709561944007874,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03789906640625
+          },
+          {
+            "device_event_ms_per_kernel": 0.036931607872247696,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0382262734375
+          },
+          {
+            "device_event_ms_per_kernel": 0.037730615586042404,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0387435625
+          },
+          {
+            "device_event_ms_per_kernel": 0.038168616592884064,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03893803125
+          },
+          {
+            "device_event_ms_per_kernel": 0.037663865834474564,
+            "resident_submission_completion_wall_ms_per_kernel": 0.03874120703125
+          }
+        ]
+      },
+      "event_medians_ms": {
+        "loop": 0.037773314863443375,
+        "captured": 0.037663865834474564
+      },
+      "captured_over_loop_event_ratio": 0.9971024775197918
+    },
+    {
+      "family": "dispatched",
+      "large": false,
+      "dims": [
+        7,
+        9,
+        13
+      ],
+      "image_digest": "3f98d83231524c655ad923ed5fbea7dfb42193a81f4fa4605a536f135fa6c44b",
+      "entry": "tessera_rocm_moe_dispatch_e59f0cd4b3176780",
+      "compiler_lineage": {
+        "graph": {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "39a31ac3fb3ddf06fd69310617188515160a44abd0195b0d7bc9c0eb5a6a6b2a"
+        },
+        "schedule": {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "39a31ac3fb3ddf06fd69310617188515160a44abd0195b0d7bc9c0eb5a6a6b2a",
+          "output_digest": "e220a728df01406121fba06154c2ae22dfe25a283f899c4b44b87ddfabe36836"
+        },
+        "tile": {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "e220a728df01406121fba06154c2ae22dfe25a283f899c4b44b87ddfabe36836",
+          "output_digest": "0672cb7c684d50bae989f20c3d31a8da391a3e550c4bb8280e7f8c143b9f128b"
+        },
+        "target": {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "0672cb7c684d50bae989f20c3d31a8da391a3e550c4bb8280e7f8c143b9f128b",
+          "output_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41"
+        },
+        "backend": {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41",
+          "output_digest": "3b19fdbba845daab5dc6c960ecea38121bfcc78f83d250fa01efb4a23cbee703"
+        }
+      },
+      "first_compile_host_call_ms": 361.093265,
+      "graph_prepare_ms": 5.414912,
+      "graph_kernel_nodes": 256,
+      "launch_block_threads": 256,
+      "correctness": "bit_exact_before_and_after_each_arm",
+      "resident_rebind_bit_exact": true,
+      "samples": {
+        "loop": [
+          {
+            "device_event_ms_per_kernel": 0.0023409610148519278,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002731875
+          },
+          {
+            "device_event_ms_per_kernel": 0.00222181249409914,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00242650390625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0022447460796684027,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002482875
+          },
+          {
+            "device_event_ms_per_kernel": 0.002241578185930848,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00246583984375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0022348985075950623,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002470375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0021270038560032845,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0023984921875
+          },
+          {
+            "device_event_ms_per_kernel": 0.0021985312923789024,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00243740234375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0021896210964769125,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00245443359375
+          },
+          {
+            "device_event_ms_per_kernel": 0.002207554643973708,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0024318984375
+          }
+        ],
+        "captured": [
+          {
+            "device_event_ms_per_kernel": 0.001987230498343706,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0022763046875
+          },
+          {
+            "device_event_ms_per_kernel": 0.0016864297213032842,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0019199140625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0016840038588270545,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00188580859375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0016807656502351165,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00188022265625
+          },
+          {
+            "device_event_ms_per_kernel": 0.001682718750089407,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00187795703125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0017358085606247187,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00198671484375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0016648633172735572,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00188549609375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0016768203349784017,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0018711640625
+          },
+          {
+            "device_event_ms_per_kernel": 0.00164264056365937,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0018400234375
+          }
+        ]
+      },
+      "event_medians_ms": {
+        "loop": 0.00222181249409914,
+        "captured": 0.001682718750089407
+      },
+      "captured_over_loop_event_ratio": 0.7573630783688994
+    },
+    {
+      "family": "dispatched",
+      "large": true,
+      "dims": [
+        64,
+        128,
+        256
+      ],
+      "image_digest": "3f98d83231524c655ad923ed5fbea7dfb42193a81f4fa4605a536f135fa6c44b",
+      "entry": "tessera_rocm_moe_dispatch_e59f0cd4b3176780",
+      "compiler_lineage": {
+        "graph": {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "09f8b0d048ffe0d249c0e63019196b795bed953a99d3072bd9419e233748cdcd"
+        },
+        "schedule": {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "09f8b0d048ffe0d249c0e63019196b795bed953a99d3072bd9419e233748cdcd",
+          "output_digest": "b24c6c8c53baeab49946c449d7fb9b7700dc986754aa84955c9568f6c4e17ca3"
+        },
+        "tile": {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "b24c6c8c53baeab49946c449d7fb9b7700dc986754aa84955c9568f6c4e17ca3",
+          "output_digest": "9dfa98cd540dccff1f754450ddc7ba7de0bfb528472e9757d0d0e4b6edfaba86"
+        },
+        "target": {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "9dfa98cd540dccff1f754450ddc7ba7de0bfb528472e9757d0d0e4b6edfaba86",
+          "output_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41"
+        },
+        "backend": {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41",
+          "output_digest": "3b19fdbba845daab5dc6c960ecea38121bfcc78f83d250fa01efb4a23cbee703"
+        }
+      },
+      "first_compile_host_call_ms": 629.696702,
+      "graph_prepare_ms": 5.505418,
+      "graph_kernel_nodes": 256,
+      "launch_block_threads": 256,
+      "correctness": "bit_exact_before_and_after_each_arm",
+      "resident_rebind_bit_exact": true,
+      "samples": {
+        "loop": [
+          {
+            "device_event_ms_per_kernel": 0.0025885156355798244,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00354144921875
+          },
+          {
+            "device_event_ms_per_kernel": 0.0023962382692843676,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00267276953125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0025784336030483246,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00284461328125
+          },
+          {
+            "device_event_ms_per_kernel": 0.002395808696746826,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0027130859375
+          },
+          {
+            "device_event_ms_per_kernel": 0.002418503863736987,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00269839453125
+          },
+          {
+            "device_event_ms_per_kernel": 0.00239576562307775,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00271144140625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0024526093620806932,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002756171875
+          },
+          {
+            "device_event_ms_per_kernel": 0.002376156160607934,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00266499609375
+          },
+          {
+            "device_event_ms_per_kernel": 0.002413582056760788,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00269605078125
+          }
+        ],
+        "captured": [
+          {
+            "device_event_ms_per_kernel": 0.002475656336173415,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00279775
+          },
+          {
+            "device_event_ms_per_kernel": 0.002024847548455,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00226993359375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020151210483163595,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00229419140625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020655938424170017,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0023384140625
+          },
+          {
+            "device_event_ms_per_kernel": 0.002050121081992984,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00229919140625
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020498905796557665,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0023069296875
+          },
+          {
+            "device_event_ms_per_kernel": 0.002049968810752034,
+            "resident_submission_completion_wall_ms_per_kernel": 0.002325484375
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020465273410081863,
+            "resident_submission_completion_wall_ms_per_kernel": 0.0022935703125
+          },
+          {
+            "device_event_ms_per_kernel": 0.0020122695714235306,
+            "resident_submission_completion_wall_ms_per_kernel": 0.00225864453125
+          }
+        ]
+      },
+      "event_medians_ms": {
+        "loop": 0.002413582056760788,
+        "captured": 0.0020498905796557665
+      },
+      "captured_over_loop_event_ratio": 0.8493146416604027
+    }
+  ],
+  "compiler_sha256": "deebfbf99289f5bcb52acb09946869dda968c0ca6bc9e44276b2d83aa2cdf6d4",
+  "fingerprints": {
+    "benchmarks/rocm/benchmark_captured_movement.py": "d3516715ff73f9f5175ce940ec3717b5da15ee40809dfd9a4b152c5e7d4dc47b",
+    "benchmarks/rocm/benchmark_rocm_e2e_movement.py": "dc63a8e11f496e7360e748de27128a1fe97b049783c94d264b2e95f45aab2fdd",
+    "python/tessera/compiler/jit.py": "3446d8591bb4214ce67a23a5cc52278545ec726e3c73dfe9127660a9006b4d4d",
+    "python/tessera/compiler/rocm_native.py": "069a42028fdd8d4b89d95ca230e413b004e4d2e3840d4d896a4edc9254cf320b",
+    "python/tessera/compiler/scheduled_paged_kv.py": "082359abb0bf9aeb8a9b2d4b849a70202885495d56bcfc9bd6ac171c8e76e567",
+    "python/tessera/runtime.py": "03d4e6c9414d5fe00b44bbb2d07b14b884b1392797dffb0fb53504a11cbe3a5b"
+  },
+  "timing_scope": "HIP graph replay versus Python driver loop on identical resident buffers; event windows include device dispatch, not isolated instruction execution; wall separate"
+}

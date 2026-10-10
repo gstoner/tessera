@@ -14,6 +14,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "TesseraROCM/Passes.h"
+#include "ROCMNativeProgramMember.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
@@ -37,7 +38,7 @@ static constexpr int64_t BD = 256;
 
 enum class Bin { Sub, Div, Pow, Maximum, Minimum, Add, Mul, Mod, FloorDiv };
 
-void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
+void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy, Type outTy,
                     Bin bin) {
   Type f32 = b.getF32Type();
   bool isF32 = storeTy.isF32();
@@ -152,7 +153,7 @@ void emitBinaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     break;
   }
   }
-  Value sv = isF32 ? y : b.create<arith::TruncFOp>(loc, storeTy, y);
+  Value sv = outTy.isF32() ? y : b.create<arith::TruncFOp>(loc, outTy, y);
   b.create<memref::StoreOp>(loc, sv, O, ValueRange{gid});
 
   b.setInsertionPointToEnd(&f.getBody().front());
@@ -231,13 +232,38 @@ struct GenerateROCMBinaryKernelPass
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type idxTy = b.getIndexType();
+      Type outTy = storeTy;
+      if (auto output = op->getAttrOfType<StringAttr>("output_dtype")) {
+        if (output.getValue() != "f32") {
+          op->emitError("mixed ROCm math output_dtype currently requires f32");
+          return signalPassFailure();
+        }
+        outTy = b.getF32Type();
+      }
+      auto outMemTy = MemRefType::get({ShapedType::kDynamic}, outTy);
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
       // (A, B, O : memref<?xstore>, N : index)
-      auto fnTy = b.getFunctionType({memTy, memTy, memTy, idxTy}, {});
+      auto fnTy = b.getFunctionType({memTy, memTy, outMemTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitBinaryBody(body, loc, gpuFunc, storeTy, bin);
+      emitBinaryBody(body, loc, gpuFunc, storeTy, outTy, bin);
+      if (auto member = module->getAttrOfType<DictionaryAttr>("tessera.autodiff.scaled_member")) {
+        auto typeAttr = member.getAs<TypeAttr>("type");
+        auto type = typeAttr ? dyn_cast<FunctionType>(typeAttr.getValue()) : FunctionType{};
+        auto output = type && type.getNumResults() == 1 ?
+            dyn_cast<RankedTensorType>(type.getResult(0)) : RankedTensorType{};
+        if (!output || !output.hasStaticShape() || !output.getElementType().isF32() ||
+            kindStr != "add" || !storeTy.isF32() || output.getNumElements() <= 0) {
+          module.emitError("native scaled program sum needs static f32 storage");
+          return signalPassFailure();
+        }
+        int64_t count = output.getNumElements();
+        SmallVector<int64_t> scalars{count};
+        SmallVector<int64_t> geometry{(count - 1) / BD + 1, 1, 1, BD, 1, 1};
+        if (failed(projectROCMNativeProgramMember(module, kname, 2, scalars, geometry)))
+          return signalPassFailure();
+      }
       op->erase();
     }
   }

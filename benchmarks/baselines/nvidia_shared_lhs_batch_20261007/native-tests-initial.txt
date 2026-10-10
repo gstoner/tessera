@@ -1,0 +1,2570 @@
+............FFFF............FFFF............FFFF..F..F..F                [100%]
+=================================== FAILURES ===================================
+___ test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[False-False] ____
+
+transpose_a = False, transpose_b = False
+
+    @pytest.mark.parametrize("transpose_a,transpose_b", [(False, False), (True, False),
+                                                        (False, True), (True, True)])
+    def test_shared_lhs_batch_keeps_native_roles_and_sealed_policy(transpose_a, transpose_b):
+        from tests.device.nvidia.test_nvfp4_transpose_jit import oriented_product
+        from tessera.compiler import nvidia_native
+        a_shape = (129, 17) if transpose_a else (17, 129)
+        b_shape = (3, 19, 129) if transpose_b else (3, 129, 19)
+        sa_shape = (9, 17) if transpose_a else (17, 9)
+        sb_shape = (3, 19, 9) if transpose_b else (3, 9, 19)
+        traced = trace(oriented_product(transpose_a, transpose_b, "shared_lhs"),
+                       (a_shape, "nvfp4"), (b_shape, "nvfp4"),
+                       (sa_shape, "uint8"), (sb_shape, "uint8"))
+        module = to_graph_ir_module(traced, name="shared_lhs", target="nvidia_sm120")
+        assert nvidia_native.supports_nvfp4_matmul(module)
+        a = lower_scheduled_matmul(module, target="nvidia_sm120")
+        assert (a.m, a.n, a.k) == (51, 19, 129)
+        assert 'batching = "shared_lhs"' in a.tile_ir
+        assert "@tessera_tile_matmul_nvfp4_batched" in a.tile_ir
+        line = next(line for line in a.schedule_ir.splitlines() if "= schedule.matmul" in line)
+        changed = a.schedule_ir.replace(line, line.replace('"shared_lhs"', '"independent_rhs"'))
+>       assert changed != a.schedule_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' = ScheduledMatmulArtifact(graph_ir='module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer"...ation='none', dynamic_m=False, dynamic_n=False, dynamic_k=False, split_k=1, split_k_reduction='', b_layout='col_major').schedule_ir
+
+tests/unit/test_nvfp4_native_transpose_contract.py:110: AssertionError
+____ test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[True-False] ____
+
+transpose_a = True, transpose_b = False
+
+    @pytest.mark.parametrize("transpose_a,transpose_b", [(False, False), (True, False),
+                                                        (False, True), (True, True)])
+    def test_shared_lhs_batch_keeps_native_roles_and_sealed_policy(transpose_a, transpose_b):
+        from tests.device.nvidia.test_nvfp4_transpose_jit import oriented_product
+        from tessera.compiler import nvidia_native
+        a_shape = (129, 17) if transpose_a else (17, 129)
+        b_shape = (3, 19, 129) if transpose_b else (3, 129, 19)
+        sa_shape = (9, 17) if transpose_a else (17, 9)
+        sb_shape = (3, 19, 9) if transpose_b else (3, 9, 19)
+        traced = trace(oriented_product(transpose_a, transpose_b, "shared_lhs"),
+                       (a_shape, "nvfp4"), (b_shape, "nvfp4"),
+                       (sa_shape, "uint8"), (sb_shape, "uint8"))
+        module = to_graph_ir_module(traced, name="shared_lhs", target="nvidia_sm120")
+        assert nvidia_native.supports_nvfp4_matmul(module)
+        a = lower_scheduled_matmul(module, target="nvidia_sm120")
+        assert (a.m, a.n, a.k) == (51, 19, 129)
+        assert 'batching = "shared_lhs"' in a.tile_ir
+        assert "@tessera_tile_matmul_nvfp4_batched" in a.tile_ir
+        line = next(line for line in a.schedule_ir.splitlines() if "= schedule.matmul" in line)
+        changed = a.schedule_ir.replace(line, line.replace('"shared_lhs"', '"independent_rhs"'))
+>       assert changed != a.schedule_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' = ScheduledMatmulArtifact(graph_ir='module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer"...ation='none', dynamic_m=False, dynamic_n=False, dynamic_k=False, split_k=1, split_k_reduction='', b_layout='col_major').schedule_ir
+
+tests/unit/test_nvfp4_native_transpose_contract.py:110: AssertionError
+____ test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[False-True] ____
+
+transpose_a = False, transpose_b = True
+
+    @pytest.mark.parametrize("transpose_a,transpose_b", [(False, False), (True, False),
+                                                        (False, True), (True, True)])
+    def test_shared_lhs_batch_keeps_native_roles_and_sealed_policy(transpose_a, transpose_b):
+        from tests.device.nvidia.test_nvfp4_transpose_jit import oriented_product
+        from tessera.compiler import nvidia_native
+        a_shape = (129, 17) if transpose_a else (17, 129)
+        b_shape = (3, 19, 129) if transpose_b else (3, 129, 19)
+        sa_shape = (9, 17) if transpose_a else (17, 9)
+        sb_shape = (3, 19, 9) if transpose_b else (3, 9, 19)
+        traced = trace(oriented_product(transpose_a, transpose_b, "shared_lhs"),
+                       (a_shape, "nvfp4"), (b_shape, "nvfp4"),
+                       (sa_shape, "uint8"), (sb_shape, "uint8"))
+        module = to_graph_ir_module(traced, name="shared_lhs", target="nvidia_sm120")
+        assert nvidia_native.supports_nvfp4_matmul(module)
+        a = lower_scheduled_matmul(module, target="nvidia_sm120")
+        assert (a.m, a.n, a.k) == (51, 19, 129)
+        assert 'batching = "shared_lhs"' in a.tile_ir
+        assert "@tessera_tile_matmul_nvfp4_batched" in a.tile_ir
+        line = next(line for line in a.schedule_ir.splitlines() if "= schedule.matmul" in line)
+        changed = a.schedule_ir.replace(line, line.replace('"shared_lhs"', '"independent_rhs"'))
+>       assert changed != a.schedule_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' = ScheduledMatmulArtifact(graph_ir='module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer"...ation='none', dynamic_m=False, dynamic_n=False, dynamic_k=False, split_k=1, split_k_reduction='', b_layout='col_major').schedule_ir
+
+tests/unit/test_nvfp4_native_transpose_contract.py:110: AssertionError
+____ test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[True-True] _____
+
+transpose_a = True, transpose_b = True
+
+    @pytest.mark.parametrize("transpose_a,transpose_b", [(False, False), (True, False),
+                                                        (False, True), (True, True)])
+    def test_shared_lhs_batch_keeps_native_roles_and_sealed_policy(transpose_a, transpose_b):
+        from tests.device.nvidia.test_nvfp4_transpose_jit import oriented_product
+        from tessera.compiler import nvidia_native
+        a_shape = (129, 17) if transpose_a else (17, 129)
+        b_shape = (3, 19, 129) if transpose_b else (3, 129, 19)
+        sa_shape = (9, 17) if transpose_a else (17, 9)
+        sb_shape = (3, 19, 9) if transpose_b else (3, 9, 19)
+        traced = trace(oriented_product(transpose_a, transpose_b, "shared_lhs"),
+                       (a_shape, "nvfp4"), (b_shape, "nvfp4"),
+                       (sa_shape, "uint8"), (sb_shape, "uint8"))
+        module = to_graph_ir_module(traced, name="shared_lhs", target="nvidia_sm120")
+        assert nvidia_native.supports_nvfp4_matmul(module)
+        a = lower_scheduled_matmul(module, target="nvidia_sm120")
+        assert (a.m, a.n, a.k) == (51, 19, 129)
+        assert 'batching = "shared_lhs"' in a.tile_ir
+        assert "@tessera_tile_matmul_nvfp4_batched" in a.tile_ir
+        line = next(line for line in a.schedule_ir.splitlines() if "= schedule.matmul" in line)
+        changed = a.schedule_ir.replace(line, line.replace('"shared_lhs"', '"independent_rhs"'))
+>       assert changed != a.schedule_ir
+E       assert 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' != 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n'
+E        +  where 'module attributes {tessera.arch = "sm_120", tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tesser...n = 8 : i64, n = 8 : i64, pipeline_depth = 1 : i64, warps = 1 : i64}}\n    return %1 : tensor<3x17x19xf32>\n  }\n}\n\n' = ScheduledMatmulArtifact(graph_ir='module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer"...ation='none', dynamic_m=False, dynamic_n=False, dynamic_k=False, split_k=1, split_k_reduction='', b_layout='col_major').schedule_ir
+
+tests/unit/test_nvfp4_native_transpose_contract.py:110: AssertionError
+__ test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-False-False] __
+
+mode = 'shared_lhs', ta = False, tb = False, rows = 16, n = 8, k = 64
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb18c8bb0>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[227, 134, 151,   0, 253,  65, 171,  63, 131, 154,  20,   5, 228,
+        188,  72, 167,  ...4, 48, 48, 64, 64],
+        [51, 58, 48, 64, 51, 48, 64, 48],
+        [51, 48, 56, 56, 56, 56, 64, 48]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+__ test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-False-True] ___
+
+mode = 'shared_lhs', ta = False, tb = True, rows = 16, n = 8, k = 64
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb1eebbd0>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[227, 134, 151,   0, 253,  65, 171,  63, 131, 154,  20,   5, 228,
+        188,  72, 167,  ...        [56, 48, 51, 56],
+        [51, 48, 48, 56],
+        [64, 64, 64, 64],
+        [48, 64, 48, 48]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+__ test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-True-False] ___
+
+mode = 'shared_lhs', ta = True, tb = False, rows = 16, n = 8, k = 64
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb1eea190>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[227,  49, 219, 219, 146,  61,  89, 233, 228,  83, 210, 239,  96,
+        155, 191, 194],
+...4, 48, 48, 64, 64],
+        [51, 58, 48, 64, 51, 48, 64, 48],
+        [51, 48, 56, 56, 56, 56, 64, 48]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+___ test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-True-True] ___
+
+mode = 'shared_lhs', ta = True, tb = True, rows = 16, n = 8, k = 64
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb1f6add0>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[227,  49, 219, 219, 146,  61,  89, 233, 228,  83, 210, 239,  96,
+        155, 191, 194],
+...        [56, 48, 51, 56],
+        [51, 48, 48, 56],
+        [64, 64, 64, 64],
+        [48, 64, 48, 48]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+_ test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-False-False] _
+
+mode = 'shared_lhs', ta = False, tb = False, rows = 17, n = 19, k = 129
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb1f24600>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[121, 177, 205, ..., 111,  70,  13],
+       [165,  91,  64, ..., 215,  38,   3],
+       [1...56, 58],
+        [58, 58, 56, 64, 58, 56, 64, 48, 48, 64, 58, 64, 48, 56, 58, 58,
+         58, 64, 64]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+_ test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-False-True] __
+
+mode = 'shared_lhs', ta = False, tb = True, rows = 17, n = 19, k = 129
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb1b317f0>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[121, 177, 205, ..., 111,  70,  13],
+       [165,  91,  64, ..., 215,  38,   3],
+       [1...1, 56, 58],
+        [64, 64, 51, 51, 64, 56, 51, 56, 64],
+        [51, 64, 51, 58, 48, 64, 58, 58, 64]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+_ test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-True-False] __
+
+mode = 'shared_lhs', ta = True, tb = False, rows = 17, n = 19, k = 129
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb1f179a0>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[121, 165, 185, ...,  32,   4, 126],
+       [177,  91, 168, ..., 196,  34, 105],
+       [2...56, 58],
+        [58, 58, 56, 64, 58, 56, 64, 48, 48, 64, 58, 64, 48, 56, 58, 58,
+         58, 64, 64]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+__ test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-True-True] __
+
+mode = 'shared_lhs', ta = True, tb = True, rows = 17, n = 19, k = 129
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7cabb1a98600>
+
+    @pytest.mark.parametrize("mode,ta,tb", CASES)
+    @pytest.mark.parametrize("rows,n,k", [(16, 8, 64), (17, 19, 129)])
+    def test_native_nvfp4_transpose_matches_oracle(mode, ta, tb, rows, n, k, monkeypatch):
+        values, expected = oriented_inputs(mode, ta, tb, rows, n, k)
+        call = ts.jit(oriented_product(ta, tb, None if mode == "rank_two" else mode), target="nvidia_sm120")
+>       result = call(*values)
+                 ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1016: in __call__
+    native_descriptor = self._try_native_descriptor_call(args, kwargs)
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[121, 165, 185, ...,  32,   4, 126],
+       [177,  91, 168, ..., 196,  34, 105],
+       [2...1, 56, 58],
+        [64, 64, 51, 51, 64, 56, 51, 56, 64],
+        [51, 64, 51, 58, 48, 64, 58, 58, 64]]], dtype=uint8))
+kwargs = {}
+
+    def _try_native_descriptor_call(self, args, kwargs):
+        """Bind host tensors to a canonical compiler-owned static descriptor.
+    
+        Admits static SM120 FP16/BF16 matmul, ROCm movement/row-softmax and
+        gfx1201 checkpoint storage. Python
+        allocates declared outputs; native Graph/Schedule/Tile owns arithmetic.
+        Compilation and launch errors propagate once this operation is selected.
+        """
+        target = normalize_target_kind(self.target)
+        if target not in {"rocm_gfx1151", "rocm_gfx1201", "nvidia_sm120"}:
+            return _JIT_FALLBACK
+        from .nvidia_native import supports_f16_matmul, supports_bf16_matmul
+        from .nvidia_native import requests_nvfp4_matmul, supports_nvfp4_matmul
+        from .nvfp4_tensor import NVFP4Tensor
+        nvfp4 = target == "nvidia_sm120" and requests_nvfp4_matmul(self.graph_ir)
+        logical_inputs = self._ordered_inputs(args, kwargs)
+        if logical_inputs and any(isinstance(value, NVFP4Tensor) for value in logical_inputs) and not nvfp4:
+            raise ValueError("logical NVFP4 host bindings require the named scaled matmul Graph contract")
+        from .nvidia_native import supports_attention, supports_attention_lse, requests_attention
+        attention_saved_lse = False
+        attention = (target == "nvidia_sm120" and self.differentiation_request is None
+                     and requests_attention(self.graph_ir))
+        matmul = (target == "nvidia_sm120" and self.differentiation_request is None
+                  and (supports_f16_matmul(self.graph_ir) or supports_bf16_matmul(self.graph_ir)))
+        from .rocm_nvfp4_ingest_native import supports_nvfp4_ingest, NVFP4_INGEST_ABI
+        from .rocm_mxfp4_storage_native import supports_mxfp4_storage, MXFP4_STORAGE_ABI
+        from .rocm_native import (
+            requests_paged_kv_read, requests_moe_dispatch,
+            _paged_kv_contract, _moe_dispatch_contract,
+            GFX_PAGED_KV_F32_ABI, GFX_MOE_DISPATCH_F32_ABI,
+            GFX_SOFTMAX_F32_ABI, requests_softmax,
+        )
+        from .rocm_math_native import supports_math, requests_math, MATH_ABIS
+        native_math = target.startswith("rocm_") and requests_math(self.graph_ir)
+        softmax = target.startswith("rocm_") and requests_softmax(self.graph_ir)
+        movement = target.startswith("rocm_") and ((requests_paged_kv_read(self.graph_ir)
+                     and len(self.graph_ir.functions[0].body[0].operands) == 2)
+                    or (target == "rocm_gfx1151" and requests_moe_dispatch(self.graph_ir)))
+        checkpoint = target == "rocm_gfx1201" and (
+            supports_nvfp4_ingest(self.graph_ir) or supports_mxfp4_storage(self.graph_ir))
+        if not movement and not checkpoint and not softmax and not matmul and not attention and not native_math and not nvfp4:
+            return _JIT_FALLBACK
+        if self.differentiation_request is not None:
+            raise ValueError("native descriptor call has no differentiation contract")
+        import hashlib
+        import os
+        import numpy as np
+        from .canonical_compile import canonical_compile
+        from tessera import runtime as rt
+        signature_binding = self._native_frontend_signature() if matmul or attention or nvfp4 else inspect.signature(self._fn)
+        bound = signature_binding.bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+            if movement or matmul:
+                return _JIT_FALLBACK
+            raise TypeError("native descriptor JIT expects host tensor inputs")
+        matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
+        prepared_matmul = matmul and os.environ.get(
+            "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
+        if prepared_matmul:
+            lib = rt._load_nvidia_ptx_launch()
+            prepared_matmul = lib is not None and hasattr(lib, "tessera_nvidia_matmul_prepare")
+        module, _ = self._trace_frontend_capture(ordered, {})
+        if attention:
+            attention_saved_lse = supports_attention_lse(module)
+        if nvfp4:
+            if not supports_nvfp4_matmul(module):
+                raise ValueError("native NVFP4 JIT requires the exact named static Graph profile")
+            op = module.functions[0].body[0]
+            values_by_name = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
+            for index, operand in enumerate(op.operands):
+                value = values_by_name[operand.removeprefix("%")]
+                if index < 2:
+                    if not isinstance(value, NVFP4Tensor):
+                        raise ValueError("native NVFP4 matrices require explicit logical packed storage")
+                    value.validate()
+                    transposed = op.kwargs.get("transposeA" if index == 0 else "transposeB", False)
+                    packed_from_end = (2 if transposed else 1) if index == 0 else (1 if transposed else 2)
+                    if value.packed_axis != len(value.shape) - packed_from_end:
+                        raise ValueError("native NVFP4 matrix packing axis differs from the K axis")
+                elif not isinstance(value, np.ndarray):
+                    raise ValueError("native NVFP4 scales require uint8 ndarray storage")
+        if native_math and not supports_math(module):
+            raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
+        if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            return _JIT_FALLBACK
+        if matmul:
+            # Frontend storage facts, not a Python schedule/algorithm decision.
+            # Never mutate the cached caller-owned semantic trace.
+            import copy
+            module = copy.deepcopy(module)
+            function = module.functions[0]
+            op = function.body[0]
+            values = dict(zip((arg.name for arg in function.args), ordered, strict=True))
+            rhs = values[op.operands[1].removeprefix("%")]
+            if "rhs_storage_order" not in op.kwargs:
+                if rhs.flags.f_contiguous and not rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "col_major"
+                elif rhs.flags.c_contiguous:
+                    op.kwargs["rhs_storage_order"] = "row_major"
+                else:
+                    raise ValueError("static native matmul requires compact RHS storage")
+        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str, value.shape) for value in ordered)
+        prepared_enabled = movement and os.environ.get(
+            "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
+        lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
+        prepared_enabled = prepared_enabled and lib is not None and hasattr(
+            lib, "tessera_rocm_movement_prepare")
+        if prepared_enabled:
+            call = self._native_prepared_movement_calls.get(signature)
+            if call is not None:
+                if call.matches(module):
+                    array, receipt = call(ordered)
+                    self.compile_result = call.compiled
+                    self.compile_bundle = call.compiled.bundle
+                    self._native_descriptor_last_receipt = receipt
+                    self._cached_artifact = call.artifact
+                    self.last_fallback_reason = None
+                    return array
+                call.close()
+                del self._native_prepared_movement_calls[signature]
+        key = hashlib.sha256(module.to_mlir(target=self.target, canonical=True).encode()).hexdigest()
+        compiled = self._native_descriptor_specializations.get(key)
+        if compiled is None:
+            compiled = canonical_compile(module, target=target,
+                source_origin=self.source_origin, enable_tool_validation=False)
+            if not compiled.executable:
+                raise RuntimeError(f"native descriptor compilation failed: {compiled.reason}")
+            self._native_descriptor_specializations[key] = compiled
+        descriptor = compiled.launch_descriptor
+        if descriptor is None:
+            raise ValueError("compilation did not produce its complete static ABI")
+        scalars = {}
+        scalar_names: tuple[str, ...]
+        movement_contract: tuple[str, str, str, tuple[int, ...]] | None
+        if movement:
+            if descriptor.abi_id == GFX_PAGED_KV_F32_ABI:
+                movement_contract = _paged_kv_contract(module)
+                scalar_names = ("P", "LP", "PageSize", "H", "D", "Start", "Tokens")
+            elif descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI and target == "rocm_gfx1151":
+                movement_contract = _moe_dispatch_contract(module)
+                scalar_names = ("T", "S", "H")
+            else:
+                raise ValueError("movement compilation produced a different ABI")
+            if movement_contract is None:
+                raise ValueError("traced movement is outside the native tensor contract")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != movement_contract[3]):
+                raise ValueError("movement descriptor differs from the traced tensor contract")
+            scalars = dict(zip(scalar_names, movement_contract[3], strict=True))
+        elif native_math:
+            info = descriptor.provenance.get("native_math")
+            if descriptor.abi_id not in MATH_ABIS.values() or not isinstance(info, dict):
+                raise ValueError("native math compilation did not produce its checked ABI")
+            scalars = ({"Rows":info["rows"], "Columns":info["columns"]}
+                       if info["family"] == "scan" else {"N":info["elements"]})
+        elif softmax:
+            import math
+            if descriptor.abi_id != GFX_SOFTMAX_F32_ABI or len(ordered) != 1:
+                raise ValueError("public native row-softmax requires static f32 storage")
+            shape = ordered[0].shape
+            rows, columns = math.prod(shape[:-1]), shape[-1]
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (tuple(item.name for item in declared) != ("Rows", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or tuple(descriptor.provenance.get("shape", ())) != shape
+                    or descriptor.provenance.get("rows") != rows
+                    or descriptor.provenance.get("columns") != columns):
+                raise ValueError("row-softmax descriptor differs from the typed frontend extent")
+            scalars = {"Rows": rows, "K": columns}
+        elif matmul:
+            shape = descriptor.provenance.get("shape")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.provenance.get("route") != "canonical_scheduled_tile_consumer"
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != ("M", "N", "K")
+                    or any(item.dtype != "int64" for item in declared)
+                    or descriptor.provenance.get("dynamic_shape_bounds") is not None):
+                raise ValueError("matmul descriptor differs from its static native contract")
+            scalars = dict(zip(("M", "N", "K"), shape, strict=True))
+        elif nvfp4:
+            from .nvidia_native import SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI
+            shape = descriptor.provenance.get("shape")
+            batch_rows = descriptor.provenance.get("batch_rows")
+            policy = module.functions[0].body[0].kwargs
+            independent = policy.get("batching") == "independent_rhs" or (policy.get("batching") == "shared_rhs_rows" and policy.get("transposeA", False))
+            scalar_names = ("M", "N", "K", "BatchRows", "BatchCount") if independent else ("M", "N", "K")
+            declared = sorted(descriptor.scalars, key=lambda item: item.ordinal)
+            if (descriptor.abi_id != (SM120_NVFP4_BATCH_ABI if independent else SM120_NVFP4_ABI)
+                    or not isinstance(shape, list) or len(shape) != 3
+                    or any(type(d) is not int or d <= 0 for d in shape)
+                    or tuple(item.name for item in declared) != scalar_names
+                    or any(item.dtype != "int64" for item in declared)):
+>               raise ValueError("NVFP4 descriptor differs from its checked static ABI")
+E               ValueError: NVFP4 descriptor differs from its checked static ABI
+
+python/tessera/compiler/jit.py:1914: ValueError
+______ test_native_vmap_keeps_operand_orientation[True-False-shared_lhs] _______
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[149, 238, 202, 235, 192,  67, 215],
+       [166, 179,  13, 190,  95, 100, 121],
+       [ ...4, 58, 51],
+        [64, 56, 51, 56, 51]],
+
+       [[58, 51, 56, 56, 56],
+        [58, 64, 64, 58, 51]]], dtype=uint8))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+>               traced = trace(self._fn, *batch_specs(ordered, batch_axes))
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/tessera/compiler/jit.py:1343: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+values = [NVFP4Tensor(storage=array([[149, 238, 202, 235, 192,  67, 215],
+       [166, 179,  13, 190,  95, 100, 121],
+       [ ...4, 58, 51],
+        [64, 56, 51, 56, 51]],
+
+       [[58, 51, 56, 56, 56],
+        [58, 64, 64, 58, 51]]], dtype=uint8)]
+axes = (0, 0, 0, 0)
+
+    def batch_specs(values: Sequence[Any], axes: Sequence[int | None]):
+        if len(values) != 4 or len(axes) != 4:
+            raise ValueError("native NVFP4 vmap requires four operand axes")
+        if tuple(axes) not in {(0, None, 0, None), (0, 0, 0, 0), (None, 0, None, 0)}:
+            raise ValueError("native NVFP4 vmap requires leading matrix/scale batch axes")
+        sizes = []
+        specs = []
+        for value, axis in zip(values, axes, strict=True):
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+            shape = tuple(value.shape)
+            if axis is not None:
+                if len(shape) != 3 or shape[0] <= 0:
+>                   raise ValueError("native NVFP4 vmap requires positive rank-three batched operands")
+E                   ValueError: native NVFP4 vmap requires positive rank-three batched operands
+
+python/tessera/compiler/native_vmap.py:29: ValueError
+
+The above exception was the direct cause of the following exception:
+
+mode = 'shared_lhs', ta = True, tb = False
+
+    @pytest.mark.parametrize("mode", ["independent_rhs", "shared_rhs_rows", "shared_lhs"])
+    @pytest.mark.parametrize("ta,tb", [(True, False), (False, True), (True, True)])
+    def test_native_vmap_keeps_operand_orientation(mode, ta, tb):
+        values, expected = oriented_inputs(mode, ta, tb, 7, 5, 31)
+        axes = 0 if mode in {"independent_rhs", "shared_lhs"} else (0, None, 0, None)
+        call = vmap(ts.jit(oriented_product(ta, tb), target="nvidia_sm120"), in_axes=axes)
+>       np.testing.assert_allclose(call(*values), expected, rtol=0, atol=2e-3)
+                                   ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1009: in __call__
+    self._establish_tracer_authority(args, kwargs)
+python/tessera/compiler/jit.py:1445: in _establish_tracer_authority
+    traced_module, _ = self._trace_frontend_capture(args, kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[149, 238, 202, 235, 192,  67, 215],
+       [166, 179,  13, 190,  95, 100, 121],
+       [ ...4, 58, 51],
+        [64, 56, 51, 56, 51]],
+
+       [[58, 51, 56, 56, 56],
+        [58, 64, 64, 58, 51]]], dtype=uint8))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+                traced = trace(self._fn, *batch_specs(ordered, batch_axes))
+            else:
+                traced = trace(self._fn, *ordered, evaluate_catalog_outputs=require_outputs)
+            # The AST module is a naming convenience here, not an input to the
+            # trace: a zero-function one (apple_gpu trace-defer, auto_batch
+            # skip) must not fail a capture that never needed it. Both fields
+            # already have their fallback in scope -- the qualname hash this
+            # line computes anyway, and the function's own name.
+            emitted = (
+                self.graph_ir.functions[0] if self.graph_ir.functions else None
+            )
+            source_hash = (
+                emitted.source_hash if emitted is not None else None
+            ) or hashlib.sha256(
+                self._fn.__qualname__.encode("utf-8")
+            ).hexdigest()
+            module = to_graph_ir_module(
+                traced,
+                name=emitted.name if emitted is not None else self._fn.__name__,
+                source_hash=source_hash,
+                target=self._legality_target(),
+            )
+            if batch_axes is not None:
+                from .native_vmap import project_batch
+                module = project_batch(module, ordered, batch_axes)
+            if self.differentiation_request is not None:
+                intent = self.differentiation_request.module_intent_attrs()
+                module.module_attrs.update(intent)
+                module.functions[0].fn_attrs.update(intent)
+            # FRONTEND-IR-MEDIUM-1 (iii): the tracer rebuilds its arguments from
+            # shape and dtype alone, so the region privileges (Decision #2), the
+            # ConstraintSolver's facts (Decision #4) and the symbolic dimension
+            # names all stop here. Record what was known and declare the debt,
+            # so the loss is attributable and machine-checked rather than
+            # invisible (Decision #32).
+            from .graph_ir import declare_frontier_debt
+            declare_frontier_debt(
+                module,
+                args=self._constraint_ir_args,
+                constraints=self.constraints,
+            )
+        except Exception as exc:
+>           raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
+E           tessera._jit_boundary.TesseraJitError: tracer frontend failed: native NVFP4 vmap requires positive rank-three batched operands
+
+python/tessera/compiler/jit.py:1385: TesseraJitError
+______ test_native_vmap_keeps_operand_orientation[False-True-shared_lhs] _______
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[149, 166,  43, 149, 227, 171,  86, 186, 112, 142, 245, 194, 193,
+        228, 157,   5],
+...  [51, 51]],
+
+       [[58, 58],
+        [51, 64],
+        [56, 64],
+        [56, 58],
+        [56, 51]]], dtype=uint8))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+>               traced = trace(self._fn, *batch_specs(ordered, batch_axes))
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/tessera/compiler/jit.py:1343: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+values = [NVFP4Tensor(storage=array([[149, 166,  43, 149, 227, 171,  86, 186, 112, 142, 245, 194, 193,
+        228, 157,   5],
+...  [51, 51]],
+
+       [[58, 58],
+        [51, 64],
+        [56, 64],
+        [56, 58],
+        [56, 51]]], dtype=uint8)]
+axes = (0, 0, 0, 0)
+
+    def batch_specs(values: Sequence[Any], axes: Sequence[int | None]):
+        if len(values) != 4 or len(axes) != 4:
+            raise ValueError("native NVFP4 vmap requires four operand axes")
+        if tuple(axes) not in {(0, None, 0, None), (0, 0, 0, 0), (None, 0, None, 0)}:
+            raise ValueError("native NVFP4 vmap requires leading matrix/scale batch axes")
+        sizes = []
+        specs = []
+        for value, axis in zip(values, axes, strict=True):
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+            shape = tuple(value.shape)
+            if axis is not None:
+                if len(shape) != 3 or shape[0] <= 0:
+>                   raise ValueError("native NVFP4 vmap requires positive rank-three batched operands")
+E                   ValueError: native NVFP4 vmap requires positive rank-three batched operands
+
+python/tessera/compiler/native_vmap.py:29: ValueError
+
+The above exception was the direct cause of the following exception:
+
+mode = 'shared_lhs', ta = False, tb = True
+
+    @pytest.mark.parametrize("mode", ["independent_rhs", "shared_rhs_rows", "shared_lhs"])
+    @pytest.mark.parametrize("ta,tb", [(True, False), (False, True), (True, True)])
+    def test_native_vmap_keeps_operand_orientation(mode, ta, tb):
+        values, expected = oriented_inputs(mode, ta, tb, 7, 5, 31)
+        axes = 0 if mode in {"independent_rhs", "shared_lhs"} else (0, None, 0, None)
+        call = vmap(ts.jit(oriented_product(ta, tb), target="nvidia_sm120"), in_axes=axes)
+>       np.testing.assert_allclose(call(*values), expected, rtol=0, atol=2e-3)
+                                   ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1009: in __call__
+    self._establish_tracer_authority(args, kwargs)
+python/tessera/compiler/jit.py:1445: in _establish_tracer_authority
+    traced_module, _ = self._trace_frontend_capture(args, kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[149, 166,  43, 149, 227, 171,  86, 186, 112, 142, 245, 194, 193,
+        228, 157,   5],
+...  [51, 51]],
+
+       [[58, 58],
+        [51, 64],
+        [56, 64],
+        [56, 58],
+        [56, 51]]], dtype=uint8))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+                traced = trace(self._fn, *batch_specs(ordered, batch_axes))
+            else:
+                traced = trace(self._fn, *ordered, evaluate_catalog_outputs=require_outputs)
+            # The AST module is a naming convenience here, not an input to the
+            # trace: a zero-function one (apple_gpu trace-defer, auto_batch
+            # skip) must not fail a capture that never needed it. Both fields
+            # already have their fallback in scope -- the qualname hash this
+            # line computes anyway, and the function's own name.
+            emitted = (
+                self.graph_ir.functions[0] if self.graph_ir.functions else None
+            )
+            source_hash = (
+                emitted.source_hash if emitted is not None else None
+            ) or hashlib.sha256(
+                self._fn.__qualname__.encode("utf-8")
+            ).hexdigest()
+            module = to_graph_ir_module(
+                traced,
+                name=emitted.name if emitted is not None else self._fn.__name__,
+                source_hash=source_hash,
+                target=self._legality_target(),
+            )
+            if batch_axes is not None:
+                from .native_vmap import project_batch
+                module = project_batch(module, ordered, batch_axes)
+            if self.differentiation_request is not None:
+                intent = self.differentiation_request.module_intent_attrs()
+                module.module_attrs.update(intent)
+                module.functions[0].fn_attrs.update(intent)
+            # FRONTEND-IR-MEDIUM-1 (iii): the tracer rebuilds its arguments from
+            # shape and dtype alone, so the region privileges (Decision #2), the
+            # ConstraintSolver's facts (Decision #4) and the symbolic dimension
+            # names all stop here. Record what was known and declare the debt,
+            # so the loss is attributable and machine-checked rather than
+            # invisible (Decision #32).
+            from .graph_ir import declare_frontier_debt
+            declare_frontier_debt(
+                module,
+                args=self._constraint_ir_args,
+                constraints=self.constraints,
+            )
+        except Exception as exc:
+>           raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
+E           tessera._jit_boundary.TesseraJitError: tracer frontend failed: native NVFP4 vmap requires positive rank-three batched operands
+
+python/tessera/compiler/jit.py:1385: TesseraJitError
+_______ test_native_vmap_keeps_operand_orientation[True-True-shared_lhs] _______
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[149, 238, 202, 235, 192,  67, 215],
+       [166, 179,  13, 190,  95, 100, 121],
+       [ ...  [51, 51]],
+
+       [[58, 58],
+        [51, 64],
+        [56, 64],
+        [56, 58],
+        [56, 51]]], dtype=uint8))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+>               traced = trace(self._fn, *batch_specs(ordered, batch_axes))
+                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/tessera/compiler/jit.py:1343: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+values = [NVFP4Tensor(storage=array([[149, 238, 202, 235, 192,  67, 215],
+       [166, 179,  13, 190,  95, 100, 121],
+       [ ...  [51, 51]],
+
+       [[58, 58],
+        [51, 64],
+        [56, 64],
+        [56, 58],
+        [56, 51]]], dtype=uint8)]
+axes = (0, 0, 0, 0)
+
+    def batch_specs(values: Sequence[Any], axes: Sequence[int | None]):
+        if len(values) != 4 or len(axes) != 4:
+            raise ValueError("native NVFP4 vmap requires four operand axes")
+        if tuple(axes) not in {(0, None, 0, None), (0, 0, 0, 0), (None, 0, None, 0)}:
+            raise ValueError("native NVFP4 vmap requires leading matrix/scale batch axes")
+        sizes = []
+        specs = []
+        for value, axis in zip(values, axes, strict=True):
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+            shape = tuple(value.shape)
+            if axis is not None:
+                if len(shape) != 3 or shape[0] <= 0:
+>                   raise ValueError("native NVFP4 vmap requires positive rank-three batched operands")
+E                   ValueError: native NVFP4 vmap requires positive rank-three batched operands
+
+python/tessera/compiler/native_vmap.py:29: ValueError
+
+The above exception was the direct cause of the following exception:
+
+mode = 'shared_lhs', ta = True, tb = True
+
+    @pytest.mark.parametrize("mode", ["independent_rhs", "shared_rhs_rows", "shared_lhs"])
+    @pytest.mark.parametrize("ta,tb", [(True, False), (False, True), (True, True)])
+    def test_native_vmap_keeps_operand_orientation(mode, ta, tb):
+        values, expected = oriented_inputs(mode, ta, tb, 7, 5, 31)
+        axes = 0 if mode in {"independent_rhs", "shared_lhs"} else (0, None, 0, None)
+        call = vmap(ts.jit(oriented_product(ta, tb), target="nvidia_sm120"), in_axes=axes)
+>       np.testing.assert_allclose(call(*values), expected, rtol=0, atol=2e-3)
+                                   ^^^^^^^^^^^^^
+
+tests/device/nvidia/test_nvfp4_transpose_jit.py:84: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/jit.py:1009: in __call__
+    self._establish_tracer_authority(args, kwargs)
+python/tessera/compiler/jit.py:1445: in _establish_tracer_authority
+    traced_module, _ = self._trace_frontend_capture(args, kwargs)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <TesseraJitFn 'product' effect=pure deterministic=False target='nvidia_sm120'>
+args = (NVFP4Tensor(storage=array([[149, 238, 202, 235, 192,  67, 215],
+       [166, 179,  13, 190,  95, 100, 121],
+       [ ...  [51, 51]],
+
+       [[58, 58],
+        [51, 64],
+        [56, 64],
+        [56, 58],
+        [56, 51]]], dtype=uint8))
+kwargs = {}, require_outputs = False
+
+    def _trace_frontend_capture(
+        self,
+        args: Tuple[Any, ...],
+        kwargs: Dict[str, Any],
+        *,
+        require_outputs: bool = False,
+    ) -> Tuple[GraphIRModule, Optional[Any]]:
+        """Trace one concrete signature into canonical Graph IR.
+    
+        E2E-REAL-6 migrates families at this boundary before deleting their AST
+        or backend resynthesis lanes. The returned trace retains concrete output
+        values for the explicit differential gate; the cached module is the
+        default frontend authority for subsequent compiler clients.
+        """
+        import hashlib
+        import numpy as np
+        from .trace import trace, to_graph_ir_module
+    
+        ordered = self._ordered_inputs(args, kwargs)
+        if ordered is None or len(ordered) != len(self.arg_names):
+            raise TesseraJitError("traced autodiff specialization requires every argument")
+        from .nvfp4_tensor import NVFP4Tensor
+        for value in ordered:
+            if isinstance(value, NVFP4Tensor):
+                value.validate()
+        signature = tuple(
+            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+            for value in ordered
+        )
+        cached = self._traced_frontend_specializations.get(signature)
+        if cached is not None and not require_outputs:
+            return cached, None
+        try:
+            batch_axes = getattr(self, "_frontend_batch_axes", None)
+            if batch_axes is not None:
+                from .native_vmap import batch_specs
+                traced = trace(self._fn, *batch_specs(ordered, batch_axes))
+            else:
+                traced = trace(self._fn, *ordered, evaluate_catalog_outputs=require_outputs)
+            # The AST module is a naming convenience here, not an input to the
+            # trace: a zero-function one (apple_gpu trace-defer, auto_batch
+            # skip) must not fail a capture that never needed it. Both fields
+            # already have their fallback in scope -- the qualname hash this
+            # line computes anyway, and the function's own name.
+            emitted = (
+                self.graph_ir.functions[0] if self.graph_ir.functions else None
+            )
+            source_hash = (
+                emitted.source_hash if emitted is not None else None
+            ) or hashlib.sha256(
+                self._fn.__qualname__.encode("utf-8")
+            ).hexdigest()
+            module = to_graph_ir_module(
+                traced,
+                name=emitted.name if emitted is not None else self._fn.__name__,
+                source_hash=source_hash,
+                target=self._legality_target(),
+            )
+            if batch_axes is not None:
+                from .native_vmap import project_batch
+                module = project_batch(module, ordered, batch_axes)
+            if self.differentiation_request is not None:
+                intent = self.differentiation_request.module_intent_attrs()
+                module.module_attrs.update(intent)
+                module.functions[0].fn_attrs.update(intent)
+            # FRONTEND-IR-MEDIUM-1 (iii): the tracer rebuilds its arguments from
+            # shape and dtype alone, so the region privileges (Decision #2), the
+            # ConstraintSolver's facts (Decision #4) and the symbolic dimension
+            # names all stop here. Record what was known and declare the debt,
+            # so the loss is attributable and machine-checked rather than
+            # invisible (Decision #32).
+            from .graph_ir import declare_frontier_debt
+            declare_frontier_debt(
+                module,
+                args=self._constraint_ir_args,
+                constraints=self.constraints,
+            )
+        except Exception as exc:
+>           raise TesseraJitError(f"tracer frontend failed: {exc}") from exc
+E           tessera._jit_boundary.TesseraJitError: tracer frontend failed: native NVFP4 vmap requires positive rank-three batched operands
+
+python/tessera/compiler/jit.py:1385: TesseraJitError
+=========================== short test summary info ============================
+FAILED tests/unit/test_nvfp4_native_transpose_contract.py::test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[False-False]
+FAILED tests/unit/test_nvfp4_native_transpose_contract.py::test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[True-False]
+FAILED tests/unit/test_nvfp4_native_transpose_contract.py::test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[False-True]
+FAILED tests/unit/test_nvfp4_native_transpose_contract.py::test_shared_lhs_batch_keeps_native_roles_and_sealed_policy[True-True]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-False-False]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-False-True]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-True-False]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[16-8-64-shared_lhs-True-True]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-False-False]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-False-True]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-True-False]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_nvfp4_transpose_matches_oracle[17-19-129-shared_lhs-True-True]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_vmap_keeps_operand_orientation[True-False-shared_lhs]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_vmap_keeps_operand_orientation[False-True-shared_lhs]
+FAILED tests/device/nvidia/test_nvfp4_transpose_jit.py::test_native_vmap_keeps_operand_orientation[True-True-shared_lhs]
+15 failed, 42 passed in 34.52s

@@ -1,0 +1,8 @@
+{
+  "src/compiler/ir/TesseraOps.td": "3926344c2e28aecdaada401ec38f50146c55c8cb5a3a83a0662ca5afaf86b04e",
+  "python/tessera/compiler/backend_manifest.py": "ade59eea3ae2e5664b03afcf77298b4b49aa493475e361c003abb65aeced7fa6",
+  "python/tessera/compiler/primitive_coverage.py": "f48dd6b2559fb2e1a9a9eb6d58d2c3e808c3c14c9e38d7d161be1b54c6774644",
+  "tests/unit/test_native_nvfp4_vmap.py": "f596c680f4c9c1f365b5c5a632d323f3edc4be66a54c0cd766a6bcc0d2dd31f8",
+  "tests/unit/test_nvidia_nvfp4_runtime_contract.py": "401c4aff6ac7dff6819197301cfa3d4714008ccbaf614d603f57a34476f84452",
+  "tests/unit/test_nvfp4_native_transpose_contract.py": "2355435050062c9bdc19883f9c9dc33fc6a048c902bb370cbf844b45ac165b8d"
+}

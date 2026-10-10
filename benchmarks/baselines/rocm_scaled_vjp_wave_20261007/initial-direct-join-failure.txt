@@ -1,0 +1,514 @@
+...............FFFFFF                                                    [100%]
+=================================== FAILURES ===================================
+_ test_wave_schedule_preserves_native_body_and_checked_launch_geometry[False-shared_rhs_rows] _
+
+policy = 'shared_rhs_rows', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_wave_schedule_preserves_native_body_and_checked_launch_geometry(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching native compiler required")
+        graph = source(policy, (3, 2), nk)
+        pipeline = PREFIX.replace("tessera-graph-to-schedule",
+                                  "tessera-graph-to-schedule{scale-transpose-wave=true}")
+        tile = native(graph, pipeline+",tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert 'algorithm = "wave_per_scale_element"' in tile.stdout
+        assert "gpu.shuffle xor" in tile.stdout
+        assert "scf.for" in tile.stdout and "memref.load" in tile.stdout
+>       package = package_native_scaled_vjp(graph, schedule="wave_per_scale_element")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:278: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True,
+python/tessera/compiler/native_scaled_program.py:262: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=1},tessera-graph-t...e-wave=true},tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: <stdin>:5:10: error: wave scale transpose requires an additive zero-initialized outer reduction
+E               %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+E                    ^
+E           <stdin>:5:10: note: see current operation: 
+E           %0 = "tensor.generate"() ({
+E           ^bb0(%arg4: index, %arg5: index):
+E             %1 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E             %2 = "arith.constant"() <{value = 0 : index}> : () -> index
+E             %3 = "arith.constant"() <{value = 1 : index}> : () -> index
+E             %4 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %5 = "arith.muli"(%arg4, %4) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %6 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %7 = "arith.addi"(%5, %6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %8 = "arith.constant"() <{value = 256 : index}> : () -> index
+E             %9 = "arith.minui"(%8, %7) : (index, index) -> index
+E             %10 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %11 = "arith.muli"(%arg5, %10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %12 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %13 = "arith.addi"(%11, %12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %14 = "arith.constant"() <{value = 129 : index}> : () -> index
+E             %15 = "arith.minui"(%14, %13) : (index, index) -> index
+E             %16 = "arith.constant"() <{value = 2 : index}> : () -> index
+E             %17 = "scf.for"(%2, %16, %3, %1) ({
+E             ^bb0(%arg6: index, %arg7: f32):
+E               %18 = "arith.constant"() <{value = 3 : index}> : () -> index
+E               %19 = "scf.for"(%2, %18, %3, %arg7) ({
+E               ^bb0(%arg8: index, %arg9: f32):
+E                 %20 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %21 = "scf.for"(%2, %20, %3, %arg9) ({
+E                 ^bb0(%arg10: index, %arg11: f32):
+E                   %22 = "scf.for"(%11, %15, %3, %arg11) ({
+E                   ^bb0(%arg12: index, %arg13: f32):
+E                     %23 = "scf.for"(%5, %9, %3, %1) ({
+E                     ^bb0(%arg14: index, %arg15: f32):
+E                       %31 = "tensor.extract"(%arg0, %arg6, %arg8, %arg10, %arg14) : (tensor<2x3x7x256xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                       %32 = "tensor.extract"(%arg1, %arg14, %arg12) : (tensor<256x129xf8E4M3FN>, index, index) -> f8E4M3FN
+E                       %33 = "arith.extf"(%31) : (f8E4M3FN) -> f32
+E                       %34 = "arith.extf"(%32) : (f8E4M3FN) -> f32
+E                       %35 = "arith.mulf"(%33, %34) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       %36 = "arith.addf"(%arg15, %35) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       "scf.yield"(%36) : (f32) -> ()
+E                     }) : (index, index, index, f32) -> f32
+E                     %24 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                     %25 = "arith.divui"(%arg12, %24) : (index, index) -> index
+E                     %26 = "tensor.extract"(%arg2, %arg6, %arg8, %arg10, %arg4) : (tensor<2x3x7x2xf32>, index, index, index, index) -> f32
+E                     %27 = "tensor.extract"(%arg3, %arg6, %arg8, %arg10, %arg12) : (tensor<2x3x7x129xf32>, index, index, index, index) -> f32
+E                     %28 = "arith.mulf"(%23, %26) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %29 = "arith.mulf"(%28, %27) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %30 = "arith.addf"(%arg13, %29) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     "scf.yield"(%30) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   "scf.yield"(%22) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "scf.yield"(%21) : (f32) -> ()
+E               }) : (index, index, index, f32) -> f32
+E               "scf.yield"(%19) : (f32) -> ()
+E             }) : (index, index, index, f32) -> f32
+E             "tensor.yield"(%17) : (f32) -> ()
+E           }) {schedule.algorithm = "wave_per_scale_element", schedule.artifact_hash = "af3cdb8a3d51413e508aafdbcb63dfabc6aee067dbfe8e2d44652c41002cac3b", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "rhs_scale"} : () -> tensor<2x2xf32>
+
+python/tessera/compiler/native_scaled_program.py:230: RuntimeError
+_ test_wave_schedule_preserves_native_body_and_checked_launch_geometry[False-independent_rhs] _
+
+policy = 'independent_rhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_wave_schedule_preserves_native_body_and_checked_launch_geometry(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching native compiler required")
+        graph = source(policy, (3, 2), nk)
+        pipeline = PREFIX.replace("tessera-graph-to-schedule",
+                                  "tessera-graph-to-schedule{scale-transpose-wave=true}")
+        tile = native(graph, pipeline+",tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert 'algorithm = "wave_per_scale_element"' in tile.stdout
+        assert "gpu.shuffle xor" in tile.stdout
+        assert "scf.for" in tile.stdout and "memref.load" in tile.stdout
+>       package = package_native_scaled_vjp(graph, schedule="wave_per_scale_element")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:278: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True,
+python/tessera/compiler/native_scaled_program.py:262: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=1},tessera-graph-t...e-wave=true},tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: <stdin>:5:10: error: wave scale transpose requires an additive zero-initialized outer reduction
+E               %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+E                    ^
+E           <stdin>:5:10: note: see current operation: 
+E           %0 = "tensor.generate"() ({
+E           ^bb0(%arg4: index, %arg5: index, %arg6: index, %arg7: index):
+E             %1 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E             %2 = "arith.constant"() <{value = 0 : index}> : () -> index
+E             %3 = "arith.constant"() <{value = 1 : index}> : () -> index
+E             %4 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %5 = "arith.muli"(%arg6, %4) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %6 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %7 = "arith.addi"(%5, %6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %8 = "arith.constant"() <{value = 256 : index}> : () -> index
+E             %9 = "arith.minui"(%8, %7) : (index, index) -> index
+E             %10 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %11 = "arith.muli"(%arg7, %10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %12 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %13 = "arith.addi"(%11, %12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %14 = "arith.constant"() <{value = 129 : index}> : () -> index
+E             %15 = "arith.minui"(%14, %13) : (index, index) -> index
+E             %16 = "arith.constant"() <{value = 7 : index}> : () -> index
+E             %17 = "scf.for"(%2, %16, %3, %1) ({
+E             ^bb0(%arg8: index, %arg9: f32):
+E               %18 = "scf.for"(%11, %15, %3, %arg9) ({
+E               ^bb0(%arg10: index, %arg11: f32):
+E                 %19 = "scf.for"(%5, %9, %3, %1) ({
+E                 ^bb0(%arg12: index, %arg13: f32):
+E                   %27 = "tensor.extract"(%arg0, %arg4, %arg5, %arg8, %arg12) : (tensor<2x3x7x256xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                   %28 = "tensor.extract"(%arg1, %arg4, %arg5, %arg12, %arg10) : (tensor<2x3x256x129xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                   %29 = "arith.extf"(%27) : (f8E4M3FN) -> f32
+E                   %30 = "arith.extf"(%28) : (f8E4M3FN) -> f32
+E                   %31 = "arith.mulf"(%29, %30) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %32 = "arith.addf"(%arg13, %31) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%32) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 %20 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %21 = "arith.divui"(%arg10, %20) : (index, index) -> index
+E                 %22 = "tensor.extract"(%arg2, %arg4, %arg5, %arg8, %arg6) : (tensor<2x3x7x2xf32>, index, index, index, index) -> f32
+E                 %23 = "tensor.extract"(%arg3, %arg4, %arg5, %arg8, %arg10) : (tensor<2x3x7x129xf32>, index, index, index, index) -> f32
+E                 %24 = "arith.mulf"(%19, %22) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %25 = "arith.mulf"(%24, %23) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %26 = "arith.addf"(%arg11, %25) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 "scf.yield"(%26) : (f32) -> ()
+E               }) : (index, index, index, f32) -> f32
+E               "scf.yield"(%18) : (f32) -> ()
+E             }) : (index, index, index, f32) -> f32
+E             "tensor.yield"(%17) : (f32) -> ()
+E           }) {schedule.algorithm = "wave_per_scale_element", schedule.artifact_hash = "0cca42898c0959ceee5f713fd9ae146333ae59783b953c68672fe40df9b94f7c", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "rhs_scale"} : () -> tensor<2x3x2x2xf32>
+
+python/tessera/compiler/native_scaled_program.py:230: RuntimeError
+_ test_wave_schedule_preserves_native_body_and_checked_launch_geometry[False-shared_lhs] _
+
+policy = 'shared_lhs', nk = False
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_wave_schedule_preserves_native_body_and_checked_launch_geometry(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching native compiler required")
+        graph = source(policy, (3, 2), nk)
+        pipeline = PREFIX.replace("tessera-graph-to-schedule",
+                                  "tessera-graph-to-schedule{scale-transpose-wave=true}")
+        tile = native(graph, pipeline+",tessera-schedule-to-tile")
+>       assert tile.returncode == 0, tile.stderr
+E       AssertionError: <stdin>:5:10: error: wave scale transpose requires an additive zero-initialized outer reduction
+E             %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+E                  ^
+E         <stdin>:5:10: note: see current operation: 
+E         %0 = "tensor.generate"() ({
+E         ^bb0(%arg4: index, %arg5: index):
+E           %1 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E           %2 = "arith.constant"() <{value = 0 : index}> : () -> index
+E           %3 = "arith.constant"() <{value = 1 : index}> : () -> index
+E           %4 = "arith.constant"() <{value = 128 : index}> : () -> index
+E           %5 = "arith.muli"(%arg5, %4) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E           %6 = "arith.constant"() <{value = 128 : index}> : () -> index
+E           %7 = "arith.addi"(%5, %6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E           %8 = "arith.constant"() <{value = 256 : index}> : () -> index
+E           %9 = "arith.minui"(%8, %7) : (index, index) -> index
+E           %10 = "arith.constant"() <{value = 129 : index}> : () -> index
+E           %11 = "arith.constant"() <{value = 2 : index}> : () -> index
+E           %12 = "scf.for"(%2, %11, %3, %1) ({
+E           ^bb0(%arg6: index, %arg7: f32):
+E             %13 = "arith.constant"() <{value = 3 : index}> : () -> index
+E             %14 = "scf.for"(%2, %13, %3, %arg7) ({
+E             ^bb0(%arg8: index, %arg9: f32):
+E               %15 = "scf.for"(%2, %10, %3, %arg9) ({
+E               ^bb0(%arg10: index, %arg11: f32):
+E                 %16 = "scf.for"(%5, %9, %3, %1) ({
+E                 ^bb0(%arg12: index, %arg13: f32):
+E                   %24 = "tensor.extract"(%arg0, %arg4, %arg12) : (tensor<7x256xf8E4M3FN>, index, index) -> f8E4M3FN
+E                   %25 = "tensor.extract"(%arg1, %arg6, %arg8, %arg12, %arg10) : (tensor<2x3x256x129xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                   %26 = "arith.extf"(%24) : (f8E4M3FN) -> f32
+E                   %27 = "arith.extf"(%25) : (f8E4M3FN) -> f32
+E                   %28 = "arith.mulf"(%26, %27) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %29 = "arith.addf"(%arg13, %28) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%29) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 %17 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %18 = "arith.divui"(%arg10, %17) : (index, index) -> index
+E                 %19 = "tensor.extract"(%arg2, %arg6, %arg8, %arg5, %18) : (tensor<2x3x2x2xf32>, index, index, index, index) -> f32
+E                 %20 = "tensor.extract"(%arg3, %arg6, %arg8, %arg4, %arg10) : (tensor<2x3x7x129xf32>, index, index, index, index) -> f32
+E                 %21 = "arith.mulf"(%16, %19) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %22 = "arith.mulf"(%21, %20) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %23 = "arith.addf"(%arg11, %22) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 "scf.yield"(%23) : (f32) -> ()
+E               }) : (index, index, index, f32) -> f32
+E               "scf.yield"(%15) : (f32) -> ()
+E             }) : (index, index, index, f32) -> f32
+E             "scf.yield"(%14) : (f32) -> ()
+E           }) : (index, index, index, f32) -> f32
+E           "tensor.yield"(%12) : (f32) -> ()
+E         }) {schedule.algorithm = "wave_per_scale_element", schedule.artifact_hash = "5099aa29f9cee5f29489eea0d2a86dee3c2d7d577e33a1a6a7e474dc0de2f87a", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "lhs_scale"} : () -> tensor<7x2xf32>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...de2f87a", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "lhs_scale"} : () -> tensor<7x2xf32>\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:113: AssertionError
+_ test_wave_schedule_preserves_native_body_and_checked_launch_geometry[True-shared_rhs_rows] _
+
+policy = 'shared_rhs_rows', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_wave_schedule_preserves_native_body_and_checked_launch_geometry(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching native compiler required")
+        graph = source(policy, (3, 2), nk)
+        pipeline = PREFIX.replace("tessera-graph-to-schedule",
+                                  "tessera-graph-to-schedule{scale-transpose-wave=true}")
+        tile = native(graph, pipeline+",tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert 'algorithm = "wave_per_scale_element"' in tile.stdout
+        assert "gpu.shuffle xor" in tile.stdout
+        assert "scf.for" in tile.stdout and "memref.load" in tile.stdout
+>       package = package_native_scaled_vjp(graph, schedule="wave_per_scale_element")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:278: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True,
+python/tessera/compiler/native_scaled_program.py:262: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=1},tessera-graph-t...e-wave=true},tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: <stdin>:5:10: error: wave scale transpose requires an additive zero-initialized outer reduction
+E               %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+E                    ^
+E           <stdin>:5:10: note: see current operation: 
+E           %0 = "tensor.generate"() ({
+E           ^bb0(%arg4: index, %arg5: index):
+E             %1 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E             %2 = "arith.constant"() <{value = 0 : index}> : () -> index
+E             %3 = "arith.constant"() <{value = 1 : index}> : () -> index
+E             %4 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %5 = "arith.muli"(%arg4, %4) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %6 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %7 = "arith.addi"(%5, %6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %8 = "arith.constant"() <{value = 256 : index}> : () -> index
+E             %9 = "arith.minui"(%8, %7) : (index, index) -> index
+E             %10 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %11 = "arith.muli"(%arg5, %10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %12 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %13 = "arith.addi"(%11, %12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %14 = "arith.constant"() <{value = 129 : index}> : () -> index
+E             %15 = "arith.minui"(%14, %13) : (index, index) -> index
+E             %16 = "arith.constant"() <{value = 2 : index}> : () -> index
+E             %17 = "scf.for"(%2, %16, %3, %1) ({
+E             ^bb0(%arg6: index, %arg7: f32):
+E               %18 = "arith.constant"() <{value = 3 : index}> : () -> index
+E               %19 = "scf.for"(%2, %18, %3, %arg7) ({
+E               ^bb0(%arg8: index, %arg9: f32):
+E                 %20 = "arith.constant"() <{value = 7 : index}> : () -> index
+E                 %21 = "scf.for"(%2, %20, %3, %arg9) ({
+E                 ^bb0(%arg10: index, %arg11: f32):
+E                   %22 = "scf.for"(%11, %15, %3, %arg11) ({
+E                   ^bb0(%arg12: index, %arg13: f32):
+E                     %23 = "scf.for"(%5, %9, %3, %1) ({
+E                     ^bb0(%arg14: index, %arg15: f32):
+E                       %31 = "tensor.extract"(%arg0, %arg6, %arg8, %arg10, %arg14) : (tensor<2x3x7x256xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                       %32 = "tensor.extract"(%arg1, %arg12, %arg14) : (tensor<129x256xf8E4M3FN>, index, index) -> f8E4M3FN
+E                       %33 = "arith.extf"(%31) : (f8E4M3FN) -> f32
+E                       %34 = "arith.extf"(%32) : (f8E4M3FN) -> f32
+E                       %35 = "arith.mulf"(%33, %34) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       %36 = "arith.addf"(%arg15, %35) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                       "scf.yield"(%36) : (f32) -> ()
+E                     }) : (index, index, index, f32) -> f32
+E                     %24 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                     %25 = "arith.divui"(%arg12, %24) : (index, index) -> index
+E                     %26 = "tensor.extract"(%arg2, %arg6, %arg8, %arg10, %arg4) : (tensor<2x3x7x2xf32>, index, index, index, index) -> f32
+E                     %27 = "tensor.extract"(%arg3, %arg6, %arg8, %arg10, %arg12) : (tensor<2x3x7x129xf32>, index, index, index, index) -> f32
+E                     %28 = "arith.mulf"(%23, %26) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %29 = "arith.mulf"(%28, %27) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     %30 = "arith.addf"(%arg13, %29) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                     "scf.yield"(%30) : (f32) -> ()
+E                   }) : (index, index, index, f32) -> f32
+E                   "scf.yield"(%22) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 "scf.yield"(%21) : (f32) -> ()
+E               }) : (index, index, index, f32) -> f32
+E               "scf.yield"(%19) : (f32) -> ()
+E             }) : (index, index, index, f32) -> f32
+E             "tensor.yield"(%17) : (f32) -> ()
+E           }) {schedule.algorithm = "wave_per_scale_element", schedule.artifact_hash = "ed1ad02283c0135f1c13402154f9deb47f62e4a8f0309ffefeeab3a18abad347", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "rhs_scale"} : () -> tensor<2x2xf32>
+
+python/tessera/compiler/native_scaled_program.py:230: RuntimeError
+_ test_wave_schedule_preserves_native_body_and_checked_launch_geometry[True-independent_rhs] _
+
+policy = 'independent_rhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_wave_schedule_preserves_native_body_and_checked_launch_geometry(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching native compiler required")
+        graph = source(policy, (3, 2), nk)
+        pipeline = PREFIX.replace("tessera-graph-to-schedule",
+                                  "tessera-graph-to-schedule{scale-transpose-wave=true}")
+        tile = native(graph, pipeline+",tessera-schedule-to-tile")
+        assert tile.returncode == 0, tile.stderr
+        assert 'algorithm = "wave_per_scale_element"' in tile.stdout
+        assert "gpu.shuffle xor" in tile.stdout
+        assert "scf.for" in tile.stdout and "memref.load" in tile.stdout
+>       package = package_native_scaled_vjp(graph, schedule="wave_per_scale_element")
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_native_scaled_transpose_lowering.py:117: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/native_scaled_program.py:278: in package_native_scaled_vjp
+    return _package_native_scaled(graph_ir, target=target, transpose=True,
+python/tessera/compiler/native_scaled_program.py:262: in _package_native_scaled
+    binary = compile_pipeline(prefix +
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+pipeline = 'builtin.module(tessera-autodiff-paired{export-scaled-transpose=true select-scaled-transpose-member=1},tessera-graph-t...e-wave=true},tessera-schedule-to-tile,tessera-rocm-executable{family=reduction input=tile output=binary arch=gfx1201})'
+source = None
+
+    def compile_pipeline(pipeline, source=None):
+        result = subprocess.run([opt, "--pass-pipeline=" + pipeline], input=native_source if source is None else source,
+                                text=True, capture_output=True, timeout=180)
+        if result.returncode:
+>           raise RuntimeError("native scaled JVP compiler failed: " + result.stderr)
+E           RuntimeError: native scaled JVP compiler failed: <stdin>:5:10: error: wave scale transpose requires an additive zero-initialized outer reduction
+E               %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+E                    ^
+E           <stdin>:5:10: note: see current operation: 
+E           %0 = "tensor.generate"() ({
+E           ^bb0(%arg4: index, %arg5: index, %arg6: index, %arg7: index):
+E             %1 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E             %2 = "arith.constant"() <{value = 0 : index}> : () -> index
+E             %3 = "arith.constant"() <{value = 1 : index}> : () -> index
+E             %4 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %5 = "arith.muli"(%arg6, %4) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %6 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %7 = "arith.addi"(%5, %6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %8 = "arith.constant"() <{value = 256 : index}> : () -> index
+E             %9 = "arith.minui"(%8, %7) : (index, index) -> index
+E             %10 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %11 = "arith.muli"(%arg7, %10) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %12 = "arith.constant"() <{value = 128 : index}> : () -> index
+E             %13 = "arith.addi"(%11, %12) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E             %14 = "arith.constant"() <{value = 129 : index}> : () -> index
+E             %15 = "arith.minui"(%14, %13) : (index, index) -> index
+E             %16 = "arith.constant"() <{value = 7 : index}> : () -> index
+E             %17 = "scf.for"(%2, %16, %3, %1) ({
+E             ^bb0(%arg8: index, %arg9: f32):
+E               %18 = "scf.for"(%11, %15, %3, %arg9) ({
+E               ^bb0(%arg10: index, %arg11: f32):
+E                 %19 = "scf.for"(%5, %9, %3, %1) ({
+E                 ^bb0(%arg12: index, %arg13: f32):
+E                   %27 = "tensor.extract"(%arg0, %arg4, %arg5, %arg8, %arg12) : (tensor<2x3x7x256xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                   %28 = "tensor.extract"(%arg1, %arg4, %arg5, %arg10, %arg12) : (tensor<2x3x129x256xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                   %29 = "arith.extf"(%27) : (f8E4M3FN) -> f32
+E                   %30 = "arith.extf"(%28) : (f8E4M3FN) -> f32
+E                   %31 = "arith.mulf"(%29, %30) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %32 = "arith.addf"(%arg13, %31) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%32) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 %20 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %21 = "arith.divui"(%arg10, %20) : (index, index) -> index
+E                 %22 = "tensor.extract"(%arg2, %arg4, %arg5, %arg8, %arg6) : (tensor<2x3x7x2xf32>, index, index, index, index) -> f32
+E                 %23 = "tensor.extract"(%arg3, %arg4, %arg5, %arg8, %arg10) : (tensor<2x3x7x129xf32>, index, index, index, index) -> f32
+E                 %24 = "arith.mulf"(%19, %22) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %25 = "arith.mulf"(%24, %23) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %26 = "arith.addf"(%arg11, %25) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 "scf.yield"(%26) : (f32) -> ()
+E               }) : (index, index, index, f32) -> f32
+E               "scf.yield"(%18) : (f32) -> ()
+E             }) : (index, index, index, f32) -> f32
+E             "tensor.yield"(%17) : (f32) -> ()
+E           }) {schedule.algorithm = "wave_per_scale_element", schedule.artifact_hash = "b7675db76ce0070e4f947d769eaafd29ff5a677f9b8770e1c2cc98b9a5e9822f", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "rhs_scale"} : () -> tensor<2x3x2x2xf32>
+
+python/tessera/compiler/native_scaled_program.py:230: RuntimeError
+_ test_wave_schedule_preserves_native_body_and_checked_launch_geometry[True-shared_lhs] _
+
+policy = 'shared_lhs', nk = True
+
+    @pytest.mark.parametrize("policy", ["shared_rhs_rows", "independent_rhs", "shared_lhs"])
+    @pytest.mark.parametrize("nk", [False, True])
+    def test_wave_schedule_preserves_native_body_and_checked_launch_geometry(policy, nk):
+        if not os.environ.get("TESSERA_OPT"):
+            pytest.skip("matching native compiler required")
+        graph = source(policy, (3, 2), nk)
+        pipeline = PREFIX.replace("tessera-graph-to-schedule",
+                                  "tessera-graph-to-schedule{scale-transpose-wave=true}")
+        tile = native(graph, pipeline+",tessera-schedule-to-tile")
+>       assert tile.returncode == 0, tile.stderr
+E       AssertionError: <stdin>:5:10: error: wave scale transpose requires an additive zero-initialized outer reduction
+E             %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+E                  ^
+E         <stdin>:5:10: note: see current operation: 
+E         %0 = "tensor.generate"() ({
+E         ^bb0(%arg4: index, %arg5: index):
+E           %1 = "arith.constant"() <{value = 0.000000e+00 : f32}> : () -> f32
+E           %2 = "arith.constant"() <{value = 0 : index}> : () -> index
+E           %3 = "arith.constant"() <{value = 1 : index}> : () -> index
+E           %4 = "arith.constant"() <{value = 128 : index}> : () -> index
+E           %5 = "arith.muli"(%arg5, %4) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E           %6 = "arith.constant"() <{value = 128 : index}> : () -> index
+E           %7 = "arith.addi"(%5, %6) <{overflowFlags = #arith.overflow<none>}> : (index, index) -> index
+E           %8 = "arith.constant"() <{value = 256 : index}> : () -> index
+E           %9 = "arith.minui"(%8, %7) : (index, index) -> index
+E           %10 = "arith.constant"() <{value = 129 : index}> : () -> index
+E           %11 = "arith.constant"() <{value = 2 : index}> : () -> index
+E           %12 = "scf.for"(%2, %11, %3, %1) ({
+E           ^bb0(%arg6: index, %arg7: f32):
+E             %13 = "arith.constant"() <{value = 3 : index}> : () -> index
+E             %14 = "scf.for"(%2, %13, %3, %arg7) ({
+E             ^bb0(%arg8: index, %arg9: f32):
+E               %15 = "scf.for"(%2, %10, %3, %arg9) ({
+E               ^bb0(%arg10: index, %arg11: f32):
+E                 %16 = "scf.for"(%5, %9, %3, %1) ({
+E                 ^bb0(%arg12: index, %arg13: f32):
+E                   %24 = "tensor.extract"(%arg0, %arg4, %arg12) : (tensor<7x256xf8E4M3FN>, index, index) -> f8E4M3FN
+E                   %25 = "tensor.extract"(%arg1, %arg6, %arg8, %arg10, %arg12) : (tensor<2x3x129x256xf8E4M3FN>, index, index, index, index) -> f8E4M3FN
+E                   %26 = "arith.extf"(%24) : (f8E4M3FN) -> f32
+E                   %27 = "arith.extf"(%25) : (f8E4M3FN) -> f32
+E                   %28 = "arith.mulf"(%26, %27) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   %29 = "arith.addf"(%arg13, %28) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                   "scf.yield"(%29) : (f32) -> ()
+E                 }) : (index, index, index, f32) -> f32
+E                 %17 = "arith.constant"() <{value = 128 : index}> : () -> index
+E                 %18 = "arith.divui"(%arg10, %17) : (index, index) -> index
+E                 %19 = "tensor.extract"(%arg2, %arg6, %arg8, %arg5, %18) : (tensor<2x3x2x2xf32>, index, index, index, index) -> f32
+E                 %20 = "tensor.extract"(%arg3, %arg6, %arg8, %arg4, %arg10) : (tensor<2x3x7x129xf32>, index, index, index, index) -> f32
+E                 %21 = "arith.mulf"(%16, %19) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %22 = "arith.mulf"(%21, %20) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 %23 = "arith.addf"(%arg11, %22) <{fastmath = #arith.fastmath<none>}> : (f32, f32) -> f32
+E                 "scf.yield"(%23) : (f32) -> ()
+E               }) : (index, index, index, f32) -> f32
+E               "scf.yield"(%15) : (f32) -> ()
+E             }) : (index, index, index, f32) -> f32
+E             "scf.yield"(%14) : (f32) -> ()
+E           }) : (index, index, index, f32) -> f32
+E           "tensor.yield"(%12) : (f32) -> ()
+E         }) {schedule.algorithm = "wave_per_scale_element", schedule.artifact_hash = "e2f7c23b8e210ddaeae5aa080a18501e686182b0612d94e59c853f7f42c777e9", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "lhs_scale"} : () -> tensor<7x2xf32>
+E         
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-...2c777e9", schedule.workgroup_size = 32 : i64, tessera.autodiff.scale_adjoint = "lhs_scale"} : () -> tensor<7x2xf32>\n').returncode
+
+tests/unit/test_native_scaled_transpose_lowering.py:113: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_wave_schedule_preserves_native_body_and_checked_launch_geometry[False-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_wave_schedule_preserves_native_body_and_checked_launch_geometry[False-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_wave_schedule_preserves_native_body_and_checked_launch_geometry[False-shared_lhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_wave_schedule_preserves_native_body_and_checked_launch_geometry[True-shared_rhs_rows]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_wave_schedule_preserves_native_body_and_checked_launch_geometry[True-independent_rhs]
+FAILED tests/unit/test_native_scaled_transpose_lowering.py::test_wave_schedule_preserves_native_body_and_checked_launch_geometry[True-shared_lhs]
+6 failed, 15 passed in 2.80s

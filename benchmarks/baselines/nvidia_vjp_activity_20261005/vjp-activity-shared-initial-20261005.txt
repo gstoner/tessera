@@ -1,0 +1,184 @@
+...............................FFFFFFFsssF                               [100%]
+=================================== FAILURES ===================================
+_____ test_native_export_binds_the_real_frontend_input_permutation[False] ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f98c3e70>
+backward = False
+
+    @pytest.mark.parametrize("backward",[False,True])
+    def test_native_export_binds_the_real_frontend_input_permutation(monkeypatch,backward):
+>       artifact=lower_generated_checkpoint(traced(monkeypatch),backward=backward)
+                                            ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f98c3e70>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+______ test_native_export_binds_the_real_frontend_input_permutation[True] ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e86e0>
+backward = True
+
+    @pytest.mark.parametrize("backward",[False,True])
+    def test_native_export_binds_the_real_frontend_input_permutation(monkeypatch,backward):
+>       artifact=lower_generated_checkpoint(traced(monkeypatch),backward=backward)
+                                            ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:24: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e86e0>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+__________ test_schedule_replay_rejects_mutated_frontend_permutation ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e8fa0>
+
+    def test_schedule_replay_rejects_mutated_frontend_permutation(monkeypatch):
+>       artifact=lower_generated_checkpoint(traced(monkeypatch),backward=True)
+                                            ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:33: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e8fa0>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+___________ test_artifact_rejects_invalid_frontend_mapping[mapping0] ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e94e0>
+mapping = (3, 0, 2, 2)
+
+    @pytest.mark.parametrize("mapping",[(3,0,2,2),(4,0,2,1),(True,0,2,1),False])
+    def test_artifact_rejects_invalid_frontend_mapping(monkeypatch,mapping):
+>       artifact=lower_generated_checkpoint(traced(monkeypatch),backward=True)
+                                            ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e94e0>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+___________ test_artifact_rejects_invalid_frontend_mapping[mapping1] ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e9940>
+mapping = (4, 0, 2, 1)
+
+    @pytest.mark.parametrize("mapping",[(3,0,2,2),(4,0,2,1),(True,0,2,1),False])
+    def test_artifact_rejects_invalid_frontend_mapping(monkeypatch,mapping):
+>       artifact=lower_generated_checkpoint(traced(monkeypatch),backward=True)
+                                            ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e9940>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+___________ test_artifact_rejects_invalid_frontend_mapping[mapping2] ___________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e9c50>
+mapping = (True, 0, 2, 1)
+
+    @pytest.mark.parametrize("mapping",[(3,0,2,2),(4,0,2,1),(True,0,2,1),False])
+    def test_artifact_rejects_invalid_frontend_mapping(monkeypatch,mapping):
+>       artifact=lower_generated_checkpoint(traced(monkeypatch),backward=True)
+                                            ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96e9c50>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+____________ test_artifact_rejects_invalid_frontend_mapping[False] _____________
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96ea200>
+mapping = False
+
+    @pytest.mark.parametrize("mapping",[(3,0,2,2),(4,0,2,1),(True,0,2,1),False])
+    def test_artifact_rejects_invalid_frontend_mapping(monkeypatch,mapping):
+>       artifact=lower_generated_checkpoint(traced(monkeypatch),backward=True)
+                                            ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:42: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96ea200>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+_____ test_pruned_activity_uses_physical_roles_after_frontend_permutation ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96eab30>
+
+    def test_pruned_activity_uses_physical_roles_after_frontend_permutation(monkeypatch):
+>       artifact = lower_generated_checkpoint(traced(monkeypatch), backward=True, prune_inactive=True)
+                                              ^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_attention_argument_order.py:62: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7121f96eab30>
+order = 'k_bias_v_q'
+
+    def traced(monkeypatch, order="k_bias_v_q"):
+        import tessera.compiler.native_attention_program as native
+>       from benchmarks.nvidia.benchmark_attention_argument_order import function, ORDERS
+E       ModuleNotFoundError: No module named 'benchmarks.nvidia.benchmark_attention_argument_order'
+
+tests/unit/test_attention_argument_order.py:13: ModuleNotFoundError
+=========================== short test summary info ============================
+FAILED tests/unit/test_attention_argument_order.py::test_native_export_binds_the_real_frontend_input_permutation[False]
+FAILED tests/unit/test_attention_argument_order.py::test_native_export_binds_the_real_frontend_input_permutation[True]
+FAILED tests/unit/test_attention_argument_order.py::test_schedule_replay_rejects_mutated_frontend_permutation
+FAILED tests/unit/test_attention_argument_order.py::test_artifact_rejects_invalid_frontend_mapping[mapping0]
+FAILED tests/unit/test_attention_argument_order.py::test_artifact_rejects_invalid_frontend_mapping[mapping1]
+FAILED tests/unit/test_attention_argument_order.py::test_artifact_rejects_invalid_frontend_mapping[mapping2]
+FAILED tests/unit/test_attention_argument_order.py::test_artifact_rejects_invalid_frontend_mapping[False]
+FAILED tests/unit/test_attention_argument_order.py::test_pruned_activity_uses_physical_roles_after_frontend_permutation
+8 failed, 31 passed, 3 skipped in 1.79s

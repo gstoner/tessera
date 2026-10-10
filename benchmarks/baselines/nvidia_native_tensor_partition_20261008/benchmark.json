@@ -1,0 +1,1074 @@
+{
+  "compiler_sha256": "08165455e4bf6a5babce1680cabf0fdabe006a767ace49ebce6ef12a6b9f620d",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "compiler_program_sha256": "10bb52a96c77c633f68444a7f84cfd87ceb403d254259aded495791000c76078",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 2.974329,
+      "end_to_end_samples_ms": [
+        287.406974,
+        2.974329,
+        2.5521
+      ],
+      "image_digests": [
+        "3f5495604292ff2cd120d5c2828e8a8a7b4e38fbe390635b3f3afd0e3e42bac0",
+        "904d65b4d415752c68157c32f56d81a202f8c3f7f5cf2b24abef39170559f0f8"
+      ],
+      "max_abs_error": 4.761386662721634e-07,
+      "package_wall_ms": 960.668978,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.01173727959394455,
+        "producer": 0.00976863969117403
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.03952480107545853,
+          0.01173727959394455,
+          0.009394880384206772
+        ],
+        "producer": [
+          0.009813759475946426,
+          0.009623680263757706,
+          0.00976863969117403
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "b4103960478c463075d8d3eb8a9e87ba183fb7a0f356c011cfa8b9f1e538f104",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 4.629109,
+      "end_to_end_samples_ms": [
+        220.25563,
+        4.629109,
+        4.536496
+      ],
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "e91d70ed64e86975e87dcb2fffe7f90162bfad192103c555dbe2ff80c4d6863d"
+      ],
+      "max_abs_error": 0.0010767364146886393,
+      "package_wall_ms": 758.329376,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.012159040197730064,
+        "producer": 0.011063040234148502
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.011648639105260372,
+          0.012159040197730064,
+          0.013604160398244858
+        ],
+        "producer": [
+          0.010069119744002819,
+          0.011063040234148502,
+          0.011590080335736275
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "4ed57aa2e142df5bd2aac80324bc0304dead52b828afd4a1c13832b691115d34",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 3.254176,
+      "end_to_end_samples_ms": [
+        3.254176,
+        7.27112,
+        2.577291
+      ],
+      "image_digests": [
+        "3f5495604292ff2cd120d5c2828e8a8a7b4e38fbe390635b3f3afd0e3e42bac0",
+        "501c5ca2721c4065ec181a8c58e6170fff390c78d395aaa06c1397c6f5467a25"
+      ],
+      "max_abs_error": 4.761386662721634e-07,
+      "package_wall_ms": 631.65567,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.009306239895522594,
+        "producer": 0.008871039375662804
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009388800710439682,
+          0.009306239895522594,
+          0.008285440504550934
+        ],
+        "producer": [
+          0.008871039375662804,
+          0.008850879967212677,
+          0.010246720165014267
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "8ddba840fbbc251a6c66a81bb087b6eb932177ca2d5bc94215e048ef1551001a",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 6.734496,
+      "end_to_end_samples_ms": [
+        17.971146,
+        6.734496,
+        6.454702
+      ],
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "ecfb7ff3d81084d5aa4c418cecfdc78caca21f06e2568a1b2fb00d3524b20070"
+      ],
+      "max_abs_error": 0.0010767364146886393,
+      "package_wall_ms": 653.069261,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.01278303936123848,
+        "producer": 0.009882240556180477
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.012197759933769703,
+          0.01278303936123848,
+          0.01314656063914299
+        ],
+        "producer": [
+          0.009067200124263763,
+          0.009882240556180477,
+          0.010753920301795006
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "781e77ac672f20f490f5e7ce7afa24c1a2ac5950811bd75b11d8cf449fc1c1b3",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 3.160995,
+      "end_to_end_samples_ms": [
+        3.253076,
+        2.368995,
+        3.160995
+      ],
+      "image_digests": [
+        "c256cea633491b433c8e7591a9c33b159850d32fc551c7f82afaf895e740b3db",
+        "904d65b4d415752c68157c32f56d81a202f8c3f7f5cf2b24abef39170559f0f8"
+      ],
+      "max_abs_error": 2.8312206268310547e-07,
+      "package_wall_ms": 626.318096,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.008654080331325531,
+        "producer": 0.01007359940558672
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.00915968045592308,
+          0.008654080331325531,
+          0.008648639544844627
+        ],
+        "producer": [
+          0.009945600293576717,
+          0.01007359940558672,
+          0.010229439474642277
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "1acc51c05ebb12ff585fc94de42ac9e36926079c7c5092542feb75bad93990bc",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 4.962996,
+      "end_to_end_samples_ms": [
+        7.275535,
+        4.451685,
+        4.962996
+      ],
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "e91d70ed64e86975e87dcb2fffe7f90162bfad192103c555dbe2ff80c4d6863d"
+      ],
+      "max_abs_error": 0.000645821652142331,
+      "package_wall_ms": 631.580139,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.012401599436998367,
+        "producer": 0.00997759960591793
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.012683839537203312,
+          0.012401599436998367,
+          0.012277760542929173
+        ],
+        "producer": [
+          0.00997759960591793,
+          0.009896639734506607,
+          0.011107200756669044
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "40a032662f550edc55672576338808500984719e5af4a450b2a7302d5a230e6e",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 2.794475,
+      "end_to_end_samples_ms": [
+        3.184585,
+        2.341395,
+        2.794475
+      ],
+      "image_digests": [
+        "c256cea633491b433c8e7591a9c33b159850d32fc551c7f82afaf895e740b3db",
+        "501c5ca2721c4065ec181a8c58e6170fff390c78d395aaa06c1397c6f5467a25"
+      ],
+      "max_abs_error": 2.8312206268310547e-07,
+      "package_wall_ms": 478.629933,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.00877408031374216,
+        "producer": 0.009901439771056175
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008897599764168262,
+          0.00877408031374216,
+          0.008338559418916702
+        ],
+        "producer": [
+          0.01002432033419609,
+          0.009901439771056175,
+          0.00827935989946127
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "8a55b685fe668344d1e36363f6f25c10f25d8863681fe8558e278af924a5d8bf",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 6.116714,
+      "end_to_end_samples_ms": [
+        6.191065,
+        6.116714,
+        5.60491
+      ],
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "ecfb7ff3d81084d5aa4c418cecfdc78caca21f06e2568a1b2fb00d3524b20070"
+      ],
+      "max_abs_error": 0.000645821652142331,
+      "package_wall_ms": 487.662646,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.012737920507788658,
+        "producer": 0.009301120415329933
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.012787200510501862,
+          0.011846400797367096,
+          0.012737920507788658
+        ],
+        "producer": [
+          0.009417920373380184,
+          0.009301120415329933,
+          0.00927968043833971
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "565b461e0d39c015ef17f77a583828f996e267ceaaecbec8891210f8b6733d53",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 3.233057,
+      "end_to_end_samples_ms": [
+        3.36411,
+        2.454688,
+        3.233057
+      ],
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "904d65b4d415752c68157c32f56d81a202f8c3f7f5cf2b24abef39170559f0f8"
+      ],
+      "max_abs_error": 1.0128132998943329e-08,
+      "package_wall_ms": 615.47462,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.00812991987913847,
+        "producer": 0.009808319620788097
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.00812991987913847,
+          0.00811840035021305,
+          0.008148159831762314
+        ],
+        "producer": [
+          0.010021760128438473,
+          0.009808319620788097,
+          0.00970911979675293
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "1c82b877ed3f5550496c8e5146ee3b66d4d10346f88bd724db3a1ee4a1dd029f",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 6.075523,
+      "end_to_end_samples_ms": [
+        6.901762,
+        4.732032,
+        6.075523
+      ],
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "e91d70ed64e86975e87dcb2fffe7f90162bfad192103c555dbe2ff80c4d6863d"
+      ],
+      "max_abs_error": 1.0250917057419429e-06,
+      "package_wall_ms": 638.888851,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.012321599759161472,
+        "producer": 0.2503011226654053
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.012321599759161472,
+          0.011339839547872543,
+          0.01298143994063139
+        ],
+        "producer": [
+          0.2503011226654053,
+          0.2503718435764313,
+          0.2500748932361603
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "228bf2dd873434ec8756367746d18672a581037b518b10603e93f8c8c2b53587",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 3.320269,
+      "end_to_end_samples_ms": [
+        3.37646,
+        3.320269,
+        2.392166
+      ],
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "501c5ca2721c4065ec181a8c58e6170fff390c78d395aaa06c1397c6f5467a25"
+      ],
+      "max_abs_error": 1.0128132998943329e-08,
+      "package_wall_ms": 484.141732,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.009178879670798779,
+        "producer": 0.010286079719662666
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.00931743998080492,
+          0.009150399826467037,
+          0.009178879670798779
+        ],
+        "producer": [
+          0.00952799990773201,
+          0.011447680182754993,
+          0.010286079719662666
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "694a397bf26c1eee738da986e465d7cb37c1c48fdc21d1000890317c75697fea",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "fp16",
+      "end_to_end_median_ms": 4.670819,
+      "end_to_end_samples_ms": [
+        5.672168,
+        4.670819,
+        4.575468
+      ],
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "ecfb7ff3d81084d5aa4c418cecfdc78caca21f06e2568a1b2fb00d3524b20070"
+      ],
+      "max_abs_error": 1.0250917057419429e-06,
+      "package_wall_ms": 483.501572,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.012446080334484577,
+        "producer": 0.25055649876594543
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.012188800610601902,
+          0.012446080334484577,
+          0.013167359866201878
+        ],
+        "producer": [
+          0.2505350410938263,
+          0.25055649876594543,
+          0.2506841719150543
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "9427ccc09f9a0c9c06d654863e985918f108cc249861f1dd8c6112bef670377b",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 2.809071,
+      "end_to_end_samples_ms": [
+        3.416621,
+        2.809071,
+        2.440488
+      ],
+      "image_digests": [
+        "a50be96817b98e9f2bef9cb7cdbacd8abf93dc3e82bab74a52f4b906d82b2684",
+        "31a3a70d204264625a1284e0bc554b04dc6607390a1c0a4501c6c70acfd30fee"
+      ],
+      "max_abs_error": 2.5331974029541016e-07,
+      "package_wall_ms": 757.757143,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.009430400095880032,
+        "producer": 0.009293760173022747
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009430400095880032,
+          0.008515840396285057,
+          0.009973440319299698
+        ],
+        "producer": [
+          0.009921600110828876,
+          0.009293760173022747,
+          0.009230080060660839
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "1014dde4ad729ff7687475586759e0d0d8e122d913223f119d74449b9d678054",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 5.696304,
+      "end_to_end_samples_ms": [
+        22.103041,
+        4.28967,
+        5.696304
+      ],
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "9bcb76686809de1e90ab06d51afb4ec12fde641e5029ef5f375973809632ee48"
+      ],
+      "max_abs_error": 3.546290099620819e-05,
+      "package_wall_ms": 750.288853,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.011499200016260147,
+        "producer": 0.00952863972634077
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.010429439134895802,
+          0.011637760326266289,
+          0.011499200016260147
+        ],
+        "producer": [
+          0.009570879861712456,
+          0.00952863972634077,
+          0.008597119711339474
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "d6aa4836e1ccb8fe1591b0eea741ac4104a31456d103c02a4304699d6e633e16",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 3.359879,
+      "end_to_end_samples_ms": [
+        3.359879,
+        2.52138,
+        3.437681
+      ],
+      "image_digests": [
+        "a50be96817b98e9f2bef9cb7cdbacd8abf93dc3e82bab74a52f4b906d82b2684",
+        "bb70f4f3782ef2bfd2158461adeeeb795d44bc10754ddc0a39d5352e3d779323"
+      ],
+      "max_abs_error": 2.5331974029541016e-07,
+      "package_wall_ms": 649.24497,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.008827519603073597,
+        "producer": 0.009545919485390186
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008989119902253151,
+          0.00824768003076315,
+          0.008827519603073597
+        ],
+        "producer": [
+          0.009250559844076633,
+          0.009545919485390186,
+          0.01103008072823286
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "698a9a8b246bb86206a59266c133911d02297bc74740df2577ed6525a87bd669",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 5.578542,
+      "end_to_end_samples_ms": [
+        19.563391,
+        5.578542,
+        4.144686
+      ],
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "643baf608645124c953d53e6219e5d8e676cd8d3972e5f67d9c0874aee0c592d"
+      ],
+      "max_abs_error": 3.546290099620819e-05,
+      "package_wall_ms": 617.183274,
+      "producer": "tessera.rmsnorm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.012782399542629719,
+        "producer": 0.008670720271766186
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.012782399542629719,
+          0.012101760134100914,
+          0.012912319973111153
+        ],
+        "producer": [
+          0.008670720271766186,
+          0.010025279596447945,
+          0.008515840396285057
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "3142e680deb1e1e6ee73a78b2d1818e5b6685912b385f3b41056a4fe4007524d",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 2.580791,
+      "end_to_end_samples_ms": [
+        3.44506,
+        2.5403,
+        2.580791
+      ],
+      "image_digests": [
+        "7296c0a0695ab4ddaaaa019be68a53a99a54d74c2e325844ba82674674eef948",
+        "31a3a70d204264625a1284e0bc554b04dc6607390a1c0a4501c6c70acfd30fee"
+      ],
+      "max_abs_error": 2.086162567138672e-07,
+      "package_wall_ms": 620.564725,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.009652160108089447,
+        "producer": 0.00979200005531311
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008507519960403442,
+          0.04009952023625374,
+          0.009652160108089447
+        ],
+        "producer": [
+          0.00979200005531311,
+          0.010270719416439533,
+          0.00943807978183031
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "6ee6b497c51b8dc90dab1c4239c988286fc588023aae335807c56d6150eeb9aa",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 4.26201,
+      "end_to_end_samples_ms": [
+        6.277421,
+        4.190169,
+        4.26201
+      ],
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "9bcb76686809de1e90ab06d51afb4ec12fde641e5029ef5f375973809632ee48"
+      ],
+      "max_abs_error": 0.0008850246667861938,
+      "package_wall_ms": 631.108583,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.012258240021765232,
+        "producer": 0.011594879440963268
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.012940159998834133,
+          0.012252800166606903,
+          0.012258240021765232
+        ],
+        "producer": [
+          0.011594879440963268,
+          0.009385599754750729,
+          0.011959359981119633
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "bbdc0375b03a80b856f006548b7c24f1f8fc17cf45f9c72b6ce98000cb1b29c2",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 2.759126,
+      "end_to_end_samples_ms": [
+        3.203306,
+        2.490889,
+        2.759126
+      ],
+      "image_digests": [
+        "7296c0a0695ab4ddaaaa019be68a53a99a54d74c2e325844ba82674674eef948",
+        "bb70f4f3782ef2bfd2158461adeeeb795d44bc10754ddc0a39d5352e3d779323"
+      ],
+      "max_abs_error": 2.086162567138672e-07,
+      "package_wall_ms": 487.911777,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.0104755200445652,
+        "producer": 0.010406400077044964
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.009416639804840088,
+          0.0104755200445652,
+          0.03329407796263695
+        ],
+        "producer": [
+          0.010406400077044964,
+          0.010696640238165855,
+          0.009735999628901482
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "912a3092f3c9b533079a2ad0ddc08e54fcfebf45fbfbb866e628af0259250e92",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 5.102111,
+      "end_to_end_samples_ms": [
+        6.185079,
+        5.102111,
+        3.922693
+      ],
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "643baf608645124c953d53e6219e5d8e676cd8d3972e5f67d9c0874aee0c592d"
+      ],
+      "max_abs_error": 0.0008850246667861938,
+      "package_wall_ms": 485.667814,
+      "producer": "tessera.layer_norm",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.01262367982417345,
+        "producer": 0.010128959082067013
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.01259199995547533,
+          0.012879359535872936,
+          0.01262367982417345
+        ],
+        "producer": [
+          0.010134079493582249,
+          0.010128959082067013,
+          0.010001599788665771
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "26d099e1ccc41160c73881a7066154c080cb721c7f56847fddb4744c9de25ffb",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 2.632442,
+      "end_to_end_samples_ms": [
+        3.324748,
+        2.632442,
+        2.409137
+      ],
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "31a3a70d204264625a1284e0bc554b04dc6607390a1c0a4501c6c70acfd30fee"
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "package_wall_ms": 619.750697,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.010096640326082706,
+        "producer": 0.011514879763126373
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.010831999592483044,
+          0.010096640326082706,
+          0.009215040132403374
+        ],
+        "producer": [
+          0.009494399651885033,
+          0.011514879763126373,
+          0.011683199554681778
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "2befd46c3462c9f17a1788d2b6e92e839cb1769cd57f285f5be7e17552e1c214",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 4.67001,
+      "end_to_end_samples_ms": [
+        5.742788,
+        4.67001,
+        4.228889
+      ],
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "9bcb76686809de1e90ab06d51afb4ec12fde641e5029ef5f375973809632ee48"
+      ],
+      "max_abs_error": 7.134745828807354e-06,
+      "package_wall_ms": 622.755281,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.01196576002985239,
+        "producer": 0.25059744715690613
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.01196576002985239,
+          0.01186015922576189,
+          0.012776000425219536
+        ],
+        "producer": [
+          0.2505203187465668,
+          0.25059744715690613,
+          0.2507529556751251
+        ]
+      },
+      "rhs_layout": "row_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    },
+    {
+      "compiler_program_sha256": "1d08f3510e6dc1ee8ec94e1ff33d291da17065afe2e88e03aa641f6c3d3291e8",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 3.287976,
+      "end_to_end_samples_ms": [
+        3.99686,
+        3.287976,
+        2.73283
+      ],
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "bb70f4f3782ef2bfd2158461adeeeb795d44bc10754ddc0a39d5352e3d779323"
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "package_wall_ms": 487.240872,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.008734400384128094,
+        "producer": 0.009964480064809322
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.008560320362448692,
+          0.008772480301558971,
+          0.008734400384128094
+        ],
+        "producer": [
+          0.009964480064809322,
+          0.009196159429848194,
+          0.010757440701127052
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        17,
+        32,
+        11
+      ]
+    },
+    {
+      "compiler_program_sha256": "ef00611d7bcba1449a51b73cf1c39df288b518254c84c894ffb42c005dd8f5c8",
+      "correctness": "independent_float64_oracle_with_producer_storage_rounding",
+      "dtype": "bf16",
+      "end_to_end_median_ms": 5.299553,
+      "end_to_end_samples_ms": [
+        5.299553,
+        4.30291,
+        5.744627
+      ],
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "643baf608645124c953d53e6219e5d8e676cd8d3972e5f67d9c0874aee0c592d"
+      ],
+      "max_abs_error": 7.134745828807354e-06,
+      "package_wall_ms": 482.276117,
+      "producer": "tessera.softmax",
+      "resident_event_dispatch_median_ms": {
+        "consumer": 0.013085119426250458,
+        "producer": 0.2503366470336914
+      },
+      "resident_event_dispatch_samples_ms": {
+        "consumer": [
+          0.0133775994181633,
+          0.012262719683349133,
+          0.013085119426250458
+        ],
+        "producer": [
+          0.2504614591598511,
+          0.25029632449150085,
+          0.2503366470336914
+        ]
+      },
+      "rhs_layout": "col_major",
+      "role_indices": [
+        1,
+        0
+      ],
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ]
+    }
+  ],
+  "runtime_sha256": "5aaa82f6ec6c2e90f5e7e4123c93fedb3517838c3e948a3c65a7a41b2ceedf63",
+  "schema": "tessera.nvidia.native_tensor_partition_benchmark.v1",
+  "scope": "Static actual Graph member outlining and scheduled resident execution; public JIT and portable witness integration remain open.",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_native_sm120_tensor_partition.py": "ba0e689c1fed1d72e4c562a0f99cfcc8f082372fd0c85b5a5d145bea2d7e584e",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "8a0148a57fb404aa08c4b8727ac1a62b99e04ae424368bd2f46d554cabf5a569",
+    "python/tessera/compiler/nvidia_native.py": "98efe61bac95c01f6b41379f8cc2a53de85a1b8530e01865221adbb8220287e8",
+    "src/transforms/lib/NativeSM120TensorProgram.h": "3392568224967e7941adeaa4fc2735f06fe2e44458a4328b29e80427021d33f0",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "16f63cbb86847ebd509c77df11b7496e9772f58c050038e359c084db04ddc84f",
+    "tests/unit/test_native_sm120_tensor_partition.py": "e838117dd4245b2caf9db2603e5dc7303efba1d1e162e5e5368958228397cbcf"
+  },
+  "timing_scope": "Resident CUDA event windows include device dispatch. End-to-end includes allocation, upload, native execution, readback and cleanup. No kernel-only or speedup claim."
+}

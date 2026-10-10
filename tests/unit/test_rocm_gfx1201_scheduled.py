@@ -1090,3 +1090,16 @@ def test_gfx1201_mixed_fp8_pairs_select_their_instruction_and_execute(a_dt, b_dt
     expected = a.astype(np.float32) @ b.astype(np.float32)
     np.testing.assert_allclose(output, expected, rtol=0,
                                atol=1e-6 * float(np.abs(expected).max()))
+
+
+@pytest.mark.parametrize("target,architecture",[("rocm_gfx1201","gfx1151"),("rocm_gfx1151","gfx1201")])
+def test_native_scaled_program_refuses_mislabeled_image_before_preparation(target,architecture,monkeypatch):
+    from tessera import runtime as rt
+    image=SimpleNamespace(target=target,architecture=architecture)
+    descriptor=SimpleNamespace(provenance={"native_scaled_primal_program":{}})
+    monkeypatch.setattr(rt,"_rocm_live_arch",lambda:"gfx1201")
+    def forbidden(*args,**kwargs):
+        raise AssertionError("mislabeled image reached native preparation")
+    monkeypatch.setattr(rt,"_load_rocm_native_movement_runtime",forbidden)
+    with pytest.raises(ValueError,match="native scaled primal requires owning gfx1201"):
+        rt._submit_rocm_gfx1151_native(image,descriptor,{},{},None)

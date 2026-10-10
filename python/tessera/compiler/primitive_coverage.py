@@ -479,6 +479,20 @@ _EXISTING_CATEGORIES: dict[str, str] = {
 #   - `backend_kernel` stays `partial` until each backend ships a real
 #     hardware kernel — that's Phase G/H work.
 _EXISTING_CONTRACT_OVERRIDES: dict[str, dict[str, str]] = {
+    # A named rank-two physical profile does not establish generic scaled
+    # semantics, generic batching, transpose, sharding or gradients. The
+    # lowering axis records existence of native Graph/Schedule/Tile/Target
+    # consumers, not dtype or architecture totality. Static shared-LHS/RHS
+    # and independent NVFP4 batches execute, including direct leading-axis
+    # vmap. Named gfx1201 FP8/MXFP8 rank-four batches also execute; general
+    # composed/dynamic batching and transpose AD remain open.
+    "scaled_matmul": {
+        "math_semantics": "partial", "dtype_layout_rule": "partial",
+        "lowering_rule": "complete", "batching_rule": "partial",
+        "transpose_rule": "planned", "sharding_rule": "planned",
+        "vjp": "planned", "jvp": "planned", "tests": "complete",
+    },
+
     # Block AttnRes Phase 1: exact fp32 host semantics and property tests are
     # closed. Graph operations, autodiff products, and physical packages are
     # deliberately retained as planned/partial work for Phases 3 and 4.

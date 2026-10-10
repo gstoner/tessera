@@ -1,0 +1,57 @@
+verified fp16 rmsnorm (17, 255, 19) fused False
+verified fp16 rmsnorm (17, 255, 19) fused True
+verified fp16 rmsnorm (17, 256, 19) fused False
+verified fp16 rmsnorm (17, 256, 19) fused True
+verified fp16 rmsnorm (17, 257, 19) fused False
+verified fp16 rmsnorm (17, 257, 19) fused True
+verified fp16 rmsnorm (128, 1024, 64) fused False
+verified fp16 rmsnorm (128, 1024, 64) fused True
+verified fp16 rmsnorm (128, 4096, 64) fused False
+verified fp16 rmsnorm (128, 4096, 64) fused True
+verified fp16 layernorm (17, 255, 19) fused False
+verified fp16 layernorm (17, 255, 19) fused True
+verified fp16 layernorm (17, 256, 19) fused False
+verified fp16 layernorm (17, 256, 19) fused True
+verified fp16 layernorm (17, 257, 19) fused False
+verified fp16 layernorm (17, 257, 19) fused True
+verified fp16 layernorm (128, 1024, 64) fused False
+verified fp16 layernorm (128, 1024, 64) fused True
+verified fp16 layernorm (128, 4096, 64) fused False
+verified fp16 layernorm (128, 4096, 64) fused True
+verified bf16 rmsnorm (17, 255, 19) fused False
+verified bf16 rmsnorm (17, 255, 19) fused True
+verified bf16 rmsnorm (17, 256, 19) fused False
+verified bf16 rmsnorm (17, 256, 19) fused True
+verified bf16 rmsnorm (17, 257, 19) fused False
+verified bf16 rmsnorm (17, 257, 19) fused True
+verified bf16 rmsnorm (128, 1024, 64) fused False
+verified bf16 rmsnorm (128, 1024, 64) fused True
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_native_norm_selection.py", line 140, in <module>
+    packet=record()
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_native_norm_selection.py", line 47, in record
+    np.testing.assert_allclose(actual,expected,rtol=.015,atol=.015)
+    ~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/.venv/lib/python3.14/site-packages/numpy/testing/_private/utils.py", line 1780, in assert_allclose
+    assert_array_compare(compare, actual, desired, err_msg=str(err_msg),
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         verbose=verbose, header=header, equal_nan=equal_nan,
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                         strict=strict)
+                         ^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/.venv/lib/python3.14/site-packages/numpy/testing/_private/utils.py", line 988, in assert_array_compare
+    raise AssertionError(msg)
+AssertionError: 
+Not equal to tolerance rtol=0.015, atol=0.015
+
+Mismatched elements: 1 / 8192 (0.0122%)
+Mismatch at index:
+ [100, 28]: 0.2691112756729126 (ACTUAL), 0.2464715153146244 (DESIRED)
+Max absolute difference among violations: 0.02263976
+Max relative difference among violations: 0.09185548
+ ACTUAL: array([[-14.797824, -20.297205,  -3.83152 , ..., -18.393152,   5.138603,
+         -6.269711],
+       [ 22.679443,  19.299387,  -3.486025, ...,  -3.149507,   6.083119,...
+ DESIRED: array([[-14.797878, -20.297275,  -3.831533, ..., -18.393265,   5.138592,
+         -6.269743],
+       [ 22.679465,  19.299471,  -3.486005, ...,  -3.14949 ,   6.083109,...

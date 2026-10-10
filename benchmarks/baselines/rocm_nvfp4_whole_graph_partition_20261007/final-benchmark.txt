@@ -1,0 +1,6 @@
+verified JIT/portable (128, 32, 256) False 2.923026
+verified JIT/portable (128, 32, 256) True 3.094604
+verified JIT/portable (257, 80, 1024) False 4.007776
+verified JIT/portable (257, 80, 1024) True 4.416135
+verified JIT/portable (256, 64, 64) False 2.775274
+verified JIT/portable (256, 64, 64) True 2.806945

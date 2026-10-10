@@ -1,0 +1,2511 @@
+{
+  "schema": "tessera.rocm.nvfp4_resident_chain.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "compiler_sha256": "f5dd9037f1b70cf4407274faf2a05546d1d9c8c7efad836671f52177e45220b9",
+  "selector_promotion": false,
+  "timing_scope": "event loops include host submission gaps; graphs use one submission per window and include GPU graph dispatch; checked walls include uploads/readback",
+  "format_gates": "FP8/MXFP8/MXFP4 remain independent correctness/quality/performance gates",
+  "scope": "static explicit three-package chain; ordinary composed JIT/general AD/dynamic producer graphs remain open",
+  "rows": [
+    {
+      "shape_mnk": [
+        256,
+        24576,
+        4096
+      ],
+      "row_offsets": [
+        0,
+        12288,
+        24576
+      ],
+      "input_sha256": {
+        "codes": "e56744a1b911aa757e2605e3dafc8132be85b56c2e04e6033814d61f4e30556a",
+        "scales": "36e67356d4deb5981317e607ca133ad944005fefbe104bd834859f280b32c1d8",
+        "globals": "d4a0c155c562b14c20af1dfb66b2ba4f4351d43424689c05bcb8de20fb6947b1",
+        "a": "718cd5622a407d31ad943e01bb30528393dbe90b406b8ef907c40431df38a50b",
+        "a_scale": "7974139635ca98f8ce4da94524cb384c148a21a58a194d66bec351fad0c82b54"
+      },
+      "compiler_receipt": {
+        "work_item": "ROCM-NVFP4-INGEST-1",
+        "sync_key": "ROCM-INGEST-RESIDENT-2026-10-05",
+        "route": "native Graph/Schedule/Tile NVFP4 conversion -> lossless storage -> packed matmul",
+        "shape_mnk": [
+          256,
+          24576,
+          4096
+        ],
+        "row_offsets": [
+          0,
+          12288,
+          24576
+        ],
+        "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+        "numeric_policy": {
+          "source_format": "nvfp4_e2m1_e4m3_k16",
+          "destination_format": "mxfp4_e2m1_e8m0_k32",
+          "execution_mode": "explicit_scale_requantization",
+          "lossy_steps": [
+            "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+          ],
+          "source_scale_application": "projection_global_times_e4m3",
+          "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+          "destination_scale_order": "k_group_n"
+        },
+        "consumer_numeric_policy": "folded_row_reference_explicit_approximate",
+        "lossy_steps": [
+          "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization",
+          "mxfp4_to_e4m3_at_row_reference_in_native_matmul"
+        ],
+        "component_image_digests": [
+          "75bceff5f8737b228e939985ce43f4263e8c62f5d9c64aaac4c15dc177247aeb",
+          "a5cd5c96bd3e4ba31e7a8e9f054cd98313c412263c4f0e8b7765a8ded9d2ccdf",
+          "b044cbd52b34f099f0b795007d39119ff70e2a81e4410cca45326b42aba4a157"
+        ],
+        "component_descriptors": [
+          {
+            "schema_version": "tessera.launch_descriptor.v1",
+            "image_digest": "75bceff5f8737b228e939985ce43f4263e8c62f5d9c64aaac4c15dc177247aeb",
+            "entry_symbol": "tessera_nvfp4_ingest_2b9a82ea462a9e4c",
+            "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+            "buffers": [
+              {
+                "ordinal": 0,
+                "name": "codes",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 1,
+                "name": "scales",
+                "direction": "input",
+                "dtype": "fp8_e4m3",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 2,
+                "name": "globals",
+                "direction": "input",
+                "dtype": "fp64",
+                "rank": 1,
+                "layout": "row_major",
+                "alignment": 8
+              },
+              {
+                "ordinal": 3,
+                "name": "packed",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 4,
+                "name": "exponents",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 5,
+                "name": "stats",
+                "direction": "output",
+                "dtype": "fp64",
+                "rank": 3,
+                "layout": "row_major",
+                "alignment": 8
+              }
+            ],
+            "scalars": [],
+            "shape_guards": [
+              {
+                "binding": "codes",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "codes",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "scales",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "scales",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "globals",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 2
+              },
+              {
+                "binding": "packed",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "packed",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "exponents",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 128
+              },
+              {
+                "binding": "exponents",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "stats",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "stats",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 128
+              },
+              {
+                "binding": "stats",
+                "dimension": 2,
+                "predicate": "eq",
+                "value": 2
+              }
+            ],
+            "geometry": {
+              "grid": [
+                12288,
+                1,
+                1
+              ],
+              "workgroup": [
+                256,
+                1,
+                1
+              ],
+              "policy": null
+            },
+            "dynamic_local_memory_bytes": 0,
+            "workspace": {
+              "bytes": 0,
+              "alignment": 1,
+              "lifetime": "launch",
+              "initialization": "undefined"
+            },
+            "ordering": {
+              "ordered_submission": true,
+              "residency": "none",
+              "synchronization": [
+                "completion"
+              ]
+            },
+            "provenance": {
+              "graph_digest": "095639cbe64e64109ea7b3954979dd1c5a020fe1a197d17115bb4c91772c1f49",
+              "numeric_policy": {
+                "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+                "destination_format": "mxfp4_e2m1_e8m0_k32",
+                "destination_scale_order": "k_group_n",
+                "execution_mode": "explicit_scale_requantization",
+                "lossy_steps": [
+                  "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+                ],
+                "source_format": "nvfp4_e2m1_e4m3_k16",
+                "source_scale_application": "projection_global_times_e4m3"
+              },
+              "ownership": "private_outputs_distinct_readonly_inputs",
+              "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+              "row_offsets": [
+                0,
+                12288,
+                24576
+              ],
+              "schedule_digest": "2b9a82ea462a9e4c1c213e7af2c05e25850dfdaee0f5bdd7444bc535381fed2a",
+              "schedule_ir_digest": "6a3910be6b984ddf1c88e6f727a60724d98c839378f6c06c9cb7b935cb0236ad",
+              "shape_nk": [
+                24576,
+                4096
+              ],
+              "tile_ir_digest": "4754912824a3ebf921a7ed50f276e98b9fe120b10246852023fd25666736b706",
+              "work_item": "ROCM-NVFP4-INGEST-1"
+            },
+            "descriptor_digest": "f2654b7d6f4d9b11f86a427dd81729a976f3831488e77d971e4d990d216bd2e8",
+            "cache_fingerprint": "0347b5dd42b3759273d44f36b21a7e0fe192dea00f2933ef2f2b187f5dcc037f"
+          },
+          {
+            "schema_version": "tessera.launch_descriptor.v1",
+            "image_digest": "a5cd5c96bd3e4ba31e7a8e9f054cd98313c412263c4f0e8b7765a8ded9d2ccdf",
+            "entry_symbol": "tessera_mxfp4_storage_e179ed4f34e713ca",
+            "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+            "buffers": [
+              {
+                "ordinal": 0,
+                "name": "codes",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 1,
+                "name": "exponents",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 2,
+                "name": "fragment",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 3,
+                "name": "plane",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              }
+            ],
+            "scalars": [],
+            "shape_guards": [
+              {
+                "binding": "codes",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "codes",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "exponents",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 128
+              },
+              {
+                "binding": "exponents",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "fragment",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "fragment",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "plane",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 129
+              },
+              {
+                "binding": "plane",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              }
+            ],
+            "geometry": {
+              "grid": [
+                196608,
+                1,
+                1
+              ],
+              "workgroup": [
+                256,
+                1,
+                1
+              ],
+              "policy": null
+            },
+            "dynamic_local_memory_bytes": 0,
+            "workspace": {
+              "bytes": 0,
+              "alignment": 1,
+              "lifetime": "launch",
+              "initialization": "undefined"
+            },
+            "ordering": {
+              "ordered_submission": true,
+              "residency": "none",
+              "synchronization": [
+                "completion"
+              ]
+            },
+            "provenance": {
+              "graph_digest": "b1448a181d239a11000ebced6ec026bf376c115142016f416ec22348b6d5250b",
+              "lossy_steps": [],
+              "ownership": "private_outputs_distinct_readonly_inputs",
+              "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+              "schedule_digest": "e179ed4f34e713ca597332f5ba21dfb017115d10fe8fa9b177487699f180ba0b",
+              "schedule_ir_digest": "7436ce58e8918693a93bcc58a36fcde715f8f63d7afc1cf64dac2f35a93149c7",
+              "shape_nk": [
+                24576,
+                4096
+              ],
+              "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+              "tile_ir_digest": "707738722a11023b1539e74980ae741ec4375128407ec675b7bb052c55af65c0",
+              "work_item": "ROCM-NVFP4-INGEST-1"
+            },
+            "descriptor_digest": "d9d8c65fba50a7d8fdfc31f2005aff1e959f2b93319167e8cacbe69c4a668d1e",
+            "cache_fingerprint": "d8864a68f09a743938636d0b1a7df4cc54f7ea918e3acebf62ebd3b2f8374b68"
+          },
+          {
+            "schema_version": "tessera.launch_descriptor.v1",
+            "image_digest": "b044cbd52b34f099f0b795007d39119ff70e2a81e4410cca45326b42aba4a157",
+            "entry_symbol": "packed_folded_w4a8",
+            "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "buffers": [
+              {
+                "ordinal": 0,
+                "name": "a",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 1,
+                "name": "b_packed",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 2,
+                "name": "a_scale",
+                "direction": "input",
+                "dtype": "fp32",
+                "rank": 1,
+                "layout": "row_major",
+                "alignment": 4
+              },
+              {
+                "ordinal": 3,
+                "name": "scale_plane",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 4,
+                "name": "output",
+                "direction": "output",
+                "dtype": "bf16",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 2
+              }
+            ],
+            "scalars": [
+              {
+                "ordinal": 5,
+                "name": "M",
+                "dtype": "int64"
+              },
+              {
+                "ordinal": 6,
+                "name": "N",
+                "dtype": "int64"
+              },
+              {
+                "ordinal": 7,
+                "name": "K",
+                "dtype": "int64"
+              }
+            ],
+            "shape_guards": [
+              {
+                "binding": "a",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "a",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 4096
+              },
+              {
+                "binding": "b_packed",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "b_packed",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "a_scale",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "scale_plane",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 129
+              },
+              {
+                "binding": "scale_plane",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "output",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "output",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              }
+            ],
+            "geometry": {
+              "grid": [
+                384,
+                1,
+                1
+              ],
+              "workgroup": [
+                256,
+                1,
+                1
+              ],
+              "policy": null
+            },
+            "dynamic_local_memory_bytes": 0,
+            "workspace": {
+              "bytes": 0,
+              "alignment": 1,
+              "lifetime": "launch",
+              "initialization": "undefined"
+            },
+            "ordering": {
+              "ordered_submission": true,
+              "residency": "none",
+              "synchronization": [
+                "completion"
+              ]
+            },
+            "provenance": {
+              "approximate_policy": "explicit_allow",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "decode_policy": "integer_rne_v1",
+              "execution_mode": "folded_row_reference_explicit_approximate",
+              "execution_state": "manual_executable_candidate",
+              "graph_ir_sha256": "d0ecb29737a813a760f818e50ef7715bd8a3d175200697e2bb27aed9bf36209c",
+              "hsaco_sha256": "75bddb9f81405c6d88b10c9fdb64a2f6f4c06414abf8864de5faa62213c84c54",
+              "image_k": 4096,
+              "image_m": 256,
+              "image_n": 24576,
+              "image_shape_policy": "static_mnk",
+              "kernel_argument_layout": "expanded_memref",
+              "materializer": "tessera_rocm.scaled_wmma_gemm",
+              "native_compiler_owned": true,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+              "producer_kind": "native_mlir_packed_lds",
+              "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+              "route": "packed_folded_native_typed_lds",
+              "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+              "schedule_hash": "34371617c6b10ef3d18bb0b991ca09093d6dcd0a875668c149fdf5d01dc15da4",
+              "schedule_ir_sha256": "742a8c4751e22387584650ac81c24301ae46196e480bb4447e14e33e245e89db",
+              "shape": [
+                24576,
+                4096
+              ],
+              "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+              "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+              "target_ir_sha256": "690ae6b505634f0c542c636ee37973ab26379c9b9ca95dcedb5a41a12567cb68",
+              "tile_ir_sha256": "c3da21e35b895e7991842ea1481794ddaced3b71e530c28c4150d4f70fa04255",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+              "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+              "work_item": "ROCM-MXFP4-W4A8-1"
+            },
+            "descriptor_digest": "525209ade93e6e6b3992ce5510d93004e16efc9dda8d70f5f548b55b9e9f1996",
+            "cache_fingerprint": "8f436d8debf0da1d26d72138e35839ed40178f8282e67c5f8438be4384b10fd8"
+          }
+        ],
+        "resident_edges": "owned buffers on one private HIP stream, no intermediate reupload"
+      },
+      "host_oracle_preparation_ms": 19726.841128,
+      "package_compile_ms": 3332.982562,
+      "correctness": {
+        "max_abs": 0.031090250754544968,
+        "relative_rms": 0.0016555499101719915,
+        "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+        "max_error_bound": 0.1204943471783997,
+        "violations": 0
+      },
+      "conversion_correctness": "bitwise codes/exponents and f64 SSE; lossless bitwise storage bridge",
+      "conversion_signal_f64": 61798.11123528816,
+      "conversion_sse_f64": 787.3338464006338,
+      "resident_event_samples_ms": {
+        "converter": [
+          25.779429117838543,
+          19.210615793863933,
+          19.217112223307293
+        ],
+        "storage": [
+          0.39661232630411786,
+          0.43971868356068927,
+          0.4088886578877767
+        ],
+        "consumer": [
+          0.34425898392995197,
+          0.33394567171732586,
+          0.3338389794031779
+        ],
+        "combined": [
+          20.381951649983723,
+          19.68948745727539,
+          19.644126892089844
+        ]
+      },
+      "resident_event_median_ms": {
+        "converter": 19.217112223307293,
+        "storage": 0.4088886578877767,
+        "consumer": 0.33394567171732586,
+        "combined": 19.68948745727539
+      },
+      "graph_windows": {
+        "converter": [
+          {
+            "stage": "converter",
+            "repeats": 1,
+            "graph_nodes": 1,
+            "host_graph_submissions": 1,
+            "window_ms": 18.881099700927734,
+            "per_iteration_ms": 18.881099700927734
+          },
+          {
+            "stage": "converter",
+            "repeats": 1,
+            "graph_nodes": 1,
+            "host_graph_submissions": 1,
+            "window_ms": 18.836732864379883,
+            "per_iteration_ms": 18.836732864379883
+          },
+          {
+            "stage": "converter",
+            "repeats": 1,
+            "graph_nodes": 1,
+            "host_graph_submissions": 1,
+            "window_ms": 18.780620574951172,
+            "per_iteration_ms": 18.780620574951172
+          }
+        ],
+        "storage": [
+          {
+            "stage": "storage",
+            "repeats": 8,
+            "graph_nodes": 8,
+            "host_graph_submissions": 1,
+            "window_ms": 2.728951930999756,
+            "per_iteration_ms": 0.3411189913749695
+          },
+          {
+            "stage": "storage",
+            "repeats": 8,
+            "graph_nodes": 8,
+            "host_graph_submissions": 1,
+            "window_ms": 2.716510057449341,
+            "per_iteration_ms": 0.3395637571811676
+          },
+          {
+            "stage": "storage",
+            "repeats": 8,
+            "graph_nodes": 8,
+            "host_graph_submissions": 1,
+            "window_ms": 2.7280309200286865,
+            "per_iteration_ms": 0.3410038650035858
+          }
+        ],
+        "consumer": [
+          {
+            "stage": "consumer",
+            "repeats": 8,
+            "graph_nodes": 8,
+            "host_graph_submissions": 1,
+            "window_ms": 2.7235519886016846,
+            "per_iteration_ms": 0.34044399857521057
+          },
+          {
+            "stage": "consumer",
+            "repeats": 8,
+            "graph_nodes": 8,
+            "host_graph_submissions": 1,
+            "window_ms": 2.718630075454712,
+            "per_iteration_ms": 0.339828759431839
+          },
+          {
+            "stage": "consumer",
+            "repeats": 8,
+            "graph_nodes": 8,
+            "host_graph_submissions": 1,
+            "window_ms": 2.8827500343322754,
+            "per_iteration_ms": 0.3603437542915344
+          }
+        ],
+        "combined": [
+          {
+            "stage": "combined",
+            "repeats": 1,
+            "graph_nodes": 3,
+            "host_graph_submissions": 1,
+            "window_ms": 19.57976722717285,
+            "per_iteration_ms": 19.57976722717285
+          },
+          {
+            "stage": "combined",
+            "repeats": 1,
+            "graph_nodes": 3,
+            "host_graph_submissions": 1,
+            "window_ms": 19.52792739868164,
+            "per_iteration_ms": 19.52792739868164
+          },
+          {
+            "stage": "combined",
+            "repeats": 1,
+            "graph_nodes": 3,
+            "host_graph_submissions": 1,
+            "window_ms": 19.53742027282715,
+            "per_iteration_ms": 19.53742027282715
+          }
+        ]
+      },
+      "graph_window_order": "rotate and reverse stages per trial",
+      "graph_per_iteration_median_ms": {
+        "converter": 18.836732864379883,
+        "storage": 0.3410038650035858,
+        "consumer": 0.34044399857521057,
+        "combined": 19.53742027282715
+      },
+      "checked_combined_wall_samples_ms": [
+        154.85912,
+        145.574156,
+        146.562767
+      ],
+      "checked_combined_wall_median_ms": 146.562767,
+      "resident_weight_reuse_wall_samples_ms": [
+        5.801087,
+        5.056307,
+        5.38532
+      ],
+      "resident_weight_reuse_wall_median_ms": 5.38532,
+      "converted_weights_readback": "diagnostic/oracle validation only; never reuploaded into the consumer",
+      "input_host_snapshot": "private immutable uploads; activation updates retain staging until synchronization",
+      "portable_program": {
+        "schema": "tessera.rocm.nvfp4_resident_program.v1",
+        "program_digest": "6ed3943e575cc3188e8924e15ca9d59b4d31450dd14438407bdb3ba90d3d16cb",
+        "serialized_bytes": 256258,
+        "restore_validate_samples_ms": [
+          1.985378,
+          2.337359,
+          2.345966
+        ],
+        "restore_validate_median_ms": 2.337359,
+        "restore_and_checked_combined_wall_samples_ms": [
+          145.598182,
+          149.184393,
+          154.899672
+        ],
+        "restore_and_checked_combined_wall_median_ms": 149.184393,
+        "compiler_required_for_replay": false,
+        "timing_scope": "JSON decode and validation; full wall also owns modules, allocations, uploads, three kernels, readback and cleanup"
+      },
+      "allocation_count": 11,
+      "ordinary_jit": {
+        "shape_mnk": [
+          256,
+          24576,
+          4096
+        ],
+        "frontend_argument_order": [
+          "codes",
+          "scales",
+          "projection_globals",
+          "a",
+          "a_scale"
+        ],
+        "role_indices": [
+          0,
+          1,
+          2,
+          3,
+          4
+        ],
+        "cold_jit_wall_ms": 523.421807,
+        "warm_jit_wall_samples_ms": [
+          152.851651,
+          149.100383,
+          147.142118
+        ],
+        "warm_jit_wall_median_ms": 149.100383,
+        "serialization_wall_ms": 4.625784,
+        "serialized_artifact_bytes": 261661,
+        "artifact_restore_wall_samples_ms": [
+          1.185041,
+          1.578912,
+          1.172036
+        ],
+        "artifact_restore_wall_median_ms": 1.185041,
+        "portable_checked_launch_wall_samples_ms": [
+          165.459012,
+          151.348813,
+          152.246566
+        ],
+        "portable_checked_launch_wall_median_ms": 152.246566,
+        "device_graph_windows": {
+          "converter": [
+            {
+              "stage": "converter",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 609.1808471679688,
+              "per_iteration_ms": 19.036901473999023
+            },
+            {
+              "stage": "converter",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 597.4595947265625,
+              "per_iteration_ms": 18.670612335205078
+            },
+            {
+              "stage": "converter",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 595.8947143554688,
+              "per_iteration_ms": 18.6217098236084
+            }
+          ],
+          "storage": [
+            {
+              "stage": "storage",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 10.80817699432373,
+              "per_iteration_ms": 0.3377555310726166
+            },
+            {
+              "stage": "storage",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 10.972467422485352,
+              "per_iteration_ms": 0.34288960695266724
+            },
+            {
+              "stage": "storage",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 10.919846534729004,
+              "per_iteration_ms": 0.34124520421028137
+            }
+          ],
+          "consumer": [
+            {
+              "stage": "consumer",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 11.738802909851074,
+              "per_iteration_ms": 0.36683759093284607
+            },
+            {
+              "stage": "consumer",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 11.708242416381836,
+              "per_iteration_ms": 0.3658825755119324
+            },
+            {
+              "stage": "consumer",
+              "repeats": 32,
+              "graph_nodes": 32,
+              "host_graph_submissions": 1,
+              "window_ms": 11.861811637878418,
+              "per_iteration_ms": 0.37068161368370056
+            }
+          ],
+          "combined": [
+            {
+              "stage": "combined",
+              "repeats": 32,
+              "graph_nodes": 96,
+              "host_graph_submissions": 1,
+              "window_ms": 607.6878662109375,
+              "per_iteration_ms": 18.990245819091797
+            },
+            {
+              "stage": "combined",
+              "repeats": 32,
+              "graph_nodes": 96,
+              "host_graph_submissions": 1,
+              "window_ms": 610.3482055664062,
+              "per_iteration_ms": 19.073381423950195
+            },
+            {
+              "stage": "combined",
+              "repeats": 32,
+              "graph_nodes": 96,
+              "host_graph_submissions": 1,
+              "window_ms": 607.5482177734375,
+              "per_iteration_ms": 18.985881805419922
+            }
+          ]
+        },
+        "device_graph_dispatch_median_ms": {
+          "converter": 18.670612335205078,
+          "storage": 0.34124520421028137,
+          "consumer": 0.36683759093284607,
+          "combined": 18.990245819091797
+        },
+        "numeric_correctness": "independent conversion/storage/folded float64 oracle before and after timing",
+        "max_abs_error": 0.031090250754544968,
+        "component_image_digests": [
+          "75bceff5f8737b228e939985ce43f4263e8c62f5d9c64aaac4c15dc177247aeb",
+          "a5cd5c96bd3e4ba31e7a8e9f054cd98313c412263c4f0e8b7765a8ded9d2ccdf",
+          "edd24807b5d154eb7d34da0fb2685377d9a7b7e89852686e86ba879c4dc8023d"
+        ],
+        "component_descriptors": [
+          {
+            "schema_version": "tessera.launch_descriptor.v1",
+            "image_digest": "75bceff5f8737b228e939985ce43f4263e8c62f5d9c64aaac4c15dc177247aeb",
+            "entry_symbol": "tessera_nvfp4_ingest_2b9a82ea462a9e4c",
+            "abi_id": "tessera.rocm.nvfp4_requantize.six_memrefs.static.v1",
+            "buffers": [
+              {
+                "ordinal": 0,
+                "name": "codes",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 1,
+                "name": "scales",
+                "direction": "input",
+                "dtype": "fp8_e4m3",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 2,
+                "name": "globals",
+                "direction": "input",
+                "dtype": "fp64",
+                "rank": 1,
+                "layout": "row_major",
+                "alignment": 8
+              },
+              {
+                "ordinal": 3,
+                "name": "packed",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 4,
+                "name": "exponents",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 5,
+                "name": "stats",
+                "direction": "output",
+                "dtype": "fp64",
+                "rank": 3,
+                "layout": "row_major",
+                "alignment": 8
+              }
+            ],
+            "scalars": [],
+            "shape_guards": [
+              {
+                "binding": "codes",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "codes",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "scales",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "scales",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "globals",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 2
+              },
+              {
+                "binding": "packed",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "packed",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "exponents",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 128
+              },
+              {
+                "binding": "exponents",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "stats",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "stats",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 128
+              },
+              {
+                "binding": "stats",
+                "dimension": 2,
+                "predicate": "eq",
+                "value": 2
+              }
+            ],
+            "geometry": {
+              "grid": [
+                12288,
+                1,
+                1
+              ],
+              "workgroup": [
+                256,
+                1,
+                1
+              ],
+              "policy": null
+            },
+            "dynamic_local_memory_bytes": 0,
+            "workspace": {
+              "bytes": 0,
+              "alignment": 1,
+              "lifetime": "launch",
+              "initialization": "undefined"
+            },
+            "ordering": {
+              "ordered_submission": true,
+              "residency": "none",
+              "synchronization": [
+                "completion"
+              ]
+            },
+            "provenance": {
+              "graph_digest": "095639cbe64e64109ea7b3954979dd1c5a020fe1a197d17115bb4c91772c1f49",
+              "numeric_policy": {
+                "destination_code_selection": "nearest_signed_e2m1_by_weight_sse",
+                "destination_format": "mxfp4_e2m1_e8m0_k32",
+                "destination_scale_order": "k_group_n",
+                "execution_mode": "explicit_scale_requantization",
+                "lossy_steps": [
+                  "nvfp4_e4m3_k16_to_mxfp4_e8m0_k32_scale_and_code_requantization"
+                ],
+                "source_format": "nvfp4_e2m1_e4m3_k16",
+                "source_scale_application": "projection_global_times_e4m3"
+              },
+              "ownership": "private_outputs_distinct_readonly_inputs",
+              "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+              "row_offsets": [
+                0,
+                12288,
+                24576
+              ],
+              "schedule_digest": "2b9a82ea462a9e4c1c213e7af2c05e25850dfdaee0f5bdd7444bc535381fed2a",
+              "schedule_ir_digest": "6a3910be6b984ddf1c88e6f727a60724d98c839378f6c06c9cb7b935cb0236ad",
+              "shape_nk": [
+                24576,
+                4096
+              ],
+              "tile_ir_digest": "4754912824a3ebf921a7ed50f276e98b9fe120b10246852023fd25666736b706",
+              "work_item": "ROCM-NVFP4-INGEST-1"
+            },
+            "descriptor_digest": "f2654b7d6f4d9b11f86a427dd81729a976f3831488e77d971e4d990d216bd2e8",
+            "cache_fingerprint": "0347b5dd42b3759273d44f36b21a7e0fe192dea00f2933ef2f2b187f5dcc037f"
+          },
+          {
+            "schema_version": "tessera.launch_descriptor.v1",
+            "image_digest": "a5cd5c96bd3e4ba31e7a8e9f054cd98313c412263c4f0e8b7765a8ded9d2ccdf",
+            "entry_symbol": "tessera_mxfp4_storage_e179ed4f34e713ca",
+            "abi_id": "tessera.rocm.mxfp4_folded_storage.four_memrefs.static.v1",
+            "buffers": [
+              {
+                "ordinal": 0,
+                "name": "codes",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 1,
+                "name": "exponents",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 2,
+                "name": "fragment",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 3,
+                "name": "plane",
+                "direction": "output",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              }
+            ],
+            "scalars": [],
+            "shape_guards": [
+              {
+                "binding": "codes",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "codes",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "exponents",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 128
+              },
+              {
+                "binding": "exponents",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "fragment",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "fragment",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "plane",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 129
+              },
+              {
+                "binding": "plane",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              }
+            ],
+            "geometry": {
+              "grid": [
+                196608,
+                1,
+                1
+              ],
+              "workgroup": [
+                256,
+                1,
+                1
+              ],
+              "policy": null
+            },
+            "dynamic_local_memory_bytes": 0,
+            "workspace": {
+              "bytes": 0,
+              "alignment": 1,
+              "lifetime": "launch",
+              "initialization": "undefined"
+            },
+            "ordering": {
+              "ordered_submission": true,
+              "residency": "none",
+              "synchronization": [
+                "completion"
+              ]
+            },
+            "provenance": {
+              "graph_digest": "b1448a181d239a11000ebced6ec026bf376c115142016f416ec22348b6d5250b",
+              "lossy_steps": [],
+              "ownership": "private_outputs_distinct_readonly_inputs",
+              "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->LLVM->HSACO",
+              "schedule_digest": "e179ed4f34e713ca597332f5ba21dfb017115d10fe8fa9b177487699f180ba0b",
+              "schedule_ir_digest": "7436ce58e8918693a93bcc58a36fcde715f8f63d7afc1cf64dac2f35a93149c7",
+              "shape_nk": [
+                24576,
+                4096
+              ],
+              "storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+              "tile_ir_digest": "707738722a11023b1539e74980ae741ec4375128407ec675b7bb052c55af65c0",
+              "work_item": "ROCM-NVFP4-INGEST-1"
+            },
+            "descriptor_digest": "d9d8c65fba50a7d8fdfc31f2005aff1e959f2b93319167e8cacbe69c4a668d1e",
+            "cache_fingerprint": "d8864a68f09a743938636d0b1a7df4cc54f7ea918e3acebf62ebd3b2f8374b68"
+          },
+          {
+            "schema_version": "tessera.launch_descriptor.v1",
+            "image_digest": "edd24807b5d154eb7d34da0fb2685377d9a7b7e89852686e86ba879c4dc8023d",
+            "entry_symbol": "packed_folded_w4a8",
+            "abi_id": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "buffers": [
+              {
+                "ordinal": 0,
+                "name": "a",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 1,
+                "name": "b_packed",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 2,
+                "name": "a_scale",
+                "direction": "input",
+                "dtype": "fp32",
+                "rank": 1,
+                "layout": "row_major",
+                "alignment": 4
+              },
+              {
+                "ordinal": 3,
+                "name": "scale_plane",
+                "direction": "input",
+                "dtype": "uint8",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 1
+              },
+              {
+                "ordinal": 4,
+                "name": "output",
+                "direction": "output",
+                "dtype": "bf16",
+                "rank": 2,
+                "layout": "row_major",
+                "alignment": 2
+              }
+            ],
+            "scalars": [
+              {
+                "ordinal": 5,
+                "name": "M",
+                "dtype": "int64"
+              },
+              {
+                "ordinal": 6,
+                "name": "N",
+                "dtype": "int64"
+              },
+              {
+                "ordinal": 7,
+                "name": "K",
+                "dtype": "int64"
+              }
+            ],
+            "shape_guards": [
+              {
+                "binding": "a",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "a",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 4096
+              },
+              {
+                "binding": "b_packed",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "b_packed",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 2048
+              },
+              {
+                "binding": "a_scale",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "scale_plane",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 129
+              },
+              {
+                "binding": "scale_plane",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              },
+              {
+                "binding": "output",
+                "dimension": 0,
+                "predicate": "eq",
+                "value": 256
+              },
+              {
+                "binding": "output",
+                "dimension": 1,
+                "predicate": "eq",
+                "value": 24576
+              }
+            ],
+            "geometry": {
+              "grid": [
+                384,
+                1,
+                1
+              ],
+              "workgroup": [
+                256,
+                1,
+                1
+              ],
+              "policy": null
+            },
+            "dynamic_local_memory_bytes": 0,
+            "workspace": {
+              "bytes": 0,
+              "alignment": 1,
+              "lifetime": "launch",
+              "initialization": "undefined"
+            },
+            "ordering": {
+              "ordered_submission": true,
+              "residency": "none",
+              "synchronization": [
+                "completion"
+              ]
+            },
+            "provenance": {
+              "approximate_policy": "explicit_allow",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "decode_policy": "integer_rne_v1",
+              "execution_mode": "folded_row_reference_explicit_approximate",
+              "execution_state": "manual_executable_candidate",
+              "graph_ir_sha256": "1a05c15a2bd44b32b1667df5a12ebda04853dc411be3510bc2b80caf3d0a6cb1",
+              "hsaco_sha256": "75bddb9f81405c6d88b10c9fdb64a2f6f4c06414abf8864de5faa62213c84c54",
+              "image_k": 4096,
+              "image_m": 256,
+              "image_n": 24576,
+              "image_shape_policy": "static_mnk",
+              "kernel_argument_layout": "expanded_memref",
+              "materializer": "tessera_rocm.scaled_wmma_gemm",
+              "native_compiler_owned": true,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+              "producer_kind": "native_mlir_packed_lds",
+              "producer_storage_contract": "mxfp4.gfx12.n16_k16_lane_u32.plus_row_reference.v1",
+              "route": "packed_folded_native_typed_lds",
+              "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+              "schedule_hash": "34371617c6b10ef3d18bb0b991ca09093d6dcd0a875668c149fdf5d01dc15da4",
+              "schedule_ir_sha256": "7d339ef156fd4807aa3e8f91c12e7e694b92f2162d838b12a69c2e1eae77f7d6",
+              "shape": [
+                24576,
+                4096
+              ],
+              "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+              "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+              "target_ir_sha256": "a30270a30d13048dc83bc27fda4a306fdb349292512df6a71e4e8b3116bb91c6",
+              "tile_ir_sha256": "0663f278e1dbff001990c12c5b4f52d43a632be48baf0f1a8cec8aba8fd5f9ff",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+              "weights_origin": "owned_native_nvfp4_ingest_and_storage",
+              "work_item": "ROCM-MXFP4-W4A8-1"
+            },
+            "descriptor_digest": "4d02ee15f12a5daa630a05e9e11fa4ad5ee444b6b06f7ee68cf24a6f357895e8",
+            "cache_fingerprint": "7cafd3d04a300e861409a1042c48476a22cfd42c502de21fdee7fa8f053b9f87"
+          }
+        ],
+        "frontend_graph_sha256": "2ae2c99f741b21ecc7692984b8d8d512ea6b9f17fd2a290eb883b092368733a9",
+        "input_sha256": {
+          "codes": "e56744a1b911aa757e2605e3dafc8132be85b56c2e04e6033814d61f4e30556a",
+          "scales": "36e67356d4deb5981317e607ca133ad944005fefbe104bd834859f280b32c1d8",
+          "projection_globals": "d4a0c155c562b14c20af1dfb66b2ba4f4351d43424689c05bcb8de20fb6947b1",
+          "a": "718cd5622a407d31ad943e01bb30528393dbe90b406b8ef907c40431df38a50b",
+          "a_scale": "7974139635ca98f8ce4da94524cb384c148a21a58a194d66bec351fad0c82b54"
+        },
+        "route": "Python frontend -> verified Graph -> native Schedule/Tile/Target/LLVM -> three HSACO images -> checked resident HIP program"
+      },
+      "source_quality": {
+        "folded_weight_error": {
+          "max_abs": 0.08984375,
+          "relative_rms": 0.14979609393074966
+        },
+        "native_output_vs_source": {
+          "max_abs": 2.3994320868855965,
+          "relative_rms": 0.15177262587269064
+        },
+        "native_output_vs_dequantized_activation_bf16_weights": {
+          "max_abs": 2.188555705823779,
+          "relative_rms": 0.1495070402262218
+        },
+        "source_activation_sha256": "219c08df4d236d6f3f3a8b6953d516d3ac8ac1302e5a5799d1ffc77c5c5addd6",
+        "source_weight_sha256": "d44a87b2942404aa2477c6cffd366b22c68bd4bf8c46c62369685c5ca3805aa1",
+        "activation_source": "same seeded synthetic f32 input as format controls; not model activations"
+      }
+    }
+  ],
+  "source_sha256": {
+    "python/tessera/compiler/rocm_nvfp4_program.py": "e1cf998730fc804fafb901322f4ce0f439e110993d33b482f473d2a43ae3da01",
+    "python/tessera/compiler/graph_ir.py": "74479ea3cacc5230c2074f9d67a86a18a934d7f5acbbd3151e678509e6ed4d75",
+    "python/tessera/compiler/op_catalog.py": "7574608f8316a75587e948c4a5637772566c9948d8138859ff2ce8648ca6770f",
+    "python/tessera/compiler/jit.py": "6a79cf4b38520de8c32654f58d082a89620a97d2b4856390b48c1c45c6ef8961",
+    "python/tessera/runtime.py": "8e10243d15c110db083e7d1da8e102c1b5865b3a5a378b1c7fc846fbadb0d4d9",
+    "benchmarks/rocm/benchmark_jit_nvfp4_program.py": "53e29c6f0cb7a9488a436ab5bbc55691cb52b25600a2d457cf7160815df230a8",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "7e6ca24e9cd4ab19b9eb7a4da3a748a6820c300147ed570a901af7ff8f34af09",
+    "python/tessera/compiler/rocm_nvfp4_resident.py": "28c2339863255a792cd6817518ad8c1eb6010b40e3eb7aa020a71483b8632939",
+    "python/tessera/compiler/rocm_nvfp4_ingest_native.py": "f8eac5af44bac4a0b1c194d4591653a1c7f6861960a955dc7240039e876dbe64",
+    "python/tessera/compiler/rocm_mxfp4_storage_native.py": "dd0290eefca7cd17101df697be8dc2fec5d75bc86c5530a6aad0040831bc68e5",
+    "python/tessera/compiler/rocm_mxfp4_packed_folded.py": "70b5177f955a88ad3c6d4d84821277b34f0edd2c0fc5ed7e125309b6c75c1d04",
+    "python/tessera/compiler/rocm_mxfp4_storage.py": "0d7be56eaeead199e0cf10c407b16d3c743d7034a867f4c1f0f62a83ee701399",
+    "benchmarks/rocm/benchmark_resident_nvfp4.py": "8c0cff41a9e82cc6a2fd4f02f5564bd3d8a0057c30416b49fea1d7bcc36fd300",
+    "benchmarks/rocm/benchmark_gfx1201_three_formats.py": "9d2b48a54903302e8e7bdf5cc527f4d69f9aef8f88200751072bbd8b8ae6fb0d"
+  },
+  "source_checkpoints": [
+    {
+      "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+      "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+      "bf16_repo": "Qwen/Qwen3-8B",
+      "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "tensor": "model.layers.0.mlp.gate_proj.weight",
+      "nvfp4_shard": "model-00001-of-00002.safetensors",
+      "bf16_shard": "model-00001-of-00005.safetensors",
+      "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+      "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+      "nvfp4_tensor_sha256": "aff199166d0bd99966c2d89811736da829fca680ae3ec89df4f575992d2a6d05",
+      "nvfp4_scale_sha256": "e97fc0a1c076a1edfa409026b08ab731c69f811e68f1a2dfaa325fdd344d8353",
+      "nvfp4_global_scale_sha256": "747dd02d217db1cb705236847e1592fd76c9b7a918b90bce196f0432c86bc736",
+      "bf16_tensor_sha256": "1f9e6bddfbbfff53f82b684776dd1b36643277b72d40f70abcd287e02ab7ea9e",
+      "nvfp4_storage": {
+        "weight": {
+          "dtype": "U8",
+          "shape": [
+            12288,
+            2048
+          ],
+          "data_offsets": [
+            1686163120,
+            1711328944
+          ]
+        },
+        "scale": {
+          "dtype": "F8_E4M3",
+          "shape": [
+            12288,
+            256
+          ],
+          "data_offsets": [
+            1248382640,
+            1251528368
+          ]
+        },
+        "global_scale": {
+          "dtype": "F32",
+          "shape": [],
+          "data_offsets": [
+            12,
+            16
+          ]
+        }
+      },
+      "bf16_storage": {
+        "dtype": "BF16",
+        "shape": [
+          12288,
+          4096
+        ],
+        "data_offsets": [
+          1345331200,
+          1445994496
+        ]
+      },
+      "nvfp4_global_scale": 0.00021943592582829297,
+      "downloaded_tensor_bytes": 128974852,
+      "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved."
+    },
+    {
+      "nvfp4_repo": "nvidia/Qwen3-8B-NVFP4",
+      "nvfp4_revision": "ccd10a893cbca613259517c3efe08e151ddf2b8e",
+      "bf16_repo": "Qwen/Qwen3-8B",
+      "bf16_revision": "b968826d9c46dd6066d109eabc6255188de91218",
+      "tensor": "model.layers.0.mlp.up_proj.weight",
+      "nvfp4_shard": "model-00001-of-00002.safetensors",
+      "bf16_shard": "model-00001-of-00005.safetensors",
+      "nvfp4_index_sha256": "d7cddcad23c80b41201f23e3fccb22ef200ed551da067c61afb0b09f67864f47",
+      "bf16_index_sha256": "f9fdbcb91c23971c13ec5d5f2573d2349e8f61f2f049371ec699281748fdb1bc",
+      "nvfp4_tensor_sha256": "a0fca785098afc1eb226da153c9064ec99a31ab0621de503410185a409819e2d",
+      "nvfp4_scale_sha256": "e6a1a5eb6c7dd13ad0a59250777ff052e15fb6c184deafd123eb0e174b296d61",
+      "nvfp4_global_scale_sha256": "747dd02d217db1cb705236847e1592fd76c9b7a918b90bce196f0432c86bc736",
+      "bf16_tensor_sha256": "ac3f743828a20694255953a4290079eda84f38e48e608a24731fb0510780db35",
+      "nvfp4_storage": {
+        "weight": {
+          "dtype": "U8",
+          "shape": [
+            12288,
+            2048
+          ],
+          "data_offsets": [
+            1711328944,
+            1736494768
+          ]
+        },
+        "scale": {
+          "dtype": "F8_E4M3",
+          "shape": [
+            12288,
+            256
+          ],
+          "data_offsets": [
+            1251528368,
+            1254674096
+          ]
+        },
+        "global_scale": {
+          "dtype": "F32",
+          "shape": [],
+          "data_offsets": [
+            20,
+            24
+          ]
+        }
+      },
+      "bf16_storage": {
+        "dtype": "BF16",
+        "shape": [
+          12288,
+          4096
+        ],
+        "data_offsets": [
+          1445994496,
+          1546657792
+        ]
+      },
+      "nvfp4_global_scale": 0.00021943592582829297,
+      "downloaded_tensor_bytes": 128974852,
+      "download_note": "Only the selected tensor byte ranges and small indexes/headers were fetched; no model shard was saved."
+    }
+  ],
+  "format_controls": [
+    {
+      "shape_mnk": [
+        256,
+        24576,
+        4096
+      ],
+      "input_sha256": {
+        "a": "219c08df4d236d6f3f3a8b6953d516d3ac8ac1302e5a5799d1ffc77c5c5addd6",
+        "b": "1a115334c0636c27c7a2c6627b7c72f393f4b9e712d437f29ce1487b4d757404"
+      },
+      "source_output_norm": 3984.46592876909,
+      "arms": {
+        "fp8_k128_n128": {
+          "group_k": 128,
+          "group_n": 128,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 0.03105105788998408,
+            "relative_rms": 0.0016564578954879144,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 0.12022385755846474,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 0.016183026134967804,
+            "relative_rms": 0.02647236374967744
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 0.5890656161285395,
+            "relative_rms": 0.03682136403267323
+          },
+          "native_output_error": {
+            "max_abs": 0.5906546349783408,
+            "relative_rms": 0.036858299200874856
+          },
+          "prepare_compile_ms": 2446.97942,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "3903099758964445d66bd98a7dd356aa601bf41d3ae1a31f5af21e982c1df1fa",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 128,
+            "macro_tile": [
+              128,
+              128
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x128_w8_d1_k128",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 128,
+            "scale_n": 128,
+            "schedule_hash": "03b8b876b8e7c981d23756d4f847460d24a25eecbb1e9ed92ce3950300755b47",
+            "shape": [
+              256,
+              24576,
+              4096
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "dc43b97a8a4a2c828358980449176d2021b78fd398727fd0edde0671ea4db98e",
+            "tile_ir_sha256": "ef8956fa8a9b29efd2d85b1c5e38976c760c6da7413857cd75d4237757ebad0b",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "88d61aae4cbc75e55679e16a7854c53bfdc3f66c657b95cc1ab7c310f6ac2ab2",
+          "tile_sha256": "ef8956fa8a9b29efd2d85b1c5e38976c760c6da7413857cd75d4237757ebad0b",
+          "target_sha256": "dc43b97a8a4a2c828358980449176d2021b78fd398727fd0edde0671ea4db98e",
+          "isa_file": "checkpoint-format-controls_256_24576_4096_fp8_k128_n128.s",
+          "isa_sha256": "2b340de09d16eb8d323a962fe546f31cc5bcab866ac2c58d5fd382ac73466b7b",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 10,
+            "v_add_nc_u32_e32": 7,
+            "v_mul_lo_u32": 44,
+            "v_add_co_u32": 80,
+            "v_add_co_ci_u32_e64": 80,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_store_b128": 8,
+            "ds_load_2addr_b64": 24,
+            "v_wmma_f32_16x16x16_fp8_fp8": 64,
+            "v_mul_f32_e32": 6,
+            "v_add_f32_e32": 4
+          },
+          "grid": [
+            192,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 128,
+            "macro_tile": [
+              128,
+              128
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 128,
+            "scale_n": 128,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 101769216,
+          "end_to_end_ms": [
+            22.374717333333333,
+            14.276559666666666,
+            14.509580666666666
+          ],
+          "end_to_end_median_ms": 14.509580666666666,
+          "device_windows": [
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.876209,
+              "event_window_ms": 17.25382423400879,
+              "host_window_ms": 17.330541,
+              "device_window_ms": 17.24156,
+              "device_event_disagreement": 0.0007108125040833218
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.876209,
+              "event_window_ms": 17.46314239501953,
+              "host_window_ms": 17.554528,
+              "device_window_ms": 17.4472,
+              "device_event_disagreement": 0.0009129167396630342
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.876209,
+              "event_window_ms": 17.597820281982422,
+              "host_window_ms": 17.680518,
+              "device_window_ms": 17.58532,
+              "device_event_disagreement": 0.0007103312672888771
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.545225
+        },
+        "fp8_k32_n1_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 0.031022614421438277,
+            "relative_rms": 0.0016556516723520306,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 0.12027646521551001,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 0.0126953125,
+            "relative_rms": 0.023910874811962014
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 0.4617534938581471,
+            "relative_rms": 0.03383443828702632
+          },
+          "native_output_error": {
+            "max_abs": 0.4622387149378966,
+            "relative_rms": 0.03387623049439937
+          },
+          "prepare_compile_ms": 3261.62058,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "0fcec43a522b0a8d3eaaac12a5d6eb69c49a6b09873bad61ca673a30cda77156",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              128
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x128_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "543279dfba6c82707cc88cb4c2220240c545f3b02b39be112eb81e504eba567c",
+            "shape": [
+              256,
+              24576,
+              4096
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "192b765b81ebcc3f332adb5e9e6cb39ca0904ca155b69b1cd4665fc365fb14e1",
+            "tile_ir_sha256": "46d169dea1c786e1b87efb72b1ea39f4407e5d6c3405bb4e344ad6bd6f852602",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "5d99359c149c6c359425649dd1ef1bed660f9350a46c3de1d84e87a10a6316b4",
+          "tile_sha256": "46d169dea1c786e1b87efb72b1ea39f4407e5d6c3405bb4e344ad6bd6f852602",
+          "target_sha256": "192b765b81ebcc3f332adb5e9e6cb39ca0904ca155b69b1cd4665fc365fb14e1",
+          "isa_file": "checkpoint-format-controls_256_24576_4096_fp8_k32_n1_control.s",
+          "isa_sha256": "11d9434e95c7147fa98f5c051e077dece957d82a39aa5461f08fc6b9c58c2e82",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 7,
+            "v_mul_lo_u32": 38,
+            "v_add_nc_u32_e32": 2,
+            "v_add_co_u32": 72,
+            "v_add_co_ci_u32_e64": 72,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_store_b128": 2,
+            "ds_load_2addr_b64": 6,
+            "v_wmma_f32_16x16x16_fp8_fp8": 16,
+            "v_mul_f32_e32": 16,
+            "v_add_f32_e32": 14
+          },
+          "grid": [
+            192,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              128
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 114425856,
+          "end_to_end_ms": [
+            22.954777333333336,
+            21.619815333333335,
+            17.447258666666666
+          ],
+          "end_to_end_median_ms": 21.619815333333335,
+          "device_windows": [
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 0.964921,
+              "event_window_ms": 25.362436294555664,
+              "host_window_ms": 25.443368,
+              "device_window_ms": 25.3508,
+              "device_event_disagreement": 0.0004588003463280209
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 0.964921,
+              "event_window_ms": 26.122312545776367,
+              "host_window_ms": 26.268418,
+              "device_window_ms": 26.11036,
+              "device_event_disagreement": 0.0004575607827760924
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 0.964921,
+              "event_window_ms": 25.897354125976562,
+              "host_window_ms": 25.976575,
+              "device_window_ms": 25.88524,
+              "device_event_disagreement": 0.000467774658277223
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.80891375
+        },
+        "mxfp8_k32_n1": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 0.029939770698547363,
+            "relative_rms": 0.0016556585305608049,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 0.12084146910727278,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 0.02734375,
+            "relative_rms": 0.02656322341126099
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 0.5388319234630821,
+            "relative_rms": 0.0374762772952193
+          },
+          "native_output_error": {
+            "max_abs": 0.5460406284115074,
+            "relative_rms": 0.03751198756303777
+          },
+          "prepare_compile_ms": 2938.281192,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "affadc877d73840329ee7296546e49386feebe101ea31828c315eb72a4015f94",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              128
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x128_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "65e119b013ec71c2e1ff66732685e299870594753fe805c9cf0ae53516f07599",
+            "shape": [
+              256,
+              24576,
+              4096
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "ff815dd894b6111d5596e4532f7e09a7f93a3f9629eabf9adebd983d2ca2ad63",
+            "tile_ir_sha256": "6b94b56efd65c473166e44fc40c17e9b938dfa52f48b15e230e89625637f87df",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "dc92d7e1643c0fc2069cc1f015d4290df5e28052c52382e22bee09d4daf15bcd",
+          "tile_sha256": "6b94b56efd65c473166e44fc40c17e9b938dfa52f48b15e230e89625637f87df",
+          "target_sha256": "ff815dd894b6111d5596e4532f7e09a7f93a3f9629eabf9adebd983d2ca2ad63",
+          "isa_file": "checkpoint-format-controls_256_24576_4096_mxfp8_k32_n1.s",
+          "isa_sha256": "13a12331e88bb74eae18fd27324bddc2ebcc99d3c8bcfa0a973f9e2905e54f51",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 7,
+            "v_mul_lo_u32": 38,
+            "v_add_co_u32": 56,
+            "v_add_co_ci_u32_e64": 56,
+            "v_add_nc_u32_e32": 70,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_store_b128": 2,
+            "ds_load_2addr_b64": 6,
+            "v_wmma_f32_16x16x16_fp8_fp8": 16,
+            "v_ldexp_f32": 64,
+            "v_add_f32_e32": 16
+          },
+          "grid": [
+            192,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              128
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 104890368,
+          "end_to_end_ms": [
+            22.342674666666667,
+            21.425353,
+            16.725034333333333
+          ],
+          "end_to_end_median_ms": 21.425353,
+          "device_windows": [
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 0.949717,
+              "event_window_ms": 26.448551177978516,
+              "host_window_ms": 26.52458,
+              "device_window_ms": 26.43676,
+              "device_event_disagreement": 0.00044581564786556454
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 0.949717,
+              "event_window_ms": 26.861112594604492,
+              "host_window_ms": 26.942818,
+              "device_window_ms": 26.8484,
+              "device_event_disagreement": 0.00047327133452558956
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 0.949717,
+              "event_window_ms": 26.368711471557617,
+              "host_window_ms": 26.454015,
+              "device_window_ms": 26.33212,
+              "device_event_disagreement": 0.0013876852343386787
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.82614875
+        },
+        "mxfp4_folded": {
+          "approximate_policy": "explicit_allow",
+          "fold_lossless": true,
+          "fold_inexact_value_count": 0,
+          "folding_weight_error": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "folding_output_error": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "pre_fold_quantized_output_error": {
+            "max_abs": 1.7143631929714553,
+            "relative_rms": 0.12048156998987182
+          },
+          "physical_weight_storage": "expanded_e4m3_bytes",
+          "correctness": {
+            "max_abs": 0.03095671930327626,
+            "relative_rms": 0.0016563710583306867,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 0.11407783148824918,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 0.08984375,
+            "relative_rms": 0.11779567416102427
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 1.7143631929714553,
+            "relative_rms": 0.12048156998987182
+          },
+          "native_output_error": {
+            "max_abs": 1.7256078423240462,
+            "relative_rms": 0.12049278027062245
+          },
+          "prepare_compile_ms": 12184.082103,
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "native_provenance": {
+            "accum": "fp32",
+            "architecture": "gfx1201",
+            "authored_target_ir_sha256": "416053ff2ba77b115052f45b1575d6bf977798ab69baedecd98c3fd2d0f7fe76",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "fold_inexact_value_count": 0,
+            "fold_lossless": true,
+            "fold_max_normalized_abs_error": 0.0,
+            "fold_max_normalized_relative_error": 0.0,
+            "image_input_level": "target",
+            "image_k": 0,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mnk",
+            "image_whole_m": true,
+            "image_whole_n": true,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "output": "bf16",
+            "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+            "producer_kind": "native_mlir_typed_lds",
+            "raster": "grouped_m4_1d",
+            "raster_group_m": 4,
+            "route": "folded_row_reference_bm256_tm4",
+            "row_guard": "cta",
+            "row_reference_sha256": "49d28ce12c1a299ca8e06da6cf7afb31054be5279074e8953ac98408b0239626",
+            "schedule_hash": "76fd84e5ba60c27bee1c3201b5abefa9296955443b94a2a9cb05742b94e284ab",
+            "staging_policy": "unconditional_k64",
+            "staging_prefetch": "register_next_slab",
+            "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+            "target_ir_sha256": "2bc28f7144fc11083ad2c63a566b5dddd8a06ba5596621eff892c115bb83a125",
+            "tile_ir_sha256": "d21facec8a2540962281d0a3ef00a1a814d6f9759efec619f5d56a866e37fb4f",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+            "weight_sha256": "526341473cd3ee29391c5d0571e4742b39da2bf903ed5c0b35c9bccbe2ebacb3",
+            "work_item": "ROCM-MXFP4-W4A8-1",
+            "workgroup_mode": "wgp"
+          },
+          "payload_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+          "tile_sha256": "d21facec8a2540962281d0a3ef00a1a814d6f9759efec619f5d56a866e37fb4f",
+          "target_sha256": "2bc28f7144fc11083ad2c63a566b5dddd8a06ba5596621eff892c115bb83a125",
+          "isa_file": "checkpoint-format-controls_256_24576_4096_mxfp4_folded.s",
+          "isa_sha256": "3c5198368d7381bfbf4c664a4cbcc95bcefcb4fff9540b24f8c92c50836ea755",
+          "static_isa_counts": {
+            "v_cvt_f32_u32_e32": 2,
+            "v_mul_f32_e32": 130,
+            "v_cvt_u32_f32_e32": 2,
+            "v_mul_lo_u32": 13,
+            "v_add_co_u32": 160,
+            "v_add_co_ci_u32_e64": 160,
+            "v_mul_u32_u24_e32": 7,
+            "v_add_nc_u32_e32": 2,
+            "ds_store_b128": 10,
+            "s_barrier_signal": 3,
+            "s_barrier_wait": 3,
+            "ds_load_2addr_b64": 12,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_cvt_f64_f32_e32": 192,
+            "v_mul_f64_e32": 128,
+            "v_cvt_f32_f64_e32": 64
+          },
+          "grid": [
+            384,
+            1,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "folded_row_reference_bm256_tm4",
+          "schedule": {
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "image_shape_policy": "runtime_mnk",
+            "raster_group_m": 4,
+            "row_guard": "cta",
+            "staging_prefetch": "register_next_slab",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2
+          },
+          "physical_input_bytes": 101737472,
+          "end_to_end_ms": [
+            101.558034,
+            100.087153,
+            99.97035733333333
+          ],
+          "end_to_end_median_ms": 100.087153,
+          "device_windows": [
+            {
+              "launches": 64,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 66,
+              "graph_build_wall_ms": 0.952457,
+              "event_window_ms": 24.47435760498047,
+              "host_window_ms": 24.553129,
+              "device_window_ms": 24.46164,
+              "device_event_disagreement": 0.0005196297768355558
+            },
+            {
+              "launches": 64,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 66,
+              "graph_build_wall_ms": 0.952457,
+              "event_window_ms": 25.22103500366211,
+              "host_window_ms": 25.310012,
+              "device_window_ms": 25.20804,
+              "device_event_disagreement": 0.0005152446622520466
+            },
+            {
+              "launches": 64,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 66,
+              "graph_build_wall_ms": 0.952457,
+              "event_window_ms": 24.63775634765625,
+              "host_window_ms": 24.795541,
+              "device_window_ms": 24.62244,
+              "device_event_disagreement": 0.0006216616253576202
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.384725625
+        },
+        "mxfp4_folded_native_packed": {
+          "approximate_policy": "explicit_allow",
+          "fold_lossless": true,
+          "fold_inexact_value_count": 0,
+          "folding_weight_error": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "folding_output_error": {
+            "max_abs": 0.0,
+            "relative_rms": 0.0
+          },
+          "pre_fold_quantized_output_error": {
+            "max_abs": 1.7143631929714553,
+            "relative_rms": 0.12048156998987182
+          },
+          "physical_weight_storage": "packed_e2m1_fragment_bytes",
+          "correctness": {
+            "max_abs": 0.03095671930327626,
+            "relative_rms": 0.0016563710583306867,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 0.11407783148824918,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 0.08984375,
+            "relative_rms": 0.11779567416102427
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 1.7143631929714553,
+            "relative_rms": 0.12048156998987182
+          },
+          "native_output_error": {
+            "max_abs": 1.7256078423240462,
+            "relative_rms": 0.12049278027062245
+          },
+          "prepare_compile_ms": 22605.915154,
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+          "native_provenance": {
+            "approximate_policy": "explicit_allow",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "decode_policy": "integer_rne_v1",
+            "execution_mode": "folded_row_reference_explicit_approximate",
+            "execution_state": "manual_executable_candidate",
+            "fold_inexact_value_count": 0,
+            "fold_lossless": true,
+            "fold_max_normalized_abs_error": 0.0,
+            "fold_max_normalized_relative_error": 0.0,
+            "graph_ir_sha256": "d0ecb29737a813a760f818e50ef7715bd8a3d175200697e2bb27aed9bf36209c",
+            "hsaco_sha256": "75bddb9f81405c6d88b10c9fdb64a2f6f4c06414abf8864de5faa62213c84c54",
+            "image_k": 4096,
+            "image_m": 256,
+            "image_n": 24576,
+            "image_shape_policy": "static_mnk",
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "physical_contract": "rocm_mxfp4_w4a8_packed_folded_prefill_v1",
+            "producer_kind": "native_mlir_packed_lds",
+            "route": "packed_folded_native_typed_lds",
+            "scale_layout": "mxfp4.e8m0.k32_plus_row_reference.last_row.v1",
+            "scale_plane_sha256": "8b57ffaf52a714fe6abf3c96c0d328b08ab99db6715fcee382d1a39337d43204",
+            "schedule_hash": "34371617c6b10ef3d18bb0b991ca09093d6dcd0a875668c149fdf5d01dc15da4",
+            "shape": [
+              24576,
+              4096
+            ],
+            "sync_key": "ROCM-PACKED-NATIVE-2026-10-03",
+            "target_abi": "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1",
+            "target_ir_sha256": "f71758d95afe31d52ec177c5acf18b644292a0e970c84d324d2d47c9bf50aa64",
+            "tile_ir_sha256": "c3da21e35b895e7991842ea1481794ddaced3b71e530c28c4150d4f70fa04255",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.n16_k16_lane_u32.v1",
+            "weight_sha256": "8fc46adb1f002787d983a5ede201c22a25a94fe3d827e09b6f9a81b868805c06",
+            "work_item": "ROCM-MXFP4-W4A8-1"
+          },
+          "payload_sha256": "75bddb9f81405c6d88b10c9fdb64a2f6f4c06414abf8864de5faa62213c84c54",
+          "tile_sha256": "c3da21e35b895e7991842ea1481794ddaced3b71e530c28c4150d4f70fa04255",
+          "target_sha256": "690ae6b505634f0c542c636ee37973ab26379c9b9ca95dcedb5a41a12567cb68",
+          "isa_file": "checkpoint-format-controls_256_24576_4096_mxfp4_folded_native_packed.s",
+          "isa_sha256": "c9f8199e4bebf399787ddc1c1d59f366bd09a3af6207dc6945482efa608afeb5",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 7,
+            "v_mul_lo_u32": 13,
+            "v_add_co_u32": 112,
+            "v_add_co_ci_u32_e64": 112,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_store_b128": 5,
+            "ds_load_2addr_b64": 12,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_mul_f32_e32": 128,
+            "v_cvt_f64_f32_e32": 192,
+            "v_mul_f64_e32": 128,
+            "v_cvt_f32_f64_e32": 64
+          },
+          "grid": [
+            384,
+            1,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "packed_folded_native_typed_lds",
+          "schedule": {
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "image_shape_policy": "static_mnk",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2
+          },
+          "physical_input_bytes": 54551552,
+          "end_to_end_ms": [
+            56.46436633333334,
+            55.24144833333333,
+            54.79686
+          ],
+          "end_to_end_median_ms": 55.24144833333333,
+          "device_windows": [
+            {
+              "launches": 64,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 66,
+              "graph_build_wall_ms": 0.860616,
+              "event_window_ms": 24.936115264892578,
+              "host_window_ms": 25.015401,
+              "device_window_ms": 24.9208,
+              "device_event_disagreement": 0.0006141800649333925
+            },
+            {
+              "launches": 64,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 66,
+              "graph_build_wall_ms": 0.860616,
+              "event_window_ms": 24.293840408325195,
+              "host_window_ms": 24.369359,
+              "device_window_ms": 24.27844,
+              "device_event_disagreement": 0.0006339223468315033
+            },
+            {
+              "launches": 64,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 66,
+              "graph_build_wall_ms": 0.860616,
+              "event_window_ms": 24.79075813293457,
+              "host_window_ms": 24.902385,
+              "device_window_ms": 24.7784,
+              "device_event_disagreement": 0.0004984975799570726
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.3871625
+        }
+      }
+    }
+  ]
+}

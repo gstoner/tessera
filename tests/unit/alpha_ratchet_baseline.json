@@ -1,6 +1,6 @@
 {
   "complete": 0,
-  "delegating_packagers": 3,
+  "delegating_packagers": 0,
   "graph_input_packagers": 45,
   "lane_native": {
     "bear_cpu": 6,

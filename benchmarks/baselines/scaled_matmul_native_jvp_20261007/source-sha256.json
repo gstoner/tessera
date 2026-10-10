@@ -1,0 +1,7 @@
+{
+  "src/compiler/ir/TesseraOps.td": "b909a35f5b7f2b1d13f85b1333f8788650ff286629c69d36afd1984e0167a34f",
+  "src/compiler/ir/TangentInterface.cpp": "9d71f1a780d4de13a230c684e0f006082b75834884297a736fb5d78c9d17f67c",
+  "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir": "72aaa8fb7eb0ab27194d2b411e82bf0eff5679ea3c8ef43b3830430c6490855f",
+  "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_schedule.mlir": "b43711be9465ad4be4445020f1f2eb0e51e96d5e4e31e50e859b06749e9ac2d2",
+  "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_encoded_invalid.mlir": "c1c280e31289dcd79f11d0f0aabe8c7207601c1b5a74c6741a9fa733865d8506"
+}

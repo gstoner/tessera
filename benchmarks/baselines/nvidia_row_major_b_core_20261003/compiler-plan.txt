@@ -1,0 +1,1 @@
+ok: compiler plan ownership, log links and start view

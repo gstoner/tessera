@@ -1,0 +1,100 @@
+--- /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp
++++ /home/angstorms/scratch/nvidia-cooperative-softmax-candidate-20261008/NVIDIALowering.cpp
+@@ -1900,6 +1900,11 @@
+     return failure();
+   }
+ 
++  auto schedule = op->getAttrOfType<StringAttr>("schedule");
++  bool cooperative = schedule && schedule.getValue() == "cooperative_128";
++  if (schedule && schedule.getValue() != "serial" && !cooperative)
++    return op->emitError("SM120 softmax schedule must be serial|cooperative_128");
++
+   Location loc = op->getLoc();
+   Value xBase = inputs[0], outBase = inputs[1];
+   Value rows = inputs[2], columns = inputs[3];
+@@ -1914,7 +1919,7 @@
+       builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
+   Value thread = arith::ExtUIOp::create(
+       builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
+-  Value row = addI64(
++  Value row = cooperative ? block : addI64(
+       builder, loc, mulI64(builder, loc, block, i64Constant(builder, loc, 128)),
+       thread);
+   Value active = lessI64(builder, loc, row, rows);
+@@ -1943,12 +1948,56 @@
+         ValueRange{linear});
+     LLVM::StoreOp::create(builder, loc, stored, ptr, storageAlignment);
+   };
++  Value scratch;
++  if (cooperative) {
++    FailureOr<Value> allocated = sm120ReductionScratch(op, builder);
++    if (failed(allocated))
++      return op->emitError("failed to materialize cooperative softmax scratch");
++    scratch = *allocated;
++  }
++  auto reduceF32 = [&](Value partial, bool maximum) -> Value {
++    if (!cooperative) return partial;
++    Value lanePointer = LLVM::GEPOp::create(
++        builder, loc, scratch.getType(), f32, scratch, ValueRange{thread});
++    LLVM::StoreOp::create(builder, loc, partial, lanePointer, 4);
++    NVVM::BarrierOp::create(builder, loc);
++    for (int64_t stride = 64; stride >= 1; stride >>= 1) {
++      Value participates = lessI64(
++          builder, loc, thread, i64Constant(builder, loc, stride));
++      auto combine = scf::IfOp::create(builder, loc, participates, false);
++      {
++        OpBuilder::InsertionGuard combineGuard(builder);
++        builder.setInsertionPointToStart(combine.thenBlock());
++        Value lhsPointer = LLVM::GEPOp::create(
++            builder, loc, scratch.getType(), f32, scratch, ValueRange{thread});
++        Value rhsPointer = LLVM::GEPOp::create(
++            builder, loc, scratch.getType(), f32, scratch,
++            ValueRange{addI64(builder, loc, thread,
++                             i64Constant(builder, loc, stride))});
++        Value lhs = LLVM::LoadOp::create(builder, loc, f32, lhsPointer, 4);
++        Value rhs = LLVM::LoadOp::create(builder, loc, f32, rhsPointer, 4);
++        Value combined = maximum
++            ? Value(arith::MaximumFOp::create(builder, loc, lhs, rhs))
++            : Value(arith::AddFOp::create(builder, loc, lhs, rhs));
++        LLVM::StoreOp::create(builder, loc, combined, lhsPointer, 4);
++      }
++      builder.setInsertionPointAfter(combine);
++      NVVM::BarrierOp::create(builder, loc);
++    }
++    Value leaderPointer = LLVM::GEPOp::create(
++        builder, loc, scratch.getType(), f32, scratch,
++        ValueRange{i64Constant(builder, loc, 0)});
++    Value result = LLVM::LoadOp::create(builder, loc, f32, leaderPointer, 4);
++    // Every lane must capture the broadcast before sum reduction reuses it.
++    NVVM::BarrierOp::create(builder, loc);
++    return result;
++  };
+   auto guarded = scf::IfOp::create(builder, loc, active, /*withElseRegion=*/false);
+   {
+     OpBuilder::InsertionGuard guard(builder);
+     builder.setInsertionPointToStart(guarded.thenBlock());
+-    Value zero = i64Constant(builder, loc, 0);
+-    Value one = i64Constant(builder, loc, 1);
++    Value zero = cooperative ? thread : i64Constant(builder, loc, 0);
++    Value one = i64Constant(builder, loc, cooperative ? 128 : 1);
+     Value rowBase = mulI64(builder, loc, row, columns);
+     Value negInf = arith::ConstantFloatOp::create(
+         builder, loc, f32,
+@@ -1966,7 +2015,7 @@
+       scf::YieldOp::create(builder, loc, ValueRange{next});
+     }
+     builder.setInsertionPointAfter(maxLoop);
+-    Value maximum = maxLoop.getResult(0);
++    Value maximum = reduceF32(maxLoop.getResult(0), true);
+     Value zeroF32 = arith::ConstantFloatOp::create(
+         builder, loc, f32, APFloat(0.0f));
+     auto sumLoop = scf::ForOp::create(
+@@ -1984,7 +2033,7 @@
+       scf::YieldOp::create(builder, loc, ValueRange{next});
+     }
+     builder.setInsertionPointAfter(sumLoop);
+-    Value denominator = sumLoop.getResult(0);
++    Value denominator = reduceF32(sumLoop.getResult(0), false);
+     auto storeLoop = scf::ForOp::create(builder, loc, zero, columns, one);
+     {
+       OpBuilder::InsertionGuard loopGuard(builder);

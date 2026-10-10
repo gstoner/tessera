@@ -38,6 +38,7 @@
 //   --tile-k  K-reduction tile size (default 16)
 
 #include "Tessera/Transforms/Passes.h"
+#include "tessera/ProgrammingModel/PMPasses.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "mlir/Dialect/Arith/IR/Arith.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -49,6 +50,7 @@
 #include "mlir/IR/Matchers.h"
 #include "mlir/IR/PatternMatch.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Casting.h"
@@ -999,6 +1001,7 @@ struct TilingPassImpl
   }
 
   void getDependentDialects(DialectRegistry &registry) const override {
+    tessera::createGraphToSchedulePass()->getDependentDialects(registry);
     registry.insert<arith::ArithDialect, scf::SCFDialect,
                     tensor::TensorDialect,
                     // Sprint 9: the value/linalg tiling patterns create
@@ -1010,6 +1013,35 @@ struct TilingPassImpl
   void runOnOperation() override {
     RewritePatternSet patterns(&getContext());
     const bool effectiveValueMode = valueMode || valueModeOpt;
+    auto target = getOperation()->getAttrOfType<StringAttr>("tessera.target");
+    bool hasMatmul = false;
+    getOperation().walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera.matmul" &&
+          !op->hasAttr("tessera.canonical_k_step"))
+        hasMatmul = true;
+    });
+    if (!effectiveValueMode && target &&
+        target.getValue() == "nvidia_sm120" && hasMatmul) {
+      // SM120 owns its physical K step in the native Schedule profile. Generic
+      // tensor tiling would introduce an unsupported tensor-valued MMA edge.
+      if (tileMOpt.getNumOccurrences() || tileNOpt.getNumOccurrences() ||
+          tileKOpt.getNumOccurrences()) {
+        getOperation().emitError(
+            "SM120 native Schedule owns physical tile sizes; generic tensor "
+            "tile-m/tile-n/tile-k overrides are not native Schedule options");
+        signalPassFailure();
+        return;
+      }
+      if (failed(tessera::normalizeSM120MatmulEntryNames(getOperation()))) {
+        signalPassFailure();
+        return;
+      }
+      OpPassManager nativeSchedule(ModuleOp::getOperationName());
+      nativeSchedule.addPass(tessera::createGraphToSchedulePass());
+      if (failed(runPipeline(nativeSchedule, getOperation())))
+        signalPassFailure();
+      return;
+    }
     if (effectiveValueMode) {
       // Value path (apple_cpu `-full`): preserve static rank-2 f32 matmul as a
       // single tile op for the Accelerate GEMM value call; do NOT tile to

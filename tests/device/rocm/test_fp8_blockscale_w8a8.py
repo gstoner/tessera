@@ -337,7 +337,7 @@ def test_blockscale_w8a8_lds_body_refuses_what_it_cannot_emit_on_gfx1201():
         package_blockscale(program)
     kn = BlockScaleShape(256, 4096, 256, 128, 128, "kn")
     program = _with_schedule(lower_blockscale(kn), staging="lds", warps=8, macro=(128, 128))
-    with pytest.raises(RuntimeError, match=r"\[N, K\] weight"):
+    with pytest.raises(ValueError, match=r"\[N, K\] weight"):
         package_blockscale(program)
 
 
@@ -422,3 +422,302 @@ def test_ragged_m_costs_the_lds_body_no_registers(n, k):
         _vgprs(whole.image.payload), _vgprs(ragged.image.payload))
     assert whole_spill == ragged_spill == 0
     assert ragged_vgpr - whole_vgpr <= 8, (whole_vgpr, ragged_vgpr)
+
+@pytest.mark.parametrize("layout",["kn","nk"])
+@pytest.mark.parametrize("output",["f32","bf16"])
+@pytest.mark.parametrize("mnk",[(32,96,256),(17,23,256),(200,2048,1536)])
+def test_w8a8_target_directive_executes_the_same_native_program(layout,output,mnk):
+    from dataclasses import replace
+    import hashlib
+    from tessera.compiler import rocm_native
+    from tessera.compiler.rocm_pipeline import ROCMInputLevel
+    m,n,k=mnk
+    shape=BlockScaleShape(m,n,k,128,128,layout,output)
+    program=lower_blockscale(shape,tessera_opt=find_tessera_opt())
+    packaged=package_blockscale(program)
+    old_target,_,old_payload,old_compiler,old_toolchain,old_libraries,old_state=rocm_native._compile_native_tile_ir(
+        program.tile_ir,directive="tessera_rocm.scaled_wmma_gemm",
+        family="matmul",architecture="gfx1201")
+    old_image=replace(packaged.image,payload=old_payload,
+        target_ir_digest=hashlib.sha256(old_target.encode()).hexdigest(),
+        compiler_fingerprint=old_compiler,toolchain_fingerprint=old_toolchain,
+        device_libraries=old_libraries,compile_state=old_state,
+        entry_points=(replace(packaged.image.entry_points[0],symbol=program.entry),))
+    baseline=replace(packaged,image=old_image,target_ir=old_target,
+        descriptor=replace(packaged.descriptor,image_digest=old_image.image_digest,
+            entry_symbol=program.entry))
+    target,backend,payload,compiler,toolchain,libraries,state=rocm_native._compile_native_tile_ir(
+        baseline.target_ir,directive="tessera_rocm.scaled_wmma_gemm",
+        family="matmul",architecture="gfx1201",input_level=ROCMInputLevel.DIRECTIVE)
+    assert "tessera_rocm.scaled_wmma_gemm" not in backend
+    image=replace(baseline.image,payload=payload,
+        target_ir_digest=hashlib.sha256(target.encode()).hexdigest(),
+        compiler_fingerprint=compiler,toolchain_fingerprint=toolchain,
+        device_libraries=libraries,compile_state=state)
+    package=replace(baseline,image=image,target_ir=target,
+        descriptor=replace(baseline.descriptor,image_digest=image.image_digest))
+    a,b,sa,sb=_inputs(shape,exact=True,seed=120130)
+    before=_launch(baseline,a,b,sa,sb,shape)
+    after=_launch(package,a,b,sa,sb,shape)
+    oracle=blockscale_reference(a,b,sa,sb,scale_k=shape.scale_k,scale_n=shape.scale_n).astype(after.dtype)
+    np.testing.assert_array_equal(before,oracle)
+    np.testing.assert_array_equal(after,oracle)
+
+@pytest.mark.parametrize("old,new",[
+    ('execution_mode = "exact_per_block"','execution_mode = "approximate"'),
+    ('partial_combine = "scale_outer_product_then_add"','partial_combine = "add_then_scale"'),
+    ('scale_k = 128 : i64','scale_k = 24 : i64'),
+])
+def test_w8a8_target_consumer_rejects_semantic_drift(old,new):
+    from tessera.compiler import rocm_native
+    from tessera.compiler.rocm_pipeline import ROCMInputLevel,ROCMExecutablePipeline
+    shape=BlockScaleShape(17,23,256,128,128,"nk")
+    target=package_blockscale(lower_blockscale(shape,tessera_opt=find_tessera_opt())).target_ir
+    altered=target.replace(old,new)
+    assert altered!=target
+    pipeline=ROCMExecutablePipeline(family="matmul",arch="gfx1201",
+        input_level=ROCMInputLevel.DIRECTIVE).pass_pipeline()
+    result=subprocess.run([str(find_tessera_opt()),"-","--pass-pipeline="+pipeline],
+        input=altered,text=True,capture_output=True)
+    assert result.returncode!=0
+    assert "ROCM_FP8_BLOCKSCALE_CONTRACT" in result.stderr
+
+@pytest.mark.parametrize("layout", ["kn", "nk"])
+@pytest.mark.parametrize("output", ["f32", "bf16"])
+def test_w8a8_register_images_reuse_runtime_shapes(layout, output):
+    from tessera.compiler import rocm_native
+    assert rt._rocm_live_arch() == "gfx1201"
+    rocm_native._cache.clear()
+    packages = []
+    for m, n, k in ((17, 23, 256), (31, 45, 512), (63, 61, 384)):
+        shape = BlockScaleShape(m, n, k, 128, 128, layout, output)
+        package = package_blockscale(lower_blockscale(shape, tessera_opt=find_tessera_opt()))
+        assert package.descriptor.provenance["runtime_shape_image"]
+        assert "runtime_shape" in package.target_ir
+        assert "tessera.schedule_hash" not in package.target_ir
+        assert "m = 0 : i64" in package.target_ir
+        a, b, sa, sb = _inputs(shape, exact=True, seed=m+n+k)
+        got = _launch(package, a, b, sa, sb, shape)
+        want = blockscale_reference(a, b, sa, sb,
+            scale_k=shape.scale_k, scale_n=shape.scale_n).astype(got.dtype)
+        np.testing.assert_array_equal(got, want)
+        packages.append(package)
+    assert packages[0].image.compile_state == "cold"
+    assert all(p.image.compile_state == "warm_cache" for p in packages[1:])
+    assert len({p.image.image_digest for p in packages}) == 1
+    assert len({p.descriptor.entry_symbol for p in packages}) == 1
+    assert len({p.descriptor.provenance["schedule_hash"] for p in packages}) == 3
+    shape = BlockScaleShape(17, 23, 256, 128, 64, layout, output)
+    changed = package_blockscale(lower_blockscale(shape, tessera_opt=find_tessera_opt()))
+    assert changed.image.compile_state == "cold"
+    assert changed.image.image_digest != packages[0].image.image_digest
+    a, b, sa, sb = _inputs(shape, exact=True, seed=121)
+    got = _launch(changed, a, b, sa, sb, shape)
+    want = blockscale_reference(a, b, sa, sb,
+        scale_k=shape.scale_k, scale_n=shape.scale_n).astype(got.dtype)
+    np.testing.assert_array_equal(got, want)
+
+@pytest.mark.parametrize("fault", ["runtime_n", "runtime_k", "scale_capacity"])
+def test_runtime_shape_w8a8_rejects_invalid_launch_capacity(fault):
+    shape = BlockScaleShape(17, 23, 256, 128, 128, "nk")
+    package = package_blockscale(lower_blockscale(shape, tessera_opt=find_tessera_opt()))
+    a, b, sa, sb = _inputs(shape, exact=True, seed=120156)
+    output = np.full((shape.m, shape.n), -101.0, np.float32)
+    artifact = rt.RuntimeArtifact(
+        metadata={"target": package.image.target}, native_image=package.image,
+        launch_descriptor=package.descriptor, tile_ir=package.tile_ir,
+        target_ir=package.target_ir)
+    scalars = {"M": shape.m, "N": shape.n, "K": shape.k}
+    if fault == "runtime_n":
+        scalars["N"] += 4096
+    elif fault == "runtime_k":
+        scalars["K"] += 1
+    else:
+        sa = sa[:, :1].copy()
+    result = rt.launch(artifact, {
+        "buffers": {"a": a, "b": np.ascontiguousarray(b.T),
+                    "a_scale": sa, "b_scale": sb, "o": output},
+        "scalars": scalars})
+    assert not result.get("ok"), result
+    np.testing.assert_array_equal(output, np.full_like(output, -101.0))
+
+@pytest.mark.parametrize("layout", ["kn", "nk"])
+@pytest.mark.parametrize("order", ["grouped_m", "grouped_n", "column_major"])
+def test_w8a8_target_preserves_diagnostic_raster_schedule(layout, order):
+    from dataclasses import replace
+    from tessera.compiler import rocm_native
+    shape = BlockScaleShape(63, 97, 256, 128, 128, layout)
+    original = lower_blockscale(shape, tessera_opt=find_tessera_opt())
+    default = package_blockscale(original)
+    # Diagnostic carrier override, not a production selector promotion.
+    tile = original.tile_ir.replace('tessera.raster_order = "row_major"',
+                                     f'tessera.raster_order = "{order}"')
+    tile = tile.replace("tessera.raster_group = 1 : i64", "tessera.raster_group = 3 : i64")
+    assert tile != original.tile_ir
+    program = replace(original, tile_ir=tile)
+    package = package_blockscale(program)
+    assert f'schedule_raster_order = "{order}"' in package.target_ir
+    assert "schedule_raster_group = 3 : i64" in package.target_ir
+    assert package.image.image_digest != default.image.image_digest
+    a, b, sa, sb = _inputs(shape, exact=True, seed=120163)
+    got = _launch(package, a, b, sa, sb, shape)
+    want = blockscale_reference(a, b, sa, sb,
+        scale_k=shape.scale_k, scale_n=shape.scale_n).astype(got.dtype)
+    np.testing.assert_array_equal(got, want)
+    direct_target, _, direct_payload, _, _, _, _ = rocm_native._compile_native_tile_ir(
+        program.tile_ir, directive="tessera_rocm.scaled_wmma_gemm",
+        family="matmul", architecture="gfx1201")
+    from tessera.compiler.native_artifact import NativeEntryPoint
+    import hashlib
+    image = replace(package.image, payload=direct_payload,
+        target_ir_digest=hashlib.sha256(direct_target.encode()).hexdigest(),
+        entry_points=(NativeEntryPoint(program.entry, package.descriptor.abi_id),))
+    baseline = replace(package, image=image, target_ir=direct_target,
+        descriptor=replace(package.descriptor,
+            entry_symbol=program.entry, image_digest=image.image_digest))
+    np.testing.assert_array_equal(_launch(baseline, a, b, sa, sb, shape), got)
+
+def _hsaco_text(payload):
+    import struct
+    assert payload[:6] == b"\x7fELF\x02\x01"
+    offset = struct.unpack_from("<Q",payload,40)[0]
+    stride, count, names_id = struct.unpack_from("<HHH",payload,58)
+    sections = [struct.unpack_from("<IIQQQQIIQQ",payload,offset+i*stride)
+                for i in range(count)]
+    names = sections[names_id]
+    strings = payload[names[4]:names[4]+names[5]]
+    for entry in sections:
+        name = strings[entry[0]:].split(b"\0",1)[0]
+        if name == b".text":
+            return payload[entry[4]:entry[4]+entry[5]]
+    raise AssertionError("HSACO has no text section")
+
+@pytest.mark.parametrize("output", ["f32","bf16"])
+def test_lds_w8a8_images_reuse_mn_with_static_k_and_edge_class(output):
+    from tessera.compiler import rocm_native
+    assert rt._rocm_live_arch() == "gfx1201"
+    rocm_native._cache.clear()
+    packages=[]
+    for m,n in ((200,8192),(328,8192),(456,10240)):
+        shape=BlockScaleShape(m,n,1536,128,128,"nk",output)
+        program=lower_blockscale(shape,tessera_opt=find_tessera_opt())
+        package=package_blockscale(program,lds_runtime_k=False)
+        assert package.descriptor.provenance["runtime_mn_image"]
+        assert package.descriptor.provenance["macro_tile"] == [128,128]
+        assert "runtime_mn" in package.target_ir and "k = 1536 : i64" in package.target_ir
+        a,b,sa,sb=_inputs(shape,exact=True,seed=m+n)
+        got=_launch(package,a,b,sa,sb,shape)
+        want=blockscale_reference(a,b,sa,sb,scale_k=128,scale_n=128).astype(got.dtype)
+        np.testing.assert_array_equal(got,want)
+        control=package_blockscale(program,project_image_identity=False)
+        # Default row-major lowering gains image reuse without changing its
+        # machine instructions: the masked/unmasked store class is retained.
+        assert _hsaco_text(package.image.payload) == _hsaco_text(control.image.payload)
+        packages.append(package)
+    assert packages[0].image.compile_state == "cold"
+    assert all(p.image.compile_state == "warm_cache" for p in packages[1:])
+    assert len({p.image.image_digest for p in packages})==1
+    assert len({p.descriptor.provenance["schedule_hash"] for p in packages})==3
+    for m,n,k in ((256,8192,1536),(200,8191,1536),(200,8192,2048)):
+        shape=BlockScaleShape(m,n,k,128,128,"nk",output)
+        package=package_blockscale(lower_blockscale(shape,tessera_opt=find_tessera_opt()),lds_runtime_k=False)
+        assert package.image.compile_state=="cold"
+        assert package.image.image_digest!=packages[0].image.image_digest
+        a,b,sa,sb=_inputs(shape,exact=True,seed=m+n+k)
+        got=_launch(package,a,b,sa,sb,shape)
+        want=blockscale_reference(a,b,sa,sb,scale_k=128,scale_n=128).astype(got.dtype)
+        np.testing.assert_array_equal(got,want)
+
+@pytest.mark.parametrize("order", ["grouped_m","grouped_n","column_major"])
+def test_lds_w8a8_runtime_raster_matches_static_control(order):
+    from dataclasses import replace
+    shape=BlockScaleShape(200,8192,1536,128,128,"nk")
+    program=lower_blockscale(shape,tessera_opt=find_tessera_opt())
+    tile=program.tile_ir.replace('tessera.raster_order = "row_major"',
+        f'tessera.raster_order = "{order}"').replace(
+        "tessera.raster_group = 1 : i64","tessera.raster_group = 3 : i64")
+    assert tile!=program.tile_ir
+    program=replace(program,tile_ir=tile)
+    package=package_blockscale(program)
+    control=package_blockscale(program,project_image_identity=False)
+    a,b,sa,sb=_inputs(shape,exact=True,seed=120165)
+    got=_launch(package,a,b,sa,sb,shape)
+    baseline=_launch(control,a,b,sa,sb,shape)
+    want=blockscale_reference(a,b,sa,sb,scale_k=128,scale_n=128).astype(got.dtype)
+    np.testing.assert_array_equal(got,baseline)
+    np.testing.assert_array_equal(got,want)
+
+def test_lds_runtime_shape_refuses_a_wrong_edge_class():
+    from dataclasses import replace
+    shape=BlockScaleShape(200,8192,1536,128,128,"nk")
+    package=package_blockscale(lower_blockscale(shape,tessera_opt=find_tessera_opt()))
+    provenance=dict(package.descriptor.provenance,lds_whole_m=True)
+    broken=replace(package,descriptor=replace(package.descriptor,provenance=provenance))
+    a,b,sa,sb=_inputs(shape,exact=True,seed=120166)
+    with pytest.raises(AssertionError,match="runtime-M/N"):
+        _launch(broken,a,b,sa,sb,shape)
+
+@pytest.mark.parametrize("output", ["f32", "bf16"])
+def test_lds_runtime_k_images_reuse_scale_group_bounds(output):
+    from tessera.compiler import rocm_native
+    assert rt._rocm_live_arch() == "gfx1201"
+    rocm_native._cache.clear()
+    packages = []
+    for k in (128, 384, 1536, 2048, 3072):
+        shape = BlockScaleShape(200, 8192, k, 128, 128, "nk", output)
+        program = lower_blockscale(shape, tessera_opt=find_tessera_opt())
+        package = package_blockscale(program)
+        assert package.descriptor.provenance["lds_runtime_k"]
+        assert "runtime_k" in package.target_ir and "k = 0 : i64" in package.target_ir
+        a, b, sa, sb = _inputs(shape, exact=True, seed=k+120167)
+        got = _launch(package, a, b, sa, sb, shape)
+        want = blockscale_reference(a, b, sa, sb, scale_k=128, scale_n=128).astype(got.dtype)
+        np.testing.assert_array_equal(got, want)
+        control = package_blockscale(program, project_image_identity=False)
+        np.testing.assert_array_equal(_launch(control, a, b, sa, sb, shape), got)
+        packages.append(package)
+    assert packages[0].image.compile_state == "cold"
+    assert all(p.image.compile_state == "warm_cache" for p in packages[1:])
+    assert len({p.image.image_digest for p in packages}) == 1
+    assert len({p.descriptor.provenance["schedule_hash"] for p in packages}) == 5
+
+@pytest.mark.parametrize("prefetch", [0, 1, 2])
+@pytest.mark.parametrize("stage_k", [64, 128])
+def test_lds_runtime_k_prefetch_clamps_final_stage(prefetch, stage_k):
+    packages = []
+    for k in (128, 384):
+        shape = BlockScaleShape(200, 1024, k, 128, 128, "nk")
+        program = _with_schedule(lower_blockscale(shape, tessera_opt=find_tessera_opt()),
+            staging="lds", warps=8, macro=(128,64), depth=2 if prefetch==2 else 1)
+        options = dict(blockscale_stage_k=stage_k, blockscale_prefetch=prefetch)
+        package = package_blockscale(program, **options)
+        assert package.descriptor.provenance["lds_runtime_k"]
+        a, b, sa, sb = _inputs(shape, exact=True, seed=k+prefetch+stage_k)
+        got = _launch(package, a, b, sa, sb, shape)
+        want = blockscale_reference(a, b, sa, sb, scale_k=128, scale_n=128).astype(got.dtype)
+        np.testing.assert_array_equal(got, want)
+        control = package_blockscale(program, project_image_identity=False, **options)
+        np.testing.assert_array_equal(_launch(control, a, b, sa, sb, shape), got)
+        packages.append(package)
+    assert packages[0].image.image_digest == packages[1].image.image_digest
+
+@pytest.mark.parametrize(("layout", "output"), [("nk", "f32"), ("kn", "f32"), ("nk", "bf16")])
+def test_register_short_k_dispatch_and_fallback_reuse_image(layout, output):
+    """One projected image must execute specialized and general K bodies."""
+    assert rt._rocm_live_arch() == "gfx1201"
+    packages = []
+    for k in (768, 1024, 1536, 2048, 2304):
+        shape = BlockScaleShape(17, 19, k, 128, 128, layout, output)
+        program = lower_blockscale(shape, tessera_opt=find_tessera_opt())
+        package = package_blockscale(program)
+        assert package.descriptor.provenance["staging"] == "global"
+        a, b, sa, sb = _inputs(shape, exact=True, seed=120180 + k)
+        got = _launch(package, a, b, sa, sb, shape)
+        want = blockscale_reference(a, b, sa, sb, scale_k=128, scale_n=128).astype(got.dtype)
+        np.testing.assert_array_equal(got, want)
+        static = package_blockscale(program, project_image_identity=False)
+        np.testing.assert_array_equal(_launch(static, a, b, sa, sb, shape), got)
+        packages.append(package)
+    assert len({p.image.image_digest for p in packages}) == 1
+    assert len({p.descriptor.entry_symbol for p in packages}) == 1
+    assert len({p.descriptor.provenance["schedule_hash"] for p in packages}) == 5

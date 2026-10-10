@@ -1,0 +1,405 @@
+{
+  "schema": "tessera.sm120.bounded_checkpoint_native_images.v1",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0",
+  "architecture": "sm_120",
+  "bounds": [
+    1,
+    2,
+    1,
+    9,
+    11,
+    8,
+    6
+  ],
+  "images": [
+    {
+      "backward": false,
+      "entry": "tessera_tile_attention_lse_a64f0467c5",
+      "sha256": "3a17c4994765eb0e361856600885e2423d35142ddbb683d4eb2ce86d1bc646b0",
+      "graph_sha256": "3afc4ff2f6d020b9c6c160fc083e455272fd306801a6ba0a4b91b51d17a97ba1",
+      "schedule_sha256": "79b798d6eaff8b0853aaf77fc5852414bf70e1a17f4520ecb2cc9fdf95041aed",
+      "tile_sha256": "1851c3b07d5faf05a76db8d80c99a4458e4a6c7fd756f2b36c888f7ad6afd310",
+      "target_sha256": "62f81b845606389029aae8f651eb3efa8a5054d80ac4e86cfc43ce2687003bc7"
+    },
+    {
+      "backward": true,
+      "entry": "tessera_tile_attention_backward_lse_output_255abb6dc7",
+      "sha256": "6bc53810a2ca41e1dff1cc962273243e2d5ea13043da6aa3bfe3bb9791e64cab",
+      "graph_sha256": "c952d8d5bb04bbf885d5dedd310f5b5558b5aa5a0835a32bb3e3b30afe4f84da",
+      "schedule_sha256": "b03862a3a4bdb76c5fc64d83e53b13c3bb321a4a398493193d5bd95edb927c6d",
+      "tile_sha256": "9ffc8a0064936cf71cfd9af6f8ac5b437af0421d6cefc057832917d16ce27fa2",
+      "target_sha256": "5cdb374af511898a10f26f41757821bf1dba0b645c319ccaf5ee5a636621dd20"
+    }
+  ],
+  "rows": [
+    {
+      "backward": false,
+      "shape": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        8,
+        6
+      ],
+      "image_sha256": "3a17c4994765eb0e361856600885e2423d35142ddbb683d4eb2ce86d1bc646b0",
+      "max_abs_error": 7.551537367644912e-09,
+      "device_window_samples_ms": [
+        0.01020895018435941,
+        0.009382336446554354,
+        0.00953441563219127,
+        0.010176316346272384,
+        0.011301702792101567
+      ],
+      "device_window_median_ms": 0.010176316346272384,
+      "completed_launch_host_samples_ms": [
+        0.010578059775773252,
+        0.00975141589907874,
+        0.00990428708235521,
+        0.010472811680139587,
+        0.011718485015674983
+      ],
+      "completed_launch_host_median_ms": 0.010472811680139587
+    },
+    {
+      "backward": false,
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        8,
+        6
+      ],
+      "image_sha256": "3a17c4994765eb0e361856600885e2423d35142ddbb683d4eb2ce86d1bc646b0",
+      "max_abs_error": 7.428807480280852e-08,
+      "device_window_samples_ms": [
+        0.025070256525927252,
+        0.010120237227713708,
+        0.011638495001462426,
+        0.010039445197228158,
+        0.009590495340894945
+      ],
+      "device_window_median_ms": 0.010120237227713708,
+      "completed_launch_host_samples_ms": [
+        0.02537924729490487,
+        0.010511178597070204,
+        0.011944029904385605,
+        0.010340435932952873,
+        0.009884871081402987
+      ],
+      "completed_launch_host_median_ms": 0.010511178597070204
+    },
+    {
+      "backward": false,
+      "shape": [
+        1,
+        2,
+        1,
+        9,
+        11,
+        8,
+        6
+      ],
+      "image_sha256": "3a17c4994765eb0e361856600885e2423d35142ddbb683d4eb2ce86d1bc646b0",
+      "max_abs_error": 3.018332361826026e-07,
+      "device_window_samples_ms": [
+        0.012254416352451438,
+        0.012380831312425065,
+        0.012461623342910616,
+        0.011554535072628814,
+        0.011028910627459535
+      ],
+      "device_window_median_ms": 0.012254416352451438,
+      "completed_launch_host_samples_ms": [
+        0.01255968311285176,
+        0.012727267579129427,
+        0.01278513867297385,
+        0.011843435540057646,
+        0.011503425574317426
+      ],
+      "completed_launch_host_median_ms": 0.01255968311285176
+    },
+    {
+      "backward": false,
+      "shape": [
+        1,
+        2,
+        1,
+        9,
+        1,
+        8,
+        6
+      ],
+      "image_sha256": "3a17c4994765eb0e361856600885e2423d35142ddbb683d4eb2ce86d1bc646b0",
+      "max_abs_error": 3.0144017004740675e-09,
+      "device_window_samples_ms": [
+        0.01036863397843767,
+        0.040310179833138345,
+        0.009504000149150886,
+        0.009777425539375531,
+        0.00978883186189255
+      ],
+      "device_window_median_ms": 0.00978883186189255,
+      "completed_launch_host_samples_ms": [
+        0.010661436198740312,
+        0.04058705970165458,
+        0.009803890969862443,
+        0.010080524319137382,
+        0.010281128665930268
+      ],
+      "completed_launch_host_median_ms": 0.010281128665930268
+    },
+    {
+      "backward": false,
+      "shape": [
+        1,
+        2,
+        1,
+        1,
+        11,
+        8,
+        6
+      ],
+      "image_sha256": "3a17c4994765eb0e361856600885e2423d35142ddbb683d4eb2ce86d1bc646b0",
+      "max_abs_error": 2.308925370897441e-07,
+      "device_window_samples_ms": [
+        0.011841901458135925,
+        0.012084277549592575,
+        0.012414732781967313,
+        0.011628039992681824,
+        0.01278479264514281
+      ],
+      "device_window_median_ms": 0.012084277549592575,
+      "completed_launch_host_samples_ms": [
+        0.012334138800454612,
+        0.01239106935070883,
+        0.01272485167304478,
+        0.01194373252663282,
+        0.013277524768716038
+      ],
+      "completed_launch_host_median_ms": 0.01239106935070883
+    },
+    {
+      "backward": false,
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        8,
+        6
+      ],
+      "image_sha256": "3a17c4994765eb0e361856600885e2423d35142ddbb683d4eb2ce86d1bc646b0",
+      "max_abs_error": 1.5213759585464004e-07,
+      "device_window_samples_ms": [
+        0.010030257819902778,
+        0.01030400011799123,
+        0.00980403989848524,
+        0.011195247716242723,
+        0.009584158363908824
+      ],
+      "device_window_median_ms": 0.010030257819902778,
+      "completed_launch_host_samples_ms": [
+        0.010410534669783447,
+        0.01062469333318053,
+        0.009992702790342345,
+        0.011507693175595291,
+        0.009888148576131846
+      ],
+      "completed_launch_host_median_ms": 0.010410534669783447
+    },
+    {
+      "backward": true,
+      "shape": [
+        1,
+        2,
+        1,
+        1,
+        1,
+        8,
+        6
+      ],
+      "image_sha256": "6bc53810a2ca41e1dff1cc962273243e2d5ea13043da6aa3bfe3bb9791e64cab",
+      "max_abs_error": 1.1641532182693481e-08,
+      "device_window_samples_ms": [
+        0.010891723160696502,
+        0.010619564811782082,
+        0.010157624093612821,
+        0.012808554243333268,
+        0.009640871298195111
+      ],
+      "device_window_median_ms": 0.010619564811782082,
+      "completed_launch_host_samples_ms": [
+        0.011470851184117913,
+        0.010914504666360889,
+        0.010550435342005279,
+        0.013118821869392207,
+        0.009961811811801526
+      ],
+      "completed_launch_host_median_ms": 0.010914504666360889
+    },
+    {
+      "backward": true,
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        8,
+        6
+      ],
+      "image_sha256": "6bc53810a2ca41e1dff1cc962273243e2d5ea13043da6aa3bfe3bb9791e64cab",
+      "max_abs_error": 2.924115255487081e-08,
+      "device_window_samples_ms": [
+        0.012785425280580427,
+        0.012959683295523767,
+        0.012492039416095998,
+        0.011667009627464975,
+        0.011809267620048901
+      ],
+      "device_window_median_ms": 0.012492039416095998,
+      "completed_launch_host_samples_ms": [
+        0.013228623994100507,
+        0.013277831367484413,
+        0.01278266340660134,
+        0.012229297005820393,
+        0.012184435612346866
+      ],
+      "completed_launch_host_median_ms": 0.01278266340660134
+    },
+    {
+      "backward": true,
+      "shape": [
+        1,
+        2,
+        1,
+        9,
+        11,
+        8,
+        6
+      ],
+      "image_sha256": "6bc53810a2ca41e1dff1cc962273243e2d5ea13043da6aa3bfe3bb9791e64cab",
+      "max_abs_error": 3.5061860359508756e-08,
+      "device_window_samples_ms": [
+        0.020843406715015375,
+        0.020753742444633256,
+        0.02076261350423983,
+        0.02075025822856639,
+        0.020738216910031762
+      ],
+      "device_window_median_ms": 0.020753742444633256,
+      "completed_launch_host_samples_ms": [
+        0.021136514519774677,
+        0.021106524895507805,
+        0.02120226727669487,
+        0.021052455741653937,
+        0.021071970292210283
+      ],
+      "completed_launch_host_median_ms": 0.021106524895507805
+    },
+    {
+      "backward": true,
+      "shape": [
+        1,
+        2,
+        1,
+        9,
+        1,
+        8,
+        6
+      ],
+      "image_sha256": "6bc53810a2ca41e1dff1cc962273243e2d5ea13043da6aa3bfe3bb9791e64cab",
+      "max_abs_error": 8.009374141693115e-08,
+      "device_window_samples_ms": [
+        0.021114930067912187,
+        0.02079492984431805,
+        0.020954613638396312,
+        0.020921029666862864,
+        0.02091310992099271
+      ],
+      "device_window_median_ms": 0.020921029666862864,
+      "completed_launch_host_samples_ms": [
+        0.02148445513523599,
+        0.021117108892464993,
+        0.02130771304785025,
+        0.021243059320725722,
+        0.021227604322282986
+      ],
+      "completed_launch_host_median_ms": 0.021243059320725722
+    },
+    {
+      "backward": true,
+      "shape": [
+        1,
+        2,
+        1,
+        1,
+        11,
+        8,
+        6
+      ],
+      "image_sha256": "6bc53810a2ca41e1dff1cc962273243e2d5ea13043da6aa3bfe3bb9791e64cab",
+      "max_abs_error": 9.422272670422949e-09,
+      "device_window_samples_ms": [
+        0.012104554931716164,
+        0.012372910386264915,
+        0.011374257578708158,
+        0.011933464815120885,
+        0.011947088902539546
+      ],
+      "device_window_median_ms": 0.011947088902539546,
+      "completed_launch_host_samples_ms": [
+        0.012462653823676381,
+        0.012701376119978947,
+        0.011691653589247772,
+        0.012238108838843827,
+        0.0123925643078614
+      ],
+      "completed_launch_host_median_ms": 0.0123925643078614
+    },
+    {
+      "backward": true,
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        4,
+        8,
+        6
+      ],
+      "image_sha256": "6bc53810a2ca41e1dff1cc962273243e2d5ea13043da6aa3bfe3bb9791e64cab",
+      "max_abs_error": 3.624928840428865e-08,
+      "device_window_samples_ms": [
+        0.01332182223253911,
+        0.012788910676937291,
+        0.011830495135618908,
+        0.011957545091610143,
+        0.011235168664762289
+      ],
+      "device_window_median_ms": 0.011957545091610143,
+      "completed_launch_host_samples_ms": [
+        0.013638128720150135,
+        0.013081980454228303,
+        0.012145326403661234,
+        0.012533455086632235,
+        0.01163411848615892
+      ],
+      "completed_launch_host_median_ms": 0.012533455086632235
+    }
+  ],
+  "compiler_sha256": "895622f99b94d875fc0119e167cd79c7787983800a5ded10ce1437c673691919",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_bounded_attention_images.py": "4d85a4d637d39085fbad6e780d7ade185ad2dce20ae7132e6fe7bce1a51cee3a",
+    "tests/unit/test_bounded_attention_checkpoint.py": "3015e27e6b0fe4b5e5d117f89025c9cf703effb1363e3671a774c3e9a3c8bd81",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "24f8fa87286231d4b355c6603768fe08529a98aa38f5e95bf0b4c5d2d2f7a8b6",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "04cdecea15d8dc34aac6e767ab350863aaff6c167032c50b3e17b7669c8f448c",
+    "tests/device/nvidia/test_lse_checkpoint_native.py": "97a67278f906cf8746755844a3dc1d2edf09128a19639cb7ddc970bbc15c6495"
+  },
+  "scope": "Native checkpoint Graph/Schedule/Tile image only. Raw driver test harness; public JIT, checked package ABI and paired residual ownership integration remain pending. Event windows include driver submission gaps, not isolated kernel timing. No speedup claim."
+}

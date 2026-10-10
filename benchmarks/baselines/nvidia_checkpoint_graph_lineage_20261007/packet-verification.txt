@@ -1,0 +1,1 @@
+Verified 48 arms, 240 event windows and 240 wall windows. All source/core/NVIDIA compiler/native runtime SHA256 hashes match measured checkout. Each arm has five independent oracle-checked windows in each timing domain and complete Graph/Schedule/Tile/Target digests.

@@ -1,0 +1,10 @@
+{
+  "python/tessera/compiler/jit.py": "bbdc8438ade1d11e1fe842a24c1632a42a27f80a6185d1abaf2d440aea89aa0a",
+  "python/tessera/compiler/native_vmap.py": "808f14ab8523d93f96d1f5515e998af99ad5c03c22c03a6910040c1f8084b240",
+  "python/tessera/compiler/rocm_typed_scaled_native.py": "1efb15a13b7768b7914642b3954cc0cbd3d8f72fdf027c6d2172fcf16ce6e5eb",
+  "python/tessera/compiler/native_vjp_plugins.py": "dd032662e338c5c71ff11c20bf83573ed2e35f8dfaacdf4e9dd996e64b779de5",
+  "benchmarks/rocm/benchmark_native_scaled_vjp.py": "8d8adbdb2a27e67df75a88996e32e49df2ff4c86351a86444e63fd8ff5178ba0",
+  "tests/unit/test_rocm_independent_scaled_batch.py": "060265d909d98071083f63b2ecb9600834fc555d8c5dc7df5e319ba3cf10d522",
+  "tests/unit/test_native_typed_scaled_vmap.py": "77734168ab9e23b1f481de0950b36041987c1e8cddb177ff0b67d7fbe0d28903",
+  "tests/unit/test_native_nested_typed_vmap.py": "598de5dd79d89df847ee2ed9aa535ee7db5e5375a1705360dcdaaab47783b171"
+}

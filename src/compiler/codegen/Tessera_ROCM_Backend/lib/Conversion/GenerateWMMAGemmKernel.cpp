@@ -44,6 +44,9 @@
 #include <algorithm>
 #include "TesseraROCM/Passes.h"
 #include "ROCMPhysicalWMMAPanel.h"
+#include "ROCMFoldedW4A8Contract.h"
+#include "Tessera/IR/ScaledBatchContract.h"
+#include "ROCMNativeProgramMember.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "Tessera/Dialect/Tile/TileEpilogue.h"
 #include "TesseraROCMDialect.h.inc"
@@ -59,6 +62,7 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/BuiltinTypes.h"
+#include "mlir/IR/IRMapping.h"
 #include "mlir/Pass/Pass.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringExtras.h"
@@ -139,6 +143,10 @@ struct WmmaGemmRequest {
   // Populated only by the canonical Schedule -> Tile consumer.  These are
   // static problem extents, never a substitute for dynamic leading dimensions.
   int64_t staticM = 0, staticN = 0, staticK = 0;
+  bool runtimeMN = false, runtimeK = false, wholeM = false, wholeN = false;
+  bool foldedFullK = false, foldedWaveGuard = false, foldedVectorScales = false;
+  bool foldedCuMode = false, foldedPacked = false;
+  int64_t foldedPrefetch = 0;
   std::string rasterOrder = "row_major";
   int64_t rasterGroup = 1;
   // ROCM-MACRO-K-TILE-1: the descriptor's `k_blocks`. Arrives here rather than
@@ -156,6 +164,7 @@ struct WmmaGemmRequest {
   // A, B, lhs_scale, rhs_scale, D, M, N, K ABI.
   int64_t scaleK = 0;
   int64_t scaleN = 0;
+  std::string scaleFormat = "fp32";
   // The weight arrives [N, K] (the `_nk` contract) rather than [K, N].
   bool bTransposed = false;
   // ROCM-FP8-BLOCKSCALE-1 large-M body: the carrier's physical schedule.
@@ -166,6 +175,106 @@ struct WmmaGemmRequest {
   int64_t warps = 1;
   int64_t pipelineDepth = 1;
 };
+
+// One workgroup-z plane owns one logical batch. Views preserve all batch
+// offsets through fragment loads, scale loads and accumulator stores.
+static void applyScaledBatchViews(OpBuilder &b, Location loc, gpu::GPUFuncOp fn,
+    int64_t scaleK, int64_t scaleN, Value M, Value N, Value K,
+    Value &A, Value &B, Value &SA, Value &SB, Value &D) {
+  auto policy = fn->getAttrOfType<StringAttr>("tessera.rocm.batching");
+  if (!policy) return;
+  Value batch = gpu::BlockIdOp::create(b, loc, gpu::Dimension::z);
+  auto ci = [&](int64_t v) { return Value(arith::ConstantIndexOp::create(b, loc, v)); };
+  auto mul = [&](Value x, Value y) { return Value(arith::MulIOp::create(b, loc, x, y)); };
+  if (policy.getValue() == "broadcast") {
+    auto types = fn->getAttrOfType<ArrayAttr>("tessera.rocm.batch_operands");
+    auto result = cast<RankedTensorType>(
+        fn->getAttrOfType<TypeAttr>("tessera.rocm.batch_result").getValue());
+    auto prefix = result.getShape().drop_back(2);
+    auto view = [&](Value base, RankedTensorType logical) -> Value {
+      Value plane = ci(0);
+      int64_t own = logical.getRank() - 2;
+      int64_t sourceStride = 1;
+      for (int64_t axis = own - 1; axis >= 0; --axis) {
+        int64_t outputAxis = int64_t(prefix.size()) - own + axis;
+        int64_t outputStride = 1;
+        for (int64_t next = outputAxis + 1; next < int64_t(prefix.size()); ++next)
+          outputStride *= prefix[next];
+        if (logical.getDimSize(axis) != 1) {
+          Value coordinate = arith::RemUIOp::create(b, loc,
+              arith::DivUIOp::create(b, loc, batch, ci(outputStride)),
+              ci(prefix[outputAxis]));
+          plane = arith::AddIOp::create(b, loc, plane, mul(coordinate, ci(sourceStride)));
+        }
+        sourceStride *= logical.getDimSize(axis);
+      }
+      int64_t elements = logical.getDimSize(own) * logical.getDimSize(own + 1);
+      auto type = cast<MemRefType>(base.getType());
+      auto sliced = MemRefType::get({ShapedType::kDynamic}, type.getElementType(),
+          StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic, {1}),
+          type.getMemorySpace());
+      return memref::ReinterpretCastOp::create(b, loc, sliced, base,
+          OpFoldResult(mul(plane, ci(elements))), ArrayRef<OpFoldResult>{ci(elements)},
+          ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+    };
+    A = view(A, cast<RankedTensorType>(cast<TypeAttr>(types[0]).getValue()));
+    B = view(B, cast<RankedTensorType>(cast<TypeAttr>(types[1]).getValue()));
+    SA = view(SA, cast<RankedTensorType>(cast<TypeAttr>(types[2]).getValue()));
+    SB = view(SB, cast<RankedTensorType>(cast<TypeAttr>(types[3]).getValue()));
+    D = view(D, result);
+    return;
+  }
+  Value groups = arith::DivUIOp::create(b, loc, K, ci(scaleK));
+  Value columns = arith::DivUIOp::create(b, loc,
+      arith::AddIOp::create(b, loc, N, ci(scaleN - 1)), ci(scaleN));
+  auto view = [&](Value base, Value count) -> Value {
+    auto type = cast<MemRefType>(base.getType());
+    auto sliced = MemRefType::get({ShapedType::kDynamic}, type.getElementType(),
+        StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic, {1}),
+        type.getMemorySpace());
+    return memref::ReinterpretCastOp::create(b, loc, sliced, base,
+        OpFoldResult(mul(batch, count)), ArrayRef<OpFoldResult>{count},
+        ArrayRef<OpFoldResult>{b.getIndexAttr(1)});
+  };
+  if (policy.getValue() == "independent_rhs") {
+    A = view(A, mul(M, K)); SA = view(SA, mul(M, groups));
+  }
+  B = view(B, mul(K, N)); SB = view(SB, mul(groups, columns));
+  D = view(D, mul(M, N));
+}
+
+// Keep one runtime-shape image while exposing common short-K trip counts to
+// native optimization. K is a uniform checked kernel argument, so every lane
+// takes the same branch. Clone the actual generated body, preserving its
+// accumulation order, masks and argument ownership; other K uses the original.
+void specializeShortScaledK(gpu::GPUFuncOp fn) {
+  Block &body = fn.getBody().front();
+  SmallVector<Operation *> original;
+  for (Operation &op : body.without_terminator())
+    original.push_back(&op);
+  Value runtimeK = fn.getArgument(7);
+  Location loc = fn.getLoc();
+  OpBuilder dispatch = OpBuilder::atBlockBegin(&body);
+  auto clone = [&](OpBuilder &b, int64_t k) {
+    IRMapping mapping;
+    if (k)
+      mapping.map(runtimeK, arith::ConstantIndexOp::create(b, loc, k));
+    for (Operation *op : original)
+      b.clone(*op, mapping);
+  };
+  for (int64_t k : {1024, 1536, 2048}) {
+    Value fixedK = arith::ConstantIndexOp::create(dispatch, loc, k);
+    Value selected = arith::CmpIOp::create(
+        dispatch, loc, arith::CmpIPredicate::eq, runtimeK, fixedK);
+    auto branch = scf::IfOp::create(dispatch, loc, TypeRange{}, selected, true);
+    OpBuilder thenBuilder = OpBuilder::atBlockBegin(&branch.getThenRegion().front());
+    clone(thenBuilder, k);
+    dispatch = OpBuilder::atBlockBegin(&branch.getElseRegion().front());
+  }
+  clone(dispatch, 0);
+  for (Operation *op : llvm::reverse(original))
+    op->erase();
+}
 
 // Emit the problem-size-generic, register-blocked (mt x nt) WMMA GEMM body into
 // `gpuFunc` (args: A, B, D : memref<?>, M, N, K : index), for the dtype in `T`.
@@ -181,13 +290,17 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                      int64_t kUnroll = 1, int64_t schedGroups = 0,
                      int64_t splitK = 1, int64_t sliceK = 0,
                      int64_t scaleK = 0, int64_t scaleN = 0,
-                     bool bTransposed = false, int64_t scaleGroupPanels = 0) {
+                     bool bTransposed = false, int64_t scaleGroupPanels = 0,
+                     StringRef scaleFormat = "fp32") {
   b.setInsertionPointToStart(&gpuFunc.getBody().front());
   Value A = gpuFunc.getArgument(0);
   Value B = gpuFunc.getArgument(1);
   // ROCM-FP8-BLOCKSCALE-1: a block-scaled body takes (A, B, lhs_scale,
   // rhs_scale, D, M, N, K); the caller admits it on the typed route only.
   const bool scaled = scaleK > 0;
+  auto aOrientation = gpuFunc->getAttrOfType<BoolAttr>("tessera.rocm.transposeA");
+  const bool aTransposed = aOrientation && aOrientation.getValue();
+  const bool partialScaleGroup = scaled && staticK > 0 && staticK % scaleK != 0;
   Value lhsScale = scaled ? gpuFunc.getArgument(2) : Value();
   Value rhsScale = scaled ? gpuFunc.getArgument(3) : Value();
   // Preserve the portable Tile ABI (A, B, bias, D, M, N, K). The legacy
@@ -197,6 +310,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value M = gpuFunc.getArgument(dIndex + 1);
   Value N = gpuFunc.getArgument(dIndex + 2);
   Value K = gpuFunc.getArgument(dIndex + 3);
+  if (scaled)
+    applyScaledBatchViews(b, loc, gpuFunc, scaleK, scaleN, M, N, K,
+                          A, B, lhsScale, rhsScale, D);
   // Fused-epilogue bias is the trailing memref arg (length N), present only when
   // `hasBias`. Only float dtypes reach the epilogue (gated at the pass level).
   Value bias = hasBias
@@ -213,6 +329,28 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
   Value c4 = b.create<arith::ConstantIndexOp>(loc, 4);
   Value c15 = b.create<arith::ConstantIndexOp>(loc, 15);
   Value c16 = b.create<arith::ConstantIndexOp>(loc, 16);
+
+  // The checked blockscale ABI admits positive dimensions and whole scale
+  // groups. Preserve those facts in a shape-free register image: otherwise
+  // LLVM sees arbitrary signed dimensions/strides after Target projection.
+  // K128 projection benefits from these facts. K32 profiles retain the
+  // original body: interleaved gfx1201 measurements found a regression for
+  // full-row K32 FP8 and MXFP8 when applying this transform indiscriminately.
+  // This does not truncate an extent or change the group's numeric order.
+  if (scaled && staticK == 0 && scaleK == 128) {
+    Value valid = b.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::sgt, M, c0);
+    for (Value extent : {N, K})
+      valid = b.create<arith::AndIOp>(
+          loc, valid, b.create<arith::CmpIOp>(
+              loc, arith::CmpIPredicate::sgt, extent, c0));
+    Value groupWidth = b.create<arith::ConstantIndexOp>(loc, scaleK);
+    Value aligned = b.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::eq,
+        b.create<arith::RemUIOp>(loc, K, groupWidth), c0);
+    b.create<LLVM::AssumeOp>(
+        loc, b.create<arith::AndIOp>(loc, valid, aligned));
+  }
 
   // Zero constants: a scalar store-element zero (per-element masking), the
   // loaded-fragment zero (edge select / masked-build init), and the accumulator
@@ -581,9 +719,11 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       Value linearBase = materializeComposedBases
                              ? materializeBase(bb, l, aLayout, arM[mi], k0)
                              : bb.create<arith::AddIOp>(l, arK[mi], k0);
-      Value view =
-          makeTileView(bb, l, A, rowOrigin[mi], k0, linearBase, M, K, K,
-                       bounded, aTileLayout);
+      if (aTransposed)
+        linearBase = *tessera::tile::materializeLinearIndex(bb, l, arM[mi], k0, M, "col_major");
+      Value view = makeTileView(bb, l, A, rowOrigin[mi], k0, linearBase, M, K,
+          aTransposed ? M : K, bounded || partialScaleGroup, aTileLayout,
+          aTransposed ? dynamicColMajor : dynamicRowMajor);
       af[mi] = packFragment(bb, l, view, aFragmentTy);
     }
     for (int64_t ni = 0; ni < nt; ++ni) {
@@ -603,9 +743,9 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
       Value view =
           bTransposed
               ? makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, K,
-                             bounded, bTileLayout, dynamicColMajor)
+                             bounded || partialScaleGroup, bTileLayout, dynamicColMajor)
               : makeTileView(bb, l, B, k0, colOrigin[ni], linearBase, K, N, N,
-                             bounded, bTileLayout);
+                             bounded || partialScaleGroup, bTileLayout);
       bf[ni] = packFragment(bb, l, view, bFragmentTy);
     }
     SmallVector<Value> next(mt * nt);
@@ -868,7 +1008,11 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
     const int64_t iterationPanels = std::max<int64_t>(kUnroll, 1) * blocks;
     const int64_t groupsPerIteration = iterationPanels / groupPanels;
     Value cScaleK = rb.create<arith::ConstantIndexOp>(loc, scaleK);
-    Value groups = rb.create<arith::DivUIOp>(loc, K, cScaleK);
+    Value groups = partialScaleGroup
+        ? Value(rb.create<arith::AddIOp>(loc,
+            rb.create<arith::DivUIOp>(loc, rb.create<arith::SubIOp>(loc, K, rb.create<arith::ConstantIndexOp>(loc, 1)), cScaleK),
+            rb.create<arith::ConstantIndexOp>(loc, 1)))
+        : Value(rb.create<arith::DivUIOp>(loc, K, cScaleK));
     Value kGroupsEnd = rb.create<arith::MulIOp>(loc, groups, cScaleK);
     auto oneGroup = [&](OpBuilder &bb, Location l, Value kStart,
                         ValueRange accs) -> SmallVector<Value> {
@@ -926,6 +1070,7 @@ void emitGeneralBody(OpBuilder &b, Location loc, gpu::GPUFuncOp gpuFunc,
                             group, groups, M, N});
           join.addTypes(accFragmentTy);
           join.addAttribute("scale_n", bb.getI64IntegerAttr(scaleN));
+          join.addAttribute("scale_format", bb.getStringAttr(scaleFormat));
           joined[mi * nt + ni] = bb.create(join)->getResult(0);
         }
       return joined;
@@ -1849,7 +1994,14 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                                 int64_t scaleK, int64_t scaleN, int64_t stageK,
                                 int64_t padBytes, int64_t prefetch,
                                 StringRef rasterOrder, int64_t rasterGroup,
-                                Type outputType) {
+                                Type outputType, bool runtimeMN = false,
+                                bool wholeMContract = false,
+                                bool wholeNContract = false,
+                                bool runtimeK = false,
+                                bool foldedFullK = false,
+                                bool foldedWaveGuard = false,
+                                bool foldedVectorScales = false,
+                                StringRef scaleFormat = "fp32", bool foldedPacked = false) {
   MLIRContext *ctx = b.getContext();
   const int64_t wgM = wavesM * mt * 16, wgN = wavesN * nt * 16;
   const int64_t nthreads = wavesM * wavesN * 32;
@@ -1888,10 +2040,25 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   Value M = gpuFunc.getArgument(5);
   Value N = gpuFunc.getArgument(6);
   Value K = gpuFunc.getArgument(7);
+  applyScaledBatchViews(b, loc, gpuFunc, scaleK, scaleN, M, N, K,
+                        A, B, lhsScale, rhsScale, D);
   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+  Value packedScalePlane = rhsScale;
+  if (foldedPacked) {
+    Value refOffset = b.create<arith::MulIOp>(
+        loc, b.create<arith::DivUIOp>(loc, K, ci(32)), N);
+    auto referenceType = MemRefType::get(
+        {ShapedType::kDynamic}, b.getI8Type(),
+        StridedLayoutAttr::get(b.getContext(), ShapedType::kDynamic, {ShapedType::kDynamic}));
+    rhsScale = b.create<memref::ReinterpretCastOp>(
+        loc, referenceType, rhsScale, refOffset, ValueRange{N},
+        ValueRange{ci(1)});
+    gpuFunc->setAttr("tessera.rocm.packed_folded_decode", b.getStringAttr("integer_rne_v1"));
+  }
   Value c0 = ci(0), c32 = ci(32);
   Value cStride = ci(ldsStride);
-  const bool wholeM = staticM % wgM == 0, wholeN = staticN % wgN == 0;
+  const bool wholeM = runtimeMN ? wholeMContract : staticM % wgM == 0;
+  const bool wholeN = runtimeMN ? wholeNContract : staticN % wgN == 0;
 
   Value tx = b.create<gpu::ThreadIdOp>(loc, gpu::Dimension::x);
   Value waveId = b.create<arith::DivUIOp>(loc, tx, c32);
@@ -1903,10 +2070,16 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   Value bidY = b.create<gpu::BlockIdOp>(loc, gpu::Dimension::y);
   Value tileM = bidY, tileN = bidX;
   if (rasterOrder != "row_major") {
-    Value gridM = ci((staticM + wgM - 1) / wgM);
-    Value gridN = ci((staticN + wgN - 1) / wgN);
-    Value flat = b.create<arith::AddIOp>(
-        loc, b.create<arith::MulIOp>(loc, bidY, gridN), bidX);
+    auto gridExtent = [&](Value extent, int64_t fixed, int64_t tile) -> Value {
+      if (!runtimeMN)
+        return ci((fixed + tile - 1) / tile);
+      return b.create<arith::DivUIOp>(
+          loc, b.create<arith::AddIOp>(loc, extent, ci(tile - 1)), ci(tile));
+    };
+    Value gridM = gridExtent(M, staticM, wgM);
+    Value gridN = gridExtent(N, staticN, wgN);
+    Value flat = foldedFullK ? bidX : Value(b.create<arith::AddIOp>(
+        loc, b.create<arith::MulIOp>(loc, bidY, gridN), bidX));
     if (rasterOrder == "column_major") {
       tileM = b.create<arith::RemUIOp>(loc, flat, gridM);
       tileN = b.create<arith::DivUIOp>(loc, flat, gridM);
@@ -2000,13 +2173,24 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     int64_t bufElems;
     SmallVector<Value> rowBase;  // (row*K + kVec) in global elements
     SmallVector<Value> ldsDst;   // row*stride + kVec in LDS elements
+    SmallVector<Value> active;   // optional mask for a partial copy round
+    SmallVector<Value> globalRows, kVectors;
+    bool packed = false;
   };
   auto planCopy = [&](Value src, Value dst, int64_t rows, Value origin,
                       Value bound, bool whole) {
-    CopyPlan plan{src, dst, rows * ldsStride, {}, {}};
-    const int64_t trips = rows * vecsPerRow / nthreads;
+    CopyPlan plan{src, dst, rows * ldsStride, {}, {}, {}, {}, {}, false};
+    const int64_t vectors = rows * vecsPerRow;
+    const int64_t trips = (vectors + nthreads - 1) / nthreads;
     for (int64_t i = 0; i < trips; ++i) {
       Value e = b.create<arith::AddIOp>(loc, tx, ci(i * nthreads));
+      // A narrow slab can have fewer vectors than threads. Only its final
+      // round needs a mask; the ordinary evenly divided copy emits exactly
+      // the prior IR. Every workgroup barrier remains outside this mask.
+      plan.active.push_back((i + 1) * nthreads > vectors
+          ? Value(b.create<arith::CmpIOp>(
+                loc, arith::CmpIPredicate::ult, e, ci(vectors)))
+          : Value());
       Value row = b.create<arith::DivUIOp>(loc, e, ci(vecsPerRow));
       Value kVec = b.create<arith::MulIOp>(
           loc, b.create<arith::RemUIOp>(loc, e, ci(vecsPerRow)), ci(vecW));
@@ -2021,6 +2205,8 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
         gr = b.create<arith::MinUIOp>(
             loc, gr, b.create<arith::SubIOp>(loc, bound, ci(1)));
       }
+      plan.globalRows.push_back(gr);
+      plan.kVectors.push_back(kVec);
       plan.rowBase.push_back(b.create<arith::AddIOp>(
           loc, b.create<arith::MulIOp>(loc, gr, K), kVec));
       plan.ldsDst.push_back(b.create<arith::AddIOp>(
@@ -2030,15 +2216,122 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   };
   CopyPlan planA = planCopy(A, ldsA, wgM, baseRow, M, wholeM);
   CopyPlan planB = planCopy(B, ldsB, wgN, baseCol, N, wholeN);
+  planB.packed = foldedPacked;
   const llvm::MaybeAlign align16(16);
 
   auto issue = [&](OpBuilder &kb, Location l, const CopyPlan &plan, Value k0) {
     SmallVector<Value> vals;
     for (size_t i = 0; i < plan.rowBase.size(); ++i) {
       Value idx = kb.create<arith::AddIOp>(l, plan.rowBase[i], k0);
-      vals.push_back(kb.create<vector::LoadOp>(l, vecTy, plan.src,
-                                               ValueRange{idx},
-                                               /*nontemporal=*/false, align16));
+      auto load = [&]() -> Value {
+        if (plan.packed) {
+          auto c32i = [&](int64_t x) -> Value { return kb.create<arith::ConstantIntOp>(l, x, 32); };
+          Value row = plan.globalRows[i];
+          Value kk = kb.create<arith::AddIOp>(l, plan.kVectors[i], k0);
+          Value group = kb.create<arith::DivUIOp>(l, kk, ci(32));
+          Value scaleIndex = kb.create<arith::AddIOp>(
+              l, kb.create<arith::MulIOp>(l, group, N), row);
+          Value rawScale = kb.create<memref::LoadOp>(l, packedScalePlane, ValueRange{scaleIndex});
+          Value rawRef = kb.create<memref::LoadOp>(l, rhsScale, ValueRange{row});
+          Value scale = kb.create<arith::ExtUIOp>(l, kb.getI32Type(), rawScale);
+          Value reference = kb.create<arith::ExtUIOp>(l, kb.getI32Type(), rawRef);
+          Value delta = kb.create<arith::MinUIOp>(
+              l, kb.create<arith::SubIOp>(l, reference, scale), c32i(13));
+          // Fragment-order bytes: [N/16,K/16,2,16,4]. Two four-byte
+          // halves contain sixteen low/high-nibble E2M1 values for this row.
+          Value tile = kb.create<arith::AddIOp>(
+              l, kb.create<arith::MulIOp>(
+                  l, kb.create<arith::DivUIOp>(l, row, ci(16)),
+                  kb.create<arith::DivUIOp>(l, K, ci(16))),
+              kb.create<arith::DivUIOp>(l, kk, ci(16)));
+          Value packedBase = kb.create<arith::AddIOp>(
+              l, kb.create<arith::MulIOp>(l, tile, ci(128)),
+              kb.create<arith::MulIOp>(
+                  l, kb.create<arith::RemUIOp>(l, row, ci(16)), ci(4)));
+          SmallVector<Value> bytes;
+          for (int j = 0; j < 8; ++j) {
+            Value address = kb.create<arith::AddIOp>(l, packedBase, ci((j / 4) * 64 + j % 4));
+            Value byte = kb.create<memref::LoadOp>(l, plan.src, ValueRange{address});
+            bytes.push_back(kb.create<arith::ExtUIOp>(l, kb.getI32Type(), byte));
+          }
+          // Select one eight-byte magnitude table per K32 scale group,
+          // then share it across all sixteen nibbles. The table encodes
+          // E2M1 * 2^-delta rounded to E4M3 nearest/even, including subnormals.
+          // Keeping rounding here in the native materializer avoids repeating
+          // its integer expression for each nibble in the staged vector.
+          Value magnitudeWord = kb.create<arith::ConstantIntOp>(l, 0, 64);
+          constexpr int bases[8] = {0, 0x30, 0x38, 0x3c, 0x40, 0x44, 0x48, 0x4c};
+          constexpr int units[8] = {0, 1, 2, 3, 4, 6, 8, 12};
+          for (int d = 0; d < 13; ++d) {
+            uint64_t word = 0;
+            for (int magnitude = 1; magnitude < 8; ++magnitude) {
+              int normal = bases[magnitude] - d * 8;
+              int value = normal;
+              if (normal < 8) {
+                if (d <= 8) {
+                  value = units[magnitude] << (8 - d);
+                } else {
+                  int shift = d - 8;
+                  int quotient = units[magnitude] >> shift;
+                  int remainder = units[magnitude] & ((1 << shift) - 1);
+                  int half = 1 << (shift - 1);
+                  value = quotient + (remainder > half ||
+                                      (remainder == half && (quotient & 1)));
+                }
+              }
+              word |= uint64_t(value) << (magnitude * 8);
+            }
+            Value table = kb.create<arith::ConstantIntOp>(l, static_cast<int64_t>(word), 64);
+            magnitudeWord = kb.create<arith::SelectOp>(
+                l, kb.create<arith::CmpIOp>(l, arith::CmpIPredicate::eq, delta, c32i(d)),
+                table, magnitudeWord);
+          }
+          Value result = kb.create<arith::ConstantOp>(l, vecTy, kb.getZeroAttr(vecTy));
+          for (int j = 0; j < 16; ++j) {
+            Value code = kb.create<arith::AndIOp>(
+                l, kb.create<arith::ShRUIOp>(l, bytes[j / 2], c32i((j % 2) * 4)), c32i(15));
+            Value magnitude = kb.create<arith::AndIOp>(l, code, c32i(7));
+            Value shift = kb.create<arith::ExtUIOp>(
+                l, kb.getI64Type(), kb.create<arith::MulIOp>(l, magnitude, c32i(8)));
+            Value value = kb.create<arith::TruncIOp>(
+                l, kb.getI32Type(), kb.create<arith::AndIOp>(
+                    l, kb.create<arith::ShRUIOp>(l, magnitudeWord, shift),
+                    kb.create<arith::ConstantIntOp>(l, 255, 64)));
+            Value sign = kb.create<arith::ShLIOp>(
+                l, kb.create<arith::AndIOp>(l, code, c32i(8)), c32i(4));
+            value = kb.create<arith::OrIOp>(l, value, sign);
+            value = kb.create<arith::SelectOp>(
+                l, kb.create<arith::CmpIOp>(l, arith::CmpIPredicate::eq, scale, c32i(0)),
+                c32i(0), value);
+            Value byte = kb.create<arith::TruncIOp>(l, kb.getI8Type(), value);
+            if (T.store != kb.getI8Type())
+              byte = kb.create<arith::BitcastOp>(l, T.store, byte);
+            result = kb.create<vector::InsertOp>(l, byte, result, ArrayRef<int64_t>{j});
+          }
+          return result;
+        }
+        return kb.create<vector::LoadOp>(l, vecTy, plan.src,
+                                        ValueRange{idx},
+                                        /*nontemporal=*/false, align16);
+      };
+      if (!plan.active[i]) {
+        vals.push_back(load());
+      } else {
+        // Inactive lanes may compute an out-of-range address, but must never
+        // dereference it, even when the output tile is fully in bounds.
+        auto branch = kb.create<scf::IfOp>(
+            l, TypeRange{vecTy}, plan.active[i], true);
+        {
+          OpBuilder::InsertionGuard guard(kb);
+          kb.setInsertionPointToStart(branch.thenBlock());
+          kb.create<scf::YieldOp>(l, load());
+          kb.setInsertionPointToStart(branch.elseBlock());
+          Value zero = kb.create<arith::ConstantOp>(
+              l, vecTy, kb.getZeroAttr(vecTy));
+          kb.create<scf::YieldOp>(l, zero);
+        }
+        vals.push_back(branch.getResult(0));
+      }
     }
     return vals;
   };
@@ -2051,8 +2344,17 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
             l, dst, kb.create<arith::MulIOp>(l, buf, ci(plan.bufElems)));
       // The row stride is a multiple of 16 bytes (checked at admission),
       // so every LDS vector is 16-byte aligned: one ds_store_b128.
-      kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
-                                 /*nontemporal=*/false, align16);
+      if (!plan.active[i]) {
+        kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
+                                   /*nontemporal=*/false, align16);
+      } else {
+        auto branch = kb.create<scf::IfOp>(
+            l, plan.active[i], /*withElseRegion=*/false);
+        OpBuilder::InsertionGuard guard(kb);
+        kb.setInsertionPointToStart(branch.thenBlock());
+        kb.create<vector::StoreOp>(l, vals[i], plan.dst, ValueRange{dst},
+                                   /*nontemporal=*/false, align16);
+      }
     }
   };
 
@@ -2077,18 +2379,22 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   // runs 1.6-1.8x slower). Only the production single-buffered body
   // (prefetch 0) is grouped; the measured-negative prefetch variants keep
   // their schedule.
-  const int64_t stagePanels = stageK / 16;
+  const bool multiGroupSlab = scaleFormat == "e8m0" && scaleK == 32 && stageK == 64;
+  const int64_t groupsPerSlab = multiGroupSlab ? 2 : 1;
+  const int64_t stagePanels = (multiGroupSlab ? scaleK : stageK) / 16;
+  if (multiGroupSlab)
+    gpuFunc->setAttr("tessera.rocm.semantic_groups_per_stage", b.getI64IntegerAttr(2));
   const int64_t groupedLiveVgprs =
       stagePanels * (mt + nt) * 2 + 2 * mt * nt * 8;
   const bool groupStageReads = prefetch == 0 && groupedLiveVgprs + 64 <= 256;
 
   // ---- One slab's MMA chain on the partial, from LDS buffer `buf`.
-  auto compute = [&](OpBuilder &kb, Location l, Value buf,
-                     SmallVector<Value> partial) {
+  auto computeActive = [&](OpBuilder &kb, Location l, Value buf,
+                     SmallVector<Value> partial, int64_t firstPanel = 0) {
     Value aRow = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgM))) : c0;
     Value bCol = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgN))) : c0;
-    for (int64_t p = 0; p < stageK / 16; ++p) {
-      Value kOff = ci(p * 16);
+    for (int64_t p = 0; p < stagePanels; ++p) {
+      Value kOff = ci((firstPanel + p) * 16);
       SmallVector<Value> af(mt), bf(nt);
       for (int64_t mi = 0; mi < mt; ++mi) {
         Value r = buf ? Value(kb.create<arith::AddIOp>(l, lrow[mi], aRow))
@@ -2129,15 +2435,43 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
     return partial;
   };
 
-  const int64_t groups = staticK / scaleK;
+  auto compute = [&](OpBuilder &kb, Location l, Value buf,
+                     SmallVector<Value> partial, int64_t firstPanel = 0) -> SmallVector<Value> {
+    if (!foldedWaveGuard)
+      return computeActive(kb, l, buf, std::move(partial), firstPanel);
+    Value live = kb.create<arith::CmpIOp>(l, arith::CmpIPredicate::ult,
+        kb.create<arith::AddIOp>(l, baseRow, waveRowOff), M);
+    SmallVector<Type> types(partial.size(), accFragmentTy);
+    auto branch = kb.create<scf::IfOp>(l, types, live, true);
+    {
+      OpBuilder::InsertionGuard guard(kb);
+      kb.setInsertionPointToStart(branch.thenBlock());
+      kb.create<scf::YieldOp>(l, computeActive(kb, l, buf, partial, firstPanel));
+      kb.setInsertionPointToStart(branch.elseBlock());
+      kb.create<scf::YieldOp>(l, partial);
+    }
+    return SmallVector<Value>(branch.getResults().begin(), branch.getResults().end());
+  };
+
   const int64_t stagesPerGroup = scaleK / stageK;
-  const int64_t lastStageK = staticK - stageK;
   Value cStageK = ci(stageK);
+  // The checked ABI admits positive whole scale groups. Expose the nonempty
+  // loop contract to LLVM so the zero accumulators do not remain live along
+  // a fictitious zero-trip edge through the register-heavy LDS body.
+  if (runtimeK)
+    b.create<LLVM::AssumeOp>(loc, b.create<arith::CmpIOp>(
+        loc, arith::CmpIPredicate::uge, K, ci(scaleK)));
+  Value cGroups = runtimeK
+      ? Value(b.create<arith::DivUIOp>(loc, K, ci(scaleK)))
+      : ci(staticK / scaleK);
+  Value lastStageK = runtimeK
+      ? Value(b.create<arith::SubIOp>(loc, K, cStageK))
+      : ci(staticK - stageK);
   // The slab the step after `k0` computes on. Past the end it re-reads the
   // last slab (in bounds, never consumed), so the issue needs no guard.
   auto nextK = [&](OpBuilder &kb, Location l, Value k0) {
     Value next = kb.create<arith::AddIOp>(l, k0, cStageK);
-    return Value(kb.create<arith::MinUIOp>(l, next, ci(lastStageK)));
+    return Value(kb.create<arith::MinUIOp>(l, next, lastStageK));
   };
   // Buffer parity of the slab at `k0` (double-buffered only).
   auto parity = [&](OpBuilder &kb, Location l, Value k0) {
@@ -2195,13 +2529,51 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
   };
 
   SmallVector<Value> initAccs = zeroFragments(b, loc);
-  Value cGroups = ci(groups);
-  auto groupLoop = b.create<scf::ForOp>(
+  scf::ForOp groupLoop;
+  if (multiGroupSlab) {
+    if (runtimeK) {
+      b.create<LLVM::AssumeOp>(loc, b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::uge, K, cStageK));
+      b.create<LLVM::AssumeOp>(loc, b.create<arith::CmpIOp>(
+          loc, arith::CmpIPredicate::eq,
+          b.create<arith::RemUIOp>(loc, K, cStageK), c0));
+    }
+    Value slabs = runtimeK ? Value(b.create<arith::DivUIOp>(loc,K,cStageK)) : ci(staticK/stageK);
+    groupLoop = b.create<scf::ForOp>(loc,c0,slabs,ci(1),initAccs,
+      [&](OpBuilder &gb,Location l,Value slab,ValueRange iter) {
+        SmallVector<Value> accs(iter.begin(),iter.end());
+        Value k0=gb.create<arith::MulIOp>(l,slab,cStageK);
+        auto slabA=issue(gb,l,planA,k0);
+        auto slabB=issue(gb,l,planB,k0);
+        barrier(gb,l);
+        drain(gb,l,planA,slabA,Value());
+        drain(gb,l,planB,slabB,Value());
+        barrier(gb,l);
+        for(int64_t half=0;half<groupsPerSlab;++half) {
+          Value group=gb.create<arith::AddIOp>(l,
+              gb.create<arith::MulIOp>(l,slab,ci(groupsPerSlab)),ci(half));
+          auto partial=compute(gb,l,Value(),zeroFragments(gb,l),half*(scaleK/16));
+          SmallVector<Value> joined(mt*nt);
+          for(int64_t mi=0;mi<mt;++mi)
+            for(int64_t ni=0;ni<nt;++ni) {
+              OperationState join(l,"tile.fragment_scaled_accumulate");
+              join.addOperands({accs[mi*nt+ni],partial[mi*nt+ni],lhsScale,rhsScale,
+                  rowOrigin[mi],colOrigin[ni],group,cGroups,M,N});
+              join.addTypes(accFragmentTy);
+              join.addAttribute("scale_n",gb.getI64IntegerAttr(scaleN));
+              join.addAttribute("scale_format",gb.getStringAttr(scaleFormat));
+              joined[mi*nt+ni]=gb.create(join)->getResult(0);
+            }
+          accs=std::move(joined);
+        }
+        gb.create<scf::YieldOp>(l,accs);
+      });
+  } else groupLoop = b.create<scf::ForOp>(
       loc, c0, cGroups, ci(1), initAccs,
       [&](OpBuilder &gb, Location l, Value g, ValueRange iter) {
         SmallVector<Value> accs(iter.begin(), iter.end());
         Value kGroup = gb.create<arith::MulIOp>(l, g, ci(scaleK));
-        SmallVector<Value> partial = zeroFragments(gb, l);
+        SmallVector<Value> partial = foldedFullK ? accs : zeroFragments(gb, l);
         if (stagesPerGroup == 1) {
           partial = stage(gb, l, kGroup, std::move(partial));
         } else {
@@ -2215,6 +2587,10 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
               });
           partial.assign(inner.getResults().begin(), inner.getResults().end());
         }
+        if (foldedFullK) {
+          gb.create<scf::YieldOp>(l, partial);
+          return;
+        }
         SmallVector<Value> joined(mt * nt);
         for (int64_t mi = 0; mi < mt; ++mi)
           for (int64_t ni = 0; ni < nt; ++ni) {
@@ -2224,6 +2600,7 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
                               g, cGroups, M, N});
             join.addTypes(accFragmentTy);
             join.addAttribute("scale_n", gb.getI64IntegerAttr(scaleN));
+            join.addAttribute("scale_format", gb.getStringAttr(scaleFormat));
             joined[mi * nt + ni] = gb.create(join)->getResult(0);
           }
         gb.create<scf::YieldOp>(l, joined);
@@ -2239,8 +2616,17 @@ void emitTypedLdsBlockScaleBody(OpBuilder &b, Location loc,
         tessera::tile::TileEpilogueAttr::get(ctx, false, "none", "bf16");
   for (int64_t ni = 0; ni < nt; ++ni)
     for (int64_t mi = 0; mi < mt; ++mi) {
+      Value stored = accs[mi * nt + ni];
+      if (foldedFullK) {
+        OperationState scale(loc, "tile.fragment_folded_scale");
+        scale.addOperands({stored, lhsScale, rhsScale,
+                           rowOrigin[mi], colOrigin[ni], M, N});
+        scale.addTypes(accFragmentTy);
+        scale.addAttribute("vector_scales", b.getBoolAttr(foldedVectorScales));
+        stored = b.create(scale)->getResult(0);
+      }
       OperationState unpack(loc, "tile.fragment_unpack");
-      unpack.addOperands(accs[mi * nt + ni]);
+      unpack.addOperands(stored);
       unpack.addTypes(tileValueTy);
       unpack.addAttribute("tile.layout", tileLayout);
       Value tile = b.create(unpack)->getResult(0);
@@ -2722,7 +3108,9 @@ struct GenerateWMMAGemmKernelPass
       auto physical = op->getAttrOfType<StringAttr>("physical_contract");
       if (physical &&
           (physical.getValue() == "rocm_fp8_w8a8_blockscale_v1" ||
-           physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1"))
+           physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
+           physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_v1" ||
+           physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"))
         scaledKernels.push_back(op);
     });
     for (tessera::tile::ScaledMatmulKernelOp kernel : scaledKernels) {
@@ -2735,11 +3123,16 @@ struct GenerateWMMAGemmKernelPass
       auto logicalN = op->getAttrOfType<IntegerAttr>("tessera.macro_tile_n");
       auto problemK = op->getAttrOfType<IntegerAttr>("tessera.problem_k");
       auto parent = op->getParentOfType<func::FuncOp>();
+      auto physical = op->getAttrOfType<StringAttr>("physical_contract");
+      const bool mxfp8 = physical &&
+          physical.getValue().starts_with("rocm_mxfp8_e4m3_e8m0_k32");
       if (!desc || !epilogue || !scaleN || !logicalM || !logicalN ||
           !problemK || !parent || desc.getFamily() != "wmma" ||
           desc.getM() != 16 || desc.getN() != 16 || desc.getK() != 16 ||
           desc.getAType() != "e4m3" || desc.getBType() != "e4m3" ||
-          desc.getAccType() != "f32" || desc.getScaleFormat() != "fp32" ||
+          desc.getAccType() != "f32" ||
+          desc.getScaleFormat() != (mxfp8 ? "e8m0" : "fp32") ||
+          (mxfp8 && (desc.getScaleBlockK() != 32 || scaleN.getInt() != 1)) ||
           desc.getScaleBlockK() <= 0 || desc.getScaleBlockK() % 16 != 0 ||
           (16 * desc.getKBlocks()) % desc.getScaleBlockK() != 0 ||
           scaleN.getInt() <= 0 ||
@@ -2770,10 +3163,12 @@ struct GenerateWMMAGemmKernelPass
       request.output = epilogue.getOutputType().str();
       request.portableABI = true;
       request.scaleK = desc.getScaleBlockK();
+      request.scaleFormat = desc.getScaleFormat().str();
       request.scaleN = scaleN.getInt();
       request.bTransposed =
           op->getAttrOfType<StringAttr>("physical_contract").getValue() ==
-          "rocm_fp8_w8a8_blockscale_nk_v1";
+          (mxfp8 ? "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"
+                 : "rocm_fp8_w8a8_blockscale_nk_v1");
       if (auto a = op->getAttrOfType<StringAttr>("tessera.raster_order"))
         request.rasterOrder = a.getValue().str();
       if (auto a = op->getAttrOfType<IntegerAttr>("tessera.raster_group"))
@@ -2797,8 +3192,12 @@ struct GenerateWMMAGemmKernelPass
       auto staticN = staticExtent(6);
       auto staticK = staticExtent(7);
       if (!staticM || !staticN || !staticK || *staticK != problemK.getInt() ||
-          *staticM <= 0 || *staticN <= 0 ||
-          *staticK % desc.getScaleBlockK() != 0) {
+          *staticM <= 0 || *staticN <= 0 || *staticK <= 0 ||
+          (*staticK % desc.getScaleBlockK() != 0 &&
+           (!op->getAttrOfType<StringAttr>("batching") ||
+            op->getAttrOfType<StringAttr>("batching").getValue() != "broadcast" ||
+            request.staging != "global" ||
+            *staticK > INT64_MAX - desc.getScaleBlockK() + 1))) {
         op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: the W8A8 block-scale "
                       "kernel needs static M/N/K with K a whole number of "
                       "scale groups; a partial group has no defined scale");
@@ -2807,6 +3206,256 @@ struct GenerateWMMAGemmKernelPass
       request.staticM = *staticM;
       request.staticN = *staticN;
       request.staticK = *staticK;
+      requests.push_back(std::move(request));
+    }
+
+    // W8A8 Target directives are executable through the same typed producer
+    // as their Schedule/Tile carriers. Preserve every scale and physical key;
+    // do not normalize a conflicting numerical contract.
+    SmallVector<Operation *> scaledDirectives;
+    module.walk([&](Operation *op) {
+      if (op->getName().getStringRef() == "tessera_rocm.scaled_wmma_gemm") {
+        auto contract = op->getAttrOfType<StringAttr>("physical_contract");
+        if (contract && (contract.getValue() == "rocm_fp8_w8a8_blockscale_v1" ||
+                         contract.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
+                         contract.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_v1" ||
+                         contract.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"))
+          scaledDirectives.push_back(op);
+      }
+    });
+    for (Operation *op : scaledDirectives) {
+      auto integer = [&](StringRef key) -> int64_t {
+        auto value = op->getAttrOfType<IntegerAttr>(key);
+        return value ? value.getInt() : 0;
+      };
+      auto text = [&](StringRef key) -> StringRef {
+        auto value = op->getAttrOfType<StringAttr>(key);
+        return value ? value.getValue() : StringRef();
+      };
+      auto policy = op->getAttrOfType<DictionaryAttr>("numeric_policy");
+      auto policyText = [&](StringRef key) -> StringRef {
+        auto value = policy ? policy.getAs<StringAttr>(key) : StringAttr();
+        return value ? value.getValue() : StringRef();
+      };
+      const bool mxfp8 = text("physical_contract").starts_with("rocm_mxfp8_e4m3_e8m0_k32");
+      bool nk = text("physical_contract") == "rocm_fp8_w8a8_blockscale_nk_v1" ||
+                text("physical_contract") == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1";
+      auto aOrientation = op->getAttrOfType<BoolAttr>("transposeA");
+      const bool aTransposed = aOrientation && aOrientation.getValue();
+      if (op->hasAttr("transposeA") && (!aOrientation || text("batching") != "broadcast" || text("staging") != "global")) {
+        op->emitError("transposed scaled A requires typed independent planes and register staging");
+        return signalPassFailure();
+      }
+      bool bf16 = text("output") == "bf16";
+      StringRef expectedABI = nk ? "a_bnk_lhs_scale_rhs_scale_d_m_n_k"
+                                : "a_b_lhs_scale_rhs_scale_d_m_n_k";
+      std::string expectedPackage =
+          (Twine("tessera.rocm.fp8_w8a8_blockscale.") +
+           (nk ? "a_bnk_sa_sb_o_m_n_k." : "a_b_sa_sb_o_m_n_k.") +
+           (bf16 ? "e4m3_e4m3_f32_bf16.wmma_exact.v1"
+                 : "e4m3_e4m3_f32_f32.wmma_exact.v1")).str();
+      if (mxfp8)
+        expectedPackage =
+            (Twine("tessera.rocm.mxfp8_e4m3_e8m0_k32.") +
+             (nk ? "a_bnk_sa_sb_o_m_n_k." : "a_b_sa_sb_o_m_n_k.") +
+             (bf16 ? "bf16.wide_scale.v1" : "f32.wide_scale.v1")).str();
+      const int64_t scaleK = integer("scale_k"), macroK = integer("macro_k");
+      const int64_t m = integer("m"), n = integer("n"), k = integer("k");
+      const bool runtimeShape = op->hasAttrOfType<UnitAttr>("runtime_shape");
+      const bool runtimeMN = op->hasAttrOfType<UnitAttr>("runtime_mn");
+      const bool runtimeK = op->hasAttrOfType<UnitAttr>("runtime_k");
+      auto wholeM = op->getAttrOfType<BoolAttr>("whole_m");
+      auto wholeN = op->getAttrOfType<BoolAttr>("whole_n");
+      const bool shapeValid = !(runtimeShape && runtimeMN) &&
+          (!runtimeK || runtimeMN) &&
+          (runtimeShape
+              ? (m == 0 && n == 0 && k == 0 && text("staging") == "global" &&
+                 !wholeM && !wholeN)
+              : runtimeMN
+                  ? (m == 0 && n == 0 && scaleK > 0 &&
+                     (runtimeK ? k == 0 : (k > 0 && k % scaleK == 0)) &&
+                     text("staging") == "lds" && wholeM && wholeN)
+                  : (m > 0 && n > 0 && k > 0 && scaleK > 0 &&
+                     (k % scaleK == 0 || (text("batching") == "broadcast" &&
+                      text("staging") == "global" && k <= INT64_MAX-scaleK+1)) && !wholeM && !wholeN));
+      const int64_t blockM = integer("block_m"), blockN = integer("block_n");
+      const int64_t warps = integer("warps"), depth = integer("pipeline_depth");
+      auto raster = op->getAttrOfType<StringAttr>("schedule_raster_order");
+      auto rasterGroup = op->getAttrOfType<IntegerAttr>("schedule_raster_group");
+      const StringRef order = raster ? raster.getValue() : StringRef("row_major");
+      const bool rasterValid =
+          (order == "row_major" || order == "column_major" ||
+           order == "grouped_m" || order == "grouped_n") &&
+          (!rasterGroup || rasterGroup.getInt() > 0);
+      if (!viaTile || text("name").empty() || text("abi") != expectedABI ||
+          text("package_abi") != expectedPackage ||
+          text("scale_format") != (mxfp8 ? "e8m0" : "fp32") ||
+          (mxfp8 && (scaleK != 32 || integer("scale_n") != 1 ||
+                       (macroK != 32 && macroK != 64) || depth != 1 ||
+                       (macroK == 64 && (text("staging") != "lds" || (!runtimeK && k % 64))) ||
+                       !((text("staging") == "global" && blockM == 16 &&
+                          blockN == 16 && warps == 1) ||
+                         (text("staging") == "lds" && nk && blockM == 128 &&
+                          (blockN == 64 || blockN == 128) && warps == 8)))) ||
+          text("partial_combine") != "scale_outer_product_then_add" ||
+          text("k_step_schedule") != "isolated_scale_group" ||
+          (text("output") != "f32" && !bf16) ||
+          policyText("storage") != "e4m3" || policyText("accum") != "f32" ||
+          policyText("execution_mode") != "exact_per_block" ||
+          !shapeValid || !rasterValid || integer("instruction_k") != 16 ||
+          scaleK <= 0 || scaleK % 16 ||
+          macroK <= 0 || macroK % scaleK || integer("scale_n") <= 0 ||
+          blockM <= 0 || blockN <= 0 || blockM % 16 || blockN % 16 ||
+          (text("staging") != "global" && text("staging") != "lds") ||
+          (text("staging") == "global" && warps != 1) ||
+          (text("staging") == "lds" && (!nk || warps < 1 || warps > 16 ||
+             blockM % 32 || warps % (blockM / 32))) ||
+          (depth != 1 && depth != 2)) {
+        op->emitError("ROCM_FP8_BLOCKSCALE_CONTRACT: executable W8A8 Target "
+                      "requires its exact typed scale, ABI, numeric policy, "
+                      "static or explicit runtime shape and physical schedule contract");
+        return signalPassFailure();
+      }
+      WmmaGemmRequest request;
+      request.anchor = op;
+      request.eraseOwner = op;
+      request.name = text("name").str();
+      request.mt = blockM / 16;
+      request.nt = blockN / 16;
+      request.dtype = "e4m3";
+      request.output = text("output").str();
+      if (op->hasAttr("batching") || op->hasAttr("batch_count")) {
+        if ((text("batching") != "independent_rhs" && text("batching") != "shared_lhs" &&
+             text("batching") != "broadcast") ||
+            integer("batch_count") <= 0 || integer("batch_count") > INT32_MAX) {
+          op->emitError("scaled batch requires a declared operand policy and positive z capacity");
+          return signalPassFailure();
+        }
+      }
+      if ((op->hasAttr("batch_operands") || op->hasAttr("batch_result")) &&
+          text("batching") != "broadcast") {
+        op->emitError("independent scaled batch metadata differs from its operand policy");
+        return signalPassFailure();
+      }
+      if (text("batching") == "broadcast") {
+        auto declared = op->getAttrOfType<ArrayAttr>("batch_operands");
+        auto outputAttr = op->getAttrOfType<TypeAttr>("batch_result");
+        auto result = outputAttr ? dyn_cast<RankedTensorType>(outputAttr.getValue()) : RankedTensorType{};
+        SmallVector<RankedTensorType> types;
+        if (declared) for (auto value : declared) {
+          auto attr = dyn_cast<TypeAttr>(value);
+          types.push_back(attr ? dyn_cast<RankedTensorType>(attr.getValue()) : RankedTensorType{});
+        }
+        bool valid = types.size() == 4 && tessera::hasExactScaledBroadcastPrefix(types, result);
+        int64_t count = 1;
+        if (valid) for (int64_t extent : result.getShape().drop_back(2)) {
+          if (count > INT32_MAX / extent) { valid = false; break; }
+          count *= extent;
+        }
+        if (valid) {
+          int64_t columns = (n - 1) / integer("scale_n") + 1;
+          valid = !runtimeShape && !runtimeMN && count == integer("batch_count") &&
+              result.getDimSize(result.getRank()-2) == m && result.getDimSize(result.getRank()-1) == n &&
+              types[0].getShape().take_back(2) == (aTransposed ? ArrayRef<int64_t>({k,m}) : ArrayRef<int64_t>({m,k})) &&
+              types[1].getShape().take_back(2) == (nk ? ArrayRef<int64_t>({n,k}) : ArrayRef<int64_t>({k,n})) &&
+              types[2].getShape().take_back(2) == ArrayRef<int64_t>({m,(k-1)/scaleK+1}) &&
+              types[3].getShape().take_back(2) == ArrayRef<int64_t>({(k-1)/scaleK+1,columns}) &&
+              isa<Float8E4M3FNType>(types[0].getElementType()) &&
+              isa<Float8E4M3FNType>(types[1].getElementType()) &&
+              types[2].getElementType() == types[3].getElementType() &&
+              (mxfp8 ? types[2].getElementType().isInteger(8) : types[2].getElementType().isF32()) &&
+              (bf16 ? result.getElementType().isBF16() : result.getElementType().isF32());
+        }
+        if (!valid) {
+          op->emitError("independent scaled batch metadata differs from its exact typed planes");
+          return signalPassFailure();
+        }
+      }
+      request.portableABI = true;
+      request.scaleK = scaleK;
+      request.scaleFormat = text("scale_format").str();
+      request.scaleN = integer("scale_n");
+      request.kBlocks = macroK / 16;
+      request.staticM = m;
+      request.staticN = n;
+      request.staticK = k;
+      request.runtimeMN = runtimeMN;
+      request.runtimeK = runtimeK;
+      request.wholeM = wholeM && wholeM.getValue();
+      request.wholeN = wholeN && wholeN.getValue();
+      request.bTransposed = nk;
+      request.staging = text("staging").str();
+      request.warps = warps;
+      request.pipelineDepth = depth;
+      request.rasterOrder = order.str();
+      request.rasterGroup = rasterGroup ? rasterGroup.getInt() : 1;
+      requests.push_back(std::move(request));
+    }
+
+    SmallVector<Operation *> foldedDirectives;
+    module.walk([&](Operation *op) {
+      auto contract = op->getAttrOfType<StringAttr>("physical_contract");
+      if (op->getName().getStringRef() == "tessera_rocm.scaled_wmma_gemm" &&
+          contract && (contract.getValue() == "rocm_mxfp4_w4a8_folded_prefill_v1" ||
+                       contract.getValue() == "rocm_mxfp4_w4a8_packed_folded_prefill_v1"))
+        foldedDirectives.push_back(op);
+    });
+    for (Operation *op : foldedDirectives) {
+      auto text = [&](StringRef key) -> StringRef {
+        auto attr = op->getAttrOfType<StringAttr>(key);
+        return attr ? attr.getValue() : StringRef();
+      };
+      auto integer = [&](StringRef key) -> int64_t {
+        auto attr = op->getAttrOfType<IntegerAttr>(key);
+        return attr ? attr.getInt() : -1;
+      };
+      int64_t m = integer("m"), n = integer("n"), k = integer("k");
+      bool packed = text("physical_contract") == "rocm_mxfp4_w4a8_packed_folded_prefill_v1";
+      StringRef mode = packed ? "wgp" : text("workgroup_mode");
+      StringRef rowGuard = packed ? "cta" : text("row_guard");
+      StringRef prefetch = packed ? "none" : text("staging_prefetch");
+      StringRef epilogue = packed ? "predicated_scalar_scales" : text("epilogue_schedule");
+      int64_t group = packed ? 0 : integer("raster_group_m");
+      if (!viaTile || !tessera_rocm::isValidFoldedW4A8Target(op, /*allowRuntimeMN=*/true) ||
+          (blockscaleStageK != 0 && blockscaleStageK != 64) ||
+          (blockscalePrefetch >= 0 &&
+           blockscalePrefetch != (prefetch == "register_next_slab" ? 1 : 0)) ||
+          blockscaleLdsPadBytes != 16) {
+        op->emitError("ROCM_FOLDED_NATIVE_CONTRACT: native folded Target requires its explicit full-K approximate numeric policy, gfx1201 ABI and complete physical schedule");
+        return signalPassFailure();
+      }
+      WmmaGemmRequest request;
+      request.anchor = op;
+      request.eraseOwner = op;
+      request.name = text("name").str();
+      request.mt = 16; request.nt = 4; // BM256/BN64
+      request.dtype = "e4m3"; request.output = "bf16";
+      request.portableABI = true;
+      request.scaleK = 64; request.scaleN = 1; request.kBlocks = 4;
+      request.staticM = m; request.staticN = n; request.staticK = k;
+      request.runtimeMN = op->hasAttr("runtime_mn");
+      request.runtimeK = op->hasAttr("runtime_k");
+      if (request.runtimeMN) {
+        request.wholeM = op->getAttrOfType<BoolAttr>("whole_m").getValue();
+        request.wholeN = op->getAttrOfType<BoolAttr>("whole_n").getValue();
+      }
+      request.bTransposed = true; request.staging = "lds";
+      request.warps = 8; request.pipelineDepth = 1;
+      request.foldedFullK = true;
+      request.foldedPacked = packed;
+      request.foldedWaveGuard = rowGuard == "wave";
+      // GFX1201-PACKED-VECTOR-SCALES-2026-10-06: paired forward/reverse
+      // three-format trials measured a small gain in the M256 long-K band.
+      // Preserve the packed scalar seed for runtime shapes and short/ragged
+      // problems. The Tile consumer retains its aligned/full-lane guard.
+      const bool packedVectorBand =
+          packed && m == 256 && n >= 1024 && k >= 1024;
+      request.foldedVectorScales =
+          packedVectorBand || epilogue == "complete_tile_vector_scales";
+      request.foldedPrefetch = prefetch == "register_next_slab" ? 1 : 0;
+      request.foldedCuMode = mode == "cu";
+      request.rasterOrder = group ? "grouped_m" : "row_major";
+      request.rasterGroup = group ? group : 1;
       requests.push_back(std::move(request));
     }
 
@@ -2851,6 +3500,8 @@ struct GenerateWMMAGemmKernelPass
         }
       if (auto a = op->getAttrOfType<BoolAttr>("bias"))
         request.bias = a.getValue();
+      if (auto a = op->getAttrOfType<BoolAttr>("portable_abi"))
+        request.portableABI = a.getValue();
       if (auto a = op->getAttrOfType<StringAttr>("activation"))
         request.activation = a.getValue().str();
       if (auto a = op->getAttrOfType<StringAttr>("output"))
@@ -2870,16 +3521,17 @@ struct GenerateWMMAGemmKernelPass
       request.storagePack =
           op->getAttrOfType<tessera::tile::TilePackedFormatAttr>(
               "tessera.storage_pack");
-      // ROCM-SPLIT-K-1 is implemented on the typed tile.matmul_kernel route
-      // only. A directive that states a split names a program this adapter
-      // cannot emit, so it is refused rather than answered unsplit.
-      if (auto split = op->getAttrOfType<IntegerAttr>("split_k");
-          split && split.getInt() != 1) {
-        op->emitError("ROCM_SPLIT_K_UNSUPPORTED: the tessera_rocm.wmma_gemm "
-                      "directive adapter has no split-K body; split-K is "
-                      "emitted from tile.matmul_kernel on the typed route");
-        return signalPassFailure();
-      }
+      // Projected Target directives preserve the Schedule's macro-K panels
+      // and the static split partition. Generation still validates portable
+      // ABI, ordered reduction and whole-panel slice divisibility below.
+      if (auto blocks = op->getAttrOfType<IntegerAttr>("k_blocks"))
+        request.kBlocks = blocks.getInt();
+      if (auto split = op->getAttrOfType<IntegerAttr>("split_k"))
+        request.splitK = split.getInt();
+      if (auto reduction = op->getAttrOfType<StringAttr>("split_k_reduction"))
+        request.splitKReduction = reduction.getValue().str();
+      if (auto problemK = op->getAttrOfType<IntegerAttr>("problem_k"))
+        request.staticK = problemK.getInt();
       requests.push_back(std::move(request));
     }
 
@@ -3286,23 +3938,29 @@ struct GenerateWMMAGemmKernelPass
         if (scaledLds && why.empty()) {
           const int64_t macroM = mt * 16, macroN = nt * 16;
           blockscaleStage =
-              blockscaleStageK > 0 ? int64_t(blockscaleStageK) : request.scaleK;
+              blockscaleStageK > 0 ? int64_t(blockscaleStageK) :
+              request.scaleFormat == "e8m0" ? request.kBlocks * 16 : request.scaleK;
           if (blockscalePrefetch >= 0)
             blockscalePrefetchMode = blockscalePrefetch;
           else
             blockscalePrefetchMode = request.pipelineDepth == 2 ? 2 : 0;
+          if (request.foldedFullK) {
+            blockscaleStage = 64;
+            blockscalePrefetchMode = request.foldedPrefetch;
+          }
+          const int64_t waveRows = request.foldedFullK ? 64 : 32;
           if (!request.bTransposed)
             why = "the LDS-staged block-scale body reads the [N, K] weight "
                   "(the _nk contract) only";
-          else if (macroM % 32 != 0 || request.warps < 1 ||
-                   request.warps > 16 || request.warps % (macroM / 32) != 0)
+          else if (macroM % waveRows != 0 || request.warps < 1 ||
+                   request.warps > 16 || request.warps % (macroM / waveRows) != 0)
             why = (Twine("warps=") + Twine(request.warps) +
                    " must be a whole multiple of the macro tile's 32-row "
                    "wave rows (macro M=" + Twine(macroM) + ", at most 16 "
                    "waves)")
                       .str();
           else {
-            ldsWavesMScaled = macroM / 32;
+            ldsWavesMScaled = macroM / waveRows;
             ldsWavesNScaled = request.warps / ldsWavesMScaled;
             if (macroN % (16 * ldsWavesNScaled) != 0)
               why = (Twine("macro N=") + Twine(macroN) +
@@ -3311,7 +3969,6 @@ struct GenerateWMMAGemmKernelPass
                         .str();
           }
           const int64_t wgM = mt * 16, wgN = nt * 16;
-          const int64_t threads = request.warps * 32;
           const int64_t nbuf = blockscalePrefetchMode == 2 ? 2 : 1;
           const int64_t stride = blockscaleStage + blockscaleLdsPadBytes;
           // The physical budget, checked once the wave grid is admitted.
@@ -3321,8 +3978,13 @@ struct GenerateWMMAGemmKernelPass
                      "double-buffered (2)";
             if (blockscalePrefetchMode > 2)
               return "blockscale-prefetch must be -1 (carrier), 0, 1 or 2";
+            const bool multiGroup = request.scaleFormat == "e8m0" &&
+                request.scaleK == 32 && request.kBlocks == 4 && blockscaleStage == 64;
+            if (multiGroup && (blockscalePrefetchMode != 0 ||
+                request.pipelineDepth != 1 || (!request.runtimeK && request.staticK % 64)))
+              return "MXFP8 K64 slabs require whole K64, one buffer and no prefetch";
             if (blockscaleStage % 16 != 0 ||
-                request.scaleK % blockscaleStage != 0)
+                (!multiGroup && request.scaleK % blockscaleStage != 0))
               return (Twine("stage K=") + Twine(blockscaleStage) +
                       " must be whole 16-byte vectors dividing scale_k=" +
                       Twine(request.scaleK))
@@ -3330,13 +3992,6 @@ struct GenerateWMMAGemmKernelPass
             if (blockscaleLdsPadBytes < 0 || blockscaleLdsPadBytes % 16 != 0)
               return "blockscale-lds-pad-bytes must be a non-negative "
                      "multiple of 16 so every LDS row stays 16-byte aligned";
-            if ((wgM * blockscaleStage / 16) % threads != 0 ||
-                (wgN * blockscaleStage / 16) % threads != 0)
-              return (Twine("a ") + Twine(wgM) + "x" + Twine(wgN) +
-                      " tile at stage K=" + Twine(blockscaleStage) +
-                      " does not divide into whole 16-byte copies for " +
-                      Twine(threads) + " threads")
-                  .str();
             if (nbuf * (wgM + wgN) * stride > 65536)
               return (Twine(nbuf * (wgM + wgN) * stride) +
                       " LDS bytes exceed the 64 KiB workgroup limit")
@@ -3368,6 +4023,8 @@ struct GenerateWMMAGemmKernelPass
         bStoreTy = T.bElem == "e4m3"
                        ? static_cast<Type>(Float8E4M3FNType::get(b.getContext()))
                        : static_cast<Type>(Float8E5M2Type::get(b.getContext()));
+      if (request.foldedPacked)
+        bStoreTy = i8Ty; // Packed E2M1 containers are integer bytes.
       auto bAbTy = MemRefType::get({ShapedType::kDynamic}, bStoreTy);
       auto dTy = MemRefType::get({ShapedType::kDynamic}, outputTy);
       auto biasTy = MemRefType::get({ShapedType::kDynamic}, T.accElem);
@@ -3376,8 +4033,11 @@ struct GenerateWMMAGemmKernelPass
       if (hasBias && portableContract && !splitK)
         argTys.push_back(biasTy);
       if (scaled) {
-        auto scaleTy = MemRefType::get({ShapedType::kDynamic}, f32Ty);
-        argTys.append({scaleTy, scaleTy});
+        auto scaleTy = MemRefType::get(
+            {ShapedType::kDynamic}, request.scaleFormat == "e8m0" ? i8Ty : f32Ty);
+        auto referenceTy = request.foldedFullK
+            ? MemRefType::get({ShapedType::kDynamic}, i8Ty) : scaleTy;
+        argTys.append({scaleTy, referenceTy});
       }
       argTys.append({dTy, idxTy, idxTy, idxTy});
       if (hasBias && !portableContract)
@@ -3385,6 +4045,10 @@ struct GenerateWMMAGemmKernelPass
       auto fnTy = b.getFunctionType(argTys, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernel(true);
+      if (request.foldedFullK)
+        gpuFunc->setAttr("llvm.passthrough", b.getArrayAttr({
+            b.getArrayAttr({b.getStringAttr("target-features"),
+                b.getStringAttr(request.foldedCuMode ? "+cumode" : "-cumode")})}));
       // The 256-VGPR ceiling this body hits at the 4x4 panel is ARCHITECTURAL,
       // not an occupancy default: RDNA4 ISA 3.3.2.1 -- "VGPRs are allocated in
       // blocks of 16 for wave32 or 8 for wave64, and a shader may have up to
@@ -3433,6 +4097,9 @@ struct GenerateWMMAGemmKernelPass
         gpuFunc->setAttr("tessera.rocm.physical_panel_nt",
                          b.getI64IntegerAttr(nt));
       }
+      for (StringRef key : {"batching", "batch_count", "batch_operands", "batch_result", "transposeA"})
+        if (Attribute value = op->getAttr(key))
+          gpuFunc->setAttr((Twine("tessera.rocm.") + key).str(), value);
       for (StringRef attrName : {"schedule_arch", "schedule_pipeline_stages",
                                  "schedule_lds_layout", "schedule_ownership",
                                  "schedule_vgpr_estimate", "schedule_source",
@@ -3528,23 +4195,35 @@ struct GenerateWMMAGemmKernelPass
                              activation, outputTy);
       } else if (scaledLds) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
-                         b.getStringAttr("rocm_fp8_w8a8_blockscale_nk_v1"));
+                         b.getStringAttr(request.foldedFullK
+                             ? (request.foldedPacked ? "rocm_mxfp4_w4a8_packed_folded_prefill_v1"
+                                                     : "rocm_mxfp4_w4a8_folded_prefill_v1")
+                             : request.scaleFormat == "e8m0"
+                                 ? "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"
+                                 : "rocm_fp8_w8a8_blockscale_nk_v1"));
         gpuFunc->setAttr("tessera.rocm.scale_k",
                          b.getI64IntegerAttr(request.scaleK));
         gpuFunc->setAttr("tessera.rocm.scale_n",
                          b.getI64IntegerAttr(request.scaleN));
         emitTypedLdsBlockScaleBody(
-            bodyB, loc, gpuFunc, /*mt=*/2,
+            bodyB, loc, gpuFunc, /*mt=*/request.foldedFullK ? 4 : 2,
             /*nt=*/nt / ldsWavesNScaled, ldsWavesMScaled, ldsWavesNScaled, T,
             request.staticM, request.staticN, request.staticK, request.scaleK,
             request.scaleN, blockscaleStage, blockscaleLdsPadBytes,
             blockscalePrefetchMode, request.rasterOrder, request.rasterGroup,
-            outputTy);
+            outputTy, request.runtimeMN, request.wholeM, request.wholeN,
+            request.runtimeK, request.foldedFullK, request.foldedWaveGuard,
+            request.foldedVectorScales, request.scaleFormat, request.foldedPacked);
       } else if (scaled) {
         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
-                         b.getStringAttr(request.bTransposed
-                                             ? "rocm_fp8_w8a8_blockscale_nk_v1"
-                                             : "rocm_fp8_w8a8_blockscale_v1"));
+                         b.getStringAttr(
+                             request.scaleFormat == "e8m0"
+                                 ? (request.bTransposed
+                                        ? "rocm_mxfp8_e4m3_e8m0_k32_nk_v1"
+                                        : "rocm_mxfp8_e4m3_e8m0_k32_v1")
+                                 : (request.bTransposed
+                                        ? "rocm_fp8_w8a8_blockscale_nk_v1"
+                                        : "rocm_fp8_w8a8_blockscale_v1")));
         gpuFunc->setAttr("tessera.rocm.scale_group_panels",
                          b.getI64IntegerAttr(scaleGroupPanels));
         gpuFunc->setAttr("tessera.rocm.scale_k",
@@ -3557,13 +4236,111 @@ struct GenerateWMMAGemmKernelPass
                         request.rasterGroup, request.staticM, request.staticN,
                         request.staticK, kUnroll, schedGroups, /*splitK=*/1,
                         /*sliceK=*/0, request.scaleK, request.scaleN,
-                        request.bTransposed, scaleGroupPanels);
+                        request.bTransposed, scaleGroupPanels, request.scaleFormat);
+        if (request.staticK == 0 && request.scaleK == 128 &&
+            request.scaleFormat == "fp32")
+          specializeShortScaledK(gpuFunc);
       } else {
         emitGeneralBody(bodyB, loc, gpuFunc, mt, nt, T, outputTy,
                         portableContract, viaTile, hasBias, activation,
                         packDesc && dt == "int4", request.rasterOrder,
                         request.rasterGroup, request.staticM, request.staticN,
                         request.staticK, kUnroll, schedGroups);
+      }
+      if (module->hasAttr("tessera.autodiff.scaled_member")) {
+        auto member = module->getAttrOfType<DictionaryAttr>("tessera.autodiff.scaled_member");
+        auto typeAttr = member ? member.getAs<TypeAttr>("type") : TypeAttr{};
+        auto memberType = typeAttr ? dyn_cast<FunctionType>(typeAttr.getValue()) : FunctionType{};
+        auto lhsType = memberType && memberType.getNumInputs() == 4 ?
+            dyn_cast<RankedTensorType>(memberType.getInput(0)) : RankedTensorType{};
+        auto outType = memberType && memberType.getNumResults() == 1 ?
+            dyn_cast<RankedTensorType>(memberType.getResult(0)) : RankedTensorType{};
+        auto batchPolicy = op->getAttrOfType<StringAttr>("batching");
+        auto batchCount = op->getAttrOfType<IntegerAttr>("batch_count");
+        int64_t launchBatches = 1;
+        const bool broadcast = batchPolicy && batchPolicy.getValue() == "broadcast";
+        if (broadcast) {
+          auto types = op->getAttrOfType<ArrayAttr>("batch_operands");
+          auto result = op->getAttrOfType<TypeAttr>("batch_result");
+          bool valid = memberType && memberType.getNumInputs() == 4 &&
+              memberType.getNumResults() == 1 && types && types.size() == 4 &&
+              result && result.getValue() == memberType.getResult(0);
+          if (valid) for (unsigned slot = 0; slot != 4; ++slot)
+            valid &= cast<TypeAttr>(types[slot]).getValue() == memberType.getInput(slot);
+          if (!valid) {
+            module.emitError("independent scaled member planes differ from typed SSA");
+            return signalPassFailure();
+          }
+          launchBatches = batchCount.getInt();
+          lhsType = RankedTensorType::get(lhsType.getShape().take_back(2), lhsType.getElementType());
+          outType = RankedTensorType::get(outType.getShape().take_back(2), outType.getElementType());
+        } else if (batchPolicy || (lhsType && lhsType.getRank() > 2)) {
+          if (!outType || !lhsType || !outType.hasStaticShape() ||
+              !lhsType.hasStaticShape() || outType.getRank() < 3) {
+            module.emitError("native scaled batch member extents differ from typed SSA");
+            return signalPassFailure();
+          }
+          int64_t logicalBatches = 1;
+          for (int64_t extent : outType.getShape().drop_back(2)) {
+            if (extent <= 0 || logicalBatches > INT64_MAX / extent) {
+              module.emitError("native scaled batch count overflows");
+              return signalPassFailure();
+            }
+            logicalBatches *= extent;
+          }
+          const bool sharedLhs = batchPolicy && batchPolicy.getValue() == "shared_lhs";
+          if (lhsType.getRank() != (sharedLhs ? 2 : outType.getRank()) ||
+              lhsType.getDimSize(lhsType.getRank() - 2) != outType.getDimSize(outType.getRank() - 2) ||
+              (!sharedLhs && lhsType.getShape().drop_back(2) != outType.getShape().drop_back(2))) {
+            module.emitError("native scaled lhs batch count differs");
+            return signalPassFailure();
+          }
+          if (batchPolicy) {
+            if (!batchCount || batchCount.getInt() != logicalBatches) {
+              module.emitError("native scaled batch count differs from typed SSA");
+              return signalPassFailure();
+            }
+            launchBatches = logicalBatches;
+            lhsType = RankedTensorType::get(lhsType.getShape().take_back(2), lhsType.getElementType());
+            outType = RankedTensorType::get(outType.getShape().take_back(2), outType.getElementType());
+          } else {
+            int64_t rows = outType.getDimSize(outType.getRank() - 2);
+            if (rows <= 0 || logicalBatches > INT64_MAX / rows) {
+              module.emitError("native scaled flattened rows overflow");
+              return signalPassFailure();
+            }
+            lhsType = RankedTensorType::get({logicalBatches * rows, lhsType.getDimSize(lhsType.getRank()-1)}, lhsType.getElementType());
+            outType = RankedTensorType::get({logicalBatches * rows, outType.getDimSize(outType.getRank()-1)}, outType.getElementType());
+          }
+        }
+        auto lhsOrientation = op->getAttrOfType<BoolAttr>("transposeA");
+        const bool transposeLhs = lhsOrientation && lhsOrientation.getValue();
+        if (!scaled || splitK || hasBias || activation != "none" ||
+            !lhsType || !outType || lhsType.getRank() != 2 || outType.getRank() != 2 ||
+            !lhsType.hasStaticShape() || !outType.hasStaticShape() ||
+            lhsType.getDimSize(transposeLhs ? 1 : 0) != outType.getDimSize(0)) {
+          module.emitError("native scaled program member needs resolved scaled matmul ABI");
+          return signalPassFailure();
+        }
+        const int64_t rows = scaledLds ? (request.foldedFullK ? 64 : 32) * ldsWavesMScaled : 16 * mt;
+        const int64_t columns = 16 * nt;
+        const int64_t threads = scaledLds ? 32 * ldsWavesMScaled * ldsWavesNScaled : 32;
+        const int64_t launchM = outType.getDimSize(0);
+        const int64_t launchN = outType.getDimSize(1);
+        const int64_t launchK = lhsType.getDimSize(transposeLhs ? 0 : 1);
+        if (launchM <= 0 || launchN <= 0 || launchK <= 0 ||
+            (request.staticM > 0 && request.staticM != launchM) ||
+            (request.staticN > 0 && request.staticN != launchN) ||
+            (request.staticK > 0 && request.staticK != launchK)) {
+          module.emitError("native scaled program extents differ from typed SSA");
+          return signalPassFailure();
+        }
+        SmallVector<int64_t> scalars{launchM, launchN, launchK};
+        SmallVector<int64_t> geometry{
+            (launchN - 1) / columns + 1,
+            (launchM - 1) / rows + 1, launchBatches, threads, 1, 1};
+        if (failed(projectROCMNativeProgramMember(module, kname, 4, scalars, geometry)))
+          return signalPassFailure();
       }
       if (gpuFunc->hasAttr("tessera.rocm.typed_gfx11_gemm_contract"))
         gpuFunc->setAttr(

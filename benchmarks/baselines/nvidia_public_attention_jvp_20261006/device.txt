@@ -1,0 +1,73 @@
+verified ('q', 'k', 'v') ('q',) 5 False
+verified ('q', 'k', 'v') ('k',) 5 False
+verified ('q', 'k', 'v') ('v',) 5 False
+verified ('q', 'k', 'v') ('k', 'q') 5 False
+verified ('q', 'k', 'v') ('v', 'q') 5 False
+verified ('q', 'k', 'v') ('q', 'k', 'v') 5 False
+verified ('q', 'k', 'v') ('q',) 129 True
+verified ('q', 'k', 'v') ('k',) 129 True
+verified ('q', 'k', 'v') ('v',) 129 True
+verified ('q', 'k', 'v') ('k', 'q') 129 True
+verified ('q', 'k', 'v') ('v', 'q') 129 True
+verified ('q', 'k', 'v') ('q', 'k', 'v') 129 True
+verified ('q', 'v', 'k') ('q',) 5 False
+verified ('q', 'v', 'k') ('k',) 5 False
+verified ('q', 'v', 'k') ('v',) 5 False
+verified ('q', 'v', 'k') ('k', 'q') 5 False
+verified ('q', 'v', 'k') ('v', 'q') 5 False
+verified ('q', 'v', 'k') ('q', 'k', 'v') 5 False
+verified ('q', 'v', 'k') ('q',) 129 True
+verified ('q', 'v', 'k') ('k',) 129 True
+verified ('q', 'v', 'k') ('v',) 129 True
+verified ('q', 'v', 'k') ('k', 'q') 129 True
+verified ('q', 'v', 'k') ('v', 'q') 129 True
+verified ('q', 'v', 'k') ('q', 'k', 'v') 129 True
+verified ('k', 'q', 'v') ('q',) 5 False
+verified ('k', 'q', 'v') ('k',) 5 False
+verified ('k', 'q', 'v') ('v',) 5 False
+verified ('k', 'q', 'v') ('k', 'q') 5 False
+verified ('k', 'q', 'v') ('v', 'q') 5 False
+verified ('k', 'q', 'v') ('q', 'k', 'v') 5 False
+verified ('k', 'q', 'v') ('q',) 129 True
+verified ('k', 'q', 'v') ('k',) 129 True
+verified ('k', 'q', 'v') ('v',) 129 True
+verified ('k', 'q', 'v') ('k', 'q') 129 True
+verified ('k', 'q', 'v') ('v', 'q') 129 True
+verified ('k', 'q', 'v') ('q', 'k', 'v') 129 True
+verified ('k', 'v', 'q') ('q',) 5 False
+verified ('k', 'v', 'q') ('k',) 5 False
+verified ('k', 'v', 'q') ('v',) 5 False
+verified ('k', 'v', 'q') ('k', 'q') 5 False
+verified ('k', 'v', 'q') ('v', 'q') 5 False
+verified ('k', 'v', 'q') ('q', 'k', 'v') 5 False
+verified ('k', 'v', 'q') ('q',) 129 True
+verified ('k', 'v', 'q') ('k',) 129 True
+verified ('k', 'v', 'q') ('v',) 129 True
+verified ('k', 'v', 'q') ('k', 'q') 129 True
+verified ('k', 'v', 'q') ('v', 'q') 129 True
+verified ('k', 'v', 'q') ('q', 'k', 'v') 129 True
+verified ('v', 'q', 'k') ('q',) 5 False
+verified ('v', 'q', 'k') ('k',) 5 False
+verified ('v', 'q', 'k') ('v',) 5 False
+verified ('v', 'q', 'k') ('k', 'q') 5 False
+verified ('v', 'q', 'k') ('v', 'q') 5 False
+verified ('v', 'q', 'k') ('q', 'k', 'v') 5 False
+verified ('v', 'q', 'k') ('q',) 129 True
+verified ('v', 'q', 'k') ('k',) 129 True
+verified ('v', 'q', 'k') ('v',) 129 True
+verified ('v', 'q', 'k') ('k', 'q') 129 True
+verified ('v', 'q', 'k') ('v', 'q') 129 True
+verified ('v', 'q', 'k') ('q', 'k', 'v') 129 True
+verified ('v', 'k', 'q') ('q',) 5 False
+verified ('v', 'k', 'q') ('k',) 5 False
+verified ('v', 'k', 'q') ('v',) 5 False
+verified ('v', 'k', 'q') ('k', 'q') 5 False
+verified ('v', 'k', 'q') ('v', 'q') 5 False
+verified ('v', 'k', 'q') ('q', 'k', 'v') 5 False
+verified ('v', 'k', 'q') ('q',) 129 True
+verified ('v', 'k', 'q') ('k',) 129 True
+verified ('v', 'k', 'q') ('v',) 129 True
+verified ('v', 'k', 'q') ('k', 'q') 129 True
+verified ('v', 'k', 'q') ('v', 'q') 129 True
+verified ('v', 'k', 'q') ('q', 'k', 'v') 129 True
+wrote benchmarks/baselines/nvidia_public_attention_jvp_20261006/packet.json

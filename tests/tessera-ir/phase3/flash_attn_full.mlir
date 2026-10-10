@@ -39,11 +39,12 @@
 // RUN: tessera-opt --allow-unregistered-dialect -tessera-lower-to-gpu %s \
 // RUN:   | FileCheck %s --check-prefix=PIPE
 
-// The func.func prints pretty (nvvm.kernel is a func attr); the unregistered
+// Kernel intent stays on func.func as tessera.nvidia.kernel; NVVM kernel
+// metadata belongs to the later executable LLVM function. The func prints pretty; the unregistered
 // tile.*/schedule.* ops print generically inline.  Match the func + the lowered
 // op sequence in emitted order.
 // CHECK:          func.func @flash_attn_fwd
-// CHECK-SAME:     nvvm.kernel
+// CHECK-SAME:     tessera.nvidia.kernel
 // CHECK:          tile.tma.descriptor
 // CHECK:          tile.mbarrier.init
 // CHECK:          tile.mbarrier.arrive_expect_tx
@@ -60,7 +61,7 @@
 // CHECK-NOT:      tile.mma
 
 // PIPE:           func.func @flash_attn_fwd
-// PIPE-SAME:      nvvm.kernel
+// PIPE-SAME:      tessera.nvidia.kernel
 // PIPE:           tile.tma.copy_async
 // PIPE:           tessera_attn.scaled_dot_product
 

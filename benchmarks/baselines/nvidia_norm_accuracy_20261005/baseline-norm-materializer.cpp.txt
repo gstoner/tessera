@@ -1,0 +1,179 @@
+static LogicalResult materializeSm120NormKernel(
+    tessera::tile::NormKernelOp kernel, OpBuilder &builder) {
+  Operation *op = kernel.getOperation();
+  ValueRange inputs = kernel.getInputs();
+  auto storage = op->getAttrOfType<StringAttr>("storage");
+  auto accum = op->getAttrOfType<StringAttr>("accum");
+  auto kind = op->getAttrOfType<StringAttr>("kind");
+  auto axis = op->getAttrOfType<IntegerAttr>("axis");
+  auto affine = op->getAttrOfType<BoolAttr>("affine");
+  bool f16Storage = storage && storage.getValue() == "f16";
+  bool bf16Storage = storage && storage.getValue() == "bf16";
+  bool layer = kind && kind.getValue() == "layernorm";
+  auto schedule = op->getAttrOfType<StringAttr>("schedule");
+  bool cooperative = schedule && schedule.getValue() == "cooperative_128";
+  if (schedule && schedule.getValue() != "serial" && !cooperative)
+    return op->emitError("SM120 norm schedule must be serial|cooperative_128");
+  if (inputs.size() != 5 || !storage ||
+      (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
+      !accum || accum.getValue() != "f32" || !kind ||
+      (!layer && kind.getValue() != "rmsnorm") || !axis ||
+      axis.getInt() != -1 || !affine || affine.getValue() ||
+      !inputs[4].getType().isF32()) {
+    op->emitError(
+        "sm_120 norm_kernel requires f16/bf16/f32 storage, f32 accumulation, "
+        "rmsnorm|layernorm, axis=-1, affine=false, and f32 epsilon");
+    return failure();
+  }
+  Location loc = op->getLoc();
+  Type i32 = builder.getI32Type();
+  Type i64 = builder.getI64Type();
+  auto f32 = builder.getF32Type();
+  Type storageType = f16Storage
+                         ? Type(builder.getF16Type())
+                         : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
+  unsigned alignment = (f16Storage || bf16Storage) ? 2 : 4;
+  Value xBase = inputs[0], outBase = inputs[1];
+  Value rows = inputs[2], columns = inputs[3], epsilon = inputs[4];
+  Value block = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
+  Value thread = arith::ExtUIOp::create(
+      builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
+  Value row = cooperative ? block : addI64(
+      builder, loc, mulI64(builder, loc, block, i64Constant(builder, loc, 128)),
+      thread);
+  Value active = lessI64(builder, loc, row, rows);
+  auto loadF32 = [&](Value linear) -> Value {
+    Value ptr = LLVM::GEPOp::create(
+        builder, loc, xBase.getType(), storageType, xBase,
+        ValueRange{linear});
+    Value value =
+        LLVM::LoadOp::create(builder, loc, storageType, ptr, alignment);
+    return (f16Storage || bf16Storage)
+               ? Value(LLVM::FPExtOp::create(builder, loc, f32, value))
+               : value;
+  };
+  auto storeF32 = [&](Value linear, Value value) {
+    Value stored = (f16Storage || bf16Storage)
+                       ? Value(LLVM::FPTruncOp::create(
+                             builder, loc, storageType, value))
+                       : value;
+    Value ptr = LLVM::GEPOp::create(
+        builder, loc, outBase.getType(), storageType, outBase,
+        ValueRange{linear});
+    LLVM::StoreOp::create(builder, loc, stored, ptr, alignment);
+  };
+  Value scratch;
+  if (cooperative) {
+    FailureOr<Value> allocated = sm120ReductionScratch(op, builder);
+    if (failed(allocated)) return failure();
+    scratch = *allocated;
+  }
+  // All 128 threads participate, including neutral lanes on a ragged row.
+  // The row guard is CTA-uniform. The final barrier also protects the next
+  // reduction's reuse of scratch from racing with readers of this result.
+  auto reduceSum = [&](Value partial) -> Value {
+    if (!cooperative) return partial;
+    Value ptr = LLVM::GEPOp::create(
+        builder, loc, scratch.getType(), f32, scratch, ValueRange{thread});
+    LLVM::StoreOp::create(builder, loc, partial, ptr, 4);
+    NVVM::BarrierOp::create(builder, loc);
+    for (int64_t stride = 64; stride >= 1; stride >>= 1) {
+      auto combine = scf::IfOp::create(builder, loc,
+          lessI64(builder, loc, thread, i64Constant(builder, loc, stride)), false);
+      {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointToStart(combine.thenBlock());
+        Value rhsPtr = LLVM::GEPOp::create(
+            builder, loc, scratch.getType(), f32, scratch,
+            ValueRange{addI64(builder, loc, thread, i64Constant(builder, loc, stride))});
+        Value lhs = LLVM::LoadOp::create(builder, loc, f32, ptr, 4);
+        Value rhs = LLVM::LoadOp::create(builder, loc, f32, rhsPtr, 4);
+        LLVM::StoreOp::create(builder, loc,
+            arith::AddFOp::create(builder, loc, lhs, rhs), ptr, 4);
+      }
+      builder.setInsertionPointAfter(combine);
+      NVVM::BarrierOp::create(builder, loc);
+    }
+    Value leader = LLVM::GEPOp::create(builder, loc, scratch.getType(), f32, scratch,
+        ValueRange{i64Constant(builder, loc, 0)});
+    Value reduced = LLVM::LoadOp::create(builder, loc, f32, leader, 4);
+    NVVM::BarrierOp::create(builder, loc);
+    return reduced;
+  };
+  auto guarded =
+      scf::IfOp::create(builder, loc, active, /*withElseRegion=*/false);
+  {
+    OpBuilder::InsertionGuard guard(builder);
+    builder.setInsertionPointToStart(guarded.thenBlock());
+    Value zero = cooperative ? thread : i64Constant(builder, loc, 0);
+    Value one = i64Constant(builder, loc, cooperative ? 128 : 1);
+    Value rowBase = mulI64(builder, loc, row, columns);
+    Value zeroF32 = arith::ConstantFloatOp::create(
+        builder, loc, f32, APFloat(0.0f));
+    auto sumLoop = scf::ForOp::create(
+        builder, loc, zero, columns, one, ValueRange{zeroF32});
+    {
+      OpBuilder::InsertionGuard loopGuard(builder);
+      builder.setInsertionPointToStart(sumLoop.getBody());
+      Value linear =
+          addI64(builder, loc, rowBase, sumLoop.getInductionVar());
+      Value value = loadF32(linear);
+      Value contribution =
+          layer ? value : Value(arith::MulFOp::create(builder, loc, value, value));
+      Value next = arith::AddFOp::create(
+          builder, loc, sumLoop.getRegionIterArgs()[0], contribution);
+      scf::YieldOp::create(builder, loc, ValueRange{next});
+    }
+    builder.setInsertionPointAfter(sumLoop);
+    Value total = reduceSum(sumLoop.getResult(0));
+    Value columnsF32 =
+        arith::UIToFPOp::create(builder, loc, f32, columns);
+    Value mean = layer
+                     ? Value(arith::DivFOp::create(
+                           builder, loc, total, columnsF32))
+                     : zeroF32;
+    Value varianceSum = total;
+    if (layer) {
+      auto varianceLoop = scf::ForOp::create(
+          builder, loc, zero, columns, one, ValueRange{zeroF32});
+      {
+        OpBuilder::InsertionGuard loopGuard(builder);
+        builder.setInsertionPointToStart(varianceLoop.getBody());
+        Value linear =
+            addI64(builder, loc, rowBase, varianceLoop.getInductionVar());
+        Value centered =
+            arith::SubFOp::create(builder, loc, loadF32(linear), mean);
+        Value squared =
+            arith::MulFOp::create(builder, loc, centered, centered);
+        Value next = arith::AddFOp::create(
+            builder, loc, varianceLoop.getRegionIterArgs()[0], squared);
+        scf::YieldOp::create(builder, loc, ValueRange{next});
+      }
+      builder.setInsertionPointAfter(varianceLoop);
+      varianceSum = reduceSum(varianceLoop.getResult(0));
+    }
+    Value variance =
+        arith::DivFOp::create(builder, loc, varianceSum, columnsF32);
+    Value adjusted = arith::AddFOp::create(builder, loc, variance, epsilon);
+    Value inverse = NVVM::RsqrtOp::create(
+        builder, loc, f32, adjusted, /*ftz=*/false);
+    auto outputLoop =
+        scf::ForOp::create(builder, loc, zero, columns, one);
+    {
+      OpBuilder::InsertionGuard loopGuard(builder);
+      builder.setInsertionPointToStart(outputLoop.getBody());
+      Value linear =
+          addI64(builder, loc, rowBase, outputLoop.getInductionVar());
+      Value value = loadF32(linear);
+      if (layer)
+        value = arith::SubFOp::create(builder, loc, value, mean);
+      storeF32(
+          linear, arith::MulFOp::create(builder, loc, value, inverse));
+    }
+  }
+  builder.setInsertionPointAfter(guarded);
+  op->erase();
+  return success();
+}
+

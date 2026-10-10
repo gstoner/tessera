@@ -1,0 +1,2 @@
+All archived current compiler/Python source bytes match. Both packet compiler/source fingerprints match the rebuilt checkout. Six NVFP4 JIT and three paged-KV movement rows numerically checked.
+Three-format packet: four shapes/20 arms; current coordinated source and owning rebuilt compiler hashes match. Packed regressions: 209 passed, no skips.

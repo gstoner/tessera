@@ -1,0 +1,1 @@
+Six shape/bias profiles, 12 paired lanes and 60 poisoned numerical windows verified; source/compiler/runtime fingerprints match.

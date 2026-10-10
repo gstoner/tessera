@@ -1,0 +1,26 @@
+--- python/tessera/compiler/nvidia_tensor_lhs.py
++++ candidate/nvidia_tensor_lhs.py
+@@ -161,7 +161,7 @@
+     return consumer
+ 
+ 
+-def package_traced_lhs(module, *, producer_schedule=None, dynamic_axes=(), shape_bounds=None):
++def package_traced_lhs(module, *, producer_schedule=None, softmax_schedule=None, dynamic_axes=(), shape_bounds=None):
+     module=deepcopy(module)
+     if shape_bounds is not None:
+         from .bounded_nvidia_lhs import validate_bounds
+@@ -234,6 +234,14 @@
+         if p.op_name=="tessera.softmax" or producer_schedule not in {"serial","cooperative_128"}:
+             raise ValueError("explicit Schedule policy requires a normalization")
+         p.kwargs={**p.kwargs,"schedule":producer_schedule}
++    if softmax_schedule is not None:
++        if softmax_schedule not in {"serial", "cooperative_128"}:
++            raise ValueError("explicit softmax Schedule policy is invalid")
++        selected = [op for op in producers if op.op_name == "tessera.softmax"]
++        if not selected:
++            raise ValueError("explicit softmax Schedule policy needs a softmax producer")
++        for op in selected:
++            op.kwargs = {**op.kwargs, "schedule": softmax_schedule}
+     module.module_attrs.update({"tessera.target":'"nvidia_sm120"',"tessera.arch":'"sm_120"'})
+     if dynamic_axes:
+         active={"M":m,"N":n,"K":k}

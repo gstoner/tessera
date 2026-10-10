@@ -47,6 +47,26 @@ def _module(shape: tuple[int, ...], storage: str, causal: bool):
     )])
 
 
+def _attention_reference(q: np.ndarray, k: np.ndarray, v: np.ndarray,
+                         *, scale: float, causal: bool) -> np.ndarray:
+    """Independent fp64 oracle for the benchmark's causal/full envelope."""
+    q64 = np.asarray(q, dtype=np.float64)
+    k64 = np.asarray(k, dtype=np.float64)
+    v64 = np.asarray(v, dtype=np.float64)
+    scores = np.matmul(q64, np.swapaxes(k64, -1, -2)) * scale
+    if causal:
+        query_rows, key_rows = scores.shape[-2:]
+        masked = np.triu(
+            np.ones((query_rows, key_rows), dtype=bool),
+            k=1 + max(key_rows - query_rows, 0),
+        )
+        scores = np.where(masked, -np.inf, scores)
+    shifted = scores - np.max(scores, axis=-1, keepdims=True)
+    probabilities = np.exp(shifted)
+    probabilities /= np.sum(probabilities, axis=-1, keepdims=True)
+    return np.matmul(probabilities, v64).astype(np.float32)
+
+
 def _delta(a: float, b: float) -> float:
     return abs(a - b) / min(a, b) if min(a, b) else 0.0
 
@@ -98,6 +118,19 @@ def record(samples: int, device_reps: int, e2e_reps: int, warmup: int) -> dict:
                 smoke = rt.launch(artifact, bindings)
                 if not smoke["ok"]:
                     raise RuntimeError(str(smoke.get("reason")))
+                expected = _attention_reference(
+                    q, k, v, scale=1.0 / np.sqrt(float(shape[-2])),
+                    causal=causal,
+                )
+                tolerance = 2e-3 if storage == "fp16" else 3e-5
+                if not np.allclose(output, expected, rtol=tolerance,
+                                   atol=tolerance):
+                    max_error = float(np.max(np.abs(output - expected)))
+                    raise RuntimeError(
+                        "attention correctness check failed before timing: "
+                        f"max_abs_error={max_error:.8g}, tolerance={tolerance}"
+                    )
+                max_abs_error = float(np.max(np.abs(output - expected)))
                 raw = (ctypes.c_void_p * 4)(
                     int(q.ctypes.data), int(k.ctypes.data), int(v.ctypes.data), int(output.ctypes.data)
                 )
@@ -136,6 +169,9 @@ def record(samples: int, device_reps: int, e2e_reps: int, warmup: int) -> dict:
                     "compile": {"cold_ms": cold_ms, "warm_ms": warm_ms,
                                 "cold_state": bundle.native_image.compile_state,
                                 "warm_state": warm.native_image.compile_state},
+                    "correctness": "passed_before_timing",
+                    "max_abs_error": max_abs_error,
+                    "correctness_atol_rtol": tolerance,
                     "resources": resources.to_dict() if resources else None,
                     "runs": runs,
                     "stability": {

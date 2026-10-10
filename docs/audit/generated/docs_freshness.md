@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-08**.
 
 ## Headline
 
-- **159** docs catalogued across the canonical doc tree.
-- **158** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **33** updated within the last 30 days.
+- **160** docs catalogued across the canonical doc tree.
+- **159** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **37** updated within the last 30 days.
 - **40** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -43,7 +43,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `RUNTIME_ABI_SPEC.md` | Normative | 2026-07-18 | 82 | ✓ |
 | `SHAPE_SYSTEM.md` | Normative | 2026-05-22 | 139 | ✓ |
 | `TARGET_IR_SPEC.md` | Normative | 2026-08-24 | 45 | ✓ |
-| `TILE_IR.md` | Normative | 2026-08-10 | 59 | ✓ |
+| `TILE_IR.md` | Normative | 2026-10-02 | 6 | ✓ |
 | `VALIDATION_SPINE.md` | Normative | 2026-08-02 | 67 | ✓ |
 | `VALUE_TARGET_IR_CONTRACT.md` | Normative | 2026-06-04 | 126 | ✓ |
 
@@ -143,13 +143,13 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/apple/APPLE_AUDIT.md` | - | 2026-09-25 | 13 | ✓ |
 | `backend/apple/MPSGRAPH_RUNTIME_GLASS_JAWS.md` | - | 2026-07-13 | 87 | ✓ |
 | `backend/apple/README.md` | - | 2026-09-05 | 33 | ✓ |
-| `backend/apple/todo.md` | - | 2026-10-07 | 1 | ✓ |
+| `backend/apple/todo.md` | - | 2026-10-08 | 0 | ✓ |
 | `backend/nvidia/BLACKWELL_SM120_EXECUTION_PLAN.md` | - | 2026-09-05 | 33 | ✓ |
 | `backend/nvidia/NVIDIA_AUDIT.md` | - | 2026-09-05 | 33 | ✓ |
 | `backend/nvidia/SM120_DIFFERENTIATION_DASHBOARD.md` | - | 2026-09-27 | 11 | ✓ |
 | `backend/nvidia/VERIFY_TARGET_IR_TAIL.md` | - | 2026-07-13 | 87 | ✓ |
 | `backend/nvidia/spikes/sm120_mma_sync/README.md` | - | 2026-06-24 | 106 | ✓ |
-| `backend/nvidia/todo.md` | - | 2026-10-07 | 1 | ✓ |
+| `backend/nvidia/todo.md` | - | 2026-10-08 | 0 | ✓ |
 | `backend/rocm/GEMM_PERF_LADDER.md` | - | 2026-08-04 | 65 | ✓ |
 | `backend/rocm/GFX125X_CDNA5_COMPILER_REFERENCE.md` | - | 2026-08-14 | 55 | ✓ |
 | `backend/rocm/GIN_EXACT_DEVICE_RUNBOOK.md` | - | 2026-08-09 | 60 | ✓ |
@@ -158,8 +158,8 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `backend/rocm/ROCM_LANE_MAP.md` | - | 2026-09-26 | 12 | ✓ |
 | `backend/rocm/ROCM_PATTERNS_FROM_AMD_ECOSYSTEM.md` | - | 2026-07-28 | 72 | ✓ |
 | `backend/rocm/STRIX_HALO_EXECUTION_PLAN.md` | - | 2026-09-05 | 33 | ✓ |
-| `backend/rocm/todo.md` | - | 2026-10-07 | 1 | ✓ |
-| `backend/x86/todo.md` | - | 2026-10-07 | 1 | ✓ |
+| `backend/rocm/todo.md` | - | 2026-10-08 | 0 | ✓ |
+| `backend/x86/todo.md` | - | 2026-10-08 | 0 | ✓ |
 | `compiler/AMD_KERNEL_COMPILER_SURVEY.md` | - | 2026-09-22 | 16 | ✓ |
 | `compiler/ANN_CALCULUS_DESIGN_SPIKE.md` | - | 2026-09-04 | 34 | ✓ |
 | `compiler/AUTODIFF_ARCHITECTURE_REVIEW.md` | - | 2026-09-06 | 32 | ✓ |
@@ -175,15 +175,16 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/CUTE_IR_ASSESSMENT.md` | - | 2026-08-24 | 45 | ✓ |
 | `compiler/DIFFERENTIABLE_PROGRAMMING_REVIEW.md` | - | 2026-09-07 | 31 | ✓ |
 | `compiler/EGGROLL_SUPPORT_PLAN.md` | - | 2026-09-07 | 31 | ✓ |
-| `compiler/EVALUATOR_PLAN.md` | - | 2026-08-08 | 61 | ✓ |
+| `compiler/EVALUATOR_PLAN.md` | - | 2026-10-06 | 2 | ✓ |
+| `compiler/FIVE_SLICE_STATUS_20261007.md` | - | 2026-10-07 | 1 | ✓ |
 | `compiler/FORGE_ASSESSMENT.md` | - | 2026-09-07 | 31 | ✓ |
 | `compiler/FRONTEND_GRAPH_SCHEDULE_REVIEW.md` | - | 2026-08-02 | 67 | ✓ |
 | `compiler/FRONT_END_LOWERING_ASSESSMENT.md` | - | 2026-09-03 | 35 | ✓ |
 | `compiler/FUNCTIONAL_ANALYSIS_TSOL_PLAN.md` | - | 2026-09-06 | 32 | ✓ |
 | `compiler/GAME_THEORY_PLAN.md` | - | 2026-09-07 | 31 | ✓ |
 | `compiler/HEAP_BARRIER_ARCHITECTURE_REVIEW.md` | - | 2026-09-11 | 27 | ✓ |
-| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-09-30 | 8 | ✓ |
-| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-09-28 | 10 | ✓ |
+| `compiler/INTEGRATED_COMPILER_LOG.md` | - | 2026-10-07 | 1 | ✓ |
+| `compiler/INTEGRATED_COMPILER_PLAN.md` | - | 2026-10-07 | 1 | ✓ |
 | `compiler/INTRA_KERNEL_FEEDBACK_PLAN.md` | - | 2026-09-23 | 15 | ✓ |
 | `compiler/IR_STACK_INTEGRATION_REVIEW.md` | - | 2026-08-02 | 67 | ✓ |
 | `compiler/LSE_CHECKPOINT_CONTRACT.md` | - | 2026-07-27 | 73 | ✓ |
@@ -193,7 +194,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/ODS_OP_CONNECTION_TRIAGE.md` | - | 2026-09-28 | 10 | ✓ |
 | `compiler/OPTIMIZING_COMPILER_PLAN.md` | - | 2026-08-08 | 61 | ✓ |
 | `compiler/PDE_STENCIL_CAPABILITY_PLAN.md` | - | 2026-09-07 | 31 | ✓ |
-| `compiler/README.md` | - | 2026-09-28 | 10 | ✓ |
+| `compiler/README.md` | - | 2026-10-07 | 1 | ✓ |
 | `compiler/RIEMANNIAN_OT_PLAN.md` | - | 2026-09-07 | 31 | ✓ |
 | `compiler/SCHEDULE_OBJECT_DESIGN.md` | - | 2026-08-16 | 53 | ✓ |
 | `compiler/SEQUENCE_MIXER_ENGINEERING_PLAN.md` | - | 2026-09-10 | 28 | ✓ |
@@ -202,7 +203,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/TARGET_IR_REVIEW.md` | - | 2026-09-06 | 32 | ✓ |
 | `compiler/TILERT_ASSESSMENT.md` | - | 2026-09-05 | 33 | ✓ |
 | `compiler/TILESIGHT_ASSESSMENT.md` | - | 2026-07-30 | 70 | ✓ |
-| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-09-04 | 34 | ✓ |
+| `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-10-02 | 6 | ✓ |
 | `compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md` | - | 2026-08-25 | 44 | ✓ |
 | `compiler/compiler_enhancement.md` | - | 2026-09-08 | 30 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-09-04 | 34 | ✓ |

@@ -1,0 +1,38 @@
+{
+  "compiler_sha256": "b8fe61ff3e13322eb43b096a035e75ac2bdbd0bd3810eb810b8714317918029e",
+  "rows": [
+    {
+      "dtype": "fp16",
+      "default_serial_boundaries": "byte_identical_to_primary",
+      "serial_schedule_digest": "8b1adaf494b2cdc9cab3010b821d5b3c6c4b28c4f7ab751775450ee79c95d47d",
+      "cooperative_schedule_digest": "d1b6b72f8e4afd0047197bb9d7adabf028c281afac00aef1f8b162dbaa2cc5ca",
+      "schedule_replay": "byte_identical",
+      "forged_policy": "rejected",
+      "forged_geometry": "rejected",
+      "native_barriers": 18
+    },
+    {
+      "dtype": "bf16",
+      "default_serial_boundaries": "byte_identical_to_primary",
+      "serial_schedule_digest": "7871ba03e6257590c044c898ceaaad166b69dc9670d6f5663d01c8d541b041b4",
+      "cooperative_schedule_digest": "c49459512612a437ab62f0cc312e82ee1a8b661a939895610aa9e2a6e5b2d0ea",
+      "schedule_replay": "byte_identical",
+      "forged_policy": "rejected",
+      "forged_geometry": "rejected",
+      "native_barriers": 18
+    },
+    {
+      "dtype": "fp32",
+      "default_serial_boundaries": "byte_identical_to_primary",
+      "serial_schedule_digest": "8b1c1187d10a74f32c24b0ccdc0a33fbebe9c8a62d559504345064753b9743f7",
+      "cooperative_schedule_digest": "9d3b4bf250bf3f9199314ab3950b38ef15c37cb05f576417bdcf98b0f374c29d",
+      "schedule_replay": "byte_identical",
+      "forged_policy": "rejected",
+      "forged_geometry": "rejected",
+      "native_barriers": 18
+    }
+  ],
+  "sibling_policy": "rejected_on_all_four_targets",
+  "execution_evidence": "pending",
+  "native_launch_contract": "pending"
+}

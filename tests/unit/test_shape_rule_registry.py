@@ -468,3 +468,37 @@ def test_alibi_explicit_slopes_shape_is_not_the_slopes_shape():
         "tessera.alibi", [tensor_ir_type((3,), "fp32")],
         {"num_heads": 4, "seq_len": 7}
     ) == TENSOR_OPAQUE
+
+
+@pytest.mark.parametrize("dtype", ["fp32", "fp16", "bf16"])
+def test_flash_attention_result_uses_value_width_and_query_axes(dtype):
+    types = [tensor_ir_type(shape, dtype) for shape in
+             ((2,4,16,8),(2,2,19,8),(2,2,19,6))]
+    result = _infer_result_type("tessera.flash_attn", types)
+    assert result.shape == ("2","4","16","6")
+    assert result.dtype == dtype
+    assert shape_rule_for("tessera.flash_attn") == "attention_value_width"
+
+
+def test_flash_attention_value_width_agrees_with_public_numerics():
+    import tessera as ts
+    rng=np.random.default_rng(120)
+    values=[rng.normal(size=s).astype(np.float32) for s in
+            ((2,4,5,8),(2,2,7,8),(2,2,7,6))]
+    expected=ts.ops.flash_attn(*values,causal=True)
+    inferred=_infer_result_type("tessera.flash_attn",
+        [tensor_ir_type(v.shape,"fp32") for v in values])
+    assert tuple(map(int,inferred.shape)) == expected.shape
+
+
+def test_flash_attention_grouped_query_matches_explicit_kv_head_mapping():
+    import tessera as ts
+    rng=np.random.default_rng(121)
+    q,k,v=[rng.normal(size=s).astype(np.float32) for s in
+           ((2,4,5,8),(2,2,7,8),(2,2,7,6))]
+    actual=ts.ops.flash_attn(q,k,v,causal=True)
+    expected=ts.ops.flash_attn(q,np.repeat(k,2,axis=1),np.repeat(v,2,axis=1),causal=True)
+    np.testing.assert_allclose(actual,expected,rtol=1e-6,atol=1e-6)
+    assert actual.dtype == q.dtype
+    with pytest.raises(ValueError,match="query heads divisible"):
+        ts.ops.flash_attn(q[:,:3],k,v)

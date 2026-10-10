@@ -1,0 +1,4657 @@
+{
+  "architecture": "gfx1151",
+  "compiler_boundary": "serialized_native_package",
+  "device": "gfx1151",
+  "device_event_follow_up": "kernel_clock_witness_required",
+  "device_identity": {
+    "architecture": "gfx1151",
+    "configured_architecture": "gfx1151",
+    "source": "hipGetDevicePropertiesR0600"
+  },
+  "dtype_rows": [
+    {
+      "cold_ms": 425.35173,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 1.0308697806475968,
+      "error_limit": 0.005,
+      "family": "unary",
+      "max_abs_error": 0.0,
+      "op_name": "sqrt",
+      "package_receipt": {
+        "artifact_hash": "7fbd4c79b7eecc54ee6641a8163d11ad9e37f4242b0c8e86a37b6787be9e95cc",
+        "ir_sha256": {
+          "graph_ir": "f38d961e66d01832dd638768ff5347afe940982808164fda24972f34023d2516",
+          "schedule_ir": "b5347de38184c80a65b6d113a47e83cd890ee6aca73b8c841f92ce5c2848a4d6",
+          "target_ir": "c3a88ed24695c706927ac0844ccf7dcf2accf60c3e4426d18afa9856ca37a478",
+          "tile_ir": "ff61beb4643d5c997bddd2c38420c8b91013fb8e5e415cfb9b7cdad045b51a4b"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "9c1e779768594e22b2443582b5f5fd50c1cfdef1c113d6d7648ebce92c7e2920",
+          "descriptor_digest": "96a98df2f4c70cc79a2fcabbe20d5f976fbe2ff4abde7c7b1dc49c16f07985e0",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_unary_358bd9535b723f30",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "fdb5575b7ed899f72f18a6b0c02e0b367a02276b8c1c9639479599c07594cd22",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "f38d961e66d01832dd638768ff5347afe940982808164fda24972f34023d2516",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "unary",
+              "kind": "sqrt",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "571804d80a96f6416342320cfcc635f048c5d87bbd09d5ad4b6b4f86de57b0a7",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f32"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "b5347de38184c80a65b6d113a47e83cd890ee6aca73b8c841f92ce5c2848a4d6",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "ff61beb4643d5c997bddd2c38420c8b91013fb8e5e415cfb9b7cdad045b51a4b",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "fb34a8a465de4ea25a76c8e9adc68ef448e3a3947b49c7c7cc30952fea5bdee0",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+              "symbol": "tessera_rocm_scalar_unary_358bd9535b723f30"
+            }
+          ],
+          "image_digest": "fdb5575b7ed899f72f18a6b0c02e0b367a02276b8c1c9639479599c07594cd22",
+          "payload_digest": "0a848f2f2beaa599e378697158c8677bb8d44a6dec6b47a8953442fe5fdc5c47",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "c3a88ed24695c706927ac0844ccf7dcf2accf60c3e4426d18afa9856ca37a478",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.079095,
+      "warm_median_ms": 2.034352,
+      "warm_samples_ns": [
+        2896218,
+        2122476,
+        1955257,
+        2064983,
+        1920925,
+        1992334,
+        2034352
+      ]
+    },
+    {
+      "cold_ms": 477.082436,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 1.0616083035341857,
+      "error_limit": 0.005,
+      "family": "unary",
+      "max_abs_error": 9.5367431640625e-07,
+      "op_name": "exp",
+      "package_receipt": {
+        "artifact_hash": "e026544a6daad9c8871e1259209334877a3785f5eea7f69d7c5d4b99fa45fc3f",
+        "ir_sha256": {
+          "graph_ir": "9008950a11f814be5f3779a8052a45d9b07b33fbfcd7f3d26cace0f0fec4299a",
+          "schedule_ir": "fdc9f21c7ef40a509bd359fa8c9ea45f26a6fd162f4b94cce27ee38072ba57f7",
+          "target_ir": "132f65338f093d7144e419e6f9c9f11a835873c59b5d5a6741d26ec12f9b2ba5",
+          "tile_ir": "9eda1e2f0609ea12d852e738cc452807f1e0b648de21993415b65bc792b42348"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "cdda713b4db30678e54ed18bd561c8f5ccc14006ce2baef8eaff9af57101cec8",
+          "descriptor_digest": "aa69c250492e5a0f127008fbc2d13d7798c65e97589f5f874b702e6b23cc9903",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_unary_b10819a020e98ff1",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "4a0c6ef637934b198a70c2ca7531775a82ff9a51e8fe4536fb4bef7c3b5e53e1",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "9008950a11f814be5f3779a8052a45d9b07b33fbfcd7f3d26cace0f0fec4299a",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "unary",
+              "kind": "exp",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "9b4745a620a46085cfa8ef4b70fa23358eecb578cb48a60d3c05449c8ad1705c",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f32"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "fdc9f21c7ef40a509bd359fa8c9ea45f26a6fd162f4b94cce27ee38072ba57f7",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "9eda1e2f0609ea12d852e738cc452807f1e0b648de21993415b65bc792b42348",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "19e29ebe7c12d2d01581c3fae092a3175d1ab649d4b09863574f17188e59d434",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+              "symbol": "tessera_rocm_scalar_unary_b10819a020e98ff1"
+            }
+          ],
+          "image_digest": "4a0c6ef637934b198a70c2ca7531775a82ff9a51e8fe4536fb4bef7c3b5e53e1",
+          "payload_digest": "3b54f1baa78183b2004add1ec531fb974b36d86929399443bda58adfbf7f8150",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "132f65338f093d7144e419e6f9c9f11a835873c59b5d5a6741d26ec12f9b2ba5",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 2.0359012901882936e-07,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.041112,
+      "warm_median_ms": 1.975448,
+      "warm_samples_ns": [
+        2300716,
+        1985513,
+        2027891,
+        1934336,
+        1975448,
+        1915584,
+        1953087
+      ]
+    },
+    {
+      "cold_ms": 491.776269,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 1.0553361314795475,
+      "error_limit": 0.005,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "add",
+      "package_receipt": {
+        "artifact_hash": "09d02b44ea471fe0ce5296684f9779a1324d310903d334c689a4545416b00410",
+        "ir_sha256": {
+          "graph_ir": "a2e67214e79d024876b7c06b82c36ffcd20a147ab0ea19437bd3c1e82575e2d8",
+          "schedule_ir": "e54a6d2203aa9964c46e524e207d8ad4e783261c1af50364d5de8b01d501e75d",
+          "target_ir": "bdff2df4b7e609d2bdfdd58e3089a59b7a64afd6f2613fdeb0d93c2a03d7c9a1",
+          "tile_ir": "372dbb0d05ae03adb91cf6399d4e283b2dd7d04df1492573198553ef3e4fe62b"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "860ec508c2cb7ed9bbbdbb0c6c0a74be1046c55a76c08efc18cd70a95727572d",
+          "descriptor_digest": "ab024b764ac4e77b86c7aedd905986eca8414732a41b4da8d113127d85108e65",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_binary_5729b4eac592674c",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "d67680101fd509fa0055915c248b8609fb00dd8bf36f265f20aaa81cd6998132",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "a2e67214e79d024876b7c06b82c36ffcd20a147ab0ea19437bd3c1e82575e2d8",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "a1",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "binary",
+              "kind": "add",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0,
+                1
+              ],
+              "rows": 256,
+              "schedule_digest": "628ffddccf64b6e32317f858eb7032d01581ed2f6043625ac8d5c7764b496885",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f32"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "e54a6d2203aa9964c46e524e207d8ad4e783261c1af50364d5de8b01d501e75d",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "372dbb0d05ae03adb91cf6399d4e283b2dd7d04df1492573198553ef3e4fe62b",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "2ffee02bfc853e450d81488404155828d7da89e8f79c3194c97c941bd2b88869",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+              "symbol": "tessera_rocm_scalar_binary_5729b4eac592674c"
+            }
+          ],
+          "image_digest": "d67680101fd509fa0055915c248b8609fb00dd8bf36f265f20aaa81cd6998132",
+          "payload_digest": "f61a5c47175893f250df553cad80b13bc81c1b962d724247d728c9c1ce959ee9",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "bdff2df4b7e609d2bdfdd58e3089a59b7a64afd6f2613fdeb0d93c2a03d7c9a1",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.024342,
+      "warm_median_ms": 2.980783,
+      "warm_samples_ns": [
+        3443138,
+        3076874,
+        2933860,
+        3003789,
+        2979563,
+        2980783,
+        2956441
+      ]
+    },
+    {
+      "cold_ms": 499.309591,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 0.8526089487772432,
+      "error_limit": 0.005,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "div",
+      "package_receipt": {
+        "artifact_hash": "b008d83b829773aa226869c1bb34527b9ac602a86355b085eb9a12f9e4358a5d",
+        "ir_sha256": {
+          "graph_ir": "a3776dc3ec86a57710813ce0d4362a80da1ee19561d3c89c6f9e0ee9369fb4be",
+          "schedule_ir": "2ed752ea9c523bacaccbfa4d9cb11230d274f50ec7752670d0d4eb632f0eca4f",
+          "target_ir": "b4482a716ccd874054e9fd2ddbcdaed38654b6cdbd14cce27d3ce314ede3366d",
+          "tile_ir": "b92b77e66cf6d2dc6aeae6181ddc59c502f6b6fb4cb66aa09690325f9cc12f9e"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "082f95c7ff9d5290746af9f258b52ec57cdd0014f651fd0de86e7453838975c3",
+          "descriptor_digest": "e1e8b7451fe61daac7f97e6c55f4946ca9935ed1efe2edf3b54fa344a97829a8",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_binary_b8791d43ca682fdb",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "9787b7222bb00f8f42d0bfd6c862335e0c0973ed7abd51e90fbd3bbe18095e05",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "a3776dc3ec86a57710813ce0d4362a80da1ee19561d3c89c6f9e0ee9369fb4be",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "a1",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "binary",
+              "kind": "div",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0,
+                1
+              ],
+              "rows": 256,
+              "schedule_digest": "f0dd7bcdbb32b622b881abd7983af0e49fdfb0e3fbec5da676c532819ca518ec",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f32"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "2ed752ea9c523bacaccbfa4d9cb11230d274f50ec7752670d0d4eb632f0eca4f",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "b92b77e66cf6d2dc6aeae6181ddc59c502f6b6fb4cb66aa09690325f9cc12f9e",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "73400513d6ae3faaec0d1ef4ad149fa93396d5fd7d795446c5f9166826819142",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+              "symbol": "tessera_rocm_scalar_binary_b8791d43ca682fdb"
+            }
+          ],
+          "image_digest": "9787b7222bb00f8f42d0bfd6c862335e0c0973ed7abd51e90fbd3bbe18095e05",
+          "payload_digest": "9fbbe85018c226490cbd58b4ba5a8f51f8f2d1d3c3d32aee369f309cd97458ce",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "b4482a716ccd874054e9fd2ddbcdaed38654b6cdbd14cce27d3ce314ede3366d",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.039727,
+      "warm_median_ms": 3.689532,
+      "warm_samples_ns": [
+        4293265,
+        3729259,
+        3699462,
+        3602647,
+        3689532,
+        3652869,
+        3561204
+      ]
+    },
+    {
+      "cold_ms": 495.744376,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 0.7750678627444609,
+      "error_limit": 0.005,
+      "family": "reduce",
+      "max_abs_error": 0.000244140625,
+      "op_name": "sum",
+      "package_receipt": {
+        "artifact_hash": "ae3e3aaa50d73bf77523ed163369b3dfd7a0259b15a839a95a8dc7e3fd580feb",
+        "ir_sha256": {
+          "graph_ir": "c09073b3463ffc2eb7bac0eb5a4e02e1f9157c80fa1ab71b3fa128fdfa85e3b1",
+          "schedule_ir": "1263cd8e332fad9976d50b8fe0ba970378d3be05f57960435b7af3a5ecb3e692",
+          "target_ir": "af94689b734a2affa0534fa0146cfe5183f50986eeb1a030709d7b415ebfaf98",
+          "tile_ir": "134db6a78a377c87825a0f9c4c8c0913c8b48af6dd69486678f2cb039780e10c"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.reduce.x_o_outer_axis_inner.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 1
+            }
+          ],
+          "cache_fingerprint": "1d7213761d08072eb9d9dfa010572652e248745eb36afe67ef3b03e6b8f10306",
+          "descriptor_digest": "8bf87a1eec04b7127b35d6660cb3ab353995d38ce74de56da78b49902565a298",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_reduction_e02615da493926ae",
+          "geometry": {
+            "grid": null,
+            "policy": "gfx1151_reduce_workgroup_per_output_256",
+            "workgroup": null
+          },
+          "image_digest": "9c86acaf3ee8f3dcd3bb650c685cf7e8e2f1f6ce2dd8bebb2d5fe977289b8eaf",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "accum": "f32",
+            "axis": 1,
+            "axis_extent": 1024,
+            "columns": 1,
+            "exp_mode": "accurate",
+            "family": "reduce",
+            "ftz": false,
+            "graph_symbol": "physical_math_sum",
+            "inner": 1,
+            "keepdims": false,
+            "kind": "sum",
+            "nan_mode": "propagate",
+            "outer": 256,
+            "output_shape": [
+              256
+            ],
+            "route": "canonical_scheduled_tile_consumer",
+            "rows": 1,
+            "schedule_digest": "9d946905aa34b999856d8f2980fde29e7aeab84d26187f9ecfec98d42264fd24",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f32",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "tile_ir_digest": "134db6a78a377c87825a0f9c4c8c0913c8b48af6dd69486678f2cb039780e10c",
+            "work_item": "E2E-REAL-5"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Outer",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "AxisExtent",
+              "ordinal": 3
+            },
+            {
+              "dtype": "int64",
+              "name": "Inner",
+              "ordinal": 4
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "5927a6fd87cd8dbb4d71797d31c078293831fdf2baa22414904e89c540027154",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.reduce.x_o_outer_axis_inner.f32.v1",
+              "symbol": "tessera_rocm_reduction_e02615da493926ae"
+            }
+          ],
+          "image_digest": "9c86acaf3ee8f3dcd3bb650c685cf7e8e2f1f6ce2dd8bebb2d5fe977289b8eaf",
+          "payload_digest": "3eafe7d859584e3494845386cc361f37ae0966c48a8b2fbc00db457034e354ca",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "af94689b734a2affa0534fa0146cfe5183f50986eeb1a030709d7b415ebfaf98",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 8.461407857062849e-05,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.034031,
+      "warm_median_ms": 1.354204,
+      "warm_samples_ns": [
+        1560985,
+        1354204,
+        1320173,
+        1353754,
+        1329692,
+        1655141,
+        1429688
+      ]
+    },
+    {
+      "cold_ms": 470.691993,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 0.9808222688979341,
+      "error_limit": 0.005,
+      "family": "scan",
+      "max_abs_error": 0.0013427734375,
+      "op_name": "cumsum",
+      "package_receipt": {
+        "artifact_hash": "1de3c769ceae1d292bf75a356b77324cab5647c56509721d30e7987f30d924f5",
+        "ir_sha256": {
+          "graph_ir": "90cc3811b6b1d04a93f091a9f7ce7bad18e313c96ee0be758a7be5e5a4af12bc",
+          "schedule_ir": "fe970ea428f95209791c3f5f053152d4f434b6f2a5d138cb7a690f3b7e4c3caf",
+          "target_ir": "d7c0d5b111515e4c3f79d078aac848de06de3a98a2098e5bbb5fbeac4b5c3b01",
+          "tile_ir": "b3cf10ff1994d0ce57e730e0cfc7b6c5460c7c84c33badedb03bc658d31b101a"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "d922b7db289ab0f6c9db2d5ae88ce0a1049733ea46279d3f79bcf4bcc00a3192",
+          "descriptor_digest": "8823706ae8e24c05a31bdb07d163fa751afb33fd416687ab29b2201774bb0df9",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scan_a721af54455473e7",
+          "geometry": {
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "c399850da6bbffa5ab64bbb5d83095387d814a7f33807df2e227e77e8d493b4b",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "90cc3811b6b1d04a93f091a9f7ce7bad18e313c96ee0be758a7be5e5a4af12bc",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "scan",
+              "kind": "sum",
+              "numeric_policy": "f32_inclusive_scan",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "1e96ab6ce4ff4b66b6af9729ae97e7b05ed3015bd85d14a73c3cb0461f063488",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f32"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "fe970ea428f95209791c3f5f053152d4f434b6f2a5d138cb7a690f3b7e4c3caf",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "b3cf10ff1994d0ce57e730e0cfc7b6c5460c7c84c33badedb03bc658d31b101a",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Columns",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "6f8c4e86b07602a061e626d036be5293e00da2c0f033a4c5b670d547ae9148d5",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+              "symbol": "tessera_rocm_scan_a721af54455473e7"
+            }
+          ],
+          "image_digest": "c399850da6bbffa5ab64bbb5d83095387d814a7f33807df2e227e77e8d493b4b",
+          "payload_digest": "b29c29aafdd145794eb0f1ee6258e902c998ae88c9a3621f11d9c45fc70ceb3d",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "d7c0d5b111515e4c3f79d078aac848de06de3a98a2098e5bbb5fbeac4b5c3b01",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.00024006609737725355,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.025311,
+      "warm_median_ms": 2.138157,
+      "warm_samples_ns": [
+        3122090,
+        2234262,
+        2137887,
+        2117635,
+        2112846,
+        2138157,
+        2172629
+      ]
+    },
+    {
+      "cold_ms": 475.975586,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f32",
+      "effective_gb_s": 0.9248520652650389,
+      "error_limit": 0.005,
+      "family": "scan",
+      "max_abs_error": 0.0,
+      "op_name": "cummax",
+      "package_receipt": {
+        "artifact_hash": "8fddf029db702a149bff487f3139108aace0c0bba9394dcd2ae9e27c1f966bb4",
+        "ir_sha256": {
+          "graph_ir": "48722d54a749ff88d90c141a25c57db4c677440ab19ce3c0284646ffcf4b3d03",
+          "schedule_ir": "cc87bfdf5f7b1d838c3fa4cba9e590dbd410c423644e0b5a1fb6e13c37668d8b",
+          "target_ir": "aa6f1b6bda75a82ef823630e90ba64b6ab026aaeda8d8441faf84e9a9400d86f",
+          "tile_ir": "e01c9b582aed89e5fc2b42ac0f4b65ffd48c9204c4415ea1f14d0f80774d082e"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+          "buffers": [
+            {
+              "alignment": 4,
+              "direction": "input",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "f405f8c0fc0b69c8f81e9999b6bc4776c5af0521d408d12a8fc045ac7c25ea7d",
+          "descriptor_digest": "8826eb33b87ade014477fc0dd03b66db981c12a253f59bd772242f665e0e6bdc",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scan_c10786557e8322a2",
+          "geometry": {
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "8b588069214f0890c0e254e0fec4265f3dd4eccc448795b60a195433d71f51d8",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "48722d54a749ff88d90c141a25c57db4c677440ab19ce3c0284646ffcf4b3d03",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "scan",
+              "kind": "max",
+              "numeric_policy": "f32_inclusive_scan",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "c3f90f2872e6554aa94090b71b0f1d56f761847315cebbd56342f70b24aaef6f",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f32"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "cc87bfdf5f7b1d838c3fa4cba9e590dbd410c423644e0b5a1fb6e13c37668d8b",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "e01c9b582aed89e5fc2b42ac0f4b65ffd48c9204c4415ea1f14d0f80774d082e",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Columns",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "e9fb29c61cb5838ada8ba75fc03fcfc054caf9a01c6ebfe0d583f5a7fe809e84",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+              "symbol": "tessera_rocm_scan_c10786557e8322a2"
+            }
+          ],
+          "image_digest": "8b588069214f0890c0e254e0fec4265f3dd4eccc448795b60a195433d71f51d8",
+          "payload_digest": "aef12085c5bc18e5751fa91e8b0d5de7d1b8be6e28e2c49634fbcd84441f5c87",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "aa6f1b6bda75a82ef823630e90ba64b6ab026aaeda8d8441faf84e9a9400d86f",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.028212,
+      "warm_median_ms": 2.267554,
+      "warm_samples_ns": [
+        3522543,
+        2339078,
+        2239342,
+        2267554,
+        2230212,
+        2251933,
+        2275545
+      ]
+    },
+    {
+      "cold_ms": 472.076252,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f16",
+      "effective_gb_s": 0.710070647529368,
+      "error_limit": 0.01,
+      "family": "unary",
+      "max_abs_error": 0.0,
+      "op_name": "sqrt",
+      "package_receipt": {
+        "artifact_hash": "0391ff6ded86e872090f57fc677b72a154bca53a04da186944442ee3a1f16521",
+        "ir_sha256": {
+          "graph_ir": "6dac1c031b3daaf8e93d0280de8121bc89c3d95ffbd1f05839a9f2f95d83a844",
+          "schedule_ir": "74395218255932001b5738575f828cdeca1251247f16e0663894a30a1929dcb6",
+          "target_ir": "f7a617ca8f059a90626359ec3208176e4a241a53ef95af854b5bdb005761f90c",
+          "tile_ir": "987fa88fbb08470d0f157e5b3c13fae25a6c514cf0bac6a63f9ad95927e188fd"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "9d9aa9f13f9f36b166f3bdb2a0b6a1cbf9863f5aaa38d4beddc6120501d9c63c",
+          "descriptor_digest": "58f88aff3bab6983cd4863fd1d712caf53cb7a711c2f4cdc559a8cc67b231cef",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_unary_1a6cbe6f84b78198",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "20cfd7dfa896943de7cc4951b3ec281fb6f08af5c7f117e8de5f453757b1dfb6",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "6dac1c031b3daaf8e93d0280de8121bc89c3d95ffbd1f05839a9f2f95d83a844",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "unary",
+              "kind": "sqrt",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "1139954f18d1b8b9003645d7caa491a2e5b52c2c894cd42f42f3de50fc869a7c",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "74395218255932001b5738575f828cdeca1251247f16e0663894a30a1929dcb6",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "987fa88fbb08470d0f157e5b3c13fae25a6c514cf0bac6a63f9ad95927e188fd",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "8885270f56cb47db89cb8af46a2cee3ec8ac80be4f8535896e70656937332bbc",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+              "symbol": "tessera_rocm_scalar_unary_1a6cbe6f84b78198"
+            }
+          ],
+          "image_digest": "20cfd7dfa896943de7cc4951b3ec281fb6f08af5c7f117e8de5f453757b1dfb6",
+          "payload_digest": "171086f9e0f62df7ea6be38221d1c0db6a8d846b9d25a6792da23457b8c86cfd",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "f7a617ca8f059a90626359ec3208176e4a241a53ef95af854b5bdb005761f90c",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.01336,
+      "warm_median_ms": 2.215081,
+      "warm_samples_ns": [
+        3430973,
+        2205490,
+        2215081,
+        2228441,
+        2233302,
+        2179779,
+        2212191
+      ]
+    },
+    {
+      "cold_ms": 493.275672,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f16",
+      "effective_gb_s": 0.7140359000898864,
+      "error_limit": 0.01,
+      "family": "unary",
+      "max_abs_error": 9.5367431640625e-07,
+      "op_name": "exp",
+      "package_receipt": {
+        "artifact_hash": "124afb0d6d465c438c6556c6756e51426c6a9dda54a33c43330bb1c2368fd568",
+        "ir_sha256": {
+          "graph_ir": "6c2ac8f0e9273d029a64d3e4e958b350b35690c21b21da3adc1e36a53ee5a6c6",
+          "schedule_ir": "d8e68e119ffc9f03a9803ac3b514e2cdd51b101743ea19c57cf009efcd2b45c0",
+          "target_ir": "65f8874e017ba87b82d6e2a6c6e4c490eae06d601fb02c7228d1cd66aaf0c75a",
+          "tile_ir": "8e0a5c11707122dfb031abb18bbe36525de65133864f5eb94d826dd191b620ae"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "c1c392cc3acbe9a36a81ed80de687c1a2ddf800464b7afdc8263a1b8e8b2718e",
+          "descriptor_digest": "fa743d50b01d2d560af486a55cff6d3080c0ac779c265ed956feb633dd015f8c",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_unary_a9aff86a415a92f6",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "f52a7ede580f064f3c53a6d3f03f9414de422463badf78bb6fed29ab6865feba",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "6c2ac8f0e9273d029a64d3e4e958b350b35690c21b21da3adc1e36a53ee5a6c6",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "unary",
+              "kind": "exp",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "3c6c1d0476b7fa297d3720e80829a60e5664a4a9a1da41297d12ab0c0fe40931",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "d8e68e119ffc9f03a9803ac3b514e2cdd51b101743ea19c57cf009efcd2b45c0",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "8e0a5c11707122dfb031abb18bbe36525de65133864f5eb94d826dd191b620ae",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "2028aeb2cacfdef1d780bc1bd8718194dce50ac38918455025ddbaff490b9dcb",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+              "symbol": "tessera_rocm_scalar_unary_a9aff86a415a92f6"
+            }
+          ],
+          "image_digest": "f52a7ede580f064f3c53a6d3f03f9414de422463badf78bb6fed29ab6865feba",
+          "payload_digest": "1bd3655ed4b820746f2fe6965cffe77db4abcb9699420899b7b600643777e373",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "65f8874e017ba87b82d6e2a6c6e4c490eae06d601fb02c7228d1cd66aaf0c75a",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 2.141243315483895e-07,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.031401,
+      "warm_median_ms": 2.20278,
+      "warm_samples_ns": [
+        2473535,
+        2274814,
+        2202780,
+        2230642,
+        2158338,
+        2171379,
+        2179519
+      ]
+    },
+    {
+      "cold_ms": 465.751853,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f16",
+      "effective_gb_s": 0.6781299069506349,
+      "error_limit": 0.01,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "add",
+      "package_receipt": {
+        "artifact_hash": "1fb12a50630dccd738c5f90e7fea767e35dbc940b1102bf7e4562c796273d1ad",
+        "ir_sha256": {
+          "graph_ir": "95173be16309a3033f414d68342e69132973e928391220ae3a8b77c99b4b4955",
+          "schedule_ir": "36708378d85bc38992d6a3a956842cb44a12e94fb49a2375ea2a37ab767370af",
+          "target_ir": "daa6c2bbaaed99d5e1d6230f8281b1a7bbb6c0c271e3b532f3092f91e4ae8858",
+          "tile_ir": "ba4a4a2c3a7e0173843ab7f0b2f17de11fa837855db0dacf905198bcfbc6487e"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "defc8c6cdcd4ac856b5d17f7cd9a639a57e7c9aac10ee89ceccaad09b3df9633",
+          "descriptor_digest": "1c5bf647397d83318db09b5b54be522ff55a8b118c3e15c381950d9dfc7d5103",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_binary_f51a955592dd858a",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "0a408cd6f419e81d2e48cf7b6d4bdbe5f94cdf1a784812de50c9b85e295b6d4b",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "95173be16309a3033f414d68342e69132973e928391220ae3a8b77c99b4b4955",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "a1",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "binary",
+              "kind": "add",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0,
+                1
+              ],
+              "rows": 256,
+              "schedule_digest": "45c75f924c6ce1a2143ff8918d70d1293198e4746bcae73a7e56f2641a609444",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "36708378d85bc38992d6a3a956842cb44a12e94fb49a2375ea2a37ab767370af",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "ba4a4a2c3a7e0173843ab7f0b2f17de11fa837855db0dacf905198bcfbc6487e",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "d29f3e4925bdeb0940b2c0a079029cbd40a47f282e939752f4963cb1aafdcd6d",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+              "symbol": "tessera_rocm_scalar_binary_f51a955592dd858a"
+            }
+          ],
+          "image_digest": "0a408cd6f419e81d2e48cf7b6d4bdbe5f94cdf1a784812de50c9b85e295b6d4b",
+          "payload_digest": "197153c252bc4ecd04062026da3290d499129b235b35ac3ea99084878eb68190",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "daa6c2bbaaed99d5e1d6230f8281b1a7bbb6c0c271e3b532f3092f91e4ae8858",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.01568,
+      "warm_median_ms": 3.092552,
+      "warm_samples_ns": [
+        3838852,
+        3083241,
+        3066259,
+        3095291,
+        3064500,
+        3092552,
+        3108232
+      ]
+    },
+    {
+      "cold_ms": 485.371422,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f16",
+      "effective_gb_s": 0.671640352250953,
+      "error_limit": 0.01,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "div",
+      "package_receipt": {
+        "artifact_hash": "6fc984398c20db100e3b1b4b0c7479627333b586160c4853c018e4981c9ca2a7",
+        "ir_sha256": {
+          "graph_ir": "7bc049c0ff2c7a3687c3c383cfb8061b553bc9a3b2cf97e44c40a5c6d66122da",
+          "schedule_ir": "d78c2c09d0e78577089a071fe0105223057abbd2df540a80746ac5b309d8f36e",
+          "target_ir": "c9052ad88a47fca18d1047c5d2d8783e773ea1eed71690ac3fcf422197e241a6",
+          "tile_ir": "de3375f583f4a596f05505caa27c6b9483a847ba7a809d77e607c445285c7a34"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "53f5b4e9f04d4452eead4186f06424ef9434193b84694f628e9d2c2a08519e24",
+          "descriptor_digest": "761e9a66c91a6b29a68e3fd09e12b97d7bea9955662b59a14fb218df094e9a31",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_binary_f9c78e83cea6d00d",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "376b76c832c98cb700ceb250d85987557f5a489a42a60801ee10676ba3f7f311",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "7bc049c0ff2c7a3687c3c383cfb8061b553bc9a3b2cf97e44c40a5c6d66122da",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "a1",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "binary",
+              "kind": "div",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0,
+                1
+              ],
+              "rows": 256,
+              "schedule_digest": "16554b171736a4a61e497012101ac4e957553b59ec818a8325555606147b9309",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "d78c2c09d0e78577089a071fe0105223057abbd2df540a80746ac5b309d8f36e",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "de3375f583f4a596f05505caa27c6b9483a847ba7a809d77e607c445285c7a34",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "af1fb2c62a92b8bfb0bd3d4f5dfc37abed6f2f6021384c342924dd24f743b833",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+              "symbol": "tessera_rocm_scalar_binary_f9c78e83cea6d00d"
+            }
+          ],
+          "image_digest": "376b76c832c98cb700ceb250d85987557f5a489a42a60801ee10676ba3f7f311",
+          "payload_digest": "40b4916326e0e682f023d59b7b84e6c30dadd8ab8522f40c36a2f969ec7a86d5",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "c9052ad88a47fca18d1047c5d2d8783e773ea1eed71690ac3fcf422197e241a6",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.026981,
+      "warm_median_ms": 3.122433,
+      "warm_samples_ns": [
+        3431820,
+        3126514,
+        3122433,
+        3140434,
+        3076730,
+        3074130,
+        3095452
+      ]
+    },
+    {
+      "cold_ms": 518.882779,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f16",
+      "effective_gb_s": 0.4493133437797226,
+      "error_limit": 0.6,
+      "family": "reduce",
+      "max_abs_error": 0.0,
+      "op_name": "sum",
+      "package_receipt": {
+        "artifact_hash": "5db67cad1cad4ff95aea6a3a20d48c187f21b30425624c0b6418ce59b39ca95b",
+        "ir_sha256": {
+          "graph_ir": "9650a4c9e3e59deedbd3e25461da913b75e2a64f5fa4197e343299f8d0065dc3",
+          "schedule_ir": "6391234083e969574f450aaec898cca3df85d9df515c1049ce053b38daf2e1cc",
+          "target_ir": "49d574f5a381ac73b35d69ac24fb2c0420a929cea2d41bcdcf8c0672e64d6aa0",
+          "tile_ir": "d0eb05597a90b5b0dbeeaea3e951475e00828dde053f48af80b62b9f5069c570"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.reduce.x_o_outer_axis_inner.f16_f32out.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 1
+            }
+          ],
+          "cache_fingerprint": "eada67486e3836a2bb6d645a912a065c7a927f90807b11bf13cb2f23e2baa76d",
+          "descriptor_digest": "6b48ddcc58d0ff8e6675aa07f3ed579c97820de9f02c0f36280b4b35c5647108",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_reduction_ea704fd34c702d6c",
+          "geometry": {
+            "grid": null,
+            "policy": "gfx1151_reduce_workgroup_per_output_256",
+            "workgroup": null
+          },
+          "image_digest": "a630c675e1e4fdd45cf4eddb6feaad47bfffc0d60dab8a15ade3e2d4c2ffceaf",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "accum": "f32",
+            "axis": 1,
+            "axis_extent": 1024,
+            "columns": 1,
+            "exp_mode": "accurate",
+            "family": "reduce",
+            "ftz": false,
+            "graph_symbol": "physical_math_sum",
+            "inner": 1,
+            "keepdims": false,
+            "kind": "sum",
+            "nan_mode": "propagate",
+            "outer": 256,
+            "output_shape": [
+              256
+            ],
+            "route": "canonical_scheduled_tile_consumer",
+            "rows": 1,
+            "schedule_digest": "7dbc2e6f6a126425ff612b25acf9bb3721ed83666800cd8f56b756c1abe03168",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "f16",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "tile_ir_digest": "d0eb05597a90b5b0dbeeaea3e951475e00828dde053f48af80b62b9f5069c570",
+            "work_item": "E2E-REAL-5"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Outer",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "AxisExtent",
+              "ordinal": 3
+            },
+            {
+              "dtype": "int64",
+              "name": "Inner",
+              "ordinal": 4
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "9191e3c631b63fb3d17d504d3dca6cf0992edd60f86bcebb37b3698e07e10430",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.reduce.x_o_outer_axis_inner.f16_f32out.v1",
+              "symbol": "tessera_rocm_reduction_ea704fd34c702d6c"
+            }
+          ],
+          "image_digest": "a630c675e1e4fdd45cf4eddb6feaad47bfffc0d60dab8a15ade3e2d4c2ffceaf",
+          "payload_digest": "5e44a1660f982f00be59f20a456a06b9ed18482cd5de4977579776f3e3aaac6b",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "49d574f5a381ac73b35d69ac24fb2c0420a929cea2d41bcdcf8c0672e64d6aa0",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.01959,
+      "warm_median_ms": 1.169144,
+      "warm_samples_ns": [
+        1392248,
+        1233738,
+        1149554,
+        1185756,
+        1153994,
+        1169144,
+        1130883
+      ]
+    },
+    {
+      "cold_ms": 483.846868,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f16",
+      "effective_gb_s": 0.8057486144074981,
+      "error_limit": 0.6,
+      "family": "scan",
+      "max_abs_error": 0.0,
+      "op_name": "cumsum",
+      "package_receipt": {
+        "artifact_hash": "cc0d795b34777ea942bfd8d8102b5297d6c22bdea201c3cd5be607e2ed849a3e",
+        "ir_sha256": {
+          "graph_ir": "87759cb6f388a4392a4cc6ee4f7fa609a4fa1627ec3de7202aae940237a676b8",
+          "schedule_ir": "1419585746f8f5bd81b449b9328827e0f782520320aeee43cf28b10632d96b4b",
+          "target_ir": "3fb0311b0c29384dc621f1d01e8ee92e6ee2cb944ebbce5e07c5c3bc08769452",
+          "tile_ir": "8687275e02c24c8fd7752a8e459ec1e1cc305bbcfb7b07c5a9f41c425524fb4c"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "2ec163bfe4d89693f95982054b154c6d48cbdd23a72b3a9c8398fabf7e566daa",
+          "descriptor_digest": "72612660f92836de111b79fb8731f41165ca9cdd59bc312d2345f498a31e002c",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scan_818bcaa988a57e02",
+          "geometry": {
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "bc3ce7f7ea3dab96eb4cc80c0251aa7a839717785f08a07eb3bfcea8b374c8de",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "87759cb6f388a4392a4cc6ee4f7fa609a4fa1627ec3de7202aae940237a676b8",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "scan",
+              "kind": "sum",
+              "numeric_policy": "f32_inclusive_scan",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "c95300f0e813b545673d4b59c8fbded3eac63d61a6559dfbad933942e43c16a2",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "1419585746f8f5bd81b449b9328827e0f782520320aeee43cf28b10632d96b4b",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "8687275e02c24c8fd7752a8e459ec1e1cc305bbcfb7b07c5a9f41c425524fb4c",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Columns",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "e1af525fe1dffcb5c3aa49f8facec4db18c14bddab18c836182f53250d47c5e3",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+              "symbol": "tessera_rocm_scan_818bcaa988a57e02"
+            }
+          ],
+          "image_digest": "bc3ce7f7ea3dab96eb4cc80c0251aa7a839717785f08a07eb3bfcea8b374c8de",
+          "payload_digest": "4025ca277e0a5b12b34cf8420c7d239d68895f4802794c14276fbc3dc7d11c80",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "3fb0311b0c29384dc621f1d01e8ee92e6ee2cb944ebbce5e07c5c3bc08769452",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.008121,
+      "warm_median_ms": 1.952053,
+      "warm_samples_ns": [
+        2847717,
+        1952053,
+        1960174,
+        1895975,
+        1958479,
+        1950958,
+        1917422
+      ]
+    },
+    {
+      "cold_ms": 466.500987,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "f16",
+      "effective_gb_s": 0.7189965907563693,
+      "error_limit": 0.6,
+      "family": "scan",
+      "max_abs_error": 0.0,
+      "op_name": "cummax",
+      "package_receipt": {
+        "artifact_hash": "792db4d2be27134f2ce51a2e3fb62626daf1d48a41fde668ae46f1aeae35d4c1",
+        "ir_sha256": {
+          "graph_ir": "73369b0d7b9474a942d49bd1ebb8ac1fdf6e7cd6d30905284334a44d7316b8b4",
+          "schedule_ir": "447b254beccd22e4b04adb7698c87074d56c215e856239cedec39de49a6de073",
+          "target_ir": "d6a60f53838a766f5c5b85e015651b71a08bb05b33cfb3bfb736d5871f23316f",
+          "tile_ir": "52fed708c1bf4647a16bd2fb5be60f8359fd8265397edf1f0e913eaf8b13a362"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "fp16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "93f66eee793a7aa905686cbfaa5ec7703e0f2568288d9766e2664d4e431f2f6c",
+          "descriptor_digest": "98b277bd35e457f621740eeae6512f49a46c41ec89413b0323dbab7ff3ce3f11",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scan_22ba7f853d1095c3",
+          "geometry": {
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "aad074262aa0a70961f2ecd41e171bdbc2f0e5ababab13af9470e5b3425236c4",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "73369b0d7b9474a942d49bd1ebb8ac1fdf6e7cd6d30905284334a44d7316b8b4",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "scan",
+              "kind": "max",
+              "numeric_policy": "f32_inclusive_scan",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "8cfc35a84ec5d0e721e1130a7577c6406dc5c780434ad7259420f0fe231009f7",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "f16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "447b254beccd22e4b04adb7698c87074d56c215e856239cedec39de49a6de073",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "52fed708c1bf4647a16bd2fb5be60f8359fd8265397edf1f0e913eaf8b13a362",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Columns",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "ff2d9fbbe47a62f766f79749cfe0e39335f731e4334953b862a969a052c311f8",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+              "symbol": "tessera_rocm_scan_22ba7f853d1095c3"
+            }
+          ],
+          "image_digest": "aad074262aa0a70961f2ecd41e171bdbc2f0e5ababab13af9470e5b3425236c4",
+          "payload_digest": "422b176a021709274e490960c24f698ef45c8a53b1ccedd4a842e9ae13ad09b2",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "d6a60f53838a766f5c5b85e015651b71a08bb05b33cfb3bfb736d5871f23316f",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.01182,
+      "warm_median_ms": 2.187582,
+      "warm_samples_ns": [
+        2569482,
+        2187582,
+        2224893,
+        2199402,
+        2143218,
+        2181742,
+        2179081
+      ]
+    },
+    {
+      "cold_ms": 485.707921,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "bf16",
+      "effective_gb_s": 0.697968040683562,
+      "error_limit": 0.05,
+      "family": "unary",
+      "max_abs_error": 0.0,
+      "op_name": "sqrt",
+      "package_receipt": {
+        "artifact_hash": "ec8933bb838f0317eb48ca8c7d5fddc6e2907d4cacefb993906cd3ba8a4b3fac",
+        "ir_sha256": {
+          "graph_ir": "c88ee79c7e3363f1c33aa3ba23b47228e76937f5223e8ba6a9911bcccef58a9f",
+          "schedule_ir": "b0f09f3ace680d73115717712e7b3bcc6c64657cdc32f956748dc60d0fc29271",
+          "target_ir": "4462b37badcb87e28dbf9d9296ff775ccb9e80756c7f73470f11ac2c83edeb91",
+          "tile_ir": "4ea045f873521425a6dd1d7219505bee191c32d28038c5034439bf3309e4ddda"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "6a0dc61f42de87585893a5ab21fef385d63366c54c5118a3655d27e3beee2ea3",
+          "descriptor_digest": "088a05d3e3566d0690b528f8a97ba18b58eb7f31e97e7cba25198ded0a9d0f35",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_unary_ebc653eb87d1faaf",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "bbc590b56ba9d11788958dd26eedc1bbb6ea3c03c6fc4c1c6f485a168288adbf",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "c88ee79c7e3363f1c33aa3ba23b47228e76937f5223e8ba6a9911bcccef58a9f",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "unary",
+              "kind": "sqrt",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "127f008591195a488be59a1b98e39ff77b825db522f3fbe6e78341e086327e0b",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "bf16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "b0f09f3ace680d73115717712e7b3bcc6c64657cdc32f956748dc60d0fc29271",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "4ea045f873521425a6dd1d7219505bee191c32d28038c5034439bf3309e4ddda",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "bf1a8dd9210fe3bacf87bccf7df35ed36c42e5f2a2137b89aaf1adc2f0ec8b0c",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+              "symbol": "tessera_rocm_scalar_unary_ebc653eb87d1faaf"
+            }
+          ],
+          "image_digest": "bbc590b56ba9d11788958dd26eedc1bbb6ea3c03c6fc4c1c6f485a168288adbf",
+          "payload_digest": "12622b734f8b57ab0234042aec15b6572add7567d4c247ad489cde1317ce2084",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "4462b37badcb87e28dbf9d9296ff775ccb9e80756c7f73470f11ac2c83edeb91",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.07504,
+      "warm_median_ms": 2.25349,
+      "warm_samples_ns": [
+        2764783,
+        2387093,
+        2178450,
+        2261606,
+        2194656,
+        2253490,
+        2174031
+      ]
+    },
+    {
+      "cold_ms": 477.294744,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "bf16",
+      "effective_gb_s": 0.7217253526458591,
+      "error_limit": 0.05,
+      "family": "unary",
+      "max_abs_error": 9.5367431640625e-07,
+      "op_name": "exp",
+      "package_receipt": {
+        "artifact_hash": "b0b6b3e67b89f4bdd4062b318a0ce77e50009b364d39ad74b21c5f804fae55cf",
+        "ir_sha256": {
+          "graph_ir": "c74785051c3e2771841bb9fcc90e4b2bf50ecc364a80b43e23d2a873874eb143",
+          "schedule_ir": "1b5ef30fa1370c43a50ef33685efe47e5b06985a551b5d5d97b5f125407ec032",
+          "target_ir": "4d817af74dfb4f39dfe4fc577158636a9b7d002cff4387f8388234e6de804171",
+          "tile_ir": "ca971847735a40266eb8dcfef3aac029298349cd9bef9f9d632bc244ffda37ec"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "72265fc80e134235e505891371aa4144a48c843bb5b56e3f0aa71a71f9271595",
+          "descriptor_digest": "ecce568fa0bc658588bc2aa316fb7b50b5caab8be31aa344fdcb8e52b5aacd7b",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_unary_b181fc6a8a8ace43",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "9aa0a39e663a031d1d61f398daa0e94633a6ca7654ab0f724097a4abc5e52c4d",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "c74785051c3e2771841bb9fcc90e4b2bf50ecc364a80b43e23d2a873874eb143",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "unary",
+              "kind": "exp",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "f1cbedc4ac21e214ede53888eb4280ff3ea9ea3e631b5a3b5896b31549e49b94",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "bf16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "1b5ef30fa1370c43a50ef33685efe47e5b06985a551b5d5d97b5f125407ec032",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "ca971847735a40266eb8dcfef3aac029298349cd9bef9f9d632bc244ffda37ec",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 2
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "e1677fee3f4eb06d6acd0cc79cbdb4d8d3ebe0206481db180c92d5808017a8f4",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+              "symbol": "tessera_rocm_scalar_unary_b181fc6a8a8ace43"
+            }
+          ],
+          "image_digest": "9aa0a39e663a031d1d61f398daa0e94633a6ca7654ab0f724097a4abc5e52c4d",
+          "payload_digest": "e983ed4e37d866a69631c413f4a2e1a3a09b55cb4409f8352013ae70eda9b63c",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "4d817af74dfb4f39dfe4fc577158636a9b7d002cff4387f8388234e6de804171",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 2.178363054082892e-07,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.011121,
+      "warm_median_ms": 2.179311,
+      "warm_samples_ns": [
+        2709170,
+        2196372,
+        2147129,
+        2179311,
+        2168190,
+        2169760,
+        2180031
+      ]
+    },
+    {
+      "cold_ms": 494.776929,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "bf16",
+      "effective_gb_s": 0.6784548138816611,
+      "error_limit": 0.05,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "add",
+      "package_receipt": {
+        "artifact_hash": "5f001d084499122662700f0b5cd5e7716230366ff2957d69f889cbadfde0ceaf",
+        "ir_sha256": {
+          "graph_ir": "66ada0e7c1b49e62f5f84e744d24a30752b88a7a849f68c118116442947f9951",
+          "schedule_ir": "1937ee2d5790a400be47d4ea7ed7a1aa33d3e8c99ce483964d686c7f4090c23e",
+          "target_ir": "5bf6ecb4dfeada6e7b88e7c234748ef257945b5798e27fd4b263edb13b37bf84",
+          "tile_ir": "dc022053140d32590b688e049b92671fecb67a5bbe469d229229e9ea0bf78bd8"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "c4c26cbee3a69cbb33e1578d79b0ddf44ca0c9e8c425d383c3c3e37f7a88ce18",
+          "descriptor_digest": "aef060599c1695bc718b95fa4c4ddfc1426290a39f3edbd59bd87a0c2bd9abde",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_binary_4295ca8ce976f00a",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "1a083586c96b51604f6a9f954c39dee163402f9d05b8e77fbb63bb43d5f7dcce",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "66ada0e7c1b49e62f5f84e744d24a30752b88a7a849f68c118116442947f9951",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "a1",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "binary",
+              "kind": "add",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0,
+                1
+              ],
+              "rows": 256,
+              "schedule_digest": "6b92c111df7c58e5c01cf2cd86be510ab877e1fb8bd70475bc59fbbcfb952333",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "bf16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "1937ee2d5790a400be47d4ea7ed7a1aa33d3e8c99ce483964d686c7f4090c23e",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "dc022053140d32590b688e049b92671fecb67a5bbe469d229229e9ea0bf78bd8",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "2df15e9f0beb2e92300bab6bb884eb7e24d8f7dc1b9fb450ea9bd7479b7bd72f",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+              "symbol": "tessera_rocm_scalar_binary_4295ca8ce976f00a"
+            }
+          ],
+          "image_digest": "1a083586c96b51604f6a9f954c39dee163402f9d05b8e77fbb63bb43d5f7dcce",
+          "payload_digest": "56974740371f56abf1382f53a434ffad9daebe781b8cc6755a3bc66cb3a49bdb",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "5bf6ecb4dfeada6e7b88e7c234748ef257945b5798e27fd4b263edb13b37bf84",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.058253,
+      "warm_median_ms": 3.091071,
+      "warm_samples_ns": [
+        3396538,
+        3016058,
+        3031247,
+        3099952,
+        3032818,
+        3112607,
+        3091071
+      ]
+    },
+    {
+      "cold_ms": 482.949313,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "bf16",
+      "effective_gb_s": 0.7246048218489317,
+      "error_limit": 0.05,
+      "family": "binary",
+      "max_abs_error": 0.0,
+      "op_name": "div",
+      "package_receipt": {
+        "artifact_hash": "83b145fe9faf605b50331089394816c95184b182d8103dd6afe13d0537f278f7",
+        "ir_sha256": {
+          "graph_ir": "45924c1917a275d83144ba71c364e1d213fcfa97f0fa711396629f0c53c17a92",
+          "schedule_ir": "52d32700312a9fc539b45cc7d14ecafb3956da153e0983ed1272d0890e4f50af",
+          "target_ir": "7c165d446609f89f016c13bf5b26cdde005491f4088b6f47b6838b0e455e2c7e",
+          "tile_ir": "bdefee27613893a02108ee8ade83ce327e3f63ead6ce54072b39a98a9235eaa0"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a1",
+              "ordinal": 1,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 2,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "66d3c475f69d5cb17f79dfd646a1fe5b415b96045a1cffc56f50668f24122a62",
+          "descriptor_digest": "53470ff88668e4fdb814141672d06bf47a913a8c517e9a79541c52839340f313",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scalar_binary_28266d260ae75c32",
+          "geometry": {
+            "grid": [
+              1024,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "5e9c3630f5da7ddd8a39abf94bbd126fd793e47bfd4bcf76a62c734a0a85faaf",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "45924c1917a275d83144ba71c364e1d213fcfa97f0fa711396629f0c53c17a92",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "a1",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "binary",
+              "kind": "div",
+              "numeric_policy": "f32_compute",
+              "output_storage": "f32",
+              "roles": [
+                0,
+                1
+              ],
+              "rows": 256,
+              "schedule_digest": "9fc2816eb9ea026ce09597c2c7b257391665bfd5cccfac4594424c1f2a47b433",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "bf16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "52d32700312a9fc539b45cc7d14ecafb3956da153e0983ed1272d0890e4f50af",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "bdefee27613893a02108ee8ade83ce327e3f63ead6ce54072b39a98a9235eaa0",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "N",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "a1",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a1",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "9006afb282f6663cd1ee1ede4971cfaabd8f6597ed93b666ab423a91ef36015d",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+              "symbol": "tessera_rocm_scalar_binary_28266d260ae75c32"
+            }
+          ],
+          "image_digest": "5e9c3630f5da7ddd8a39abf94bbd126fd793e47bfd4bcf76a62c734a0a85faaf",
+          "payload_digest": "8d8dd990322174ad6152e278bed26ad5c4ac950f154b0e1771b905f0251181ad",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "7c165d446609f89f016c13bf5b26cdde005491f4088b6f47b6838b0e455e2c7e",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.032251,
+      "warm_median_ms": 2.894201,
+      "warm_samples_ns": [
+        3238930,
+        2894201,
+        2844517,
+        2866289,
+        2859389,
+        2926452,
+        2903211
+      ]
+    },
+    {
+      "cold_ms": 503.725485,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "bf16",
+      "effective_gb_s": 0.40404202002550493,
+      "error_limit": 5.0,
+      "family": "reduce",
+      "max_abs_error": 0.0,
+      "op_name": "sum",
+      "package_receipt": {
+        "artifact_hash": "ee49c55a23f556d624915fff0df000882306baf1e98e1f5149f43389051e5bae",
+        "ir_sha256": {
+          "graph_ir": "009b20220800885bc63208287d78dd0f0ade326c7b1dc838bd6fae9555eaa8a4",
+          "schedule_ir": "b64b35f5703aa31fd594d91f4a9fc3d1db9b78565e7dd183045f100ab91bd6cd",
+          "target_ir": "70014d96d8a0b6b45206703ae722ad03ad489f612e7273928453af1554339eb0",
+          "tile_ir": "c7ad379ad674ca3087029bc2d2eeca47e345ba4381c5d24c80187ff81e31fda6"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.reduce.x_o_outer_axis_inner.bf16_f32out.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 1
+            }
+          ],
+          "cache_fingerprint": "d6fee0e8080af51526fe7ae5b107e3260b451c59ea8f63880d3b08c5014f64e1",
+          "descriptor_digest": "b453aeb2fe1a3c6e74a9434ab8fa68263ee548da2dcf73af4c38b43c9411bfde",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_reduction_caf5d0723feaecd1",
+          "geometry": {
+            "grid": null,
+            "policy": "gfx1151_reduce_workgroup_per_output_256",
+            "workgroup": null
+          },
+          "image_digest": "97b555f12c9745d544e818b80a1da922cae6c8ecf031ac27b9f541154f33092b",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "accum": "f32",
+            "axis": 1,
+            "axis_extent": 1024,
+            "columns": 1,
+            "exp_mode": "accurate",
+            "family": "reduce",
+            "ftz": false,
+            "graph_symbol": "physical_math_sum",
+            "inner": 1,
+            "keepdims": false,
+            "kind": "sum",
+            "nan_mode": "propagate",
+            "outer": 256,
+            "output_shape": [
+              256
+            ],
+            "route": "canonical_scheduled_tile_consumer",
+            "rows": 1,
+            "schedule_digest": "246015e30841decce1179582b1527f786939937fff85edf11fa77a5d36566d32",
+            "shape": [
+              256,
+              1024
+            ],
+            "storage": "bf16",
+            "sync_key": "E2E-REAL-2026-08-05",
+            "tile_ir_digest": "c7ad379ad674ca3087029bc2d2eeca47e345ba4381c5d24c80187ff81e31fda6",
+            "work_item": "E2E-REAL-5"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Outer",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "AxisExtent",
+              "ordinal": 3
+            },
+            {
+              "dtype": "int64",
+              "name": "Inner",
+              "ordinal": 4
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "cb57596813816f577b70c148ce90bd9dc1340be75923fb3364cda5b41c2b77cc",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.reduce.x_o_outer_axis_inner.bf16_f32out.v1",
+              "symbol": "tessera_rocm_reduction_caf5d0723feaecd1"
+            }
+          ],
+          "image_digest": "97b555f12c9745d544e818b80a1da922cae6c8ecf031ac27b9f541154f33092b",
+          "payload_digest": "40c6d8deb88dc58b2e6129b3aa03646b6db4abe28fdd28bc36ebb3f7de23e542",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "70014d96d8a0b6b45206703ae722ad03ad489f612e7273928453af1554339eb0",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.058813,
+      "warm_median_ms": 1.300142,
+      "warm_samples_ns": [
+        1457111,
+        1241329,
+        1346594,
+        1280901,
+        1228568,
+        1380607,
+        1300142
+      ]
+    },
+    {
+      "cold_ms": 477.730309,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "bf16",
+      "effective_gb_s": 0.7051133882708838,
+      "error_limit": 5.0,
+      "family": "scan",
+      "max_abs_error": 0.0,
+      "op_name": "cumsum",
+      "package_receipt": {
+        "artifact_hash": "4640004e36b8a502f11170b373007b5f845dc106faa15e805f26283596e4cec8",
+        "ir_sha256": {
+          "graph_ir": "de654f24cf3689f5dd2a1264e23fbda47a078c92c99db3c7f2da4a71d697e7bf",
+          "schedule_ir": "b8cca52047d1b8c6baaff1dc7031f1b473ff1c0f8702307313778e47c61889b2",
+          "target_ir": "496139b3ac5d53d16bf56f42a4a9770abd9aa24faff50b48c5514f94dc6e0ad0",
+          "tile_ir": "36cb64b5fb797ced216399810042f3269d16cbec0b8c4062799efdf038038c42"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "95c8c48a165e33d20d9ceb8ce6bb6d1ceb3b8251934e5da023cefb28ccde8bef",
+          "descriptor_digest": "536189451a674504c4068d02563853b48bedf17288c5bf6d3db76d10bda6411e",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scan_dc0e9ce6d151d0fd",
+          "geometry": {
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "cc927d77864b2df517b7a09f9f3b7b2b25eda19e9a7f44c2319a2da0e230391f",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "de654f24cf3689f5dd2a1264e23fbda47a078c92c99db3c7f2da4a71d697e7bf",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "scan",
+              "kind": "sum",
+              "numeric_policy": "f32_inclusive_scan",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "52c618b28a9242083690f4d5737867dacbb1a654bf08d323ee0801b785104e81",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "bf16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "b8cca52047d1b8c6baaff1dc7031f1b473ff1c0f8702307313778e47c61889b2",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "36cb64b5fb797ced216399810042f3269d16cbec0b8c4062799efdf038038c42",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Columns",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "9b234c4686aa5c3f3e073b03341f6bd4f3bc9c77500dcaf2b2e1a0b2c179f663",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+              "symbol": "tessera_rocm_scan_dc0e9ce6d151d0fd"
+            }
+          ],
+          "image_digest": "cc927d77864b2df517b7a09f9f3b7b2b25eda19e9a7f44c2319a2da0e230391f",
+          "payload_digest": "9b997a8f3513c020f8b93ec3223f3974204150b07099c67316160c5b42d40455",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "496139b3ac5d53d16bf56f42a4a9770abd9aa24faff50b48c5514f94dc6e0ad0",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.038152,
+      "warm_median_ms": 2.230654,
+      "warm_samples_ns": [
+        3424910,
+        2230654,
+        2227753,
+        2134928,
+        2268806,
+        2185072,
+        2235844
+      ]
+    },
+    {
+      "cold_ms": 463.668183,
+      "compiler_boundary": "serialized_native_package",
+      "dtype": "bf16",
+      "effective_gb_s": 0.6996221802521349,
+      "error_limit": 5.0,
+      "family": "scan",
+      "max_abs_error": 0.0,
+      "op_name": "cummax",
+      "package_receipt": {
+        "artifact_hash": "be60684ab61c31c00c39f4b1877bb4a2895cc6946cfb22253a141ec2c2185464",
+        "ir_sha256": {
+          "graph_ir": "70f6b0c2674d95ce5d57871d6b8e89f6d6355676a8f52883dfdb94f6fdf3dd06",
+          "schedule_ir": "f8d09e8f4ac308cdf1b9bb3578de807d8fc049be69d699a64e59ddc8853b783f",
+          "target_ir": "1490b8e4e8939bcf01873c2cb3fdd1e48aa4b98668fa93d37f33db973d98e6d7",
+          "tile_ir": "8d05be14e49eae8adb35a84bf5297dbcd41b86953e0651af9d42775d431b506f"
+        },
+        "launch_descriptor": {
+          "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+          "buffers": [
+            {
+              "alignment": 2,
+              "direction": "input",
+              "dtype": "bf16",
+              "layout": "row_major",
+              "name": "a0",
+              "ordinal": 0,
+              "rank": 2
+            },
+            {
+              "alignment": 4,
+              "direction": "output",
+              "dtype": "fp32",
+              "layout": "row_major",
+              "name": "o",
+              "ordinal": 1,
+              "rank": 2
+            }
+          ],
+          "cache_fingerprint": "4e1030e4a5a98c2865846cbc96ced2b278dd41de0d0228500dcaa3ad401f17f7",
+          "descriptor_digest": "980124276bdbaa9eca368afa5d3df2c491955a2240a1171ebca71da2f79f70ec",
+          "dynamic_local_memory_bytes": 0,
+          "entry_symbol": "tessera_rocm_scan_155560bc82c1d393",
+          "geometry": {
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "policy": null,
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "image_digest": "ea95297734e252e4d56751226cc64dc0b96e798afb8310bdd4b28cbddfad2eef",
+          "ordering": {
+            "ordered_submission": true,
+            "residency": "none",
+            "synchronization": [
+              "completion"
+            ]
+          },
+          "provenance": {
+            "graph_digest": "70f6b0c2674d95ce5d57871d6b8e89f6d6355676a8f52883dfdb94f6fdf3dd06",
+            "native_math": {
+              "architecture": "gfx1151",
+              "bindings": [
+                "a0",
+                "o"
+              ],
+              "columns": 1024,
+              "elements": 262144,
+              "family": "scan",
+              "kind": "max",
+              "numeric_policy": "f32_inclusive_scan",
+              "output_storage": "f32",
+              "roles": [
+                0
+              ],
+              "rows": 256,
+              "schedule_digest": "c15d8ace93e54c9f89c4905265019c4f6dd9d2dc4d023276e595abbb65884dad",
+              "shape": [
+                256,
+                1024
+              ],
+              "storage": "bf16"
+            },
+            "route": "canonical_native_math_schedule",
+            "schedule_ir_digest": "f8d09e8f4ac308cdf1b9bb3578de807d8fc049be69d699a64e59ddc8853b783f",
+            "sync_key": "ROCM-MATH-PACKAGE-2026-10-06",
+            "tile_ir_digest": "8d05be14e49eae8adb35a84bf5297dbcd41b86953e0651af9d42775d431b506f",
+            "work_item": "E2E-REAL-6"
+          },
+          "scalars": [
+            {
+              "dtype": "int64",
+              "name": "Rows",
+              "ordinal": 2
+            },
+            {
+              "dtype": "int64",
+              "name": "Columns",
+              "ordinal": 3
+            }
+          ],
+          "schema_version": "tessera.launch_descriptor.v1",
+          "shape_guards": [
+            {
+              "binding": "a0",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "a0",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            },
+            {
+              "binding": "o",
+              "dimension": 0,
+              "predicate": "eq",
+              "value": 256
+            },
+            {
+              "binding": "o",
+              "dimension": 1,
+              "predicate": "eq",
+              "value": 1024
+            }
+          ],
+          "workspace": {
+            "alignment": 1,
+            "bytes": 0,
+            "initialization": "undefined",
+            "lifetime": "launch"
+          }
+        },
+        "native_image": {
+          "architecture": "gfx1151",
+          "binary_format": "hsaco",
+          "cache_key": "80a200aa61eea566a40f71dd3d3cdaeb54b9bf5d8ba294bc2c554184eedaee8d",
+          "compile_state": "cold",
+          "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+          "device_libraries": [
+            {
+              "content_digest": "7b0d1bc455ec41ad461b688f404c211a12b880e36ff74eb8061e97502464bae8",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ocml"
+            },
+            {
+              "content_digest": "27406f05bd6167bb9aa2661348b9f003f644a54dd3022ba4eca8cefcd91d12a6",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.ockl"
+            },
+            {
+              "content_digest": "991096d09359c3047086807df8a88093658b97c6390e34161a200b64c1f08a7d",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_unsafe_math_off"
+            },
+            {
+              "content_digest": "b5595568396c253959bececa1676917e6db88413d36b9cefb9c325295bb5392c",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_finite_only_off"
+            },
+            {
+              "content_digest": "53b01683ea053b38a5bca7b140e3af5fff46fcc7ff7fe1944b968f6252f0f648",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_wavefrontsize64_off"
+            },
+            {
+              "content_digest": "af6c48e11d4a168e7475cc4a03aee358b5680ab17809260ebf24c19f4422d87e",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_isa_version_1151"
+            },
+            {
+              "content_digest": "ba2bb43ab6634f187bc9b26c49e7e9687aa9e7d954c0834dd3b9393ad67b2cac",
+              "link_mode": "compiler_driver",
+              "logical_name": "rocm.oclc_abi_version_600"
+            }
+          ],
+          "entry_points": [
+            {
+              "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+              "symbol": "tessera_rocm_scan_155560bc82c1d393"
+            }
+          ],
+          "image_digest": "ea95297734e252e4d56751226cc64dc0b96e798afb8310bdd4b28cbddfad2eef",
+          "payload_digest": "69e6bcd00244dd32e4981cc956e88fe8d744563cff9731566faed9a7508b8b99",
+          "pipeline_name": "tessera-lower-to-rocm",
+          "resource_record": null,
+          "schema_version": "tessera.native_image.v1",
+          "target": "rocm_gfx1151",
+          "target_ir_digest": "1490b8e4e8939bcf01873c2cb3fdd1e48aa4b98668fa93d37f33db973d98e6d7",
+          "toolchain_fingerprint": "705a7957b408f87b3e85a650ab20e8fd5eaa8a04fe16495b5255d24dc84934c2"
+        },
+        "serialization": "RuntimeArtifact JSON roundtrip before launch"
+      },
+      "rms_error": 0.0,
+      "shape": [
+        256,
+        1024
+      ],
+      "warm_mad_ms": 0.046207,
+      "warm_median_ms": 2.248162,
+      "warm_samples_ns": [
+        3269756,
+        2180521,
+        2231769,
+        2246302,
+        2248162,
+        2294369,
+        2302596
+      ]
+    }
+  ],
+  "eligibility_reason": "no exact-artifact clean-host paired promotion packet",
+  "f32_cache_comparison": [],
+  "f32_cache_comparison_scope": "not applicable: legacy cache controls no packaged rows",
+  "host": "Linux-6.18.33.1-microsoft-standard-WSL2-x86_64-with-glibc2.43",
+  "iterations": 7,
+  "module_policy": "checked_native_image_descriptor_launch",
+  "processor": "",
+  "promotion_eligible": false,
+  "schema": "tessera.physical_math_evidence.v1",
+  "selector_eligible": false,
+  "storage_dtypes": [
+    "f32",
+    "f16",
+    "bf16"
+  ],
+  "target": "rocm",
+  "timing_domain": "synchronized_host_wall",
+  "workload_shape": [
+    256,
+    1024
+  ]
+}

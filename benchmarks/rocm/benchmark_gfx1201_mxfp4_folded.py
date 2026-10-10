@@ -22,6 +22,7 @@ from tessera.compiler.rocm_mxfp4_folded_frontend import (
     compile_folded_scaled_matmul,
 )
 from benchmarks.rocm import benchmark_gfx1201_mxfp4_production as base
+from benchmarks.rocm.folded_launch_arguments import folded_launch_values
 from benchmarks.rocm.inspect_gfx1201_folded_prefill import (
     selected_symbol_isa_evidence,
 )
@@ -68,10 +69,9 @@ def folded_engine(
     device_copies = base._copies(hip, arrays, copies)
 
     def launch(bundle: base._DeviceArrays) -> None:
-        values: list[Any] = [
-            *(ctypes.c_void_p(pointer.value) for pointer in bundle.device),
-            ctypes.c_int64(case.m), ctypes.c_int64(case.n), ctypes.c_int64(case.k),
-        ]
+        values = folded_launch_values(
+            package, bundle.device, arrays, (case.m, case.n, case.k),
+        )
         arguments = (ctypes.c_void_p * len(values))(
             *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
         )

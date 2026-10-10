@@ -1,0 +1,32 @@
+         37264 function calls (37125 primitive calls) in 0.897 seconds
+
+   Ordered by: cumulative time
+   List reduced from 321 to 24 due to restriction <24>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.897    0.897 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_jvp.py:61(materialize)
+        1    0.013    0.013    0.885    0.885 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:141(build_native_gpu_storage)
+        7    0.000    0.000    0.674    0.096 /usr/lib/python3.14/subprocess.py:513(run)
+        7    0.000    0.000    0.671    0.096 /usr/lib/python3.14/subprocess.py:1177(communicate)
+        7    0.001    0.000    0.671    0.096 /usr/lib/python3.14/subprocess.py:2093(_communicate)
+       38    0.000    0.000    0.669    0.018 /usr/lib/python3.14/selectors.py:385(select)
+       38    0.668    0.018    0.668    0.018 {method 'poll' of 'select.poll' objects}
+        1    0.000    0.000    0.441    0.441 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:191(_reject_bodyless_image)
+        1    0.000    0.000    0.441    0.441 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:263(_reject_bodyless_cuda_image)
+        5    0.000    0.000    0.223    0.045 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:49(_run)
+        5    0.000    0.000    0.223    0.045 /usr/lib/python3.14/subprocess.py:424(check_output)
+        3    0.000    0.000    0.107    0.036 /usr/lib/python3.14/pathlib/__init__.py:774(read_bytes)
+        3    0.107    0.036    0.107    0.036 {method 'read' of '_io.FileIO' objects}
+        3    0.000    0.000    0.087    0.029 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:25(_sha)
+        3    0.087    0.029    0.087    0.029 {built-in method _hashlib.openssl_sha256}
+        1    0.000    0.000    0.013    0.013 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:136(replay_arena_ir)
+        1    0.000    0.000    0.011    0.011 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_jvp.py:11(source)
+        1    0.000    0.000    0.011    0.011 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_jvp.py:50(_lower_graph)
+        1    0.000    0.000    0.011    0.011 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/scheduled_matmul.py:989(run_tessera_opt)
+        1    0.000    0.000    0.007    0.007 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:61(_decode_image)
+        1    0.000    0.000    0.007    0.007 /usr/lib/python3.14/re/__init__.py:183(sub)
+        1    0.003    0.003    0.007    0.007 {method 'sub' of 're.Pattern' objects}
+     9893    0.004    0.000    0.005    0.000 /home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_gpu_storage.py:63(decode)
+        4    0.000    0.000    0.004    0.001 /usr/lib/python3.14/re/__init__.py:270(findall)
+
+

@@ -1,0 +1,1 @@
+PASS: 24 correctness-gated cases; recorder source fingerprints match current files.

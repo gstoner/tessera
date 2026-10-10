@@ -1,0 +1,3963 @@
+{
+  "schema": "tessera.nvidia.jit_multiresult_owner.v1",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "architecture": "sm_120",
+  "samples": 5,
+  "reps": 20,
+  "rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": false,
+      "compact": false,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 1114.47221,
+      "max_abs_error": 1.9834158815346115e-08,
+      "samples": {
+        "capture_wall_ms": [
+          4.646636,
+          2.088006,
+          1.835014,
+          1.841995,
+          1.878755
+        ],
+        "backward_wall_ms": [
+          0.281812,
+          0.226131,
+          0.195091,
+          0.198791,
+          0.202971
+        ],
+        "paired_wall_ms": [
+          2.6679,
+          2.046145,
+          2.040776,
+          2.013135,
+          2.025816
+        ],
+        "forward_device_window_ms": [
+          0.01089600007981062,
+          0.010009599849581718,
+          0.00955360010266304,
+          0.00803999975323677,
+          0.008697600103914738
+        ],
+        "backward_device_window_ms": [
+          0.009812800213694572,
+          0.011297600343823433,
+          0.00841120071709156,
+          0.009251199662685394,
+          0.007302399724721909
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 1.878755,
+        "backward_wall_ms": 0.202971,
+        "paired_wall_ms": 2.040776,
+        "forward_device_window_ms": 0.00955360010266304,
+        "backward_device_window_ms": 0.009251199662685394
+      },
+      "program_digest": "bf199bb7b16f5ddc48542ce7f0ca12f7499f94214193b55b108a123efe6d20a0",
+      "checkpoint_identity": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "3e65a6fda42808401857747f682c48ae74eb545f9a36d3ad2953eb9013e537fd",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "bdc7bbae333c3e13724c9aa33f7b690387f23a1debc9fccebe571071c65506fd",
+          "schedule_ir_digest": "3dc0de3d793b6b701fe193d344ef6a8c2e405b78af7f66473e151f2922bb3fb1",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2b00d33fa8d3e7b24285f59267ec23a60d170049604ff3dd1db698b2e945c6b6",
+          "tile_ir_digest": "e4ca42c457f31fbf6b547bb4c8fe151a530551bb11e4deb0ef832ecc6dcfb776",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "0fc3dd18a5389ee68206d7bfa09aa536c06144c974135c74b26cd7c75706ca92",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "6f3c18230acdf5a2e280a1d29c14af42d5b274738552f6e8e637d6fb37982c9e",
+          "schedule_ir_digest": "1f1b21003174e8b6e1e566b458e17601e3148255f617e7578c1388ee3f1fbe1b",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "a4027e331c1d23ffcbb409ae91fe199c550bc345a2c59556b373c977d7e35bcb",
+          "tile_ir_digest": "6a5bd8c26dc6b6fbbfcf3584e91666c0e9adf1412dbcdbf4d9506715dbea05cb",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": false,
+      "compact": true,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 934.951176,
+      "max_abs_error": 1.9834158815346115e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.201137,
+          1.828544,
+          1.835775,
+          1.805533,
+          1.867105
+        ],
+        "backward_wall_ms": [
+          0.218772,
+          0.191281,
+          0.195762,
+          0.192631,
+          0.187961
+        ],
+        "paired_wall_ms": [
+          2.072285,
+          2.015726,
+          2.091876,
+          2.62166,
+          2.210847
+        ],
+        "forward_device_window_ms": [
+          0.0076223998330533504,
+          0.00952639989554882,
+          0.010404800064861774,
+          0.010507199913263321,
+          0.010068800300359726
+        ],
+        "backward_device_window_ms": [
+          0.012001600116491318,
+          0.011481599882245064,
+          0.011979199945926666,
+          0.012908799573779106,
+          0.011145600117743015
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 1.835775,
+        "backward_wall_ms": 0.192631,
+        "paired_wall_ms": 2.091876,
+        "forward_device_window_ms": 0.010068800300359726,
+        "backward_device_window_ms": 0.011979199945926666
+      },
+      "program_digest": "7d8e26b50e1cad286fd327d484774cb359734e6a821ba261901c8d812e7654f5",
+      "checkpoint_identity": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "3e65a6fda42808401857747f682c48ae74eb545f9a36d3ad2953eb9013e537fd",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "bdc7bbae333c3e13724c9aa33f7b690387f23a1debc9fccebe571071c65506fd",
+          "schedule_ir_digest": "3dc0de3d793b6b701fe193d344ef6a8c2e405b78af7f66473e151f2922bb3fb1",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2b00d33fa8d3e7b24285f59267ec23a60d170049604ff3dd1db698b2e945c6b6",
+          "tile_ir_digest": "e4ca42c457f31fbf6b547bb4c8fe151a530551bb11e4deb0ef832ecc6dcfb776",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "480e7844f88593c204d183f238ac7bedebf06307a1d87c2919785e90f918770c",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "3258cdffd25ea7c50f4fd5bdb80047e39c5cd312d2decc5ed2b41bceced53111",
+          "schedule_ir_digest": "ed95e7c45848298a6ebc3c80136c1122d5d69ef98ffb08dacb87cf920c93bd1d",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "7d5b84d042223e1d2cfe2955b13c5017203f951434505ca2ea4f245203a90a0f",
+          "tile_ir_digest": "69d694feb006ef7ae5be1e1649b4ab11faa2144f01620f162b1d040445ba01dd",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": true,
+      "compact": false,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 1102.446789,
+      "max_abs_error": 2.543465713045201e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.178187,
+          1.938304,
+          1.837234,
+          1.920274,
+          1.915645
+        ],
+        "backward_wall_ms": [
+          0.240352,
+          0.194492,
+          0.227131,
+          0.254802,
+          0.204272
+        ],
+        "paired_wall_ms": [
+          2.189486,
+          2.064656,
+          2.074656,
+          2.072996,
+          2.018226
+        ],
+        "forward_device_window_ms": [
+          0.011992000043392181,
+          0.0075264000333845615,
+          0.014144000597298145,
+          0.011860799975693226,
+          0.012654399499297142
+        ],
+        "backward_device_window_ms": [
+          0.010835199616849422,
+          0.008328000083565712,
+          0.011985599994659424,
+          0.008080000057816505,
+          0.007945599965751171
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 1.920274,
+        "backward_wall_ms": 0.227131,
+        "paired_wall_ms": 2.072996,
+        "forward_device_window_ms": 0.011992000043392181,
+        "backward_device_window_ms": 0.008328000083565712
+      },
+      "program_digest": "6248ba5e159f8cf2486c2e8ef329e6fd9f1a9c4c098be497a8e51a19a2b1c390",
+      "checkpoint_identity": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "68b64d046b640490f5a80ad8450abced11f6ad48435c004392ff37ebdc5f94aa",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "a9b1bcadc4a7045a5d8fa14c82d2bf0c95e6adaad6a928fcc5581eaf65337277",
+          "schedule_ir_digest": "c9e9d5bb503475b5243532ac12560a0975ea360fd7eb081fc7a7842f66afff27",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "8ee96e10d74d8c8dbe8de2d149a5b09dc3c96dfbf9cb42edbd0c2fc71a72391f",
+          "tile_ir_digest": "d47b78c2325dc9f99ce53bee17f3d2cdc7b4fa30d405ff6941745a065f871c94",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "73bb9df206affabe5326b94b96465fc47b917358f1d5f6336735f3539a745880",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "86a240b6c3af56d36b34d4eff211fcddc6eddf697c45b04827b398b8fe34a0f7",
+          "schedule_ir_digest": "27976b6bf633a5bd43a66b59ea9d1a65133fc9cba843b7127bd5ccc1736519eb",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "ba60fffb5c2a557fa27bfecac7677c39aac9427e9417fbe5703d1da16fb8bbc5",
+          "tile_ir_digest": "6f5ec22a6b010a37453df931fa778c39001e95cc229c1d8a0dc04ffd94265646",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": true,
+      "compact": true,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 918.334351,
+      "max_abs_error": 2.543465713045201e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.195763,
+          1.944345,
+          1.858075,
+          1.813205,
+          1.812084
+        ],
+        "backward_wall_ms": [
+          0.215842,
+          0.190992,
+          0.185802,
+          0.200302,
+          0.194642
+        ],
+        "paired_wall_ms": [
+          2.019846,
+          1.972866,
+          2.075646,
+          2.081456,
+          1.985466
+        ],
+        "forward_device_window_ms": [
+          0.010958400554955006,
+          0.012697599828243256,
+          0.008851200342178345,
+          0.006836800370365381,
+          0.008868800476193428
+        ],
+        "backward_device_window_ms": [
+          0.010529600083827972,
+          0.01672479882836342,
+          0.012148799374699593,
+          0.012535999529063702,
+          0.01160959992557764
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 1.858075,
+        "backward_wall_ms": 0.194642,
+        "paired_wall_ms": 2.019846,
+        "forward_device_window_ms": 0.008868800476193428,
+        "backward_device_window_ms": 0.012148799374699593
+      },
+      "program_digest": "82ea167aa2ad108a20b444cabc6d8c99f68c5c7e8a5ddb7ae3ad87ddb1c4bb30",
+      "checkpoint_identity": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "68b64d046b640490f5a80ad8450abced11f6ad48435c004392ff37ebdc5f94aa",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "a9b1bcadc4a7045a5d8fa14c82d2bf0c95e6adaad6a928fcc5581eaf65337277",
+          "schedule_ir_digest": "c9e9d5bb503475b5243532ac12560a0975ea360fd7eb081fc7a7842f66afff27",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "8ee96e10d74d8c8dbe8de2d149a5b09dc3c96dfbf9cb42edbd0c2fc71a72391f",
+          "tile_ir_digest": "d47b78c2325dc9f99ce53bee17f3d2cdc7b4fa30d405ff6941745a065f871c94",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a03d264fb13b9a0273641abb97c0c9467c60a8e1fe35e2ddcbd68f73b94bc051",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "ce4fa1d800b9991b70b1a7e5069ee7ed3dd9d4119f174adbcc8c9fd844f65c3f",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "ff0932c617a49a72371561f3010e145007b8b79d91a95c5c2ce4248197ca9a3e",
+          "schedule_ir_digest": "b0420ce0d63d54abe5b7f8aa431a175b3a49127bc25bafa5efd29f7802e9b21b",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "3b9026c01c907bb8f42c549d188db94ecfca5ea59b9fd6502f72b065e912f3eb",
+          "tile_ir_digest": "7b4b1f4200d8452900057cb1ec10543308df03c5f0480f8fbb0d95d6f5dd94bc",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": false,
+      "compact": false,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 1114.376786,
+      "max_abs_error": 3.0756970997858346e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.443115,
+          2.173698,
+          2.177857,
+          2.125167,
+          2.255848
+        ],
+        "backward_wall_ms": [
+          0.257012,
+          0.222122,
+          0.207782,
+          0.207332,
+          0.208041
+        ],
+        "paired_wall_ms": [
+          2.379499,
+          2.50946,
+          2.305529,
+          2.368489,
+          2.362649
+        ],
+        "forward_device_window_ms": [
+          0.010009599849581718,
+          0.006939200218766928,
+          0.010208000428974628,
+          0.0094352001324296,
+          0.009007999673485756
+        ],
+        "backward_device_window_ms": [
+          0.01101440005004406,
+          0.01082720048725605,
+          0.011950399726629257,
+          0.010051200166344643,
+          0.011190400458872318
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.177857,
+        "backward_wall_ms": 0.208041,
+        "paired_wall_ms": 2.368489,
+        "forward_device_window_ms": 0.0094352001324296,
+        "backward_device_window_ms": 0.01101440005004406
+      },
+      "program_digest": "8486dc15a6173798b7aa1f04e665c3c747f73f8b140c35817cde17026b382038",
+      "checkpoint_identity": "f4cf16b24e8d6c33d2330fa6f1177dca460d90bea550dd88957d86b0bf3b176f",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": false,
+          "checkpoint_contract": "f4cf16b24e8d6c33d2330fa6f1177dca460d90bea550dd88957d86b0bf3b176f",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "9cc4831f21dd2caaaa53c3bf9ae7f8f2a23bb8c0565ad741a23e8d8f0bdeca04",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "2b5756ddf6e30fefca16d46c33712e3d48a345c9b515041af54c4e4c6f56eca0",
+          "schedule_ir_digest": "f627db15279153bac18e5c94b8d33c8090f3e8d55ce3d5e90a36f5bb89337fc3",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "eb2e41a96b9e397f89066020b4d991736b0ff3edc48f49d27bb4bb37341bc186",
+          "tile_ir_digest": "81a11d1193a70fbe53f317fb1940ffb6dc8524ea04d5866c16cc945e341f60ff",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": false,
+          "checkpoint_contract": "f4cf16b24e8d6c33d2330fa6f1177dca460d90bea550dd88957d86b0bf3b176f",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "bd1aee0424f918a51c259fbe305d875c5a605cfa434c63fa05e4ac61aba33e17",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "0571377ee33d198550cb2a9b1db2e27ea2205c9a8688f9dec24900f4ee17a1e6",
+          "schedule_ir_digest": "97c7cb3595b090c6c3ec97020372b037534a20decab1509f0196c1f603c0f11e",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "05a3ace67dcccb6628d9c9c2cd85bcb8f1a8d174f9ff0222fabc09da50266d84",
+          "tile_ir_digest": "5b4e9dba3af9d794538b79ea09d289270b7ecaa02747cdba2d52768bb9effbf5",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": false,
+      "compact": true,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 955.5027,
+      "max_abs_error": 3.0756970997858346e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.499856,
+          2.118827,
+          2.253128,
+          2.173258,
+          2.174617
+        ],
+        "backward_wall_ms": [
+          0.246602,
+          0.210672,
+          0.211361,
+          0.272363,
+          0.211002
+        ],
+        "paired_wall_ms": [
+          2.313649,
+          2.34555,
+          2.402448,
+          2.294628,
+          2.34357
+        ],
+        "forward_device_window_ms": [
+          0.009424000047147274,
+          0.010278400033712387,
+          0.007036800030618906,
+          0.009174400009214878,
+          0.010358399711549282
+        ],
+        "backward_device_window_ms": [
+          0.00936800055205822,
+          0.009843199513852596,
+          0.011883200146257877,
+          0.012860800139605999,
+          0.009681600145995617
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.174617,
+        "backward_wall_ms": 0.211361,
+        "paired_wall_ms": 2.34357,
+        "forward_device_window_ms": 0.009424000047147274,
+        "backward_device_window_ms": 0.009843199513852596
+      },
+      "program_digest": "1ade8458ebe3503d24c7c120fbedaef6634f80d421347752ddf2e361704ba491",
+      "checkpoint_identity": "f4cf16b24e8d6c33d2330fa6f1177dca460d90bea550dd88957d86b0bf3b176f",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": false,
+          "checkpoint_contract": "f4cf16b24e8d6c33d2330fa6f1177dca460d90bea550dd88957d86b0bf3b176f",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "9cc4831f21dd2caaaa53c3bf9ae7f8f2a23bb8c0565ad741a23e8d8f0bdeca04",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "2b5756ddf6e30fefca16d46c33712e3d48a345c9b515041af54c4e4c6f56eca0",
+          "schedule_ir_digest": "f627db15279153bac18e5c94b8d33c8090f3e8d55ce3d5e90a36f5bb89337fc3",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "eb2e41a96b9e397f89066020b4d991736b0ff3edc48f49d27bb4bb37341bc186",
+          "tile_ir_digest": "81a11d1193a70fbe53f317fb1940ffb6dc8524ea04d5866c16cc945e341f60ff",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": false,
+          "checkpoint_contract": "f4cf16b24e8d6c33d2330fa6f1177dca460d90bea550dd88957d86b0bf3b176f",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "d399df84f29f921606a2b0eaf8254a561047db593d9b925aba852a924e98f339",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "56a1b690a2079c02e05fcb8ae59a414d6c297a446015714cdf5449e5ea4d5767",
+          "schedule_ir_digest": "881c450f75a14fde474d97dc5dcd6ec5daa18d4e4a5146199d2852a895d19ea5",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2d5c5ce7f05268103997190515e412bfc2fab31b0365a2b5397cd79f3e517343",
+          "tile_ir_digest": "0aed2c5d6ea1dc710d5a9b947b6b652119df178df7fe2c3cb08fbd762d4518bb",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": true,
+      "compact": false,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 1130.761619,
+      "max_abs_error": 3.1570110414769204e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.695496,
+          2.255368,
+          2.651811,
+          2.820562,
+          2.128867
+        ],
+        "backward_wall_ms": [
+          0.311612,
+          0.215722,
+          0.224732,
+          0.220232,
+          0.219782
+        ],
+        "paired_wall_ms": [
+          2.367999,
+          2.58697,
+          2.661621,
+          2.364899,
+          2.36639
+        ],
+        "forward_device_window_ms": [
+          0.007943999953567982,
+          0.009284799918532372,
+          0.007760000415146351,
+          0.00952639989554882,
+          0.009883199818432331
+        ],
+        "backward_device_window_ms": [
+          0.009564800187945366,
+          0.009380800649523735,
+          0.009105599485337734,
+          0.008104000240564346,
+          0.009523199871182442
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.651811,
+        "backward_wall_ms": 0.220232,
+        "paired_wall_ms": 2.367999,
+        "forward_device_window_ms": 0.009284799918532372,
+        "backward_device_window_ms": 0.009380800649523735
+      },
+      "program_digest": "a33980eebe5a7d96e5433d482a000d6528ee6e5d453e63b4fa7dd4f32a4bae4e",
+      "checkpoint_identity": "41ce4224c3b74a806b1c2021e7ad9bbc82ee1b8660bde8f4425a8169f7bc3d07",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": true,
+          "checkpoint_contract": "41ce4224c3b74a806b1c2021e7ad9bbc82ee1b8660bde8f4425a8169f7bc3d07",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "6b9fdc6459c2953667c5b653ecd5f1181dd2df6cc76b24099bd2c6915a595469",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "f6b42af5ef16f27954a853bf5417d445eaf7ed3012fdffee3678150bf2d90be8",
+          "schedule_ir_digest": "b86385c9bf14a7e2876a43a41ff55a527d97795cd5310b7bd830c8bc370c7bbb",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "e43cb5c40dbccf32b39a4bd2cdb4c51fd0d56415d29bd134acc38ab43418b1fe",
+          "tile_ir_digest": "24db6339147635d35ba8de213aa5e1e34c30ba8df18c0ba835f7ab99c73daaf6",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": true,
+          "checkpoint_contract": "41ce4224c3b74a806b1c2021e7ad9bbc82ee1b8660bde8f4425a8169f7bc3d07",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "eff214a96520cd27754f2d71d49b38091182fc53bb2b88fc20cbbf170e1d874a",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "980f89acf4139bbec07105cb4265745ed690b708474379cfe3bc9b441bd7d9d8",
+          "schedule_ir_digest": "295dd75ccd13f9873f2b81f2d5e7b73f7bbb033e83513b9de04c72f2cfa85fa2",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "88b3c993b02cd8754f43ca11438af50cf067bd7a2eb4bef05b42d04afc478008",
+          "tile_ir_digest": "7bdcc32ba1671b634ea34db48ec3121cfd5350cb3f11e22df3cf900ad811cfbd",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": true,
+      "compact": true,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 967.968585,
+      "max_abs_error": 3.1570110414769204e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.512125,
+          2.356458,
+          2.282689,
+          2.40962,
+          2.199178
+        ],
+        "backward_wall_ms": [
+          0.268362,
+          0.208762,
+          0.217662,
+          0.231412,
+          0.208712
+        ],
+        "paired_wall_ms": [
+          2.384939,
+          2.347749,
+          2.56163,
+          2.660371,
+          2.36905
+        ],
+        "forward_device_window_ms": [
+          0.00947519950568676,
+          0.009769599884748459,
+          0.013500800356268883,
+          0.09833920001983643,
+          0.0077840001322329044
+        ],
+        "backward_device_window_ms": [
+          0.008030399680137634,
+          0.009871999733150005,
+          0.009681600145995617,
+          0.012444799765944481,
+          0.011692799627780914
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.356458,
+        "backward_wall_ms": 0.217662,
+        "paired_wall_ms": 2.384939,
+        "forward_device_window_ms": 0.009769599884748459,
+        "backward_device_window_ms": 0.009871999733150005
+      },
+      "program_digest": "34b591bbd230f9d5c007ff6b90d03586627d3e4ea5bdf4457e79ceca5b1922a9",
+      "checkpoint_identity": "41ce4224c3b74a806b1c2021e7ad9bbc82ee1b8660bde8f4425a8169f7bc3d07",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": true,
+          "checkpoint_contract": "41ce4224c3b74a806b1c2021e7ad9bbc82ee1b8660bde8f4425a8169f7bc3d07",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "6b9fdc6459c2953667c5b653ecd5f1181dd2df6cc76b24099bd2c6915a595469",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "f6b42af5ef16f27954a853bf5417d445eaf7ed3012fdffee3678150bf2d90be8",
+          "schedule_ir_digest": "b86385c9bf14a7e2876a43a41ff55a527d97795cd5310b7bd830c8bc370c7bbb",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "e43cb5c40dbccf32b39a4bd2cdb4c51fd0d56415d29bd134acc38ab43418b1fe",
+          "tile_ir_digest": "24db6339147635d35ba8de213aa5e1e34c30ba8df18c0ba835f7ab99c73daaf6",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            5
+          ],
+          "causal": true,
+          "checkpoint_contract": "41ce4224c3b74a806b1c2021e7ad9bbc82ee1b8660bde8f4425a8169f7bc3d07",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "901d36539bcd31fa29ce200268ca85214ead8d02ebf63aefd84b70e877ee1c1d",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "70e5d87093479b40d53c6a4dcc6accf652c488418eb4dcaedbc3d6990d1f70fd",
+          "schedule_ir_digest": "61dd04c2ff36229c1bd42ed8cd8eeb26dffbc41c9958160639c9fc6693e21bbd",
+          "shape": [
+            1,
+            2,
+            1,
+            3,
+            5,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "aa8c40471508e391341f0b718df631aa707b5597c7a345e419c7d690b11463b5",
+          "tile_ir_digest": "7559d93e4a0966a9e2d5b545caa8712b21f0fc55142d70d05a739ead4997bb31",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": false,
+      "compact": false,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 1081.693584,
+      "max_abs_error": 3.864759745564328e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.813258,
+          1.951166,
+          1.942926,
+          1.870006,
+          1.834764
+        ],
+        "backward_wall_ms": [
+          0.287303,
+          0.206052,
+          0.232542,
+          0.205601,
+          0.216451
+        ],
+        "paired_wall_ms": [
+          2.110737,
+          2.090867,
+          2.030207,
+          1.979446,
+          2.035557
+        ],
+        "forward_device_window_ms": [
+          0.007531200535595417,
+          0.007568000350147486,
+          0.00833440013229847,
+          0.009345600381493568,
+          0.00749600026756525
+        ],
+        "backward_device_window_ms": [
+          0.0084544001147151,
+          0.009691199287772179,
+          0.011356799863278866,
+          0.010411200113594532,
+          0.015140799805521965
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 1.942926,
+        "backward_wall_ms": 0.216451,
+        "paired_wall_ms": 2.035557,
+        "forward_device_window_ms": 0.007568000350147486,
+        "backward_device_window_ms": 0.010411200113594532
+      },
+      "program_digest": "3c4b9e4cd5cefdd42393ea12bc18764e55672d6e240f33a757410da4c50d7ef9",
+      "checkpoint_identity": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "80f30f47d8c647f5e8baae7dd6966c89958cb625eadce9bf037891cdceab86e9",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "ba14a1feeafc4943623cfe445d1eb3ebe677c3008b434fd187d046c2db7a2811",
+          "schedule_ir_digest": "48cf00c4408db913c7312722544367b7529bdfc4bbb531c572f557be28218182",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2ddc57b06f1289552c9af55dad311e82dbaef37b04d9f1a3eb19fa606f4e2e27",
+          "tile_ir_digest": "f5a94d34bb89a84d9542e8986ee62f420196afc1b4714a8357bf4dcfc04deb3f",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "fd1dc18022937e370622f3de6a0ff50f40ee7f65190991faaaa17b946428f177",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "048ccdcc1085c4c9e900ca2f6d9b10ffaee86f2375a9ff9b8cbc50512e92a2cb",
+          "schedule_ir_digest": "d319975410ef1bd96e660a17fcd41251bce2f7f121b038b3aa6cf4241891d0eb",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "10d2fde74821685a11bb152abbfbaa6accd4d65b18c021b4d1cdcdc0972f5eb0",
+          "tile_ir_digest": "1d502561aba62f1180e698fb7610853283132808c0d0ad001242c4dd476c1408",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": false,
+      "compact": true,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 916.682718,
+      "max_abs_error": 3.864759745564328e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.378964,
+          1.981295,
+          1.904775,
+          1.873575,
+          1.900905
+        ],
+        "backward_wall_ms": [
+          0.242882,
+          0.220552,
+          0.191931,
+          0.193692,
+          0.196721
+        ],
+        "paired_wall_ms": [
+          2.101947,
+          2.000126,
+          2.116377,
+          2.091096,
+          2.006937
+        ],
+        "forward_device_window_ms": [
+          0.0071680000983178616,
+          0.010495999827980995,
+          0.011584000661969185,
+          0.01443840004503727,
+          0.010745599865913391
+        ],
+        "backward_device_window_ms": [
+          0.010683199390769005,
+          0.014822399243712425,
+          0.011180800385773182,
+          0.009521599858999252,
+          0.017902400344610214
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 1.904775,
+        "backward_wall_ms": 0.196721,
+        "paired_wall_ms": 2.091096,
+        "forward_device_window_ms": 0.010745599865913391,
+        "backward_device_window_ms": 0.011180800385773182
+      },
+      "program_digest": "9bae81cbb3e49afb3ca271cf8314a49b530ebf771d63139edbef171275dca2cd",
+      "checkpoint_identity": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "80f30f47d8c647f5e8baae7dd6966c89958cb625eadce9bf037891cdceab86e9",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "ba14a1feeafc4943623cfe445d1eb3ebe677c3008b434fd187d046c2db7a2811",
+          "schedule_ir_digest": "48cf00c4408db913c7312722544367b7529bdfc4bbb531c572f557be28218182",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2ddc57b06f1289552c9af55dad311e82dbaef37b04d9f1a3eb19fa606f4e2e27",
+          "tile_ir_digest": "f5a94d34bb89a84d9542e8986ee62f420196afc1b4714a8357bf4dcfc04deb3f",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "b1eb33f5b21e607a0fa7bc66e95e086729f1cae37c96d18788339d1836e6e1f8",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "e1e08bb2d4f7593c849776479458e32864bae4cbe8195d9b6ffb684d5bda8be0",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "d42baed06d24e6745674de12a62a114281fc79f87f1d25366b1b0f42127de198",
+          "schedule_ir_digest": "995a88dc462c6ba7b99329c845e2ff748c0fd5ad22a30747e2e4a7825a503f6b",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "65555f5d52d5abb830347b20b54a87b1c2383ab31eb830211d21092c7d36e26e",
+          "tile_ir_digest": "e1817be48b01856aec311e79a6633fc3a6a4770b99c5c3d87bb8c473dc5a5b31",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": true,
+      "compact": false,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 1084.718907,
+      "max_abs_error": 6.50822372105786e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.39067,
+          2.259768,
+          2.086518,
+          1.982837,
+          2.316169
+        ],
+        "backward_wall_ms": [
+          0.230782,
+          0.201642,
+          0.209302,
+          0.204122,
+          0.353753
+        ],
+        "paired_wall_ms": [
+          2.183838,
+          2.276099,
+          2.322348,
+          2.257359,
+          2.525749
+        ],
+        "forward_device_window_ms": [
+          0.009756799787282944,
+          0.009721600450575352,
+          0.01039199996739626,
+          0.009291199967265129,
+          0.011475199833512306
+        ],
+        "backward_device_window_ms": [
+          0.007921600714325905,
+          0.011164800263941288,
+          0.012113600037992,
+          0.007800000254064798,
+          0.009833600372076035
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.259768,
+        "backward_wall_ms": 0.209302,
+        "paired_wall_ms": 2.276099,
+        "forward_device_window_ms": 0.009756799787282944,
+        "backward_device_window_ms": 0.009833600372076035
+      },
+      "program_digest": "eba24f4291cf4abaa38b42beaed0bfa626f7ee8ad802ea850f7ab8482ffe2a57",
+      "checkpoint_identity": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "e6a45e06870d0554750df287fa50ed773a09796823ffe969652aa27eda59a66f",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "4c2b96de68d568bdb12489a3660cbc89036e9be029729bc79572ae7f16517503",
+          "schedule_ir_digest": "3ff087e83f50db4f281250846eca53f74aba7d3114bc617d29ae901ce0a577e8",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "aacccda3d817240d68de3923f0ea8702a602262c23e65b8e84d938aaf3ed5972",
+          "tile_ir_digest": "e5b5c213705cb5944515ac4b7ddbe47f8235793979b2e7aa2561dc4cc2f33f5e",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "6badaab3c3385db2bce5155092e6ad7b5b528fc443cca1868a2778905c668796",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "d0f4a104a45259b7ed9b9b610e0667c7b5b9142c76fbed4c565bb08be06b4f22",
+          "schedule_ir_digest": "006796175db52e0f51e6538e951f3a240589c161735363fe6f307181c6a05d06",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "8a47f1ae850690b644edca9dcaebdb43909cebf4133ca7ed2341903d3c8138ec",
+          "tile_ir_digest": "1fb75a57078a8283424e7586835b24ee6f5144df27efdea971201d0d5817e493",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": false,
+      "causal": true,
+      "compact": true,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 922.99979,
+      "max_abs_error": 6.50822372105786e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.53811,
+          2.459931,
+          2.313418,
+          2.374169,
+          1.991626
+        ],
+        "backward_wall_ms": [
+          0.263682,
+          0.201811,
+          0.200051,
+          0.251292,
+          0.194772
+        ],
+        "paired_wall_ms": [
+          2.391149,
+          2.61143,
+          2.296679,
+          2.747951,
+          2.426829
+        ],
+        "forward_device_window_ms": [
+          0.01197119988501072,
+          0.011072000488638878,
+          0.011907199397683144,
+          0.012964800000190735,
+          0.011247999966144562
+        ],
+        "backward_device_window_ms": [
+          0.012638400308787823,
+          0.008654399774968624,
+          0.015692800283432007,
+          0.013836799189448357,
+          0.015244799666106701
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.374169,
+        "backward_wall_ms": 0.201811,
+        "paired_wall_ms": 2.426829,
+        "forward_device_window_ms": 0.011907199397683144,
+        "backward_device_window_ms": 0.013836799189448357
+      },
+      "program_digest": "6e1abc8767adc48c9eb78b43c09a3b0efc71a104dfa8cb6c45aeab5c61e53cb3",
+      "checkpoint_identity": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "e6a45e06870d0554750df287fa50ed773a09796823ffe969652aa27eda59a66f",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "4c2b96de68d568bdb12489a3660cbc89036e9be029729bc79572ae7f16517503",
+          "schedule_ir_digest": "3ff087e83f50db4f281250846eca53f74aba7d3114bc617d29ae901ce0a577e8",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "aacccda3d817240d68de3923f0ea8702a602262c23e65b8e84d938aaf3ed5972",
+          "tile_ir_digest": "e5b5c213705cb5944515ac4b7ddbe47f8235793979b2e7aa2561dc4cc2f33f5e",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "a99f732ac24778ef09dc573eb2af240de45bc8f84e9f530c3c8e8133201f8d25",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "87ad697134d7e0f5806e54853d9f66cab9e304833ae08b70a6f2623a3cdd6039",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "91cafbdfdc342eef5b62eb7e2f4fda07e717895ef3646c133fdf7eb0a97cb17e",
+          "schedule_ir_digest": "2ba4467a180d1d2ed324f837b4f41b4b377da148359b2e7939bc952020283dee",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "adcd4a895e976b666e45bcd38274e9664b5e3c60bf1c54c52399351eed7107ce",
+          "tile_ir_digest": "6ae45a0e9973f1b553b4a0fd4c0030b6bdaee9d71df25ec573cfb50c7b269423",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": false,
+      "compact": false,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 1138.533808,
+      "max_abs_error": 3.789356983752157e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.683111,
+          2.385068,
+          2.43092,
+          2.321589,
+          2.271548
+        ],
+        "backward_wall_ms": [
+          0.262212,
+          0.215772,
+          0.221032,
+          0.245492,
+          0.214632
+        ],
+        "paired_wall_ms": [
+          2.612072,
+          2.65718,
+          2.733681,
+          2.681321,
+          2.560801
+        ],
+        "forward_device_window_ms": [
+          0.007740800268948078,
+          0.013775999657809734,
+          0.012959999963641167,
+          0.013187199831008911,
+          0.010302400216460228
+        ],
+        "backward_device_window_ms": [
+          0.015984000638127327,
+          0.015585599467158318,
+          0.016414400190114975,
+          0.01971679925918579,
+          0.015012800693511963
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.385068,
+        "backward_wall_ms": 0.221032,
+        "paired_wall_ms": 2.65718,
+        "forward_device_window_ms": 0.012959999963641167,
+        "backward_device_window_ms": 0.015984000638127327
+      },
+      "program_digest": "9aefe97b92d3da32b277f35b743def2d1b415cf25cf4e4bf428d36b2852c2caa",
+      "checkpoint_identity": "0234ae7c0f50ee0fc5db398bf4cba7a53757314a249f3ac2a30a77a64ddcddfc",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": false,
+          "checkpoint_contract": "0234ae7c0f50ee0fc5db398bf4cba7a53757314a249f3ac2a30a77a64ddcddfc",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "f3e7f7520b0356fa40521fc1b0d2ad8d5ce27bdf7f3fc3d8d0a151647bb7ac6d",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "d2527c4e0266359fef0fc96ed3f49e4a1606b825d758e1e5d42bcdecd7f2b4fe",
+          "schedule_ir_digest": "8d1d4ff33c7a606ab2c6ec172e34f4c3d419ce8f742a1fa8035c64fbe67ce372",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "c6507156aa32b63c092167622aecadc1164ca01ba718044a54984bc1df2b7fcd",
+          "tile_ir_digest": "58f2ea1fa93dd4ca2c57ff2bb4336e4f455ebd90fb53e635458fa26adefc3b73",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": false,
+          "checkpoint_contract": "0234ae7c0f50ee0fc5db398bf4cba7a53757314a249f3ac2a30a77a64ddcddfc",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "55807acef9262a9750578539e4443a83b35b06f360a44a3e914e42f8595265e3",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "b8b7bf30fc3d5dfbe599eaf8ba389d26edc862fe2d57f6dddaffa3e66b7d6663",
+          "schedule_ir_digest": "43a5d75ae09b7cc3636a2d6b950d90f07236c93b5b6af8a92778ca13a7293bc8",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "728314eeb8eb23a0edd493cf26568a3f08bc561024415f2c907a86f508533412",
+          "tile_ir_digest": "7eebf3684e5cd82f50e3cb38a560465a6eb87f347c3fa50d2068d3ceac72c58e",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": false,
+      "compact": true,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 952.438925,
+      "max_abs_error": 3.789356983752157e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.558425,
+          2.350259,
+          2.355728,
+          2.405149,
+          2.346149
+        ],
+        "backward_wall_ms": [
+          0.367903,
+          0.212572,
+          0.223802,
+          0.214862,
+          0.222732
+        ],
+        "paired_wall_ms": [
+          2.537629,
+          2.583981,
+          2.663082,
+          2.555509,
+          2.557319
+        ],
+        "forward_device_window_ms": [
+          0.01146399974822998,
+          0.013368000276386738,
+          0.011171200312674046,
+          0.010255999863147736,
+          0.008479999378323555
+        ],
+        "backward_device_window_ms": [
+          0.02049120143055916,
+          0.014801600947976112,
+          0.01985280029475689,
+          0.018171200528740883,
+          0.012700800783932209
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.355728,
+        "backward_wall_ms": 0.222732,
+        "paired_wall_ms": 2.557319,
+        "forward_device_window_ms": 0.011171200312674046,
+        "backward_device_window_ms": 0.018171200528740883
+      },
+      "program_digest": "6712a3cdb91b7e2c4c770b7ae2f4e0f189105409f81d7c7cd08831b08160a153",
+      "checkpoint_identity": "0234ae7c0f50ee0fc5db398bf4cba7a53757314a249f3ac2a30a77a64ddcddfc",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": false,
+          "checkpoint_contract": "0234ae7c0f50ee0fc5db398bf4cba7a53757314a249f3ac2a30a77a64ddcddfc",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "f3e7f7520b0356fa40521fc1b0d2ad8d5ce27bdf7f3fc3d8d0a151647bb7ac6d",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "d2527c4e0266359fef0fc96ed3f49e4a1606b825d758e1e5d42bcdecd7f2b4fe",
+          "schedule_ir_digest": "8d1d4ff33c7a606ab2c6ec172e34f4c3d419ce8f742a1fa8035c64fbe67ce372",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "c6507156aa32b63c092167622aecadc1164ca01ba718044a54984bc1df2b7fcd",
+          "tile_ir_digest": "58f2ea1fa93dd4ca2c57ff2bb4336e4f455ebd90fb53e635458fa26adefc3b73",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": false,
+          "checkpoint_contract": "0234ae7c0f50ee0fc5db398bf4cba7a53757314a249f3ac2a30a77a64ddcddfc",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "246aefd2ed3f36cfdcab8a133343af4f6f81a968bc780cdd7e0b9c7a5e9d7ceb",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "3c4c488fe3af42048fd6388aa682d754d8b4358e1dbc82d56927d0a389f895c0",
+          "schedule_ir_digest": "9dd05b2d9709739fcbf58a93cf81993de6d202a5f789d104da747f696aa69b10",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "870b96200669386d2af287d9ef734d1a1cbec9dafe24ad6c15f53025a61403ee",
+          "tile_ir_digest": "8472314a67776bc9ae7f61430885ad13f5886e776b23fd0eb642b1f58e1fb2fc",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": true,
+      "compact": false,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 1129.342785,
+      "max_abs_error": 4.750922044660655e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.693611,
+          4.484696,
+          2.412829,
+          2.417229,
+          2.439949
+        ],
+        "backward_wall_ms": [
+          0.271902,
+          0.223602,
+          0.214262,
+          0.215712,
+          0.209171
+        ],
+        "paired_wall_ms": [
+          2.5606,
+          2.753341,
+          2.44686,
+          2.661742,
+          2.495189
+        ],
+        "forward_device_window_ms": [
+          0.012971200048923492,
+          0.015318399295210838,
+          0.009686400182545185,
+          0.009875199757516384,
+          0.011687999591231346
+        ],
+        "backward_device_window_ms": [
+          0.014856000430881977,
+          0.016235198825597763,
+          0.012812800705432892,
+          0.016752000898122787,
+          0.01791040040552616
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.439949,
+        "backward_wall_ms": 0.215712,
+        "paired_wall_ms": 2.5606,
+        "forward_device_window_ms": 0.011687999591231346,
+        "backward_device_window_ms": 0.016235198825597763
+      },
+      "program_digest": "f86dc573ab6921f4e652dafa2d23211a3cae414b713ae415f6d992ab1ec0dcab",
+      "checkpoint_identity": "ad0dbaa6e525daa4ecf5e690fe17bfb0659f29fcfb4b195a4ea74a7f4973a980",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": true,
+          "checkpoint_contract": "ad0dbaa6e525daa4ecf5e690fe17bfb0659f29fcfb4b195a4ea74a7f4973a980",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "1eae15b435a926670dc8bb0b013fc3404d5c4286ccb1f1027f12aa36b94ead62",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "b75db8d83aff076e8617ec8da34290224ec4eda23a11f5f7544f900f218571f9",
+          "schedule_ir_digest": "7998fab98fdc4bbda2f4abc96fee4e7fee026ea9f97f6ac063e7b2d0f12f238b",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2d5e10cc30ae298f076973fb2b9cac0154c3951ed9269a6c90c418bb9541dc6c",
+          "tile_ir_digest": "0ef966b7a99f08d77d4c1822108f434735fca3c18eccfc85ed4036bbb0378208",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": true,
+          "checkpoint_contract": "ad0dbaa6e525daa4ecf5e690fe17bfb0659f29fcfb4b195a4ea74a7f4973a980",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "b928addd906c9f0dc5b26565cf8b047fb4bd6ada3be361c7825069c2b9e8b1e2",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "d618b74a5f578ce578e13a03888adbcdd33b38fd1afe17b141a60dfd70a819b3",
+          "schedule_ir_digest": "cbaeb5b5c1e7d164921efc3a84e597df920e7a414b08c88cd9db9f02321c118d",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "321255a7ba9a03fc81e97b27a1ba9d3615e7500ceea07b33aa924acf866aeec0",
+          "tile_ir_digest": "287c9dc7833cf5c5143f01398e3deac1eefa34ff0c4018e42b5a87efe07c21bf",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "bias": true,
+      "causal": true,
+      "compact": true,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 951.29214,
+      "max_abs_error": 4.750922044660655e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.920864,
+          2.445059,
+          2.321468,
+          2.380799,
+          2.448899
+        ],
+        "backward_wall_ms": [
+          0.258092,
+          0.217121,
+          0.217171,
+          0.256662,
+          0.218232
+        ],
+        "paired_wall_ms": [
+          2.56387,
+          2.616622,
+          2.536871,
+          2.629141,
+          2.695171
+        ],
+        "forward_device_window_ms": [
+          0.011188799515366554,
+          0.012848000042140484,
+          0.007304000202566385,
+          0.010694400407373905,
+          0.009375999681651592
+        ],
+        "backward_device_window_ms": [
+          0.01643040031194687,
+          0.015641599893569946,
+          0.014672000892460346,
+          0.01592320017516613,
+          0.01190240029245615
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.445059,
+        "backward_wall_ms": 0.218232,
+        "paired_wall_ms": 2.616622,
+        "forward_device_window_ms": 0.010694400407373905,
+        "backward_device_window_ms": 0.015641599893569946
+      },
+      "program_digest": "fa6fb17cb73f607f9932801291d7c69a8697516675785250aebac9874b12948e",
+      "checkpoint_identity": "ad0dbaa6e525daa4ecf5e690fe17bfb0659f29fcfb4b195a4ea74a7f4973a980",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": true,
+          "checkpoint_contract": "ad0dbaa6e525daa4ecf5e690fe17bfb0659f29fcfb4b195a4ea74a7f4973a980",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "1eae15b435a926670dc8bb0b013fc3404d5c4286ccb1f1027f12aa36b94ead62",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "b75db8d83aff076e8617ec8da34290224ec4eda23a11f5f7544f900f218571f9",
+          "schedule_ir_digest": "7998fab98fdc4bbda2f4abc96fee4e7fee026ea9f97f6ac063e7b2d0f12f238b",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2d5e10cc30ae298f076973fb2b9cac0154c3951ed9269a6c90c418bb9541dc6c",
+          "tile_ir_digest": "0ef966b7a99f08d77d4c1822108f434735fca3c18eccfc85ed4036bbb0378208",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            3
+          ],
+          "causal": true,
+          "checkpoint_contract": "ad0dbaa6e525daa4ecf5e690fe17bfb0659f29fcfb4b195a4ea74a7f4973a980",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "ac45eab2a3148830f0aa3e014e7a00c5455a5de8c9644d711648060f9457ff41",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.5,
+          "schedule_digest": "e16259ec6a85a2f8a27c11e5354507b15ddd584f0cb69761ad203ecc1960a153",
+          "schedule_ir_digest": "baeb1d584f9bfdb800a3f440950d3b3a2d33891909abf097bfd82c2b0c8f20a5",
+          "shape": [
+            1,
+            2,
+            1,
+            5,
+            3,
+            4,
+            3
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2da7a9ee99822a3396b4e320f9417d9bfac54b078441fee3970094733acc884d",
+          "tile_ir_digest": "1e50a1a06b7e2a7ec610ab60a8978cb43dadda28dc46ef3512d267ffc69ce9d3",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": false,
+      "causal": false,
+      "compact": false,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 1083.294139,
+      "max_abs_error": 4.680065054940563e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.255627,
+          2.009026,
+          1.958246,
+          2.063927,
+          2.024367
+        ],
+        "backward_wall_ms": [
+          0.239922,
+          0.205562,
+          0.212912,
+          0.204371,
+          0.228492
+        ],
+        "paired_wall_ms": [
+          2.256548,
+          2.235427,
+          2.218688,
+          3.061684,
+          2.388349
+        ],
+        "forward_device_window_ms": [
+          0.009265599772334099,
+          0.015268799848854542,
+          0.01313599944114685,
+          0.012667199596762657,
+          0.015062401071190834
+        ],
+        "backward_device_window_ms": [
+          0.016700800508260727,
+          0.0152751998975873,
+          0.015483200550079346,
+          0.017691198736429214,
+          0.012988800182938576
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.024367,
+        "backward_wall_ms": 0.212912,
+        "paired_wall_ms": 2.256548,
+        "forward_device_window_ms": 0.01313599944114685,
+        "backward_device_window_ms": 0.015483200550079346
+      },
+      "program_digest": "ccba1a9fbcbe196dcdb0d71e6e94435f4c4938b2a8f2f4fdcb4c7dd223a87eee",
+      "checkpoint_identity": "84e35d9e04d0ed2b727df7f834b3900e492578f3eaab1217c3f201c2fd55d65f",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "84e35d9e04d0ed2b727df7f834b3900e492578f3eaab1217c3f201c2fd55d65f",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "f4622b5eff930ce48952603290a44c300f154e2f6c68b43581f85238d05375ba",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "450fb7ec02330dc3f200a6e4058550d7240ae4427eabfc068ca054c1dcf3c63e",
+          "schedule_ir_digest": "a3993fbeaa17c0caa6a5a53c4f795bf8e05564fd1cd4f671f26453193b977b57",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "3b1b7c10c6fa4d999dcd0580b9cce5081cf0d278a1123ddb06c17ec39968a769",
+          "tile_ir_digest": "120149381731f8780f0e57e7c79b96c2d5769220b4a773d7bce78036a6718422",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "84e35d9e04d0ed2b727df7f834b3900e492578f3eaab1217c3f201c2fd55d65f",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "a29f1031e4c3b8a6132f612a345477243ee5f882282dbae1c9ec2851bd5ec331",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "a8198b01a67766fa25a8aec297b1250b2b04a02de73a88a7b2011e8efc0988b4",
+          "schedule_ir_digest": "f4d6408bedc2ffd5c3dab678536574c6257b2c194ecb7b7d373127dcdf6b3eeb",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "09b25a86522ed1723647b37cb0d5f35824eaa29bb71722a2ce5bfee939744234",
+          "tile_ir_digest": "2742a660b282370fb6d2593f71289e6a38c15637ccdccb93812a4c321f766359",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": false,
+      "causal": false,
+      "compact": true,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 933.270657,
+      "max_abs_error": 4.680065054940563e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.173217,
+          2.044137,
+          1.990397,
+          2.238777,
+          2.193898
+        ],
+        "backward_wall_ms": [
+          0.229402,
+          0.200542,
+          0.198182,
+          0.198611,
+          0.239732
+        ],
+        "paired_wall_ms": [
+          2.44849,
+          2.338858,
+          2.173357,
+          2.367218,
+          2.238157
+        ],
+        "forward_device_window_ms": [
+          0.019654400646686554,
+          0.014315200038254261,
+          0.014041599817574024,
+          0.015320000238716602,
+          0.01125119999051094
+        ],
+        "backward_device_window_ms": [
+          0.014118400402367115,
+          0.01480800099670887,
+          0.011790400370955467,
+          0.014070400968194008,
+          0.014015999622642994
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.173217,
+        "backward_wall_ms": 0.200542,
+        "paired_wall_ms": 2.338858,
+        "forward_device_window_ms": 0.014315200038254261,
+        "backward_device_window_ms": 0.014070400968194008
+      },
+      "program_digest": "8af18ca6696e3bf7e50599e64dc1059d18bdc0d8b522176ab20a4a0ceb4d9001",
+      "checkpoint_identity": "84e35d9e04d0ed2b727df7f834b3900e492578f3eaab1217c3f201c2fd55d65f",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "84e35d9e04d0ed2b727df7f834b3900e492578f3eaab1217c3f201c2fd55d65f",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "f4622b5eff930ce48952603290a44c300f154e2f6c68b43581f85238d05375ba",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "450fb7ec02330dc3f200a6e4058550d7240ae4427eabfc068ca054c1dcf3c63e",
+          "schedule_ir_digest": "a3993fbeaa17c0caa6a5a53c4f795bf8e05564fd1cd4f671f26453193b977b57",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "3b1b7c10c6fa4d999dcd0580b9cce5081cf0d278a1123ddb06c17ec39968a769",
+          "tile_ir_digest": "120149381731f8780f0e57e7c79b96c2d5769220b4a773d7bce78036a6718422",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": false,
+          "checkpoint_contract": "84e35d9e04d0ed2b727df7f834b3900e492578f3eaab1217c3f201c2fd55d65f",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "eab8bd5b9486acb1f2a3db338214842df06dc956508b4652651a72d0d95e0298",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "d3cfe638ef2cf092d8ce14a836074452121c0437cc1b502d673cadbfe64a3bcc",
+          "schedule_ir_digest": "b812de839c8df422253e797c7436360ae927344bca29e34539496df057b30877",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "5d9d4783750ed7aa6e05851187f5e3fb58c897e578fbe1b86544ea29916c1136",
+          "tile_ir_digest": "758ccbbbeb3b69ddc69b2276457338fc0c03727cc844a2c26f5ad018057719ed",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": false,
+      "causal": true,
+      "compact": false,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 1109.4843,
+      "max_abs_error": 5.350321818919923e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.980712,
+          2.066332,
+          2.150412,
+          2.213979,
+          1.973684
+        ],
+        "backward_wall_ms": [
+          0.250095,
+          0.200743,
+          0.261538,
+          0.202835,
+          0.206269
+        ],
+        "paired_wall_ms": [
+          2.25164,
+          2.439538,
+          2.38449,
+          2.26252,
+          2.135926
+        ],
+        "forward_device_window_ms": [
+          0.018556799739599228,
+          0.012681600637733936,
+          0.01387999951839447,
+          0.01194079965353012,
+          0.01199360005557537
+        ],
+        "backward_device_window_ms": [
+          0.01629440113902092,
+          0.01482400018721819,
+          0.01450559962540865,
+          0.014630399644374847,
+          0.011582399718463421
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.150412,
+        "backward_wall_ms": 0.206269,
+        "paired_wall_ms": 2.26252,
+        "forward_device_window_ms": 0.012681600637733936,
+        "backward_device_window_ms": 0.014630399644374847
+      },
+      "program_digest": "1ffc5ac71f88560612b31f7579e30c8f303f997d14def49b4153c801927a48d9",
+      "checkpoint_identity": "4f71dc55bbf40a14cc0443167103c39b2794c300807ec3f1f0a01b85438192b7",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "4f71dc55bbf40a14cc0443167103c39b2794c300807ec3f1f0a01b85438192b7",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "01a03558b5626664f314d50ca8acc313112cc36d007b9cfcdbe3129b0763d7c4",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "4bb77d4b721ef62d0163ae45d72b20e28a1d6ac6e89e1060b433f4e2aec60ddf",
+          "schedule_ir_digest": "8b0a0082aa802a3422cff9b3307fb1a1d88eeef27a337b3281827497d9c3a9c1",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "b113cfc731acde02059e907a233e1fcae922449fc6647f222a4f5b55e960169d",
+          "tile_ir_digest": "39bef0c1cf5a06daac19ea1c61a7455ad23d247c8ab52198c93f2608200b220c",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "4f71dc55bbf40a14cc0443167103c39b2794c300807ec3f1f0a01b85438192b7",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "201890008fa6a92f443b76ba5ce3cd9eed9fb4d07557f2bc18380e0d4c870451",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "15c1261fe269617436960b53bb7fca8598cbdb9c38e27e833103beb48e31402c",
+          "schedule_ir_digest": "48b92b25d934800ada3d73c8a70121286f989b607cdcd45fb1c9e631991df2a7",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "3816c13ca0b8ec25fccf34f752bc47e5b0c8d6994392f131877f1c0ebe8f6c07",
+          "tile_ir_digest": "55870461c0af681c27de8cee904eb7899fdfdfbbd7578ffc82e0287783e04ad1",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": false,
+      "causal": true,
+      "compact": true,
+      "active": [
+        2,
+        0
+      ],
+      "compile_wall_ms": 913.510598,
+      "max_abs_error": 5.350321818919923e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.596121,
+          2.267877,
+          2.233897,
+          2.226397,
+          2.275527
+        ],
+        "backward_wall_ms": [
+          0.273242,
+          0.194781,
+          0.244991,
+          0.209082,
+          0.205832
+        ],
+        "paired_wall_ms": [
+          2.300588,
+          2.346858,
+          2.440928,
+          2.707651,
+          2.319007
+        ],
+        "forward_device_window_ms": [
+          0.01552640087902546,
+          0.00979520007967949,
+          0.013976000249385834,
+          0.014110399410128593,
+          0.013062399812042713
+        ],
+        "backward_device_window_ms": [
+          0.015030400827527046,
+          0.019100800156593323,
+          0.010140799917280674,
+          0.01378719974309206,
+          0.014292800799012184
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.267877,
+        "backward_wall_ms": 0.209082,
+        "paired_wall_ms": 2.346858,
+        "forward_device_window_ms": 0.013976000249385834,
+        "backward_device_window_ms": 0.014292800799012184
+      },
+      "program_digest": "a687679105bee7a62e0f26c8b069d0383e07a89929a50448eebc303a4ce73c1a",
+      "checkpoint_identity": "4f71dc55bbf40a14cc0443167103c39b2794c300807ec3f1f0a01b85438192b7",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "4f71dc55bbf40a14cc0443167103c39b2794c300807ec3f1f0a01b85438192b7",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "graph_ir_digest": "01a03558b5626664f314d50ca8acc313112cc36d007b9cfcdbe3129b0763d7c4",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "4bb77d4b721ef62d0163ae45d72b20e28a1d6ac6e89e1060b433f4e2aec60ddf",
+          "schedule_ir_digest": "8b0a0082aa802a3422cff9b3307fb1a1d88eeef27a337b3281827497d9c3a9c1",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "b113cfc731acde02059e907a233e1fcae922449fc6647f222a4f5b55e960169d",
+          "tile_ir_digest": "39bef0c1cf5a06daac19ea1c61a7455ad23d247c8ab52198c93f2608200b220c",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": false,
+          "bias_gradient": false,
+          "bias_gradient_reduction": "none",
+          "bias_shape": [],
+          "causal": true,
+          "checkpoint_contract": "4f71dc55bbf40a14cc0443167103c39b2794c300807ec3f1f0a01b85438192b7",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "97f88d0dea7cfbccf280b49eba2d809e11dd719149e9a17893c9d47d144e04f4",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "04754d883890a57d7997b5667d74a7c25a196436f5b985e33efa73988726405f",
+          "schedule_ir_digest": "a9d99192a818e5b72f087283899cf297f4061244f2087d11e93efde798291ebf",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2c55f0b8737c2e1991b730f3d9b803c2b0afa76cc7a7b575d7dbe1426cfecd3e",
+          "tile_ir_digest": "67cfc7e023446e37970e8b4f7a3b7b530449988f69af21dffbe53ace14177b44",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": true,
+      "causal": false,
+      "compact": false,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 1111.923963,
+      "max_abs_error": 1.226108496954481e-07,
+      "samples": {
+        "capture_wall_ms": [
+          2.812592,
+          2.53945,
+          2.265167,
+          2.49242,
+          2.295188
+        ],
+        "backward_wall_ms": [
+          0.313643,
+          0.247172,
+          0.249632,
+          0.292022,
+          0.255222
+        ],
+        "paired_wall_ms": [
+          2.587375,
+          2.511059,
+          2.795107,
+          2.493909,
+          2.50674
+        ],
+        "forward_device_window_ms": [
+          0.012915199622511864,
+          0.013488000258803368,
+          0.013323199935257435,
+          0.010793600231409073,
+          0.012296000495553017
+        ],
+        "backward_device_window_ms": [
+          0.038729600608348846,
+          0.03876639902591705,
+          0.04259200021624565,
+          0.03878080099821091,
+          0.038729600608348846
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.49242,
+        "backward_wall_ms": 0.255222,
+        "paired_wall_ms": 2.511059,
+        "forward_device_window_ms": 0.012915199622511864,
+        "backward_device_window_ms": 0.03876639902591705
+      },
+      "program_digest": "f4b79a594db8fbfeeb303f9c187be82a27729cf10ca3fbf927945f7b4f6b2d51",
+      "checkpoint_identity": "f56e50203cc72fc7ca91445ae2b422b5a84b33b8bc3a11baa6b4b693c7f01702",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": false,
+          "checkpoint_contract": "f56e50203cc72fc7ca91445ae2b422b5a84b33b8bc3a11baa6b4b693c7f01702",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "cbb9128cf2e77317b4dfe68e45e82db09efbb8e1d7cf1a2a06d6fda58af95cdd",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "0be2c8fe6e767b9d77ad2cb87a2d75ba7af0cff39941e3b364a65404e276221f",
+          "schedule_ir_digest": "10a60509e4780afa74b6ccdc91341a261b31dc125db1f6d83d5dbe9fd0638f36",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2ab065f8df4729dd6eebe2e965e14fe26356d6b8da54606f9f06df5b52cb9092",
+          "tile_ir_digest": "700c646dee638a68f5240543d006b7083c4c24844c9bdbbe2929fa5a5affd953",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": false,
+          "checkpoint_contract": "f56e50203cc72fc7ca91445ae2b422b5a84b33b8bc3a11baa6b4b693c7f01702",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "ed381facf518f4350038613776c4ff5eba9b3001ae9b726b7fe36314ffa4de59",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "cfa7ea0ab2df8bfc3a1b09357742ba359afb5780919f891a8fd4bbdf955cfd6d",
+          "schedule_ir_digest": "c8e8da6db6cb809c7b7cd05e8d7239962de6219d622e3d1df95f07e364d8be22",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "03f2146496e0b6c50485cb346d8e6874678dcd5d56ed5acc3176476c84bd62a0",
+          "tile_ir_digest": "312cec639b715f51032ac3544ee40dec8e4d0f467b6156ca7eeaee42c282f677",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": true,
+      "causal": false,
+      "compact": true,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 952.249882,
+      "max_abs_error": 1.226108496954481e-07,
+      "samples": {
+        "capture_wall_ms": [
+          2.787111,
+          2.336588,
+          2.220527,
+          3.437915,
+          2.365089
+        ],
+        "backward_wall_ms": [
+          0.326543,
+          0.257012,
+          0.247472,
+          0.253672,
+          0.255742
+        ],
+        "paired_wall_ms": [
+          2.59073,
+          2.68848,
+          2.56531,
+          2.51783,
+          2.502919
+        ],
+        "forward_device_window_ms": [
+          0.012854400090873241,
+          0.017896000295877457,
+          0.10222560167312622,
+          0.012561599723994732,
+          0.0147167993709445
+        ],
+        "backward_device_window_ms": [
+          0.044438399374485016,
+          0.043140798807144165,
+          0.04041919857263565,
+          0.04001759737730026,
+          0.040462397038936615
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.365089,
+        "backward_wall_ms": 0.255742,
+        "paired_wall_ms": 2.56531,
+        "forward_device_window_ms": 0.0147167993709445,
+        "backward_device_window_ms": 0.040462397038936615
+      },
+      "program_digest": "bbebace412e0fe9a7c65108b0c869f5f0c3c401658bbe4324e71bdb9ef323fa1",
+      "checkpoint_identity": "f56e50203cc72fc7ca91445ae2b422b5a84b33b8bc3a11baa6b4b693c7f01702",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": false,
+          "checkpoint_contract": "f56e50203cc72fc7ca91445ae2b422b5a84b33b8bc3a11baa6b4b693c7f01702",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "cbb9128cf2e77317b4dfe68e45e82db09efbb8e1d7cf1a2a06d6fda58af95cdd",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "0be2c8fe6e767b9d77ad2cb87a2d75ba7af0cff39941e3b364a65404e276221f",
+          "schedule_ir_digest": "10a60509e4780afa74b6ccdc91341a261b31dc125db1f6d83d5dbe9fd0638f36",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "2ab065f8df4729dd6eebe2e965e14fe26356d6b8da54606f9f06df5b52cb9092",
+          "tile_ir_digest": "700c646dee638a68f5240543d006b7083c4c24844c9bdbbe2929fa5a5affd953",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": false,
+          "checkpoint_contract": "f56e50203cc72fc7ca91445ae2b422b5a84b33b8bc3a11baa6b4b693c7f01702",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "a83e668f68ba97e3fbf2abf93d4299e13dcd7d746a41ee1a7455fafa7760566e",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "196f65d9a4e2b6d4dcda1cb1fabada6ef61d38dc6a2820d0492dc2de9ffbfa88",
+          "schedule_ir_digest": "100e8496c655b3d03dd562f0c7fdbbed8ee829c3bd5a4756212871e9e5ba1335",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "831eea46ecd5dfc81194032f58b20ca022d98caabeeb9345ba15e5154c3a89b4",
+          "tile_ir_digest": "be10e50d926a39a7d02229d54a099ff942e70a9d37033ba53751be7c5592e72a",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": true,
+      "causal": true,
+      "compact": false,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 1135.022088,
+      "max_abs_error": 4.8672463087706674e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.704377,
+          2.316407,
+          2.51657,
+          2.363888,
+          2.348638
+        ],
+        "backward_wall_ms": [
+          0.287302,
+          0.274432,
+          0.249002,
+          0.249482,
+          0.258171
+        ],
+        "paired_wall_ms": [
+          3.017824,
+          2.57703,
+          2.74732,
+          2.58925,
+          2.614509
+        ],
+        "forward_device_window_ms": [
+          0.014222400262951851,
+          0.015104000456631184,
+          0.013132800348103046,
+          0.012305600568652153,
+          0.016203198581933975
+        ],
+        "backward_device_window_ms": [
+          0.03984479978680611,
+          0.038366399705410004,
+          0.03954080119729042,
+          0.03892799839377403,
+          0.03859040141105652
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.363888,
+        "backward_wall_ms": 0.258171,
+        "paired_wall_ms": 2.614509,
+        "forward_device_window_ms": 0.014222400262951851,
+        "backward_device_window_ms": 0.03892799839377403
+      },
+      "program_digest": "044f789869c58540b2f7d37c44c8deee45c94216797e7e022f1eb30a204f1d68",
+      "checkpoint_identity": "dedb0c33ceb6af7b91bfc7f38055d676a5f49443173d9d14c0513117d7598ed0",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": true,
+          "checkpoint_contract": "dedb0c33ceb6af7b91bfc7f38055d676a5f49443173d9d14c0513117d7598ed0",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "5bd6715ab35df1545c837aecb98e0cd642af2c0335de1cb36d7c87c412631bc6",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "e3588372f08be89ed2653cbf9de38ceabe53135401864407151ccf35d3520dc5",
+          "schedule_ir_digest": "9de75bdb5b4a68d26876387f5fd0ca8a894ced03bbdb39f349cae9d680c5f330",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "e38a9facb02526f1f657e08ea9654790c4ae9094c23e330d0850a60a1ff6369c",
+          "tile_ir_digest": "7af37296b8fef1244dc1e4b98c6d0ff1177a9afd05acb54a6d30d6de70a343ce",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": true,
+          "checkpoint_contract": "dedb0c33ceb6af7b91bfc7f38055d676a5f49443173d9d14c0513117d7598ed0",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "logical_v1",
+          "gradient_output": "complete_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "a96c984a4f40dd431948805badf0cdfe4b7c2baeab695a80bf0269199cb7ffbd",
+          "inactive_gradient": "zero_fill_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "eb2788e9415bc68fdb37f6a0686ee228f3f7402ca62c5a23e0bf7e109b1454be",
+          "schedule_ir_digest": "981e93b6c0a71254bdf43a9e4e23a41a13601daabbab7564a8b4de0ac138883a",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "36ebabb0b313190b0feca945dfc5d3846a163985b9102a3495890fc361723179",
+          "tile_ir_digest": "a86532bfb267b9b3191ebc6047633dcbaf09a58a258cd3a7ffbd7511b3c3a157",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "bias": true,
+      "causal": true,
+      "compact": true,
+      "active": [
+        3,
+        2,
+        0
+      ],
+      "compile_wall_ms": 951.590557,
+      "max_abs_error": 4.8672463087706674e-08,
+      "samples": {
+        "capture_wall_ms": [
+          2.848427,
+          2.471149,
+          2.66166,
+          2.438719,
+          2.294657
+        ],
+        "backward_wall_ms": [
+          0.283192,
+          0.244572,
+          0.250661,
+          0.274132,
+          0.299513
+        ],
+        "paired_wall_ms": [
+          2.551049,
+          2.57356,
+          2.72095,
+          2.722611,
+          2.473639
+        ],
+        "forward_device_window_ms": [
+          0.014564800076186657,
+          0.011499200016260147,
+          0.013508799485862255,
+          0.01490080077201128,
+          0.015651199966669083
+        ],
+        "backward_device_window_ms": [
+          0.044628798961639404,
+          0.04071199893951416,
+          0.043006397783756256,
+          0.04021440073847771,
+          0.04052799940109253
+        ]
+      },
+      "medians": {
+        "capture_wall_ms": 2.471149,
+        "backward_wall_ms": 0.274132,
+        "paired_wall_ms": 2.57356,
+        "forward_device_window_ms": 0.014564800076186657,
+        "backward_device_window_ms": 0.04071199893951416
+      },
+      "program_digest": "e34fd2849f6bd2b9b447c8f0a42e1b038dce850e66bf189cc36fd54505fd200e",
+      "checkpoint_identity": "dedb0c33ceb6af7b91bfc7f38055d676a5f49443173d9d14c0513117d7598ed0",
+      "ancestry": {
+        "forward": {
+          "accum": "f32",
+          "bias": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": true,
+          "checkpoint_contract": "dedb0c33ceb6af7b91bfc7f38055d676a5f49443173d9d14c0513117d7598ed0",
+          "checkpoint_role": "forward_save",
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "graph_ir_digest": "5bd6715ab35df1545c837aecb98e0cd642af2c0335de1cb36d7c87c412631bc6",
+          "lse_checkpoint": "saved",
+          "mask_alignment": "end_aligned_v1",
+          "output": "f32",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "e3588372f08be89ed2653cbf9de38ceabe53135401864407151ccf35d3520dc5",
+          "schedule_ir_digest": "9de75bdb5b4a68d26876387f5fd0ca8a894ced03bbdb39f349cae9d680c5f330",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "e38a9facb02526f1f657e08ea9654790c4ae9094c23e330d0850a60a1ff6369c",
+          "tile_ir_digest": "7af37296b8fef1244dc1e4b98c6d0ff1177a9afd05acb54a6d30d6de70a343ce",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        },
+        "backward": {
+          "bias": true,
+          "bias_gradient": true,
+          "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1",
+          "bias_shape": [
+            1,
+            1,
+            1,
+            9
+          ],
+          "causal": true,
+          "checkpoint_contract": "dedb0c33ceb6af7b91bfc7f38055d676a5f49443173d9d14c0513117d7598ed0",
+          "checkpoint_role": "backward_load",
+          "deterministic": true,
+          "frontend_argument_indices": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "gradient_activity": [
+            1,
+            0,
+            1,
+            1
+          ],
+          "gradient_block_threads": 128,
+          "gradient_launch": "packed_v1",
+          "gradient_output": "compact_v1",
+          "gradient_storage": "f32",
+          "graph_ir_digest": "65e27667eb983422c92a50058dfe364446ee9a4b469776a8ba3b41f1c816578b",
+          "inactive_gradient": "absent_v1",
+          "lse_checkpoint": "saved",
+          "lse_cotangent": true,
+          "mask_alignment": "end_aligned_v1",
+          "physical_gradient_roles": [
+            0,
+            2,
+            3
+          ],
+          "route": "deterministic_direct",
+          "row_lse": "f32[B,Hq,Sq]",
+          "scale": 0.353553385,
+          "schedule_digest": "bbd025a9c0fb028a4338afe64c18ec566b76cb8b5b2edc92cacd51062d6dbc99",
+          "schedule_ir_digest": "3963777e985df2d74f6fb49df305e1446a96dba6a230067f0a1b83a1b32fc0c9",
+          "shape": [
+            2,
+            4,
+            2,
+            7,
+            9,
+            8,
+            6
+          ],
+          "storage": "f32",
+          "target_ir_digest": "1882d97484e5da187462aa4e8cee100ac912af545cc490ec8cddc81f4a2e421b",
+          "tile_ir_digest": "5f7c245f1ede3993f786b2c6c5e3c0a4c79af6646498b41a211bd91cf07970fc",
+          "work_item": "NVIDIA-LSE-1",
+          "workspace_bytes": 0
+        }
+      }
+    }
+  ],
+  "source_sha256": {
+    "python/tessera/compiler/resident_attention.py": "538220a2eca08f2dd216de0df83aa3c6243be9cff5dd0bb8ef30416b70407cbe",
+    "python/tessera/compiler/native_attention_program.py": "43dccf161bedde76431271e58bea3c4f902f4d085c9ba50786c2478ca36adfed",
+    "python/tessera/compiler/scheduled_checkpoint.py": "f3c211ad63d08f3eb09ee3bdd8c7a9355654465a2af2901516311cb55a7a4a09",
+    "python/tessera/compiler/nvidia_native.py": "742d0e2c8eafba0f324e60d3f8c71f326b69211a49431f22805a12c7a44b38d8",
+    "python/tessera/compiler/jit.py": "8ff249963bc1c3fbf34afb3135f0da66062236f7e0d5df90d0bf9a6cc4e93eb0",
+    "src/compiler/ir/AttentionADContract.h": "fe720f6b64056e5cc3d2197cdb6310aabf8141729e2c5cb068a9fbc276969931",
+    "src/compiler/ir/AdjointInterface.cpp": "a4effbf11497ba1235023788704d6c41fe938ef44eacf92d4a9a40f437e59d6a",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "ab2b9a932aee64f12ff8a6e4fe1074799accfa94bec5fc929ae10988808077c7",
+    "benchmarks/nvidia/record_jit_multiresult_owner.py": "6fb804b6a66a40cf00fa5e3562688a50c863a663a33b344f49ea7dfb33d3b88d",
+    "tests/device/nvidia/test_jit_multiresult_attention_vjp.py": "bced77b93fbaf3a50df141da3493800427d8ac555dd15de83c9cf3eadcb5ec36"
+  },
+  "binaries": {
+    "TESSERA_OPT": "b7c63c3cf9e998dfaa111cb04cfb596378b14adf6175219b9b319d02e21eed2e",
+    "TESSERA_NVIDIA_OPT": "86aaa8f30d0eea3b2087fa0350493d59a6d245651d22bbe43eb5cdb74a64e523",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "d27db8b3ac6d34d58271b03b2d591347998310e355c79bd717232d587af51c10"
+  },
+  "timing_scope": "Device windows use the same public program packages and include driver gaps. Capture wall includes private copies, module loads and forward. Backward wall includes seed/gradient allocation and synchronization. Pair includes capture/backward; downloads, oracle and frame close excluded. Synchronous owner; no speedup claim."
+}

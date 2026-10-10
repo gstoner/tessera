@@ -1,0 +1,25 @@
+{
+  "candidate_compiler_sha256": "6429d819562c32af6c4432f97d70f2aa792e30e3f299c6f3ef23ba9f5fe69f8c",
+  "primary_compiler_sha256": "ac321f5090c4ebc66c9264003253c0317c8df3f107f02797e7910e03c37c8c4d",
+  "source_sha256": "4afde7ceb8e1f698e5d1fe8856689a42db627d13066075d1bd5f599425ff56b2",
+  "runs": {
+    "control_serial": {
+      "returncode": 0,
+      "output_sha256": "b74b45880fabb98cc5f1ce833b8cedd9ab58f42a507251e80d1acf0d88b8ad00"
+    },
+    "candidate_serial": {
+      "returncode": 0,
+      "output_sha256": "b74b45880fabb98cc5f1ce833b8cedd9ab58f42a507251e80d1acf0d88b8ad00"
+    },
+    "candidate_cooperative": {
+      "returncode": 0,
+      "output_sha256": "b53f0f301b07e785dcd8391c75f77115ed2f0d46b9ff1cec8d64a42e234fd8ac"
+    }
+  },
+  "serial_output": "byte_identical",
+  "cooperative_functions": 3,
+  "barriers": 54,
+  "invalid_schedule": "rejected",
+  "execution_evidence": "not_run",
+  "frontend_schedule_contract": "pending"
+}

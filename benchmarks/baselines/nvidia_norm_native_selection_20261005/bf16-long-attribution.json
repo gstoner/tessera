@@ -1,0 +1,18 @@
+[
+  {
+    "mode": "serial",
+    "norm_different_elements": 139,
+    "norm_max_abs": 0.015625,
+    "output_max_abs": 0.025334462989121675,
+    "output_violations": 1,
+    "consumer_max_abs": 0.00032467080745846033
+  },
+  {
+    "mode": "cooperative_128",
+    "norm_different_elements": 35,
+    "norm_max_abs": 0.015625,
+    "output_max_abs": 0.022639760358288186,
+    "output_violations": 1,
+    "consumer_max_abs": 0.00032467080745846033
+  }
+]

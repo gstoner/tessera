@@ -1,0 +1,42 @@
+..............................FF.....................                    [100%]
+=================================== FAILURES ===================================
+________________ test_declared_rule_names_match_implementations ________________
+
+    def test_declared_rule_names_match_implementations():
+        """A rule name with no implementation (or vice versa) is drift."""
+        declared = set(SHAPE_RULE_NAMES)
+        implemented = set(_SHAPE_RULES)
+>       assert declared == implemented, (
+            f"declared-but-unimplemented={sorted(declared - implemented)}, "
+            f"implemented-but-undeclared={sorted(implemented - declared)}"
+        )
+E       AssertionError: declared-but-unimplemented=[], implemented-but-undeclared=['nvfp4_requantize']
+E       assert {'adafactor_s...gemm_3d', ...} == {'adafactor_s...gemm_3d', ...}
+E         
+E         Extra items in the right set:
+E         'nvfp4_requantize'
+E         Use -v to get more diff
+
+tests/unit/test_shape_rule_registry.py:58: AssertionError
+________________ test_every_catalog_op_resolves_to_a_named_rule ________________
+
+    def test_every_catalog_op_resolves_to_a_named_rule():
+        """`shape_rule_for` never returns an empty string.
+    
+        A caller must not be able to confuse "no rule declared" with "no answer";
+        the absence of a rule is itself a named, countable status.
+        """
+        for spec in _SPECS:
+            rule = shape_rule_for(spec.graph_name)
+            assert rule, f"{spec.graph_name} resolved to an empty rule"
+>           assert rule in SHAPE_RULE_NAMES, (
+                f"{spec.graph_name} resolved to undeclared rule {rule!r}"
+            )
+E           AssertionError: tessera.nvfp4_requantize resolved to undeclared rule 'nvfp4_requantize'
+E           assert 'nvfp4_requantize' in frozenset({'adafactor_step', 'alibi_bias', 'all_gather', 'arange', 'attention_value_width', 'batched_gemm_3d', ...})
+
+tests/unit/test_shape_rule_registry.py:73: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_shape_rule_registry.py::test_declared_rule_names_match_implementations
+FAILED tests/unit/test_shape_rule_registry.py::test_every_catalog_op_resolves_to_a_named_rule
+2 failed, 51 passed in 2.07s

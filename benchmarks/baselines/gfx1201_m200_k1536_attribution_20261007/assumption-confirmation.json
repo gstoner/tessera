@@ -1,0 +1,1634 @@
+{
+  "work_item": "ROCM-FP8-BLOCKSCALE-1",
+  "sync_key": "GFX1201-M200-K1536-ATTRIBUTION-2026-10-07",
+  "host": "tajasarus",
+  "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_gfx1201_fp8_blockscale.py": "a4f3bba267928cad83d3fe83ff95106ae9c53f7a47f6d559a5aa48c5a6658858",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "430a298fe4c84942eef535d169c1a4e723bc4289d92b9ebee0238f5d03969fca",
+    "python/tessera/compiler/rocm_native.py": "3ea986802205e3495dfdaf6e26a8576eed72b6ae79af4b6321b508aa0aa5ac52",
+    "python/tessera/compiler/rocm_pipeline.py": "a018fafda76a959b79cc8b88dc5f265bc80e6e09403b8676b384697fc42d8787",
+    "python/tessera/runtime.py": "e1ec8a6566efc29c973b5d0a4a9a88382851108295e7b09a637d673302848bf2",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "dd9e05eae25de7b93ed223d00fa71292c0f9a044c5c57ec19ca2e1558b9bec3c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "f390fb55a96876bb98d66ad593bbd1cb93b79848e0285c779b2d4a91c747bd9e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "78579bb3c866bf207c7a6060437aec28349e419a60eb9dde8df2187c26e63eef",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "71fbbd6188e1b44c596420fe07201714acaf71d69a8e405f2bd69cbb796c3517"
+  },
+  "source_commit": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "worktree_dirty": true,
+  "compiler": "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "e583553a8de7717747811003b4d43900de8a6c5fbbbeade95112a3bf55517dd4",
+  "alt_compilers": {
+    "reference": {
+      "path": "/home/angstorms/scratch/fp8-projection-reference-20261007/tessera-opt",
+      "sha256": "3def20f9b8d9a12ecec5d4d7738c577741cdae2a993a54c312e4f04223cfd8ab"
+    }
+  },
+  "timing_source": "device_clock_marker (llvm.readsteadycounter), hip_event + host wall cross-checks",
+  "marker_image_sha256": "89bd2114512a826b12b6eeea6e58f039bb28b060abb24d9a047cf4a07e89d869",
+  "wall_clock_rate_khz": 100000,
+  "windows": 9,
+  "min_window_ms": 6.0,
+  "aiter_kernel_source_sha256": null,
+  "rows": [
+    {
+      "shape": [
+        200,
+        1024,
+        1536
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 629145600,
+      "tessera_nk+bf16": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+        "compile_state": "cold",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "a250a8da0177a96ec3b0f4d6090223968a62b564f13ab612a0246ec1bcf91c83",
+        "graph_schedule_tile_ms": 27.714045019820333,
+        "package_first_use_ms": 250.78097614459693,
+        "repeated_package_samples_ms": [
+          14.30604699999094,
+          14.24384699203074,
+          14.08115797676146
+        ],
+        "repeated_package_median_ms": 14.24384699203074,
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "7d22e7b49a1f6a5c39bc682d128fcc673413d58e401b8354d0c438054145a84c",
+        "schedule_hash": "2e8a7c75676d711841b23cb7af6b9855aeb9739622b5fd199a3ebd5d5c27c4ec",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 0.001144925968448892,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            4.526113159954548,
+            4.570527002215385,
+            3.689766861498356,
+            3.5669738426804543,
+            3.7223901599645615,
+            3.7152159493416548,
+            3.76090407371521
+          ],
+          "median_ms": 3.7223901599645615,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "tessera_nk+bf16@reference": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+        "compile_state": "cold",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "a7e517da76c6e11456647828f2b626d316e61595d91a4cee2ce167e85564a8eb",
+        "graph_schedule_tile_ms": 25.163005106151104,
+        "package_first_use_ms": 254.12506400607526,
+        "repeated_package_samples_ms": [
+          15.097256051376462,
+          14.01429995894432,
+          13.798689004033804
+        ],
+        "repeated_package_median_ms": 14.01429995894432,
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "87380a1a1b64ef5f981c639933adea48ffc3d503c52a1a830b108c9fdc546e09",
+        "schedule_hash": "2e8a7c75676d711841b23cb7af6b9855aeb9739622b5fd199a3ebd5d5c27c4ec",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": false,
+        "oracle_max_rel_err": 0.001144925968448892,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            4.495375091210008,
+            4.833469167351723,
+            4.840041045099497,
+            4.831935977563262,
+            4.791509127244353,
+            4.7667918261140585,
+            4.672602051869035
+          ],
+          "median_ms": 4.791509127244353,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "timing": {
+        "tessera_nk+bf16": {
+          "launches_per_window": 50,
+          "paired_set_attempts": 1,
+          "window_ms_min": 25.69276,
+          "median_us": 525.6175999999999,
+          "min_us": 513.8552,
+          "event_median_us": 526.751708984375,
+          "device_event_disagreement_max": 0.005321009719969774,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 50,
+              "device_ns": 26343440.0,
+              "event_ns": 26484363.555908203,
+              "host_ns": 26549729
+            },
+            {
+              "launches": 50,
+              "device_ns": 25842680.0,
+              "event_ns": 25928836.822509766,
+              "host_ns": 26060717
+            },
+            {
+              "launches": 50,
+              "device_ns": 26586560.0,
+              "event_ns": 26593864.44091797,
+              "host_ns": 26796881
+            },
+            {
+              "launches": 50,
+              "device_ns": 26454720.0,
+              "event_ns": 26528602.600097656,
+              "host_ns": 26618010
+            },
+            {
+              "launches": 50,
+              "device_ns": 25900040.0,
+              "event_ns": 25987995.147705078,
+              "host_ns": 26074934
+            },
+            {
+              "launches": 50,
+              "device_ns": 26434920.0,
+              "event_ns": 26511873.245239258,
+              "host_ns": 26604494
+            },
+            {
+              "launches": 50,
+              "device_ns": 25935280.0,
+              "event_ns": 26010032.653808594,
+              "host_ns": 26097688
+            },
+            {
+              "launches": 50,
+              "device_ns": 26280880.0,
+              "event_ns": 26337585.44921875,
+              "host_ns": 26426094
+            },
+            {
+              "launches": 50,
+              "device_ns": 25692760.0,
+              "event_ns": 25767683.029174805,
+              "host_ns": 25856617
+            }
+          ],
+          "tflops": 1.196964485207497
+        },
+        "tessera_nk+bf16@reference": {
+          "launches_per_window": 50,
+          "paired_set_attempts": 1,
+          "window_ms_min": 27.75276,
+          "median_us": 561.164,
+          "min_us": 555.0551999999999,
+          "event_median_us": 563.5211563110352,
+          "device_event_disagreement_max": 0.005203631271328165,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 50,
+              "device_ns": 28173480.0,
+              "event_ns": 28248571.395874023,
+              "host_ns": 28335977
+            },
+            {
+              "launches": 50,
+              "device_ns": 28411120.0,
+              "event_ns": 28492811.20300293,
+              "host_ns": 28637291
+            },
+            {
+              "launches": 50,
+              "device_ns": 27796440.0,
+              "event_ns": 27803689.95666504,
+              "host_ns": 28020224
+            },
+            {
+              "launches": 50,
+              "device_ns": 28229320.0,
+              "event_ns": 28236680.98449707,
+              "host_ns": 28417992
+            },
+            {
+              "launches": 50,
+              "device_ns": 28505250.0,
+              "event_ns": 28641761.779785156,
+              "host_ns": 28729963
+            },
+            {
+              "launches": 50,
+              "device_ns": 27913200.0,
+              "event_ns": 27974552.154541016,
+              "host_ns": 28060302
+            },
+            {
+              "launches": 50,
+              "device_ns": 28058200.0,
+              "event_ns": 28128698.348999023,
+              "host_ns": 28230655
+            },
+            {
+              "launches": 50,
+              "device_ns": 28029440.0,
+              "event_ns": 28176057.815551758,
+              "host_ns": 28256436
+            },
+            {
+              "launches": 50,
+              "device_ns": 27752760.0,
+              "event_ns": 27826641.082763672,
+              "host_ns": 27914043
+            }
+          ],
+          "tflops": 1.121143908019759
+        }
+      }
+    },
+    {
+      "shape": [
+        200,
+        1024,
+        1024
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 419430400,
+      "tessera_nk+bf16": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+        "compile_state": "warm_cache",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "a250a8da0177a96ec3b0f4d6090223968a62b564f13ab612a0246ec1bcf91c83",
+        "graph_schedule_tile_ms": 34.36884400434792,
+        "package_first_use_ms": 42.84440819174051,
+        "repeated_package_samples_ms": [
+          14.80247313156724,
+          13.788680080324411,
+          14.192420057952404
+        ],
+        "repeated_package_median_ms": 14.192420057952404,
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "7d22e7b49a1f6a5c39bc682d128fcc673413d58e401b8354d0c438054145a84c",
+        "schedule_hash": "85be654c81d09ecd77b096d0d3c7a44557bd964dbc6d136ec8274214895f77f8",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 0.0011130082903059886,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            4.05684788711369,
+            4.328896990045905,
+            4.168921848759055,
+            3.851245855912566,
+            3.7974119186401367,
+            3.8185741286724806,
+            3.798103891313076
+          ],
+          "median_ms": 3.851245855912566,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "tessera_nk+bf16@reference": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+        "compile_state": "warm_cache",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "a7e517da76c6e11456647828f2b626d316e61595d91a4cee2ce167e85564a8eb",
+        "graph_schedule_tile_ms": 24.511101888492703,
+        "package_first_use_ms": 38.736745016649365,
+        "repeated_package_samples_ms": [
+          14.046291122213006,
+          13.301078928634524,
+          13.6693618260324
+        ],
+        "repeated_package_median_ms": 13.6693618260324,
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "87380a1a1b64ef5f981c639933adea48ffc3d503c52a1a830b108c9fdc546e09",
+        "schedule_hash": "85be654c81d09ecd77b096d0d3c7a44557bd964dbc6d136ec8274214895f77f8",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": false,
+        "oracle_max_rel_err": 0.0011130082903059886,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            4.041668958961964,
+            3.819856094196439,
+            3.857486881315708,
+            3.977525979280472,
+            4.177637863904238,
+            3.8927248679101467,
+            3.9845500141382217
+          ],
+          "median_ms": 3.977525979280472,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "timing": {
+        "tessera_nk+bf16": {
+          "launches_per_window": 50,
+          "paired_set_attempts": 1,
+          "window_ms_min": 15.8766,
+          "median_us": 327.592,
+          "min_us": 317.532,
+          "event_median_us": 329.40277099609375,
+          "device_event_disagreement_max": 0.008446155206841695,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 50,
+              "device_ns": 16540920.0,
+              "event_ns": 16590206.146240234,
+              "host_ns": 16652192
+            },
+            {
+              "launches": 50,
+              "device_ns": 16403840.0,
+              "event_ns": 16470138.549804688,
+              "host_ns": 16545920
+            },
+            {
+              "launches": 50,
+              "device_ns": 16134160.0,
+              "event_ns": 16200578.689575195,
+              "host_ns": 16275353
+            },
+            {
+              "launches": 50,
+              "device_ns": 16061960.0,
+              "event_ns": 16130090.713500977,
+              "host_ns": 16212833
+            },
+            {
+              "launches": 50,
+              "device_ns": 16379600.0,
+              "event_ns": 16519123.077392578,
+              "host_ns": 16595042
+            },
+            {
+              "launches": 50,
+              "device_ns": 16474040.0,
+              "event_ns": 16524633.407592773,
+              "host_ns": 16589642
+            },
+            {
+              "launches": 50,
+              "device_ns": 16216520.0,
+              "event_ns": 16284160.614013672,
+              "host_ns": 16368561
+            },
+            {
+              "launches": 50,
+              "device_ns": 15876600.0,
+              "event_ns": 15943135.261535645,
+              "host_ns": 16018332
+            },
+            {
+              "launches": 50,
+              "device_ns": 16525120.0,
+              "event_ns": 16591541.290283203,
+              "host_ns": 16666319
+            }
+          ],
+          "tflops": 1.2803438423404725
+        },
+        "tessera_nk+bf16@reference": {
+          "launches_per_window": 50,
+          "paired_set_attempts": 1,
+          "window_ms_min": 17.24808,
+          "median_us": 350.192,
+          "min_us": 344.9616,
+          "event_median_us": 351.17408752441406,
+          "device_event_disagreement_max": 0.00836379441924986,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 50,
+              "device_ns": 17407760.0,
+              "event_ns": 17444280.62438965,
+              "host_ns": 17587869
+            },
+            {
+              "launches": 50,
+              "device_ns": 17546480.0,
+              "event_ns": 17614645.00427246,
+              "host_ns": 17694068
+            },
+            {
+              "launches": 50,
+              "device_ns": 17535480.0,
+              "event_ns": 17542903.900146484,
+              "host_ns": 17699900
+            },
+            {
+              "launches": 50,
+              "device_ns": 17551160.0,
+              "event_ns": 17558704.376220703,
+              "host_ns": 17716823
+            },
+            {
+              "launches": 50,
+              "device_ns": 17509600.0,
+              "event_ns": 17657281.87561035,
+              "host_ns": 17732221
+            },
+            {
+              "launches": 50,
+              "device_ns": 17248080.0,
+              "event_ns": 17255655.28869629,
+              "host_ns": 17407001
+            },
+            {
+              "launches": 50,
+              "device_ns": 17502880.0,
+              "event_ns": 17551704.40673828,
+              "host_ns": 17622241
+            },
+            {
+              "launches": 50,
+              "device_ns": 17571360.0,
+              "event_ns": 17620424.270629883,
+              "host_ns": 17688679
+            },
+            {
+              "launches": 50,
+              "device_ns": 17487560.0,
+              "event_ns": 17559160.232543945,
+              "host_ns": 17634866
+            }
+          ],
+          "tflops": 1.1977155389043725
+        }
+      }
+    },
+    {
+      "shape": [
+        256,
+        1024,
+        1536
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 805306368,
+      "tessera_nk+bf16": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_2x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_28d379a9237322d1",
+        "compile_state": "cold",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "6a30f0bfb8202a99be12b001cf41d040869ec03cae7d4e9fbcd11a244162de6b",
+        "graph_schedule_tile_ms": 40.39232712239027,
+        "package_first_use_ms": 236.05284094810486,
+        "repeated_package_samples_ms": [
+          15.173460822552443,
+          13.936903094872832,
+          13.122367905452847
+        ],
+        "repeated_package_median_ms": 13.936903094872832,
+        "panel_override": false,
+        "macro_tile": [
+          32,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "75239c9504ac162f401d4c9f1380a4c69fd77aa351abc9619256c47b0863d400",
+        "schedule_hash": "ba9c0a785ea759f5d06ba3d25aa80b461b6a3f771d125f6d53e0962f3002193b",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 0.0012968094861943269,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            3.822184866294265,
+            3.8063048850744963,
+            3.6288208793848753,
+            3.7826402112841606,
+            3.692176891490817,
+            3.838301170617342,
+            3.8441121578216553
+          ],
+          "median_ms": 3.8063048850744963,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "tessera_nk+bf16@reference": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_2x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_28d379a9237322d1",
+        "compile_state": "cold",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "97c650fdbfab55a050e7cc46773e2362592c466670b0480182eb5f3b0a95832f",
+        "graph_schedule_tile_ms": 25.481672026216984,
+        "package_first_use_ms": 250.20654709078372,
+        "repeated_package_samples_ms": [
+          14.346653828397393,
+          13.803457841277122,
+          13.565273024141788
+        ],
+        "repeated_package_median_ms": 13.803457841277122,
+        "panel_override": false,
+        "macro_tile": [
+          32,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "720b414c7d88d86f0fd0044a756d5aa716861d398632aef7bcc9ea41c00cd44c",
+        "schedule_hash": "ba9c0a785ea759f5d06ba3d25aa80b461b6a3f771d125f6d53e0962f3002193b",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": false,
+        "oracle_max_rel_err": 0.0012968094861943269,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            3.7162480875849724,
+            3.8662750739604235,
+            3.7466760259121656,
+            3.7500131875276566,
+            3.7653320468962193,
+            3.7701609544456005,
+            3.9939580019563437
+          ],
+          "median_ms": 3.7653320468962193,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "timing": {
+        "tessera_nk+bf16": {
+          "launches_per_window": 321,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.70864,
+          "median_us": 24.1597507788162,
+          "min_us": 24.014454828660437,
+          "event_median_us": 24.31417477093753,
+          "device_event_disagreement_max": 0.008631309459144348,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 321,
+              "device_ns": 7755280.0,
+              "event_ns": 7803360.939025879,
+              "host_ns": 7886382
+            },
+            {
+              "launches": 321,
+              "device_ns": 7803920.0,
+              "event_ns": 7840691.089630127,
+              "host_ns": 7961977
+            },
+            {
+              "launches": 321,
+              "device_ns": 7871630.0,
+              "event_ns": 7881940.841674805,
+              "host_ns": 7975031
+            },
+            {
+              "launches": 321,
+              "device_ns": 7748640.0,
+              "event_ns": 7804850.101470947,
+              "host_ns": 7889739
+            },
+            {
+              "launches": 321,
+              "device_ns": 7746200.0,
+              "event_ns": 7780590.057373047,
+              "host_ns": 7859140
+            },
+            {
+              "launches": 321,
+              "device_ns": 7768920.0,
+              "event_ns": 7836559.772491455,
+              "host_ns": 7924144
+            },
+            {
+              "launches": 321,
+              "device_ns": 7770040.0,
+              "event_ns": 7815800.189971924,
+              "host_ns": 7900890
+            },
+            {
+              "launches": 321,
+              "device_ns": 7708640.0,
+              "event_ns": 7757040.023803711,
+              "host_ns": 7832650
+            },
+            {
+              "launches": 321,
+              "device_ns": 7737320.0,
+              "event_ns": 7787680.149078369,
+              "host_ns": 7905989
+            }
+          ],
+          "tflops": 33.332561058788336
+        },
+        "tessera_nk+bf16@reference": {
+          "launches_per_window": 320,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.7802,
+          "median_us": 24.4665,
+          "min_us": 24.313125,
+          "event_median_us": 24.638840556144714,
+          "device_event_disagreement_max": 0.01012494544400878,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 320,
+              "device_ns": 7851040.0,
+              "event_ns": 7900839.805603027,
+              "host_ns": 8008225
+            },
+            {
+              "launches": 320,
+              "device_ns": 7812560.0,
+              "event_ns": 7892470.836639404,
+              "host_ns": 7981734
+            },
+            {
+              "launches": 320,
+              "device_ns": 7910160.0,
+              "event_ns": 7968710.899353027,
+              "host_ns": 8049002
+            },
+            {
+              "launches": 320,
+              "device_ns": 7808160.0,
+              "event_ns": 7872990.131378174,
+              "host_ns": 7958400
+            },
+            {
+              "launches": 320,
+              "device_ns": 7837080.0,
+              "event_ns": 7884428.977966309,
+              "host_ns": 7973639
+            },
+            {
+              "launches": 320,
+              "device_ns": 7814200.0,
+              "event_ns": 7882629.871368408,
+              "host_ns": 7970992
+            },
+            {
+              "launches": 320,
+              "device_ns": 7895560.0,
+              "event_ns": 7902309.894561768,
+              "host_ns": 7990802
+            },
+            {
+              "launches": 320,
+              "device_ns": 7780200.0,
+              "event_ns": 7827529.9072265625,
+              "host_ns": 7910819
+            },
+            {
+              "launches": 320,
+              "device_ns": 7829280.0,
+              "event_ns": 7859560.012817383,
+              "host_ns": 7983738
+            }
+          ],
+          "tflops": 32.91465342406964
+        }
+      }
+    },
+    {
+      "shape": [
+        200,
+        8192,
+        1024
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 3355443200,
+      "tessera_nk+bf16": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_lds_0ac40669ce7dd492",
+        "compile_state": "cold",
+        "runtime_shape_image": false,
+        "runtime_mn_image": true,
+        "lds_whole_m": false,
+        "lds_whole_n": true,
+        "project_image_identity": true,
+        "text_sha256": "7bd17088daa7d853cb7fd00496abe625f68dd4b464739e488137322bdabe1bda",
+        "graph_schedule_tile_ms": 27.787856059148908,
+        "package_first_use_ms": 164.7569639608264,
+        "repeated_package_samples_ms": [
+          14.340416993945837,
+          14.11030301824212,
+          13.523814966902137
+        ],
+        "repeated_package_median_ms": 14.11030301824212,
+        "panel_override": false,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+        "schedule_hash": "2f8a2ed142885c699ff2f30e1ed429a8fd14493bb0441e777474bd14713181b8",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 0.001347787337234314,
+        "image_input_level": "target",
+        "lds_runtime_k": true,
+        "end_to_end": {
+          "samples_ms": [
+            5.182325141504407,
+            5.645802011713386,
+            5.4664211347699165,
+            5.324219120666385,
+            5.423248978331685,
+            5.136867053806782,
+            5.376489134505391
+          ],
+          "median_ms": 5.376489134505391,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "tessera_nk+bf16@reference": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_lds_0ac40669ce7dd492",
+        "compile_state": "cold",
+        "runtime_shape_image": false,
+        "runtime_mn_image": true,
+        "lds_whole_m": false,
+        "lds_whole_n": true,
+        "project_image_identity": true,
+        "text_sha256": "7bd17088daa7d853cb7fd00496abe625f68dd4b464739e488137322bdabe1bda",
+        "graph_schedule_tile_ms": 27.19600684940815,
+        "package_first_use_ms": 162.58511180058122,
+        "repeated_package_samples_ms": [
+          14.822092140093446,
+          14.277863083407283,
+          13.760986970737576
+        ],
+        "repeated_package_median_ms": 14.277863083407283,
+        "panel_override": false,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+        "schedule_hash": "2f8a2ed142885c699ff2f30e1ed429a8fd14493bb0441e777474bd14713181b8",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": false,
+        "oracle_max_rel_err": 0.001347787337234314,
+        "image_input_level": "target",
+        "lds_runtime_k": true,
+        "end_to_end": {
+          "samples_ms": [
+            5.367140984162688,
+            5.4486270528286695,
+            5.394019186496735,
+            5.571126006543636,
+            5.384420044720173,
+            5.475868936628103,
+            5.3478749468922615
+          ],
+          "median_ms": 5.394019186496735,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "timing": {
+        "tessera_nk+bf16": {
+          "launches_per_window": 189,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.806,
+          "median_us": 41.634497354497356,
+          "min_us": 41.3015873015873,
+          "event_median_us": 41.84422669587312,
+          "device_event_disagreement_max": 0.008212295224985936,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 189,
+              "device_ns": 7864640.0,
+              "event_ns": 7908558.8455200195,
+              "host_ns": 7982685
+            },
+            {
+              "launches": 189,
+              "device_ns": 7882360.0,
+              "event_ns": 7928898.811340332,
+              "host_ns": 8008585
+            },
+            {
+              "launches": 189,
+              "device_ns": 7845080.0,
+              "event_ns": 7889237.880706787,
+              "host_ns": 7971574
+            },
+            {
+              "launches": 189,
+              "device_ns": 7806000.0,
+              "event_ns": 7870635.986328125,
+              "host_ns": 7985902
+            },
+            {
+              "launches": 189,
+              "device_ns": 7913400.0,
+              "event_ns": 7957446.098327637,
+              "host_ns": 8058163
+            },
+            {
+              "launches": 189,
+              "device_ns": 7909360.0,
+              "event_ns": 7938375.949859619,
+              "host_ns": 8028714
+            },
+            {
+              "launches": 189,
+              "device_ns": 7868920.0,
+              "event_ns": 7901775.83694458,
+              "host_ns": 7976664
+            },
+            {
+              "launches": 189,
+              "device_ns": 7849960.0,
+              "event_ns": 7884798.049926758,
+              "host_ns": 7992905
+            },
+            {
+              "launches": 189,
+              "device_ns": 7875920.0,
+              "event_ns": 7919948.101043701,
+              "host_ns": 8016002
+            }
+          ],
+          "tflops": 80.59285960462172
+        },
+        "tessera_nk+bf16@reference": {
+          "launches_per_window": 190,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.83464,
+          "median_us": 41.60315789473684,
+          "min_us": 41.234947368421054,
+          "event_median_us": 41.869504828202096,
+          "device_event_disagreement_max": 0.008317283482188525,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 190,
+              "device_ns": 7919520.0,
+              "event_ns": 7963459.014892578,
+              "host_ns": 8050886
+            },
+            {
+              "launches": 190,
+              "device_ns": 7891920.0,
+              "event_ns": 7958109.8556518555,
+              "host_ns": 8047138
+            },
+            {
+              "launches": 190,
+              "device_ns": 7928360.0,
+              "event_ns": 7994409.084320068,
+              "host_ns": 8080071
+            },
+            {
+              "launches": 190,
+              "device_ns": 7909800.0,
+              "event_ns": 7955205.917358398,
+              "host_ns": 8036719
+            },
+            {
+              "launches": 190,
+              "device_ns": 7834640.0,
+              "event_ns": 7868795.871734619,
+              "host_ns": 7961094
+            },
+            {
+              "launches": 190,
+              "device_ns": 7902960.0,
+              "event_ns": 7932576.1795043945,
+              "host_ns": 8023464
+            },
+            {
+              "launches": 190,
+              "device_ns": 7969480.0,
+              "event_ns": 8019314.765930176,
+              "host_ns": 8102183
+            },
+            {
+              "launches": 190,
+              "device_ns": 7904600.0,
+              "event_ns": 7939347.743988037,
+              "host_ns": 8042449
+            },
+            {
+              "launches": 190,
+              "device_ns": 7891400.0,
+              "event_ns": 7935257.911682129,
+              "host_ns": 8043332
+            }
+          ],
+          "tflops": 80.65356982010476
+        }
+      }
+    },
+    {
+      "shape": [
+        200,
+        2048,
+        2048
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 1677721600,
+      "tessera_nk+bf16": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_lds_0ac40669ce7dd492",
+        "compile_state": "warm_cache",
+        "runtime_shape_image": false,
+        "runtime_mn_image": true,
+        "lds_whole_m": false,
+        "lds_whole_n": true,
+        "project_image_identity": true,
+        "text_sha256": "7bd17088daa7d853cb7fd00496abe625f68dd4b464739e488137322bdabe1bda",
+        "graph_schedule_tile_ms": 37.530012894421816,
+        "package_first_use_ms": 42.32147219590843,
+        "repeated_package_samples_ms": [
+          14.417098136618733,
+          14.335453044623137,
+          14.020010828971863
+        ],
+        "repeated_package_median_ms": 14.335453044623137,
+        "panel_override": false,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+        "schedule_hash": "a10eb791f47f58d30f3b1a7ccf08e861db29728f83376c67cd02608adb5917d1",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 0.0010902950303769412,
+        "image_input_level": "target",
+        "lds_runtime_k": true,
+        "end_to_end": {
+          "samples_ms": [
+            4.066976951435208,
+            4.530721111223102,
+            3.8522169925272465,
+            3.9713550359010696,
+            3.955946071073413,
+            3.899127012118697,
+            4.212764091789722
+          ],
+          "median_ms": 3.9713550359010696,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "tessera_nk+bf16@reference": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_lds_0ac40669ce7dd492",
+        "compile_state": "warm_cache",
+        "runtime_shape_image": false,
+        "runtime_mn_image": true,
+        "lds_whole_m": false,
+        "lds_whole_n": true,
+        "project_image_identity": true,
+        "text_sha256": "7bd17088daa7d853cb7fd00496abe625f68dd4b464739e488137322bdabe1bda",
+        "graph_schedule_tile_ms": 24.89808900281787,
+        "package_first_use_ms": 39.48776703327894,
+        "repeated_package_samples_ms": [
+          14.353011967614293,
+          14.281569048762321,
+          13.531117932870984
+        ],
+        "repeated_package_median_ms": 14.281569048762321,
+        "panel_override": false,
+        "macro_tile": [
+          128,
+          64
+        ],
+        "staging": "lds",
+        "warps": 8,
+        "pipeline_depth": 1,
+        "workgroup_threads": 256,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+        "schedule_hash": "a10eb791f47f58d30f3b1a7ccf08e861db29728f83376c67cd02608adb5917d1",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": false,
+        "oracle_max_rel_err": 0.0010902950303769412,
+        "image_input_level": "target",
+        "lds_runtime_k": true,
+        "end_to_end": {
+          "samples_ms": [
+            4.261076916009188,
+            4.657182842493057,
+            3.670100122690201,
+            3.6974221002310514,
+            3.719855099916458,
+            3.7290421314537525,
+            3.733531106263399
+          ],
+          "median_ms": 3.7290421314537525,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "timing": {
+        "tessera_nk+bf16": {
+          "launches_per_window": 311,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.8232,
+          "median_us": 25.288360128617363,
+          "min_us": 25.154983922829583,
+          "event_median_us": 25.46934759501859,
+          "device_event_disagreement_max": 0.014982608196264617,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 311,
+              "device_ns": 7844120.0,
+              "event_ns": 7906370.162963867,
+              "host_ns": 8004708
+            },
+            {
+              "launches": 311,
+              "device_ns": 7911280.0,
+              "event_ns": 8005559.921264648,
+              "host_ns": 8078188
+            },
+            {
+              "launches": 311,
+              "device_ns": 7920920.0,
+              "event_ns": 7981750.011444092,
+              "host_ns": 8053731
+            },
+            {
+              "launches": 311,
+              "device_ns": 7855640.0,
+              "event_ns": 7911656.856536865,
+              "host_ns": 7976835
+            },
+            {
+              "launches": 311,
+              "device_ns": 7869440.0,
+              "event_ns": 7989138.126373291,
+              "host_ns": 8055233
+            },
+            {
+              "launches": 311,
+              "device_ns": 7864680.0,
+              "event_ns": 7922867.774963379,
+              "host_ns": 7995441
+            },
+            {
+              "launches": 311,
+              "device_ns": 7885800.0,
+              "event_ns": 7920967.102050781,
+              "host_ns": 8026820
+            },
+            {
+              "launches": 311,
+              "device_ns": 7823200.0,
+              "event_ns": 7887279.033660889,
+              "host_ns": 7967978
+            },
+            {
+              "launches": 311,
+              "device_ns": 7847640.0,
+              "event_ns": 7882688.999176025,
+              "host_ns": 7987966
+            }
+          ],
+          "tflops": 66.34362969631314
+        },
+        "tessera_nk+bf16@reference": {
+          "launches_per_window": 306,
+          "paired_set_attempts": 1,
+          "window_ms_min": 7.6636,
+          "median_us": 25.184444444444445,
+          "min_us": 25.044444444444444,
+          "event_median_us": 25.347578759286918,
+          "device_event_disagreement_max": 0.008070448228534552,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 306,
+              "device_ns": 7707400.0,
+              "event_ns": 7762690.06729126,
+              "host_ns": 7835816
+            },
+            {
+              "launches": 306,
+              "device_ns": 7680160.0,
+              "event_ns": 7740030.765533447,
+              "host_ns": 7813513
+            },
+            {
+              "launches": 306,
+              "device_ns": 7706440.0,
+              "event_ns": 7753601.07421875,
+              "host_ns": 7819114
+            },
+            {
+              "launches": 306,
+              "device_ns": 7738360.0,
+              "event_ns": 7785248.756408691,
+              "host_ns": 7850543
+            },
+            {
+              "launches": 306,
+              "device_ns": 7718440.0,
+              "event_ns": 7781238.079071045,
+              "host_ns": 7853961
+            },
+            {
+              "launches": 306,
+              "device_ns": 7692360.0,
+              "event_ns": 7753589.153289795,
+              "host_ns": 7826138
+            },
+            {
+              "launches": 306,
+              "device_ns": 7695480.0,
+              "event_ns": 7756359.100341797,
+              "host_ns": 7830937
+            },
+            {
+              "launches": 306,
+              "device_ns": 7736480.0,
+              "event_ns": 7797528.7437438965,
+              "host_ns": 7871524
+            },
+            {
+              "launches": 306,
+              "device_ns": 7663600.0,
+              "event_ns": 7710859.775543213,
+              "host_ns": 7781141
+            }
+          ],
+          "tflops": 66.61737580517074
+        }
+      }
+    },
+    {
+      "shape": [
+        197,
+        1056,
+        1536
+      ],
+      "scale_block": [
+        128,
+        128
+      ],
+      "flop": 639074304,
+      "tessera_nk+bf16": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+        "compile_state": "warm_cache",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "a250a8da0177a96ec3b0f4d6090223968a62b564f13ab612a0246ec1bcf91c83",
+        "graph_schedule_tile_ms": 46.590826008468866,
+        "package_first_use_ms": 42.016384890303016,
+        "repeated_package_samples_ms": [
+          14.08525020815432,
+          13.566977111622691,
+          13.815191108733416
+        ],
+        "repeated_package_median_ms": 13.815191108733416,
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "7d22e7b49a1f6a5c39bc682d128fcc673413d58e401b8354d0c438054145a84c",
+        "schedule_hash": "13da4529127727fb5f5db092096649f0177411850d90d9b3a6aa81b24a5ab8e9",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": true,
+        "oracle_max_rel_err": 0.0011603033750040358,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            4.532169084995985,
+            4.515353124588728,
+            4.434778122231364,
+            4.731144057586789,
+            4.559725988656282,
+            4.6094420831650496,
+            4.750020103529096
+          ],
+          "median_ms": 4.559725988656282,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "tessera_nk+bf16@reference": {
+        "route": "canonical_scheduled_tile_consumer",
+        "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+        "entry_symbol": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+        "compile_state": "warm_cache",
+        "runtime_shape_image": true,
+        "runtime_mn_image": false,
+        "lds_whole_m": false,
+        "lds_whole_n": false,
+        "project_image_identity": true,
+        "text_sha256": "a7e517da76c6e11456647828f2b626d316e61595d91a4cee2ce167e85564a8eb",
+        "graph_schedule_tile_ms": 24.91751709021628,
+        "package_first_use_ms": 39.78438302874565,
+        "repeated_package_samples_ms": [
+          13.868381967768073,
+          14.204572886228561,
+          13.494088081642985
+        ],
+        "repeated_package_median_ms": 13.868381967768073,
+        "panel_override": false,
+        "macro_tile": [
+          16,
+          32
+        ],
+        "staging": "global",
+        "warps": 1,
+        "pipeline_depth": 1,
+        "workgroup_threads": 32,
+        "blockscale_stage_k": -1,
+        "blockscale_lds_pad_bytes": -1,
+        "blockscale_prefetch": -1,
+        "macro_k": 128,
+        "k_unroll": 1,
+        "scale_group_panels": -1,
+        "weight_layout": "nk",
+        "hsaco_sha256": "87380a1a1b64ef5f981c639933adea48ffc3d503c52a1a830b108c9fdc546e09",
+        "schedule_hash": "13da4529127727fb5f5db092096649f0177411850d90d9b3a6aa81b24a5ab8e9",
+        "abi_id": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+        "output": "bf16",
+        "panel_projection_checked": false,
+        "oracle_max_rel_err": 0.0011603033750040358,
+        "image_input_level": "target",
+        "lds_runtime_k": false,
+        "end_to_end": {
+          "samples_ms": [
+            5.038379924371839,
+            4.67132986523211,
+            4.588552052155137,
+            4.511975916102529,
+            4.63749491609633,
+            5.037407856434584,
+            4.795998102054
+          ],
+          "median_ms": 4.67132986523211,
+          "warmups": 5,
+          "compile_included": false,
+          "domain": "public runtime launch including staging, transfers and completion"
+        }
+      },
+      "timing": {
+        "tessera_nk+bf16": {
+          "launches_per_window": 50,
+          "paired_set_attempts": 1,
+          "window_ms_min": 26.17372,
+          "median_us": 532.6952,
+          "min_us": 523.4744000000001,
+          "event_median_us": 534.1703033447266,
+          "device_event_disagreement_max": 0.004719069624853867,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 50,
+              "device_ns": 26753320.0,
+              "event_ns": 26761226.654052734,
+              "host_ns": 26940855
+            },
+            {
+              "launches": 50,
+              "device_ns": 26726120.0,
+              "event_ns": 26852840.423583984,
+              "host_ns": 26951070
+            },
+            {
+              "launches": 50,
+              "device_ns": 26399320.0,
+              "event_ns": 26450319.290161133,
+              "host_ns": 26551703
+            },
+            {
+              "launches": 50,
+              "device_ns": 26787080.0,
+              "event_ns": 26847225.189208984,
+              "host_ns": 26938481
+            },
+            {
+              "launches": 50,
+              "device_ns": 26203960.0,
+              "event_ns": 26252998.35205078,
+              "host_ns": 26345370
+            },
+            {
+              "launches": 50,
+              "device_ns": 26173720.0,
+              "event_ns": 26239248.275756836,
+              "host_ns": 26323839
+            },
+            {
+              "launches": 50,
+              "device_ns": 26801360.0,
+              "event_ns": 26850303.649902344,
+              "host_ns": 26939694
+            },
+            {
+              "launches": 50,
+              "device_ns": 26252160.0,
+              "event_ns": 26288887.02392578,
+              "host_ns": 26383473
+            },
+            {
+              "launches": 50,
+              "device_ns": 26634760.0,
+              "event_ns": 26708515.167236328,
+              "host_ns": 26839372
+            }
+          ],
+          "tflops": 1.1996997607637538
+        },
+        "tessera_nk+bf16@reference": {
+          "launches_per_window": 50,
+          "paired_set_attempts": 1,
+          "window_ms_min": 27.96084,
+          "median_us": 566.1768000000001,
+          "min_us": 559.2168,
+          "event_median_us": 567.1959686279297,
+          "device_event_disagreement_max": 0.002571316971224181,
+          "admissible": true,
+          "windows": [
+            {
+              "launches": 50,
+              "device_ns": 28308840.0,
+              "event_ns": 28359798.431396484,
+              "host_ns": 28451277
+            },
+            {
+              "launches": 50,
+              "device_ns": 27960840.0,
+              "event_ns": 27968467.712402344,
+              "host_ns": 28159951
+            },
+            {
+              "launches": 50,
+              "device_ns": 28697320.0,
+              "event_ns": 28705005.645751953,
+              "host_ns": 28878582
+            },
+            {
+              "launches": 50,
+              "device_ns": 28102480.0,
+              "event_ns": 28151767.73071289,
+              "host_ns": 28244452
+            },
+            {
+              "launches": 50,
+              "device_ns": 28563440.0,
+              "event_ns": 28611383.43811035,
+              "host_ns": 28712345
+            },
+            {
+              "launches": 50,
+              "device_ns": 28315080.0,
+              "event_ns": 28363407.135009766,
+              "host_ns": 28455224
+            },
+            {
+              "launches": 50,
+              "device_ns": 28196640.0,
+              "event_ns": 28244895.935058594,
+              "host_ns": 28337180
+            },
+            {
+              "launches": 50,
+              "device_ns": 28532520.0,
+              "event_ns": 28606075.286865234,
+              "host_ns": 28717345
+            },
+            {
+              "launches": 50,
+              "device_ns": 28075720.0,
+              "event_ns": 28143783.569335938,
+              "host_ns": 28220967
+            }
+          ],
+          "tflops": 1.1287539581275672
+        }
+      }
+    }
+  ]
+}

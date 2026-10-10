@@ -1,0 +1,38 @@
+[
+  {
+    "shape": [
+      128,
+      32,
+      256
+    ],
+    "ratios": {
+      "warm_combined_wall_median_ms": 1.0593807662236123,
+      "weight_reuse_wall_median_ms": 0.8403485506641049,
+      "allocating_combined_wall_median_ms": 0.563300041859449
+    }
+  },
+  {
+    "shape": [
+      257,
+      80,
+      1024
+    ],
+    "ratios": {
+      "warm_combined_wall_median_ms": 0.9828044387606041,
+      "weight_reuse_wall_median_ms": 1.0534646599952722,
+      "allocating_combined_wall_median_ms": 0.5773103996145547
+    }
+  },
+  {
+    "shape": [
+      256,
+      64,
+      64
+    ],
+    "ratios": {
+      "warm_combined_wall_median_ms": 1.0147819672605916,
+      "weight_reuse_wall_median_ms": 0.9846441578895562,
+      "allocating_combined_wall_median_ms": 0.5098253468839111
+    }
+  }
+]

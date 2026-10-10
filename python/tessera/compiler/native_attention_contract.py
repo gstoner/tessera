@@ -37,7 +37,18 @@ def project_attention_descriptor(artifact, parent) -> None:
         raise ValueError('native attention projection requires one native schedule')
     attrs = attrs_list[0]
     tensor = r'tensor<([1-9][0-9]*)x([1-9][0-9]*)x([1-9][0-9]*)x([1-9][0-9]*)x(f32|f16|bf16)>'
-    inputs = re.findall(tensor, args)
+    if backward:
+        # Existing backward wrappers carry a distinct ordered do/Q/K/V ABI;
+        # the unbiased Apple wrapper additionally owns an internal zero bias.
+        inputs = re.findall(tensor, args)
+    else:
+        from .scheduled_attention import schedule_attention_argument_types
+        function_source=f"func.func @{name}({args}) -> {results}\n{body}\n  }}"
+        matches = [re.fullmatch(tensor, value)
+                   for value in schedule_attention_argument_types(function_source)]
+        if any(match is None for match in matches):
+            raise ValueError("attention native arguments require static rank-four tensors")
+        inputs = [match.groups() for match in matches if match is not None]
     outputs = re.findall(tensor, results)
     bias = artifact.bias_name is not None
     if len(inputs) != (4 if backward else 3) + int(bias):

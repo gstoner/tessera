@@ -5,7 +5,7 @@ kernel is a manually launchable candidate, not an automatically selected route.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 import hashlib
 from pathlib import Path
 import subprocess
@@ -744,9 +744,15 @@ def package_mxfp4_packed_folded_prefill(
 
 def author_packed_folded_graph(m: int, payload: PackedFoldedPayload) -> str:
     """Author the versioned packed physical Graph contract for this payload."""
-    n, k = payload.shape
-    if m <= 64:
-        raise ValueError("packed folded prefill requires M>64")
+    return author_packed_folded_shape_graph(m, *payload.shape)
+
+
+def author_packed_folded_shape_graph(m: int, n: int, k: int) -> str:
+    """Author shape-only Graph semantics for compiler-owned resident weights."""
+    if any(type(x) is not int for x in (m,n,k)) or m <= 0:
+        raise ValueError("packed folded requires positive integer M")
+    if n <= 0 or n % 16 or k <= 0 or k % 64:
+        raise ValueError("packed folded prefill requires positive N16/K64")
     return f'''module attributes {{tessera.target = "rocm", tessera.arch = "gfx1201"}} {{
   func.func @packed_folded_w4a8(%a: tensor<{m}x{k}xui8>,
                                 %b: tensor<{n}x{k // 2}xui8>,
@@ -827,7 +833,7 @@ def lower_packed_folded_artifact(
 
 @dataclass(frozen=True)
 class PackedFoldedScaledMatmulProgram:
-    """Manually selected packed HSACO bound to its authored Graph carrier."""
+    """Native MLIR packed HSACO bound to its authored Graph carrier."""
 
     package: ROCMNativePackage
     graph_ir: str
@@ -846,9 +852,9 @@ class PackedFoldedScaledMatmulProgram:
 
 def compile_packed_folded_scaled_matmul(
     a: np.ndarray, a_scale: np.ndarray, payload: PackedFoldedPayload, *,
-    tessera_opt: Path, integer_decode: bool = True,
+    tessera_opt: Path, integer_decode: bool = True, runtime_mn: bool = False,
 ) -> PackedFoldedScaledMatmulProgram:
-    """Materialize the explicit packed Graph→Target ABI as a manual package.
+    """Materialize the explicit packed Graph→Target ABI with the native compiler.
 
     This is not an automatic selector. The caller supplies the opt-in payload
     and retains the package for exact-device launch with matching buffers.
@@ -861,37 +867,78 @@ def compile_packed_folded_scaled_matmul(
     graph_ir, tile_ir, target_ir, receipt = _lower_packed_folded_carrier(
         m, payload, tessera_opt=tessera_opt,
     )
-    package = package_mxfp4_packed_folded_prefill(
-        m, payload, integer_decode=integer_decode,
-    )
-    image = replace(
-        package.image,
-        target_ir_digest=hashlib.sha256(target_ir.encode()).hexdigest(),
-    )
-    descriptor = replace(
-        package.descriptor,
-        image_digest=image.image_digest,
-        provenance={
-            **package.descriptor.provenance,
-            **receipt,
-            "execution_state": "manual_executable_candidate",
-            "materializer": "tessera_rocm.scaled_wmma_gemm",
-            "decode_policy": "integer_register" if integer_decode else "constant_table",
-            "hsaco_sha256": image.payload_digest,
-        },
-    )
-    bound_package = ROCMNativePackage(
-        tile_ir=tile_ir, target_ir=target_ir, backend_ir=package.target_ir,
-        image=image, descriptor=descriptor,
-    )
-    return PackedFoldedScaledMatmulProgram(bound_package, graph_ir)
+    if integer_decode is not True:
+        raise ValueError("native packed folding currently requires integer decode")
+    return _materialize_packed_folded_native(
+        m, *payload.shape, graph_ir, tile_ir, target_ir, receipt, runtime_mn=runtime_mn)
+
+
+def _materialize_packed_folded_native(m, n, k, graph_ir, tile_ir, target_ir, receipt, *, runtime_mn=False):
+    """Materialize an already verified physical Graph using MLIR/LLVM."""
+    from .rocm_native import _compile_native_tile_ir, _shape_free_target_ir
+    from .rocm_pipeline import ROCMInputLevel
+    if type(runtime_mn) is not bool:
+        raise TypeError("runtime_mn must be a boolean")
+    authored_target_digest = hashlib.sha256(target_ir.encode()).hexdigest()
+    image_target = (_shape_free_target_ir(target_ir, family="folded_matmul",
+                    directive="tessera_rocm.scaled_wmma_gemm") if runtime_mn else target_ir)
+    native_target,backend,binary,compiler,toolchain,libraries,state=_compile_native_tile_ir(
+        image_target,directive="tessera_rocm.scaled_wmma_gemm",family="matmul",
+        architecture="gfx1201",input_level=ROCMInputLevel.DIRECTIVE)
+    entry=_target_string_attr(
+        next(line for line in native_target.splitlines() if "tessera_rocm.scaled_wmma_gemm" in line),"name")
+    image=NativeImageArtifact(
+        target="rocm_gfx1201",architecture="gfx1201",pipeline_name="tessera-lower-to-rocm",
+        compiler_fingerprint=compiler,toolchain_fingerprint=toolchain,
+        target_ir_digest=hashlib.sha256(native_target.encode()).hexdigest(),
+        binary_format="hsaco",payload=binary,
+        entry_points=(NativeEntryPoint(entry,PACKED_FOLDED_TARGET_ABI_V1),),
+        compile_state=state,device_libraries=libraries)
+    descriptor=_packed_native_descriptor(image,entry,m,n,k,{
+        **receipt, "authored_target_ir_sha256": authored_target_digest,
+        "target_ir_sha256": hashlib.sha256(native_target.encode()).hexdigest(),
+    }, runtime_mn=runtime_mn)
+    package=ROCMNativePackage(tile_ir,native_target,backend,image,descriptor)
+    return PackedFoldedScaledMatmulProgram(package,graph_ir)
+
+
+
+def _packed_native_descriptor(image, entry, m, n, k, receipt, *, runtime_mn=False):
+    """One checked descriptor schema for host-payload and resident packages."""
+    return LaunchDescriptor(
+        image_digest=image.image_digest,entry_symbol=entry,abi_id=PACKED_FOLDED_TARGET_ABI_V1,
+        buffers=(
+            BufferBinding(0,"a","input","uint8",2,"row_major",1),
+            BufferBinding(1,"b_packed","input","uint8",2,"row_major",1),
+            BufferBinding(2,"a_scale","input","fp32",1,"row_major",4),
+            BufferBinding(3,"scale_plane","input","uint8",2,"row_major",1),
+            BufferBinding(4,"output","output","bf16",2,"row_major",2)),
+        scalars=tuple(ScalarArgument(5+i,name,"int64") for i,name in enumerate(("M","N","K"))),
+        shape_guards=tuple(ShapeGuard(name,axis,"eq",extent)
+            for name,shape in (("a",(m,k)),("b_packed",(n,k//2)),("a_scale",(m,)),
+                               ("scale_plane",(k//32+1,n)),("output",(m,n)))
+            for axis,extent in enumerate(shape)),
+        geometry=LaunchGeometry(grid=((n+63)//64,(m+255)//256,1),workgroup=(256,1,1)),
+        ordering=OrderingSemantics(ordered_submission=True,residency="none",synchronization=("completion",)),
+        provenance={**receipt,
+            "work_item":"ROCM-MXFP4-W4A8-1","sync_key":"ROCM-PACKED-NATIVE-2026-10-03",
+            "route":"packed_folded_native_typed_lds","numeric_policy":"folded_row_reference_explicit_approximate",
+            "block_m":256,"block_n":64,"block_k":64,"tile_m_per_wave":4,"tile_n_per_wave":2,
+            "native_compiler_owned":True,"producer_kind":"native_mlir_packed_lds",
+            "kernel_argument_layout":"expanded_memref",
+            "image_shape_policy":"runtime_mn_fixed_k" if runtime_mn else "static_mnk",
+            "image_m":0 if runtime_mn else m,"image_n":0 if runtime_mn else n,"image_k":k,
+            **({"image_whole_m":m % 256 == 0,"image_whole_n":n % 64 == 0} if runtime_mn else {}),
+            "materializer":"tessera_rocm.scaled_wmma_gemm","decode_policy":"integer_rne_v1",
+            "execution_state":"manual_executable_candidate","hsaco_sha256":image.payload_digest})
+
 
 
 __all__ = [
     "PACKED_FOLDED_SCALE_PLANE_V1", "PACKED_FOLDED_WEIGHT_LAYOUT_V1",
     "PACKED_FOLDED_PHYSICAL_V1", "PACKED_FOLDED_TARGET_ABI_V1",
     "PackedFoldedPayload", "prepare_packed_folded_payload",
-    "folded_oracle_from_packed", "author_packed_folded_graph",
+    "folded_oracle_from_packed", "author_packed_folded_graph", "author_packed_folded_shape_graph",
     "lower_packed_folded_artifact", "emit_mxfp4_packed_folded_prefill_hip",
     "package_mxfp4_packed_folded_prefill", "PackedFoldedScaledMatmulProgram",
     "compile_packed_folded_scaled_matmul",

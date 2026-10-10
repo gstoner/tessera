@@ -1,0 +1,56 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2105,8 +2105,9 @@
+                      SmallVector<Value> partial) {
+     Value aRow = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgM))) : c0;
+     Value bCol = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgN))) : c0;
+-    for (int64_t p = 0; p < stageK / 16; ++p) {
+-      Value kOff = ci(p * 16);
++    const bool twoPanel = foldedFullK && prefetch == 1;
++    auto readPanel = [&](int64_t panel) {
++      Value kOff = ci(panel * 16);
+       SmallVector<Value> af(mt), bf(nt);
+       for (int64_t mi = 0; mi < mt; ++mi) {
+         Value r = buf ? Value(kb.create<arith::AddIOp>(l, lrow[mi], aRow))
+@@ -2121,6 +2122,15 @@
+         bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, kOff, c, ldsColMajor),
+                               bFragmentTy);
+       }
++      return std::make_pair(af, bf);
++    };
++    auto current = readPanel(0);
++    for (int64_t p = 0; p < stagePanels; ++p) {
++      std::pair<SmallVector<Value>, SmallVector<Value>> next;
++      if (twoPanel && p + 1 < stagePanels)
++        next = readPanel(p + 1);
++      auto &af = current.first;
++      auto &bf = current.second;
+       for (int64_t mi = 0; mi < mt; ++mi)
+         for (int64_t ni = 0; ni < nt; ++ni) {
+           OperationState mma(l, "tile.mma");
+@@ -2128,6 +2138,25 @@
+           mma.addTypes(accFragmentTy);
+           partial[mi * nt + ni] = kb.create(mma)->getResult(0);
+         }
++      if (twoPanel) {
++        // Buffer the next K16 panel while consuming the current one.
++        // Spread later LDS reads between row-first WMMA chains, rather
++        // than holding all four panels or serializing every read/compute.
++        const int64_t reads = p == 0 ? 2 * (mt + nt)
++            : (p + 1 < stagePanels ? mt + nt : 0);
++        auto i32 = kb.getI32Type();
++        if (reads)
++          kb.create<ROCDL::SchedGroupBarrier>(l,
++              ROCDL::SchedGroupMaskAttr::get(kb.getContext(),
++                  ROCDL::SchedGroupMask::ds_read),
++              IntegerAttr::get(i32, reads), IntegerAttr::get(i32, 0));
++        kb.create<ROCDL::SchedGroupBarrier>(l,
++            ROCDL::SchedGroupMaskAttr::get(kb.getContext(),
++                ROCDL::SchedGroupMask::mfma_wmma),
++            IntegerAttr::get(i32, mt * nt), IntegerAttr::get(i32, 0));
++      }
++      if (p + 1 < stagePanels)
++        current = twoPanel ? std::move(next) : readPanel(p + 1);
+     }
+     if (groupStageReads) {
+       // All of the stage's LDS fragment reads, then its WMMA chain (see

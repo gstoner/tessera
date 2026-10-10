@@ -1,0 +1,1 @@
+All ten native image digests match the preceding public movement packet; all ten full JIT rows pass retained-route 10% non-regression.

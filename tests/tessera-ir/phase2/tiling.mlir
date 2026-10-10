@@ -1,6 +1,7 @@
 // RUN: tessera-opt --tessera-tiling='tile-m=16 tile-n=16 tile-k=16' %s | FileCheck %s --check-prefix=T16
 // RUN: tessera-opt --tessera-tiling='tile-m=32 tile-n=32 tile-k=32' %s | FileCheck %s --check-prefix=T32
-// RUN: tessera-opt --tessera-tiling='tile-m=16 tile-n=16 tile-k=16' --tessera-tile-ir-lowering='sm=120' %s | FileCheck %s --check-prefix=TILE
+// RUN: tessera-opt --tessera-tiling='tile-m=16 tile-n=16 tile-k=16' --tessera-tile-ir-lowering='sm=90' %s | FileCheck %s --check-prefix=TILE
+// RUN: not tessera-opt --tessera-tiling='tile-m=16 tile-n=16 tile-k=16' --tessera-tile-ir-lowering='sm=120' %s 2>&1 | FileCheck %s --check-prefix=SM120-ROUTE
 // 2026-06: un-XFAIL'd — TilingPass now builds tensor.extract_slice/insert_slice
 // with static OpFoldResult sizes (matching the static tile result type) instead
 // of dynamic Values, which the MLIR-23 slice verifier rejected.
@@ -23,6 +24,8 @@
 // T16:       scf.yield
 // T16:       scf.yield
 // T16-NOT:   tessera.matmul{{.*}}tensor<64x128xbf16>
+
+// SM120-ROUTE: SM120 Schedule delegation requires explicit nvidia_sm120 target and sm_120 architecture
 
 // TILE-LABEL: func.func @matmul_64x128x64
 // TILE:       scf.for

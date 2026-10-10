@@ -11,8 +11,9 @@ Per-op view of NVIDIA coverage today (2026-05-20).  Same row schema as the Apple
 
 | Status | Count |
 |---|---:|
-| ``artifact_only`` | 41 |
-| **total** | **41** |
+| ``artifact_only`` | 42 |
+| ``planned`` | 2 |
+| **total** | **44** |
 
 ## activation (6)
 
@@ -55,7 +56,7 @@ Per-op view of NVIDIA coverage today (2026-05-20).  Same row schema as the Apple
 | rmsnorm | artifact_only | fp32 | sm_90a | - | - | - |
 | rmsnorm_safe | artifact_only | fp32 | sm_90a | - | - | - |
 
-## other (6)
+## other (9)
 
 | Op | status | dtypes | arch_min | tile shape | expected MFU | roofline |
 |---|---|---|---|---|---|---|
@@ -63,6 +64,9 @@ Per-op view of NVIDIA coverage today (2026-05-20).  Same row schema as the Apple
 | kv_cache.read | artifact_only | fp32 | sm_90a | - | - | - |
 | memory_index_score | artifact_only | fp32 | sm_90a | - | - | - |
 | msa_index_scores | artifact_only | fp32 | sm_90a | - | - | - |
+| mxfp4_folded_storage | planned | - | sm_90a | - | - | - |
+| nvfp4_requantize | planned | - | sm_90a | - | - | - |
+| scaled_matmul | artifact_only | - | sm_90a | - | - | - |
 | score_combine | artifact_only | fp32 | sm_90a | - | - | - |
 | varlen_sdpa | artifact_only | fp32 | sm_90a | - | - | - |
 

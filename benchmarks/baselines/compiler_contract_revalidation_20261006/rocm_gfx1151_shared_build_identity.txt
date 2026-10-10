@@ -1,0 +1,8 @@
+  Name:                    gfx1151                            
+Ubuntu LLVM version 23.1.1
+  Optimized build.
+7268efddff2a0465c662d331b061a92ff9ae17ca19736a9effca4f23f9885efd  /home/gstoner/scratch/rocm-native-movement-20261005/.build/tools/tessera-opt/tessera-opt
+910f964b57cbb073f7b4fd191d84c3c2e6a09d858a3d89408cd8dc156a6594fd  src/compiler/ir/TesseraOps.cpp
+2a432ff2e7d49657f5e4e6a73c27a97bd3bcd84cfe3539e44c7ed5deaa97cb1d  src/compiler/programming_model/lib/PMPasses.cpp
+8579ec8a737685e8ba2461d0d64750554578c0309d7cfcb3d5bf33c7dcf934ab  python/tessera/compiler/graph_ir.py
+49051665e604ba0c8ae330be23ec320e02155c26f8687d775bf5586c7cb6dad2  python/tessera/compiler/rocm_nvfp4_program.py

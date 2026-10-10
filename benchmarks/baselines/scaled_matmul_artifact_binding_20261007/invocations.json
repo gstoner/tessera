@@ -1,0 +1,7 @@
+{
+  "core": "python /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/utils/lit/lit.py -v tests/tessera-ir",
+  "backends": "python /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/utils/lit/lit.py -v .build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/test .build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/test",
+  "device": "python -m pytest -q tests/device/nvidia/test_nvfp4_transpose_jit.py tests/device/nvidia/test_jit_multiresult_attention_vjp.py tests/device/nvidia/test_public_attention_forward.py",
+  "scope": "Existing NVFP4/attention executable regression. Scaled AD is Graph/Schedule/Tile/Target artifact proof only.",
+  "enumerated_source_files": 1260
+}

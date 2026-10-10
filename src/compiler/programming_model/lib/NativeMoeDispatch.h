@@ -15,8 +15,10 @@ static FailureOr<NativeMoeDispatch> moeDispatchContract(Operation *graph) {
       fn.getNumResults() != 1 || graph->getNumOperands() != 2 ||
       graph->getNumResults() != 1 || !target || !arch ||
       target.getValue() != "rocm_gfx1151" || arch.getValue() != "gfx1151" ||
-      graph->getOperand(0) != fn.getArgument(0) ||
-      graph->getOperand(1) != fn.getArgument(1) ||
+      !((graph->getOperand(0) == fn.getArgument(0) &&
+         graph->getOperand(1) == fn.getArgument(1)) ||
+        (graph->getOperand(0) == fn.getArgument(1) &&
+         graph->getOperand(1) == fn.getArgument(0))) ||
       graph->getResultTypes() != fn.getResultTypes())
     return graph->emitError("MoE token gather needs isolated gfx1151 Graph entry"), failure();
   for (unsigned i = 0; i < fn.getNumArguments(); ++i)

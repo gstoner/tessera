@@ -1,0 +1,102 @@
+{
+  "schema": "tessera.scheduled_attention_cache.v1",
+  "host": "tajasarus",
+  "architecture": "gfx1201",
+  "claim": "host_compile_cost",
+  "binary_compiles": 1,
+  "source_revision": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "source_worktree_dirty": true,
+  "relevant_source_sha256": {
+    "python/tessera/compiler/rocm_native.py": "e677b426a811c9239b855633037933cfa836137c2b1bf153bc4170c5148f4a74",
+    "python/tessera/compiler/scheduled_attention.py": "4bf2068761882535ba422028f6319fb621eeca08eb3780d1683c123ee803f83f",
+    "python/tessera/runtime.py": "4cb451b659bbbf734962a0c42ea537e61be8bf501c154922b6ce7d276b925826",
+    "tests/unit/test_scheduled_attention_consumers.py": "97465dcd0a6e07dea5eaa8791863b155a289461f5f1df752f75adbc83010a36b",
+    "benchmarks/rocm/measure_scheduled_attention_cache.py": "c992937dcf8ae44b0680b9e0e14579d3dbb129eeb9989d60604bae4c8f14eded"
+  },
+  "rows": [
+    {
+      "query_rows": 17,
+      "graph_to_tile_ms": 135.6504310388118,
+      "first_package_ms": 368.342675967142,
+      "repeat_package_ms": [
+        42.53247007727623,
+        37.747884867712855,
+        37.58377302438021,
+        37.28632489219308,
+        37.02005720697343,
+        37.43837494403124,
+        37.91865101084113
+      ],
+      "repeat_median_ms": 37.58377302438021,
+      "binary_compiles": 1,
+      "compile_state": "cold",
+      "image_digest": "29252ecb490595820adcafb9a0624e8d801f23c18a630de26c0faa251a740fb8",
+      "schedule_digest": "c2d7aee07b36cb958d68d1a64bb209dbedc330c6e31ba0f0d4ab5940c44acc35",
+      "correct": true,
+      "max_abs_error": 5.923677235841751e-05
+    },
+    {
+      "query_rows": 23,
+      "graph_to_tile_ms": 38.37736579589546,
+      "first_package_ms": 52.05384991131723,
+      "repeat_package_ms": [
+        37.56285295821726,
+        38.264821050688624,
+        38.18689286708832,
+        37.860539043322206,
+        37.983084097504616,
+        36.37091885320842,
+        36.849341820925474
+      ],
+      "repeat_median_ms": 37.860539043322206,
+      "binary_compiles": 0,
+      "compile_state": "warm_cache",
+      "image_digest": "29252ecb490595820adcafb9a0624e8d801f23c18a630de26c0faa251a740fb8",
+      "schedule_digest": "6a652d27514c0e7999725f30eac63fb09187492f165ac06d4957bf0a854655a7",
+      "correct": true,
+      "max_abs_error": 6.508827209472656e-05
+    },
+    {
+      "query_rows": 31,
+      "graph_to_tile_ms": 35.38117208518088,
+      "first_package_ms": 49.78455207310617,
+      "repeat_package_ms": [
+        37.0851110201329,
+        36.385987885296345,
+        36.24884597957134,
+        36.811479134485126,
+        37.62029204517603,
+        38.62895513884723,
+        36.25618992373347
+      ],
+      "repeat_median_ms": 36.811479134485126,
+      "binary_compiles": 0,
+      "compile_state": "warm_cache",
+      "image_digest": "29252ecb490595820adcafb9a0624e8d801f23c18a630de26c0faa251a740fb8",
+      "schedule_digest": "c1f48209199823e555413ceede6b968d0229238083f6cfd8769f55529c12b869",
+      "correct": true,
+      "max_abs_error": 3.5628676414489746e-05
+    },
+    {
+      "query_rows": 65,
+      "graph_to_tile_ms": 35.453978925943375,
+      "first_package_ms": 51.572252064943314,
+      "repeat_package_ms": [
+        36.741456016898155,
+        37.134273909032345,
+        37.06070501357317,
+        37.3119730502367,
+        36.28685907460749,
+        36.941947881132364,
+        36.903433967381716
+      ],
+      "repeat_median_ms": 36.941947881132364,
+      "binary_compiles": 0,
+      "compile_state": "warm_cache",
+      "image_digest": "29252ecb490595820adcafb9a0624e8d801f23c18a630de26c0faa251a740fb8",
+      "schedule_digest": "52d93cb9bcc341a2ce2e22a387fa7aa0650b0ceaa6f3ddf4b1d1a4b0f9cde5bb",
+      "correct": true,
+      "max_abs_error": 4.7788023948669434e-05
+    }
+  ]
+}

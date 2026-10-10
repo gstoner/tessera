@@ -54,3 +54,17 @@ def test_nvfp4_dispatch_rejects_malformed_views_before_loading_cuda(
 def test_nvfp4_dispatch_rejects_nonpositive_dimensions(dims):
     with pytest.raises(ValueError, match="dimensions must be positive"):
         rt._nvidia_nvfp4_gemm_2d(None, None, None, None, *dims)
+
+
+@pytest.mark.parametrize("policy", ["independent_rhs", "shared_rhs_rows", "shared_lhs"])
+@pytest.mark.parametrize("field,value", [("M", 50), ("BatchRows", 16),
+                                        ("BatchCount", 2), ("BatchCount", True)])
+def test_native_batch_scalars_reject_shape_reinterpretation(policy, field, value):
+    from types import SimpleNamespace
+    descriptor = SimpleNamespace(provenance={
+        "batching": policy, "batch_rows": [3, 17], "shape": [51, 19, 129]})
+    scalars = {"M": 51, "N": 19, "K": 129, "BatchRows": 17, "BatchCount": 3}
+    assert rt._validate_nvfp4_independent_batch_scalars(descriptor, scalars) == (3, 17)
+    scalars[field] = value
+    with pytest.raises(RuntimeError, match="scalars differ"):
+        rt._validate_nvfp4_independent_batch_scalars(descriptor, scalars)

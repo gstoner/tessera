@@ -1,0 +1,240 @@
+{
+  "schema": "tessera.sm120.native_producer_chain_benchmark.v1",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88",
+  "target": "nvidia_sm120",
+  "compiler_sha256": "ac321f5090c4ebc66c9264003253c0317c8df3f107f02797e7910e03c37c8c4d",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_native_producer_chain.py": "ac201303cc8efd816ff672112535cfbb5b73110931777f7aefcf986ba6cc44c8",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "0add0a2b4058389358d453dccc6344b2153a461685853cb5b7bf734a2d70eab2",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "3f5f9c47150269ce00e147c7b5ccb3d10684e1b216cae8fcb5ee80db9eae1f51",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "23885c582202ed405d7afec7458e13bf295412cfd4a4b623bdbb4872f3a4fb68"
+  },
+  "method": "independent float64 oracle with each producer rounded to storage; separate resident stage CUDA events; prepared complete-program host wall includes copies and synchronization",
+  "profiles": [
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "storage": "fp16",
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.885928213596344e-08,
+      "images": [
+        "5453cc624d487a873de051be99341705da48fac711e676abdc223149e1418db6",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "1f6c46f864fc83a1ebeaf787c024bc72eaf812497ff8572912c885a93b8f48e9"
+      ],
+      "descriptor_digests": [
+        "e32f9960d574e0626dd867ffe3bb61f738e5ffdd6f702e7df116e211453611a4",
+        "1d1a96f9aca77f0720b1915433934c8606c7c308bd25139a0f278a55834f4331",
+        "86f205bd8d4bd8c3ea4a5395eaeb44a6c318e29cac5d2834111e1bbae1d54a8c"
+      ],
+      "plan_digest": "f48e75a7c63c130100be90d675a224fe35974c93cc28a01acc247ebd655a01c3",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.01069399993866682,
+            0.009654000401496887,
+            0.009483999572694302
+          ],
+          "median_ms": 0.009654000401496887
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.009885000064969063,
+            0.008562999777495861,
+            0.010273000225424767
+          ],
+          "median_ms": 0.009885000064969063
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.010689999908208847,
+            0.009592999704182148,
+            0.009553000330924988
+          ],
+          "median_ms": 0.009592999704182148
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.23776529997121543,
+        0.2270851022331044,
+        0.21956100245006382
+      ],
+      "prepared_host_wall_median_ms": 0.2270851022331044
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "storage": "bf16",
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 1.0943040251731873e-08,
+      "images": [
+        "6b01a34b7648bbc2c2b5c6e3dcbfb53b624f134967b718e6447da4069ab23e8d",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "bf7909b397eec085b733f95c4b6c380461149e70aecb562791bf0c22bdde23f5"
+      ],
+      "descriptor_digests": [
+        "2a51dfa303cb08d1a332ca19044db26030024577777125343c1cda3d7aa99179",
+        "5b71858e185d610d4a12182edd90794aa4c0b0d2dcfd858b3276fceefbb30563",
+        "4e54853618a861a910e3095201d3059ce478ef39b19778a4cefce7d0a282e99c"
+      ],
+      "plan_digest": "2e70a100a63400d07ee6807f3e1c071f2a342551eb04485fecea55000716e55d",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.009336999617516994,
+            0.009176000021398067,
+            0.00889500044286251
+          ],
+          "median_ms": 0.009176000021398067
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.01146399974822998,
+            0.011199000291526318,
+            0.012707999907433987
+          ],
+          "median_ms": 0.01146399974822998
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.010580999776721,
+            0.009736999869346619,
+            0.008024999871850014
+          ],
+          "median_ms": 0.009736999869346619
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.22185909911058843,
+        0.22344109893310815,
+        0.2239040011772886
+      ],
+      "prepared_host_wall_median_ms": 0.22344109893310815
+    },
+    {
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "storage": "fp16",
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 7.798298611305654e-06,
+      "images": [
+        "89d8bd1630fb28fa45634071774a8aa670483cda86e8726af67afd2897660bcf",
+        "423b6914ace52007e7eaf21997126a4ed609145088b46b77dfc84938e4258f26",
+        "03c9cd07900e935866a1fb22a0941f45054c89b92d76d1f4fb6d8bbf13ad980c"
+      ],
+      "descriptor_digests": [
+        "fbb7cce22f7aa6b23c2722597292a699c00bc87a6a4caad8787c05ca151216bc",
+        "12c6706232beadff2c0396790d9e76bccef2f69f0607672b7fa9dc84f3b8d87e",
+        "cdc72eadc91639d00c4b72ebfefdb132ee825633556fa04f3782c17efb37c65e"
+      ],
+      "plan_digest": "45d5e1e01150eec87509a05e35e631182f02cb5945acb0c7c18767c2abf56f66",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.009100999683141708,
+            0.010374999605119228,
+            0.009926999919116497
+          ],
+          "median_ms": 0.009926999919116497
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.0452519990503788,
+            0.04558100178837776,
+            0.045538000762462616
+          ],
+          "median_ms": 0.045538000762462616
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.00922400038689375,
+            0.00977999996393919,
+            0.008233999833464622
+          ],
+          "median_ms": 0.00922400038689375
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.28623770049307495,
+        0.2897997008403763,
+        0.5686973017873242
+      ],
+      "prepared_host_wall_median_ms": 0.2897997008403763
+    },
+    {
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "storage": "bf16",
+      "correctness": "passed_before_and_after_timing",
+      "max_abs_error": 3.259629011154175e-08,
+      "images": [
+        "d13cea1f6ce656a3df2423503064e8b631ecae9c1ad350811740e77dec630f33",
+        "8adc368060c9eef161a1784e0fc5e0e7cc54e53cd33d7e134964c3c0d39c5189",
+        "4c554bd1eb02012acc3bc8b0e68c9c36e21ba304036e27080a33ad5a303a7f01"
+      ],
+      "descriptor_digests": [
+        "1fd813cbfa63045ccdefd19c110da0bd053f537526f71392673d55c9efa54594",
+        "d3f486357f87b45b24882d9e7638211c5a589186e1b3b6a12f2976b1a632a4d7",
+        "c5119a1cc324ca25d2822157910c180610f74dd30b023cf19d9c43436ceae704"
+      ],
+      "plan_digest": "c12d966561552b40facf985964c7304289f3585bba139ae1dce36de363900f05",
+      "stages": [
+        {
+          "kind": "rmsnorm",
+          "device_event_samples_ms": [
+            0.008697000332176685,
+            0.009929999709129333,
+            0.00953499972820282
+          ],
+          "median_ms": 0.00953499972820282
+        },
+        {
+          "kind": "softmax",
+          "device_event_samples_ms": [
+            0.04561299830675125,
+            0.045361001044511795,
+            0.04537300020456314
+          ],
+          "median_ms": 0.04537300020456314
+        },
+        {
+          "kind": "matmul",
+          "device_event_samples_ms": [
+            0.009296000003814697,
+            0.007993999868631363,
+            0.009355000220239162
+          ],
+          "median_ms": 0.009296000003814697
+        }
+      ],
+      "prepared_host_wall_samples_ms": [
+        0.278576702112332,
+        0.24702820228412747,
+        0.27893169899471104
+      ],
+      "prepared_host_wall_median_ms": 0.278576702112332
+    }
+  ],
+  "promotion": "none; characterization only"
+}

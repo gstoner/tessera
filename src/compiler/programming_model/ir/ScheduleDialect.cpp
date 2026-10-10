@@ -96,6 +96,26 @@ LogicalResult TileOp::verify() {
 }
 
 LogicalResult MatmulOp::verify() {
+  // Operand orientation is semantic even before a target lowering runs.
+  for (StringRef name : {StringRef("transposeA"), StringRef("transposeB")}) {
+    if (Attribute attr = getOperation()->getAttr(name)) {
+      auto orientation = dyn_cast<BoolAttr>(attr);
+      if (!orientation)
+        return emitOpError("orientation flags must be boolean");
+      auto physical = getOperation()->getAttrOfType<StringAttr>("physical_contract");
+      const bool typedScaledA = name == "transposeA" && getArch() == "gfx1201" &&
+          getStorage() == "e4m3" && getStorageB() == "e4m3" &&
+          getStaging() == "global" && physical &&
+          (physical.getValue() == "rocm_fp8_w8a8_blockscale_v1" ||
+           physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
+           physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_v1" ||
+           physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1");
+      if (orientation.getValue() && !typedScaledA &&
+          (!physical || physical.getValue() != "nvidia_sm120_nvfp4_blockscale_v1"))
+        return emitOpError("operand orientation requires its named native storage contract");
+    }
+  }
+
   if (getSubject().getType() != getScheduled().getType())
     return emitOpError("must preserve the scheduled Graph value type");
   if (getArtifactHash().size() != 64 ||
@@ -119,7 +139,8 @@ LogicalResult MatmulOp::verify() {
   const bool foldedFamily = foldedMxfp4 || packedFoldedMxfp4;
   // ROCM-FP8-BLOCKSCALE-1: the W8A8 contract's LDS-staged body runs 8 waves.
   const bool fp8W8A8Lds =
-      getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1" &&
+      (getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1" ||
+       getPhysicalContract() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1") &&
       getStaging() == "lds";
   if (getWarps() != 1 && getWarps() != 4 &&
       !((foldedFamily || fp8W8A8Lds) && getWarps() == 8))
@@ -169,7 +190,10 @@ LogicalResult MatmulOp::verify() {
       getPhysicalContract() == "rocm_mxfp4_w4a8_exact_v1";
   // ROCM-FP8-BLOCKSCALE-1: derived by Graph->Schedule from a conforming
   // logical scaled_matmul; never authored on the Graph op.
-  const bool fp8W8A8 =
+  const bool mxfp8 =
+      getPhysicalContract() == "rocm_mxfp8_e4m3_e8m0_k32_v1" ||
+      getPhysicalContract() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1";
+  const bool fp8W8A8 = mxfp8 ||
       getPhysicalContract() == "rocm_fp8_w8a8_blockscale_v1" ||
       getPhysicalContract() == "rocm_fp8_w8a8_blockscale_nk_v1";
   if (!getPhysicalContract().empty() && !packedMxfp4 && !foldedFamily &&
@@ -181,11 +205,21 @@ LogicalResult MatmulOp::verify() {
   if (fp8W8A8 &&
       (getArch() != "gfx1201" || getStorage() != "e4m3" ||
        getStorageB() != "e4m3" || getScaleK() <= 0 ||
-       getScaleFormat() != "fp32" || getAccum() != "f32" ||
+       getScaleFormat() != (mxfp8 ? "e8m0" : "fp32") || getAccum() != "f32" ||
        (getOutput() != "f32" && getOutput() != "bf16") || getBias() ||
        getResidual() ||
        getActivation() != "none"))
     return emitOpError("gfx1201 FP8 W8A8 block-scale contract is inconsistent");
+  if (mxfp8 && (getScaleK() != 32 || getScaleN() != 1 ||
+                (macroK != 32 && macroK != 64) || getPipelineDepth() != 1 ||
+                !((getMacroTileM() == 16 && getMacroTileN() == 16 &&
+                   macroK == 32 && getWarps() == 1 && getStaging() == "global") ||
+                  (getPhysicalContract() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1" &&
+                   getMacroTileM() == 128 &&
+                   (getMacroTileN() == 64 || getMacroTileN() == 128) &&
+                   getWarps() == 8 && getStaging() == "lds"))))
+    return emitOpError("MXFP8 Schedule requires K32 per-column scales, "
+                       "pipeline depth 1, and one checked global/LDS profile");
   if (packedMxfp4 &&
       (getArch() != "gfx1201" || getStorage() != "e4m3_raw_u8" ||
        getStorageB() != "e2m1_packed_u8" || getScaleK() != 32 ||
@@ -234,8 +268,12 @@ LogicalResult MatmulOp::verify() {
       !fp8W8A8Bf16 &&
       !(getOutput() == "i32" && getStorage() == "int4" && getAccum() == "int32"))
     return emitOpError("requires f32/f16 output, x86 f64 storage/accum/output, int4 with i32 accumulation/output, or ROCm int8/int4 with i32 accumulation/output");
-  if (getALayout() != "row_major" || getBLayout() != "col_major")
-    return emitOpError("initial matmul contract requires row/col layouts");
+  const bool rowMajorSm120B = getBLayout() == "row_major" &&
+      getArch() == "sm_120" && (getStorage() == "f16" || getStorage() == "bf16") &&
+      getTileM() == 16 && getTileN() == 8 && getTileK() == 16 &&
+      (getOutput() == "f32" || getOutput() == "f16");
+  if (getALayout() != "row_major" || (getBLayout() != "col_major" && !rowMajorSm120B))
+    return emitOpError("matmul physical layouts require row/col, or the SM120 half row-major RHS contract");
   // The shared block-rasterization contract (ROCM-RASTER-1): a permutation of
   // block ids onto the tile grid. The selection stays row-major until device
   // timing and counters exist; the contract may name any of the four orders
@@ -298,6 +336,8 @@ LogicalResult NormOp::verify() {
       (getKind() != "rmsnorm" && getKind() != "layernorm") ||
       !getEpsilon().isFinite() || getEpsilon().convertToDouble() <= 0.0)
     return emitOpError("requires SM120, Zen 5, or the bounded gfx1201 RMSNorm row contract with positive finite f32 epsilon");
+  if (getSchedule() != "serial" && (!sm120 || getSchedule() != "cooperative_128"))
+    return emitOpError("norm cooperative_128 schedule requires SM120");
   return success();
 }
 

@@ -1,0 +1,13 @@
+frontend requested argument indices (1, 3)
+module attributes {tessera.arch = "sm_120", tessera.autodiff = "reverse", tessera.autodiff.wrt = ["bias", "q"], tessera.autodiff.wrt_indices = [1, 3], tessera.frontend.authority = "tracer", tessera.ir.version = "1.0", tessera.target = "nvidia_sm120"} {
+  func.func @attention(%arg0: tensor<1x1x5x4xf32>, %arg1: tensor<1x2x3x5xf32>, %arg2: tensor<1x1x5x3xf32>, %arg3: tensor<1x2x3x4xf32>) -> (tensor<1x2x3x3xf32>, tensor<1x2x3x3xf32>, tensor<1x2x3xf32>) attributes {tessera.autodiff = "reverse", tessera.autodiff.paired = @attention__bwd, tessera.autodiff.residual_policy = "save", tessera.autodiff.residual_sources = ["tessera.flash_attn:output", "tessera.flash_attn:lse"], tessera.autodiff.wrt = ["bias", "q"], tessera.autodiff.wrt_indices = [1, 3], tessera.frontend.authority = "tracer", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = "fba5f70b3713647a0bdf566956244a2dc88fa3e40f7013bb0c5ea664057e5cc8", tessera.structured_cfg.schema = "tessera.structured_cfg.v1"} {
+    %output, %row_lse = tessera_attn.checkpoint_forward %arg3, %arg0, %arg2, %arg1 {causal = true, scale = 5.000000e-01 : f32} : (tensor<1x2x3x4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>, tensor<1x2x3x5xf32>) -> (tensor<1x2x3x3xf32>, tensor<1x2x3xf32>)
+    return %output, %output, %row_lse : tensor<1x2x3x3xf32>, tensor<1x2x3x3xf32>, tensor<1x2x3xf32>
+  }
+  func.func @attention__bwd(%arg0: tensor<1x1x5x4xf32>, %arg1: tensor<1x2x3x5xf32>, %arg2: tensor<1x1x5x3xf32>, %arg3: tensor<1x2x3x4xf32>, %arg4: tensor<1x2x3x3xf32>, %arg5: tensor<1x2x3x3xf32>, %arg6: tensor<1x2x3xf32>) -> (tensor<1x1x5x4xf32>, tensor<1x2x3x5xf32>, tensor<1x1x5x3xf32>, tensor<1x2x3x4xf32>) attributes {tessera.autodiff.forward = @attention, tessera.autodiff.residual_policy = "save", tessera.autodiff.residual_sources = ["tessera.flash_attn:output", "tessera.flash_attn:lse"], tessera.autodiff.role = "backward"} {
+    %d_query, %d_key, %d_value, %d_bias = tessera_attn.checkpoint_backward %arg4, %arg3, %arg0, %arg2, %arg5, %arg1, %arg6 {causal = true, scale = 5.000000e-01 : f32} : (tensor<1x2x3x3xf32>, tensor<1x2x3x4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>, tensor<1x2x3x3xf32>, tensor<1x2x3x5xf32>, tensor<1x2x3xf32>) -> (tensor<1x2x3x4xf32>, tensor<1x1x5x4xf32>, tensor<1x1x5x3xf32>, tensor<1x2x3x5xf32>)
+    return %d_key, %d_bias, %d_value, %d_query : tensor<1x1x5x4xf32>, tensor<1x2x3x5xf32>, tensor<1x1x5x3xf32>, tensor<1x2x3x4xf32>
+  }
+}
+
+

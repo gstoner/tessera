@@ -1,0 +1,18 @@
+{
+  "source_revision": "8dddbc4bdaffd036e9fa792cdd2ec48b3182fb43",
+  "source_worktree_dirty": true,
+  "source_sha256": {
+    "scripts/ci_install_pinned_rocm.sh": "ce27f4ed98d36b2cf02a84dde515ccb2a135493cb03c5467e1a610e712f84b1f",
+    ".github/workflows/validate.yml": "4e5a9e703ef93e7f2f8aa542779fcdf4ebaee178a1ab3cd72d9b90de1fd1b4fc",
+    "tests/unit/conftest.py": "9bb238a84816e02554c784846c162659e1e13e27d845d3956be55ce740cfdc03",
+    "scripts/ci_require_executed.py": "2519f331b64ca0709101f22c5cfffcbf05f1511bfd0a94565d5f49f648b9e20f"
+  },
+  "compiler_sha256": "b487e3ad06ba645dcba5372dc2de7b21525f1b76fffd69aa145993d68979d2dc",
+  "compiler_route": {
+    "passed": 345,
+    "skipped": 0,
+    "gate": "every selected proof test executed"
+  },
+  "workflow_and_audit_passed": 69,
+  "device_execution_claim": false
+}

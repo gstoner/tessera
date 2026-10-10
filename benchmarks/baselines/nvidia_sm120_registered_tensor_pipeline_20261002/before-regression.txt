@@ -1,0 +1,73 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+_ test_registered_sm120_pipeline_preserves_complete_canonical_tensor_function[False] _
+
+fused = False
+
+    @pytest.mark.parametrize("fused", [False, True])
+    def test_registered_sm120_pipeline_preserves_complete_canonical_tensor_function(fused):
+        import re
+        canonical = scheduled_matmul.lower_scheduled_matmul(
+            _module(target="nvidia_sm120", shape=(17,35,19), bias=fused,
+                    residual=fused, activation="relu" if fused else "none"),
+            target="nvidia_sm120")
+        tool = scheduled_matmul.find_tessera_opt()
+        tensor = scheduled_matmul.run_tessera_opt(
+            tool, canonical.graph_ir.replace('"nvidia_sm120"', '"generic_tensor_replay"'),
+            "--tessera-tiling=tile-m=16 tile-n=16 tile-k=16"
+        ).replace('"generic_tensor_replay"', '"nvidia_sm120"')
+        full = scheduled_matmul.run_tessera_opt(tool, tensor, "--tessera-nvidia-pipeline-sm120")
+        # Module metadata may differ; the executable function and checked ABI must
+        # be exactly the native Schedule projection of the complete logical product.
+        def body(source):
+            return source[source.index("  llvm.func"):source.rindex("\n}")].strip()
+>       assert body(full) == body(canonical.tile_ir)
+E       assert 'llvm.func @n...m.return\n  }' == 'llvm.func @n...m.return\n  }'
+E         
+E         Skipping 714 identical leading characters in diff, use -v to show
+E           nc">
+E         -     %c35_i64 = arith.constant 35 : i64
+E         -     %c35_i64_0 = arith.constant 35 : i64
+E         -     %c19_i64 = arith.constant 19 : i64
+E         -     %c35_i64_1 = arith.constant 35 : i64...
+E         
+E         ...Full output truncated (36 lines hidden), use '-vv' to show
+
+tests/unit/test_sm120_legacy_scheduled_producer.py:303: AssertionError
+_ test_registered_sm120_pipeline_preserves_complete_canonical_tensor_function[True] _
+
+fused = True
+
+    @pytest.mark.parametrize("fused", [False, True])
+    def test_registered_sm120_pipeline_preserves_complete_canonical_tensor_function(fused):
+        import re
+        canonical = scheduled_matmul.lower_scheduled_matmul(
+            _module(target="nvidia_sm120", shape=(17,35,19), bias=fused,
+                    residual=fused, activation="relu" if fused else "none"),
+            target="nvidia_sm120")
+        tool = scheduled_matmul.find_tessera_opt()
+        tensor = scheduled_matmul.run_tessera_opt(
+            tool, canonical.graph_ir.replace('"nvidia_sm120"', '"generic_tensor_replay"'),
+            "--tessera-tiling=tile-m=16 tile-n=16 tile-k=16"
+        ).replace('"generic_tensor_replay"', '"nvidia_sm120"')
+        full = scheduled_matmul.run_tessera_opt(tool, tensor, "--tessera-nvidia-pipeline-sm120")
+        # Module metadata may differ; the executable function and checked ABI must
+        # be exactly the native Schedule projection of the complete logical product.
+        def body(source):
+            return source[source.index("  llvm.func"):source.rindex("\n}")].strip()
+>       assert body(full) == body(canonical.tile_ir)
+E       AssertionError: assert 'llvm.func @n...m.return\n  }' == 'llvm.func @n...m.return\n  }'
+E         
+E         Skipping 61 identical leading characters in diff, use -v to show
+E         - ed_matmul_fused_f16_relu_b1_r1_kernel(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr, %arg3: !llvm.ptr, %arg4: !llvm.ptr, %arg5: i64, %arg6: i64, %arg7: i64) attributes {nvvm.kernel} {
+E         ?          ---------------------                                                                     ^^^^^^^^^         ^^^^^^^^^         ------------------------
+E         + ed_matmul_kernel(%arg0: !llvm.ptr, %arg1: !llvm.ptr, %arg2: !llvm.ptr, %arg3: i64, %arg4: i64, %arg5: i64) attributes {nvvm.kernel} {
+E         ?                       ...
+E         
+E         ...Full output truncated (42 lines hidden), use '-vv' to show
+
+tests/unit/test_sm120_legacy_scheduled_producer.py:303: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_sm120_legacy_scheduled_producer.py::test_registered_sm120_pipeline_preserves_complete_canonical_tensor_function[False]
+FAILED tests/unit/test_sm120_legacy_scheduled_producer.py::test_registered_sm120_pipeline_preserves_complete_canonical_tensor_function[True]
+2 failed, 65 deselected in 2.05s

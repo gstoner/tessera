@@ -1,0 +1,4 @@
+96f562f44dc056e8ff095cf7f7d1a8a9ffcef0e264c9d0f82fe1107b2a6143cf  python/tessera/compiler/trace.py
+0c26c5807a972b24eb7c75741a3e8d4f227b82854b3a3748d7a9987e98f842de  tests/device/rocm/test_public_scaled_jvp.py
+38fe1a6ebe96ad0bcfe8d85352156d570650e618b8ed0f579686af6d4f626cab  .build-gfx1201-current/tools/tessera-opt/tessera-opt
+e7e822e798daf7e5b78d0d952c1b0ec2aaf20e74ed95adb9741f9ba681e7428f  .build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so

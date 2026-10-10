@@ -135,6 +135,13 @@ _GENERIC_TARGET_CHIP = {"rocm": "rocm_gfx1151"}
 
 def _capability_target(target_name: str) -> str:
     """The registry key for a compilation request against ``target_name``."""
+    if target_name == "rocm":
+        import os
+        chip = os.environ.get("TESSERA_ROCM_CHIP")
+        if chip:
+            # Use the same explicit architecture as backend selection. Unknown
+            # chips reach the capability registry and are refused, not remapped.
+            return "rocm_" + chip
     return _GENERIC_TARGET_CHIP.get(target_name, target_name)
 
 

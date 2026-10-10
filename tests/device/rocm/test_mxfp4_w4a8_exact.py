@@ -261,7 +261,7 @@ def test_fragment_decode_does_not_store_into_poisoned_rows_after_m() -> None:
 def test_generic_scaled_matmul_pipeline_materializes_and_executes_exact_abi() -> None:
     assert rt._rocm_live_arch() == "gfx1201"
     root = Path(__file__).resolve().parents[3]
-    fixture = root / "tests/tessera-ir/phase2/e2e_scaled_matmul_rocm_target.mlir"
+    fixture = root / "tests/tessera-ir/phase2/e2e_mxfp4_ingest_rocm.mlir"
     tessera_opt = os.environ.get("TESSERA_OPT")
     assert tessera_opt, "generic route proof requires TESSERA_OPT"
     common = [

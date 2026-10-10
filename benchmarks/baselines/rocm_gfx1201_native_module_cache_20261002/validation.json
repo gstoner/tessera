@@ -1,0 +1,49 @@
+{
+  "architecture": "gfx1201",
+  "compiler_sha256": "8936631e8589e8a8e216c238d045fbf0dd237a8c733d3b4e4070ead00d335548",
+  "device": "AMD Radeon RX 9070 XT",
+  "direct_package_artifact_tests_passed": 2,
+  "exact_device_suite": {
+    "passed": 61,
+    "reason": "sibling owning-architecture cases",
+    "skipped": 3
+  },
+  "native_module_library_sha256": "55122befeb059b988ed9aae4ce8228fa227be06b2c8cd8cc818bbe95d44365bf",
+  "packet_sha256": {
+    "dynamic_bias_relu_cached.json": "d04c5c7f3563684620a187d7e939f4e8d02708359d7e2efd7240a48b5c9c50bf",
+    "dynamic_bias_relu_uncached.json": "022b18b87c5f7350d2681f240c6a2d018007016128c37218897a9e435daec9c6",
+    "dynamic_cached.json": "8565175fe3bedce0e002f2ea566c978c37de8576aa6879fcb7c8a754152e62e9",
+    "dynamic_uncached.json": "4f47897f8bec6eb291c180b0a014f45b31954e015dc727cfd9f099365b1a0143",
+    "static_bias_relu_cached.json": "2b10ef1080340e4e513fe7c65720fdf30b8b33312e7365521f80f0ca46dc1748",
+    "static_bias_relu_uncached.json": "2980f3a6cac218a1d7faf8866e02dd15cd254f8dcf247958f61a8dd709ff569d",
+    "static_cached.json": "64e03d1d27319ce1ef96438dd3c157d1a14d565d56be67ec682c1522938012ed",
+    "static_uncached.json": "1765afc77ce21cb46d307b6c0d581b448a0850510fd209f863419a59ff4e9af6"
+  },
+  "promotion_eligible": false,
+  "schema": "tessera.rocm_native_module_cache_validation.v1",
+  "source_sha256": {
+    "benchmarks/rocm/record_gfx1201_matmul_shape_key.py": "28311c5d7ac165c31a16f55c7fb4ad0a40490fac9101666c377753e30b8668f4",
+    "python/tessera/compiler/native_artifact.py": "9ea3f6a4deea0b2d66047bf6f682394cbaff9520352cab6686b5614731892921",
+    "python/tessera/compiler/rocm_native.py": "624a2ec94ca2851cbac1289dcc78bc231878d649ed0e45bf94e4c6622903e59c",
+    "python/tessera/compiler/scheduled_matmul.py": "7916e5adb76d0fc4374cb1f16fa5bc8819965d8c1077262e220cacc6a3f648e7",
+    "python/tessera/runtime.py": "1c01721ab21ed50f7de5bdcf02cf95fa045c68f7306e2cdf009f6e301e458508",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "b308e13c572ffbc0563a5cda47d3e9d13c05369e2a55cb6a1e56b0a593baa3e7",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "125e0a1ab843e20ba1d34426dbad0054d99f6760e5a8755923f2002c718e10c0",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": "bd3c03355489ec8cd409e6ef176b1142a63c8452d40ae88738acbf3ad5e64080",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "be84a6d46e8eeea5915c32984ab34cc440a5c7b00500cf5437b7dd81d49a4e1e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "779b2f4f5dd678aa1a540e38ecac40c899ddb86fb11174f8da704c20fc86f0bd",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860"
+  },
+  "split_k_regression_passed": 59,
+  "sync": "ROCM-NATIVE-MODULE-CACHE-2026-10-02",
+  "transcript_sha256": {
+    "direct-package-tests.txt": "0d35d3d3698acbb10b22e48b2fc281a162fc240f37def9034a841768387b8978",
+    "split-k-tests.txt": "1baaa8b3f2db61f81fe789d9e8402b22cf5dd10fc7bde92cf808735f060f5965",
+    "validation-tests.txt": "3174724c0ed0502e6e6c22127dfc73f717feba0bfb0db18884b465439a7fb024"
+  },
+  "validation_source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/CMakeLists.txt": "fc0f6df8a39bb1141d39e5c8b8dbce1c83d772feaa7e32cdacb0ff29d6fd649b",
+    "tests/unit/test_rocm_matmul_shape_key.py": "99a5b062c3bcad631348ab282dfdb849545fcd4d8e93a295f6885dfe3cafb8b1",
+    "tests/unit/test_rocm_native_image_lifetime.py": "adc0a7f28175f2cca67272260f6fad8eaaf6efbb34ec8bb205112ee3a08244d3"
+  }
+}

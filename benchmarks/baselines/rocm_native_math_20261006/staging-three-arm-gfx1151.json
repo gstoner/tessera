@@ -1,0 +1,3913 @@
+{
+  "schema": "tessera.rocm.math-staging-ab.v1",
+  "architecture": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "device_ordinal": 0,
+  "compiler_binary_sha256": "14a91080ec75736ff2e6f7b2b44f74752fbce23d7527bb66cca02b4ef748c0e1",
+  "native_runtime_sha256": "fdf02b35fb74bf46fdb38921b09b2c8b839a2215dc46bdbdb914c94c56ddd29b",
+  "source_sha256": {
+    "python/tessera/runtime.py": "ac5fb432a27534b132aeaa22e15bf9e8bbd63c47bbf15965950ca530830acc39",
+    "python/tessera/compiler/rocm_math_native.py": "b567ea22f72d7845b7b29b99824712de80a3b82f587336bb565824c317bd2a2a",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "d23990995061e254d100d4da851dde1d5d07adceab8b8b3b00b298dcabb2f8c1",
+    "benchmarks/rocm/benchmark_native_math_staging.py": "8db428225e72ffc5b0ad90b236ec1b71d7a4e68192d45a13dbe4dce7fc10d7a0"
+  },
+  "samples": 7,
+  "iterations": 5,
+  "counter_order": [
+    "allocations",
+    "frees",
+    "capacity_reuses",
+    "launches"
+  ],
+  "timing_policy": "native reuse/control and Python baseline, same image and changed identical inputs; warm host wall includes validation/upload/launch/readback; compiler and oracle excluded; no kernel speedup claim",
+  "rows": [
+    {
+      "kind": "sqrt",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f32",
+      "output_storage": "f32",
+      "image_sha256": "9f8155afa8690fdb1a3e69a484aaf3bfae88e21a8f0b8d898ae0a0bb7e0c53e6",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.633265,
+            0.630956,
+            0.632035,
+            0.629166,
+            0.619484,
+            0.621005,
+            0.617404
+          ],
+          "portable_wall_samples_ms": [
+            0.474877,
+            0.469276,
+            0.469417,
+            0.469626,
+            0.467036,
+            0.465806,
+            0.475616
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.629166,
+          "portable_wall_median_ms": 0.469417
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.719121,
+            0.71171,
+            0.697659,
+            0.699439,
+            0.71428,
+            0.71749,
+            0.71826
+          ],
+          "portable_wall_samples_ms": [
+            0.551981,
+            0.555201,
+            0.562891,
+            0.543401,
+            0.544851,
+            0.553831,
+            0.528009
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.71428,
+          "portable_wall_median_ms": 0.551981
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            0.799195,
+            0.739811,
+            0.743652,
+            0.742422,
+            0.737581,
+            0.749742,
+            0.740662
+          ],
+          "portable_wall_samples_ms": [
+            0.620834,
+            0.584513,
+            0.588203,
+            0.582303,
+            0.593253,
+            0.576043,
+            0.590303
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 0.742422,
+          "portable_wall_median_ms": 0.588203
+        }
+      },
+      "reuse_over_control_jit_wall": 0.8808394467155737,
+      "reuse_over_control_portable_wall": 0.8504223877271136,
+      "reuse_over_python_jit_wall": 0.8474506412794879,
+      "reuse_over_python_portable_wall": 0.7980527130939488
+    },
+    {
+      "kind": "add",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f32",
+      "output_storage": "f32",
+      "image_sha256": "9b3ea023e0f8c353b663d85fe6306f7b636358b2c2d15ca1f0395f1de4667d7b",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.725341,
+            0.740621,
+            0.72094,
+            0.736442,
+            0.743672,
+            0.726371,
+            0.761973
+          ],
+          "portable_wall_samples_ms": [
+            0.570262,
+            0.579683,
+            0.558952,
+            0.565462,
+            0.556321,
+            0.564672,
+            0.548491
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.736442,
+          "portable_wall_median_ms": 0.564672
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.821666,
+            0.798175,
+            0.800215,
+            0.802785,
+            0.816696,
+            0.826206,
+            0.792034
+          ],
+          "portable_wall_samples_ms": [
+            0.640966,
+            0.655087,
+            0.639846,
+            0.626645,
+            0.656147,
+            0.633696,
+            0.623815
+          ],
+          "counter_deltas": [
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.802785,
+          "portable_wall_median_ms": 0.639846
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            1.015807,
+            0.849068,
+            0.865388,
+            0.849667,
+            0.848978,
+            0.861448,
+            0.838827
+          ],
+          "portable_wall_samples_ms": [
+            0.691929,
+            0.687209,
+            0.687738,
+            0.679298,
+            0.703259,
+            0.672717,
+            0.681978
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 0.849667,
+          "portable_wall_median_ms": 0.687209
+        }
+      },
+      "reuse_over_control_jit_wall": 0.9173589441755888,
+      "reuse_over_control_portable_wall": 0.88251235453531,
+      "reuse_over_python_jit_wall": 0.8667419118313411,
+      "reuse_over_python_portable_wall": 0.8216888894062796
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f32",
+      "output_storage": "f32",
+      "image_sha256": "90289999156de0583cfb55f38cc155a679a2972f64aad84f0fa8402112c9ba2a",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.71098,
+            0.662397,
+            0.669698,
+            0.71063,
+            0.654857,
+            0.651366,
+            0.668417
+          ],
+          "portable_wall_samples_ms": [
+            0.507338,
+            0.514969,
+            0.53603,
+            0.507288,
+            0.493778,
+            0.497308,
+            0.491718
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.668417,
+          "portable_wall_median_ms": 0.507288
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.793864,
+            0.774544,
+            0.732571,
+            0.746262,
+            0.742652,
+            0.735322,
+            0.768783
+          ],
+          "portable_wall_samples_ms": [
+            0.578942,
+            0.576963,
+            0.592483,
+            0.574713,
+            0.585623,
+            0.579112,
+            0.574183
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.746262,
+          "portable_wall_median_ms": 0.578942
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            0.817977,
+            0.786205,
+            0.784294,
+            0.793935,
+            0.784064,
+            0.769113,
+            0.802685
+          ],
+          "portable_wall_samples_ms": [
+            0.642646,
+            0.614284,
+            0.646016,
+            0.621765,
+            0.608964,
+            0.618765,
+            0.617435
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 0.786205,
+          "portable_wall_median_ms": 0.618765
+        }
+      },
+      "reuse_over_control_jit_wall": 0.8956867695259842,
+      "reuse_over_control_portable_wall": 0.8762328523409945,
+      "reuse_over_python_jit_wall": 0.8501815684204501,
+      "reuse_over_python_portable_wall": 0.8198395190419625
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f32",
+      "output_storage": "f32",
+      "image_sha256": "9f8155afa8690fdb1a3e69a484aaf3bfae88e21a8f0b8d898ae0a0bb7e0c53e6",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            2.48705,
+            2.464719,
+            2.507403,
+            2.513544,
+            2.286081,
+            2.359915,
+            2.637094
+          ],
+          "portable_wall_samples_ms": [
+            2.287918,
+            2.205353,
+            2.26534,
+            2.253609,
+            1.965622,
+            2.007835,
+            2.255456
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.48705,
+          "portable_wall_median_ms": 2.253609
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            2.629098,
+            2.552714,
+            2.553883,
+            2.473291,
+            2.516865,
+            2.598688,
+            2.556356
+          ],
+          "portable_wall_samples_ms": [
+            2.272618,
+            2.225205,
+            2.268387,
+            2.247379,
+            2.245148,
+            2.306302,
+            2.281445
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.553883,
+          "portable_wall_median_ms": 2.268387
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            2.687301,
+            2.520251,
+            2.485039,
+            2.898115,
+            2.574677,
+            2.569066,
+            2.729281
+          ],
+          "portable_wall_samples_ms": [
+            2.351201,
+            2.3145,
+            2.297599,
+            2.280541,
+            2.376216,
+            2.294696,
+            2.376991
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 2.574677,
+          "portable_wall_median_ms": 2.3145
+        }
+      },
+      "reuse_over_control_jit_wall": 0.9738308293684558,
+      "reuse_over_control_portable_wall": 0.9934852386299162,
+      "reuse_over_python_jit_wall": 0.9659658279465735,
+      "reuse_over_python_portable_wall": 0.9736915100453662
+    },
+    {
+      "kind": "add",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f32",
+      "output_storage": "f32",
+      "image_sha256": "9b3ea023e0f8c353b663d85fe6306f7b636358b2c2d15ca1f0395f1de4667d7b",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            3.543673,
+            3.482272,
+            3.505931,
+            3.548283,
+            3.470529,
+            3.48963,
+            3.49862
+          ],
+          "portable_wall_samples_ms": [
+            3.176722,
+            3.159441,
+            3.188858,
+            3.246796,
+            3.164561,
+            3.167461,
+            3.114129
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.49862,
+          "portable_wall_median_ms": 3.167461
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            4.02099,
+            3.940656,
+            3.949116,
+            3.951976,
+            3.991018,
+            3.945626,
+            4.143664
+          ],
+          "portable_wall_samples_ms": [
+            3.696857,
+            3.695331,
+            3.712602,
+            3.773404,
+            3.721783,
+            3.646778,
+            3.641511
+          ],
+          "counter_deltas": [
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.951976,
+          "portable_wall_median_ms": 3.696857
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            3.740679,
+            4.058553,
+            3.972237,
+            4.057272,
+            3.975117,
+            4.008899,
+            3.882612
+          ],
+          "portable_wall_samples_ms": [
+            3.185882,
+            3.734304,
+            3.757395,
+            3.818348,
+            3.83922,
+            3.709012,
+            3.635969
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 3.975117,
+          "portable_wall_median_ms": 3.734304
+        }
+      },
+      "reuse_over_control_jit_wall": 0.8852837162978722,
+      "reuse_over_control_portable_wall": 0.8567983560089015,
+      "reuse_over_python_jit_wall": 0.880130069127525,
+      "reuse_over_python_portable_wall": 0.8482065198762607
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f32",
+      "output_storage": "f32",
+      "image_sha256": "90289999156de0583cfb55f38cc155a679a2972f64aad84f0fa8402112c9ba2a",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            3.200763,
+            2.727426,
+            3.110138,
+            3.471563,
+            2.661962,
+            3.049499,
+            3.116119
+          ],
+          "portable_wall_samples_ms": [
+            2.28189,
+            2.219687,
+            2.356626,
+            2.359095,
+            2.235938,
+            2.285386,
+            2.195286
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.110138,
+          "portable_wall_median_ms": 2.28189
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            3.023183,
+            3.592715,
+            2.951683,
+            2.978325,
+            3.103718,
+            3.120578,
+            3.008572
+          ],
+          "portable_wall_samples_ms": [
+            2.231447,
+            2.312833,
+            2.309507,
+            2.334533,
+            2.335024,
+            2.229207,
+            2.204796
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.023183,
+          "portable_wall_median_ms": 2.309507
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            3.423775,
+            3.229735,
+            3.032643,
+            3.693362,
+            3.071736,
+            3.557144,
+            3.071576
+          ],
+          "portable_wall_samples_ms": [
+            2.341664,
+            2.395887,
+            2.305556,
+            2.2822,
+            2.335954,
+            2.305342,
+            2.457601
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 3.229735,
+          "portable_wall_median_ms": 2.335954
+        }
+      },
+      "reuse_over_control_jit_wall": 1.028762731200857,
+      "reuse_over_control_portable_wall": 0.9880420366770918,
+      "reuse_over_python_jit_wall": 0.9629700269526758,
+      "reuse_over_python_portable_wall": 0.9768557086312488
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f16",
+      "output_storage": "f32",
+      "image_sha256": "dfc53449bd5f9e044e12620fa4d620f63c9015741da3d918228aa8d1f096b250",
+      "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.749823,
+            0.719821,
+            0.737642,
+            0.724752,
+            0.730402,
+            0.731131,
+            0.719081
+          ],
+          "portable_wall_samples_ms": [
+            0.517189,
+            0.500978,
+            0.508549,
+            0.52394,
+            0.515359,
+            0.510239,
+            0.510109
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.730402,
+          "portable_wall_median_ms": 0.510239
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.917803,
+            0.813187,
+            0.820177,
+            0.855229,
+            0.815357,
+            0.819377,
+            0.822447
+          ],
+          "portable_wall_samples_ms": [
+            0.580283,
+            0.587394,
+            0.605875,
+            0.580333,
+            0.585344,
+            0.583084,
+            0.599064
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.820177,
+          "portable_wall_median_ms": 0.585344
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            0.967545,
+            0.86235,
+            0.855349,
+            0.87327,
+            0.844369,
+            0.87268,
+            0.848628
+          ],
+          "portable_wall_samples_ms": [
+            0.675339,
+            0.628536,
+            0.660487,
+            0.627046,
+            0.620915,
+            0.622345,
+            0.625136
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 0.86235,
+          "portable_wall_median_ms": 0.627046
+        }
+      },
+      "reuse_over_control_jit_wall": 0.8905419196100354,
+      "reuse_over_control_portable_wall": 0.8716908347911656,
+      "reuse_over_python_jit_wall": 0.8469902011944107,
+      "reuse_over_python_portable_wall": 0.8137186107558297
+    },
+    {
+      "kind": "add",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f16",
+      "output_storage": "f32",
+      "image_sha256": "24f130b543606657b31db555d0a3ecb7354290328dcd6d9511ae38ff14d5f9a1",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.913172,
+            0.932813,
+            0.88475,
+            0.904501,
+            0.944904,
+            0.905961,
+            0.904792
+          ],
+          "portable_wall_samples_ms": [
+            0.597095,
+            0.603634,
+            0.594144,
+            0.590764,
+            0.604155,
+            0.604184,
+            0.606855
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.905961,
+          "portable_wall_median_ms": 0.603634
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.975215,
+            1.030639,
+            0.981176,
+            1.04103,
+            1.023948,
+            0.976656,
+            0.982636
+          ],
+          "portable_wall_samples_ms": [
+            0.68942,
+            0.667238,
+            0.668928,
+            0.676799,
+            0.679019,
+            0.715101,
+            0.710091
+          ],
+          "counter_deltas": [
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.982636,
+          "portable_wall_median_ms": 0.679019
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            1.036759,
+            1.06375,
+            1.018068,
+            1.038409,
+            1.080651,
+            1.04779,
+            1.086972
+          ],
+          "portable_wall_samples_ms": [
+            0.778465,
+            0.720191,
+            0.762293,
+            0.712371,
+            0.736652,
+            0.738682,
+            0.737082
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 1.04779,
+          "portable_wall_median_ms": 0.737082
+        }
+      },
+      "reuse_over_control_jit_wall": 0.9219700886187765,
+      "reuse_over_control_portable_wall": 0.8889795425459376,
+      "reuse_over_python_jit_wall": 0.8646398610408574,
+      "reuse_over_python_portable_wall": 0.8189509443996733
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "f16",
+      "output_storage": "f32",
+      "image_sha256": "a46e496d37892859ee4f4ccff0d1917207f176fe409a222b218a89945333b5d6",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.778725,
+            0.731802,
+            0.721722,
+            0.777264,
+            0.739502,
+            0.747983,
+            0.750973
+          ],
+          "portable_wall_samples_ms": [
+            0.506439,
+            0.52038,
+            0.520589,
+            0.519799,
+            0.51895,
+            0.501029,
+            0.502658
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.747983,
+          "portable_wall_median_ms": 0.51895
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.821737,
+            0.867179,
+            0.797805,
+            0.835838,
+            0.807456,
+            0.848939,
+            0.796106
+          ],
+          "portable_wall_samples_ms": [
+            0.594034,
+            0.584033,
+            0.584304,
+            0.592354,
+            0.580824,
+            0.583483,
+            0.595064
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.821737,
+          "portable_wall_median_ms": 0.584304
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            0.87554,
+            0.897002,
+            0.844528,
+            0.892761,
+            0.851629,
+            0.852459,
+            0.852969
+          ],
+          "portable_wall_samples_ms": [
+            0.646747,
+            0.617225,
+            0.627225,
+            0.623025,
+            0.634727,
+            0.628606,
+            0.636767
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 0.852969,
+          "portable_wall_median_ms": 0.628606
+        }
+      },
+      "reuse_over_control_jit_wall": 0.9102462223314758,
+      "reuse_over_control_portable_wall": 0.8881506886826035,
+      "reuse_over_python_jit_wall": 0.8769169805702199,
+      "reuse_over_python_portable_wall": 0.8255568670995823
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f16",
+      "output_storage": "f32",
+      "image_sha256": "dfc53449bd5f9e044e12620fa4d620f63c9015741da3d918228aa8d1f096b250",
+      "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            2.481032,
+            2.345185,
+            2.616225,
+            2.741037,
+            2.681683,
+            2.611159,
+            2.845783
+          ],
+          "portable_wall_samples_ms": [
+            1.891138,
+            1.970397,
+            2.242628,
+            2.191135,
+            2.140612,
+            2.190726,
+            2.146353
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.616225,
+          "portable_wall_median_ms": 2.146353
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            2.630381,
+            2.685434,
+            2.657522,
+            2.600658,
+            3.057665,
+            2.955709,
+            2.751298
+          ],
+          "portable_wall_samples_ms": [
+            1.919965,
+            1.92253,
+            2.239748,
+            2.230848,
+            2.501573,
+            2.158813,
+            2.213817
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.685434,
+          "portable_wall_median_ms": 2.213817
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            2.762348,
+            2.595749,
+            2.691914,
+            3.015213,
+            2.931328,
+            2.890515,
+            2.681394
+          ],
+          "portable_wall_samples_ms": [
+            2.020076,
+            2.038086,
+            2.727956,
+            2.264729,
+            2.26326,
+            2.260949,
+            2.307232
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 2.762348,
+          "portable_wall_median_ms": 2.26326
+        }
+      },
+      "reuse_over_control_jit_wall": 0.9742280018797707,
+      "reuse_over_control_portable_wall": 0.9695259364256394,
+      "reuse_over_python_jit_wall": 0.9471018857870189,
+      "reuse_over_python_portable_wall": 0.9483457490522521
+    },
+    {
+      "kind": "add",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f16",
+      "output_storage": "f32",
+      "image_sha256": "24f130b543606657b31db555d0a3ecb7354290328dcd6d9511ae38ff14d5f9a1",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            4.160838,
+            4.045961,
+            3.864291,
+            3.896293,
+            3.939846,
+            3.877535,
+            3.871704
+          ],
+          "portable_wall_samples_ms": [
+            3.205623,
+            2.987451,
+            3.006682,
+            3.034664,
+            3.060065,
+            3.006584,
+            2.984378
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.896293,
+          "portable_wall_median_ms": 3.006682
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            3.907463,
+            3.744844,
+            3.956817,
+            3.899943,
+            3.896062,
+            3.843823,
+            3.852844
+          ],
+          "portable_wall_samples_ms": [
+            2.984131,
+            3.067936,
+            3.183322,
+            3.110618,
+            3.108308,
+            3.020835,
+            3.010055
+          ],
+          "counter_deltas": [
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.896062,
+          "portable_wall_median_ms": 3.067936
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            4.264644,
+            4.057562,
+            3.906773,
+            4.025341,
+            3.921225,
+            3.834392,
+            3.96923
+          ],
+          "portable_wall_samples_ms": [
+            3.133759,
+            3.197433,
+            3.129739,
+            3.090757,
+            3.109138,
+            3.022565,
+            3.004915
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 3.96923,
+          "portable_wall_median_ms": 3.109138
+        }
+      },
+      "reuse_over_control_jit_wall": 1.000059290637572,
+      "reuse_over_control_portable_wall": 0.9800341336977043,
+      "reuse_over_python_jit_wall": 0.9816243956636426,
+      "reuse_over_python_portable_wall": 0.9670468149049672
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "f16",
+      "output_storage": "f32",
+      "image_sha256": "a46e496d37892859ee4f4ccff0d1917207f176fe409a222b218a89945333b5d6",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            3.040267,
+            3.020405,
+            3.430179,
+            3.041561,
+            3.250934,
+            2.984478,
+            3.428685
+          ],
+          "portable_wall_samples_ms": [
+            2.296923,
+            2.133853,
+            2.359387,
+            2.24081,
+            2.223534,
+            2.142214,
+            2.274382
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.041561,
+          "portable_wall_median_ms": 2.24081
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            2.927799,
+            3.11067,
+            3.286445,
+            3.10094,
+            3.338624,
+            3.293751,
+            3.11302
+          ],
+          "portable_wall_samples_ms": [
+            2.183607,
+            2.293663,
+            2.349016,
+            2.704101,
+            2.191608,
+            2.329715,
+            2.277802
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.11302,
+          "portable_wall_median_ms": 2.293663
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            2.960762,
+            3.348995,
+            3.019865,
+            3.060297,
+            3.435874,
+            3.228217,
+            3.033836
+          ],
+          "portable_wall_samples_ms": [
+            2.306344,
+            2.407994,
+            2.295704,
+            2.262981,
+            2.270731,
+            2.372597,
+            2.261111
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 3.060297,
+          "portable_wall_median_ms": 2.295704
+        }
+      },
+      "reuse_over_control_jit_wall": 0.9770451201726941,
+      "reuse_over_control_portable_wall": 0.9769569461599198,
+      "reuse_over_python_jit_wall": 0.9938777184044556,
+      "reuse_over_python_portable_wall": 0.9760883807320108
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "bf16",
+      "output_storage": "f32",
+      "image_sha256": "cc1c0828708efe0e06878fce76a649282fdc803402b4c926b3ce458cf67aab13",
+      "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.727712,
+            0.731423,
+            0.768475,
+            0.730302,
+            0.715491,
+            0.709591,
+            0.710051
+          ],
+          "portable_wall_samples_ms": [
+            0.507469,
+            0.51542,
+            0.52018,
+            0.498089,
+            0.51925,
+            0.510279,
+            0.505379
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.727712,
+          "portable_wall_median_ms": 0.510279
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.825668,
+            0.792966,
+            0.812937,
+            0.826398,
+            0.835108,
+            0.784835,
+            0.795816
+          ],
+          "portable_wall_samples_ms": [
+            0.583843,
+            0.582664,
+            0.582503,
+            0.579744,
+            0.585134,
+            0.592365,
+            0.601384
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.812937,
+          "portable_wall_median_ms": 0.583843
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            0.86178,
+            0.8513,
+            0.868651,
+            0.890482,
+            0.824408,
+            0.844939,
+            0.85106
+          ],
+          "portable_wall_samples_ms": [
+            0.632626,
+            0.650868,
+            0.625686,
+            0.638637,
+            0.622236,
+            0.635187,
+            0.617456
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 0.8513,
+          "portable_wall_median_ms": 0.632626
+        }
+      },
+      "reuse_over_control_jit_wall": 0.8951640779051759,
+      "reuse_over_control_portable_wall": 0.8740003733880513,
+      "reuse_over_python_jit_wall": 0.8548243862328205,
+      "reuse_over_python_portable_wall": 0.8066045341165239
+    },
+    {
+      "kind": "add",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "bf16",
+      "output_storage": "f32",
+      "image_sha256": "d646cc70b318cbb013727a4b0dbbc66eb830fc60b89a608941128f795631f9eb",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.904282,
+            0.909253,
+            0.897192,
+            0.866581,
+            0.879581,
+            0.898533,
+            0.892062
+          ],
+          "portable_wall_samples_ms": [
+            0.583884,
+            0.592244,
+            0.634027,
+            0.587424,
+            0.598205,
+            0.588344,
+            0.598305
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.897192,
+          "portable_wall_median_ms": 0.592244
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.973116,
+            0.978087,
+            1.008309,
+            0.971276,
+            1.009278,
+            1.007079,
+            0.975217
+          ],
+          "portable_wall_samples_ms": [
+            0.706441,
+            0.666569,
+            0.663129,
+            0.672149,
+            0.719282,
+            0.673399,
+            0.68061
+          ],
+          "counter_deltas": [
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.978087,
+          "portable_wall_median_ms": 0.673399
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            1.093073,
+            1.046241,
+            1.062032,
+            1.04412,
+            1.02847,
+            1.03209,
+            1.0295
+          ],
+          "portable_wall_samples_ms": [
+            0.728202,
+            0.741163,
+            0.717712,
+            0.738653,
+            0.716532,
+            0.717742,
+            0.752574
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 1.04412,
+          "portable_wall_median_ms": 0.728202
+        }
+      },
+      "reuse_over_control_jit_wall": 0.91729263347739,
+      "reuse_over_control_portable_wall": 0.879484525519046,
+      "reuse_over_python_jit_wall": 0.8592805424663832,
+      "reuse_over_python_portable_wall": 0.8132963106390809
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        3,
+        17
+      ],
+      "storage": "bf16",
+      "output_storage": "f32",
+      "image_sha256": "fd9fbcacfa3b57e37f83750b317fd1b5d83a58739954031971b9a2aa7acff383",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            0.758094,
+            0.751303,
+            0.735263,
+            0.790586,
+            0.746624,
+            0.740683,
+            0.731022
+          ],
+          "portable_wall_samples_ms": [
+            0.503969,
+            0.504959,
+            0.508429,
+            0.487128,
+            0.506899,
+            0.50925,
+            0.50454
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.746624,
+          "portable_wall_median_ms": 0.504959
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            0.816957,
+            0.826668,
+            0.838589,
+            0.848119,
+            0.818838,
+            0.827858,
+            0.828258
+          ],
+          "portable_wall_samples_ms": [
+            0.600715,
+            0.597184,
+            0.624287,
+            0.609805,
+            0.594584,
+            0.587194,
+            0.584874
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 0.827858,
+          "portable_wall_median_ms": 0.597184
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            0.928244,
+            0.8578,
+            0.86242,
+            0.914833,
+            0.929474,
+            0.844439,
+            0.835609
+          ],
+          "portable_wall_samples_ms": [
+            0.677969,
+            0.627626,
+            0.639098,
+            0.675229,
+            0.637367,
+            0.618586,
+            0.617076
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 0.86242,
+          "portable_wall_median_ms": 0.637367
+        }
+      },
+      "reuse_over_control_jit_wall": 0.901874476057488,
+      "reuse_over_control_portable_wall": 0.8455668604651163,
+      "reuse_over_python_jit_wall": 0.8657313142088542,
+      "reuse_over_python_portable_wall": 0.7922578357524002
+    },
+    {
+      "kind": "sqrt",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "bf16",
+      "output_storage": "f32",
+      "image_sha256": "cc1c0828708efe0e06878fce76a649282fdc803402b4c926b3ce458cf67aab13",
+      "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            2.701357,
+            2.473823,
+            2.573265,
+            2.513736,
+            2.75064,
+            2.545337,
+            2.164456
+          ],
+          "portable_wall_samples_ms": [
+            2.23661,
+            2.191227,
+            2.310844,
+            2.15426,
+            2.207158,
+            2.154295,
+            1.909751
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.545337,
+          "portable_wall_median_ms": 2.191227
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            2.477609,
+            2.641454,
+            2.483034,
+            2.41338,
+            2.580309,
+            2.722948,
+            2.356462
+          ],
+          "portable_wall_samples_ms": [
+            2.197117,
+            2.178156,
+            2.175986,
+            2.112222,
+            2.23135,
+            2.193427,
+            1.915651
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.483034,
+          "portable_wall_median_ms": 2.178156
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            2.645984,
+            2.635208,
+            2.763711,
+            2.542058,
+            2.677456,
+            2.637353,
+            2.725348
+          ],
+          "portable_wall_samples_ms": [
+            2.347572,
+            2.241539,
+            2.283603,
+            2.281207,
+            2.324555,
+            2.23355,
+            2.274547
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 2.645984,
+          "portable_wall_median_ms": 2.281207
+        }
+      },
+      "reuse_over_control_jit_wall": 1.025091480825474,
+      "reuse_over_control_portable_wall": 1.0060009475905307,
+      "reuse_over_python_jit_wall": 0.9619623550255784,
+      "reuse_over_python_portable_wall": 0.9605559688357961
+    },
+    {
+      "kind": "add",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "bf16",
+      "output_storage": "f32",
+      "image_sha256": "d646cc70b318cbb013727a4b0dbbc66eb830fc60b89a608941128f795631f9eb",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            3.45599,
+            3.585658,
+            3.686164,
+            3.503339,
+            2.9322,
+            2.944286,
+            2.718577
+          ],
+          "portable_wall_samples_ms": [
+            3.064788,
+            3.033306,
+            3.102134,
+            3.10765,
+            2.463473,
+            2.484884,
+            2.448082
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ],
+            [
+              0,
+              0,
+              30,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.45599,
+          "portable_wall_median_ms": 3.033306
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            3.387477,
+            3.347865,
+            3.96552,
+            2.890267,
+            2.895638,
+            3.150252,
+            2.876862
+          ],
+          "portable_wall_samples_ms": [
+            3.030886,
+            3.057537,
+            3.124621,
+            2.435751,
+            2.503466,
+            2.515,
+            2.502095
+          ],
+          "counter_deltas": [
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ],
+            [
+              30,
+              30,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 3.150252,
+          "portable_wall_median_ms": 2.515
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            3.194015,
+            4.096587,
+            3.631001,
+            2.995594,
+            3.000294,
+            3.4377,
+            3.016695
+          ],
+          "portable_wall_samples_ms": [
+            3.051767,
+            3.300596,
+            3.162124,
+            2.521726,
+            2.562838,
+            2.680945,
+            2.57383
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 3.194015,
+          "portable_wall_median_ms": 2.680945
+        }
+      },
+      "reuse_over_control_jit_wall": 1.0970519183862115,
+      "reuse_over_control_portable_wall": 1.206085884691849,
+      "reuse_over_python_jit_wall": 1.0820205916377976,
+      "reuse_over_python_portable_wall": 1.1314316407087799
+    },
+    {
+      "kind": "cumsum",
+      "shape": [
+        256,
+        1024
+      ],
+      "storage": "bf16",
+      "output_storage": "f32",
+      "image_sha256": "fd9fbcacfa3b57e37f83750b317fd1b5d83a58739954031971b9a2aa7acff383",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+      "correctness": "independent f32 oracle after every changed-input JIT and portable launch",
+      "arms": {
+        "reuse": {
+          "jit_wall_samples_ms": [
+            2.534562,
+            2.286982,
+            2.518365,
+            2.867202,
+            2.882326,
+            2.835954,
+            3.258234
+          ],
+          "portable_wall_samples_ms": [
+            1.862783,
+            1.845162,
+            1.822291,
+            2.073125,
+            2.273162,
+            2.137604,
+            2.225424
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ],
+            [
+              0,
+              0,
+              20,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.835954,
+          "portable_wall_median_ms": 2.073125
+        },
+        "control": {
+          "jit_wall_samples_ms": [
+            2.522206,
+            2.581029,
+            2.651034,
+            2.874001,
+            2.859687,
+            2.933249,
+            3.289951
+          ],
+          "portable_wall_samples_ms": [
+            1.794764,
+            1.830306,
+            1.825511,
+            2.192791,
+            2.206888,
+            2.218818,
+            2.267547
+          ],
+          "counter_deltas": [
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ],
+            [
+              20,
+              20,
+              0,
+              10
+            ]
+          ],
+          "jit_wall_median_ms": 2.859687,
+          "portable_wall_median_ms": 2.192791
+        },
+        "python": {
+          "jit_wall_samples_ms": [
+            2.886567,
+            2.623782,
+            2.646098,
+            2.897784,
+            2.944881,
+            2.856746,
+            3.386962
+          ],
+          "portable_wall_samples_ms": [
+            1.943732,
+            1.864849,
+            1.942207,
+            2.155251,
+            2.119753,
+            2.268172,
+            2.308609
+          ],
+          "counter_deltas": [
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ],
+            [
+              0,
+              0,
+              0,
+              0
+            ]
+          ],
+          "jit_wall_median_ms": 2.886567,
+          "portable_wall_median_ms": 2.119753
+        }
+      },
+      "reuse_over_control_jit_wall": 0.9917008399870335,
+      "reuse_over_control_portable_wall": 0.9454275396059177,
+      "reuse_over_python_jit_wall": 0.9824660227876229,
+      "reuse_over_python_portable_wall": 0.9780030975307028
+    }
+  ]
+}

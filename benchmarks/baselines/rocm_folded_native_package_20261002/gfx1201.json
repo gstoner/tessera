@@ -1,0 +1,1377 @@
+{
+  "architecture": "gfx1201",
+  "compiler_sha256": "5c0c63de60a8bc20a81c0f97138bde2a3d65539ad56a08e2474ed8f9688a0006",
+  "device": "AMD Radeon RX 9070 XT",
+  "dirty_worktree": true,
+  "kernel_release": "6.18.33.2-microsoft-standard-WSL2",
+  "profiler_counters": false,
+  "radiance_comparison": false,
+  "rows": [
+    {
+      "correctness": "bitwise_matched_and_sampled_independent_oracle",
+      "fold_lossless": true,
+      "frontend_receipt": {
+        "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+        "artifact_image_digest": "1d63be5c469dfb1a111ff1850819d03a2f5834c769d66a90fee2d8a46d71f371",
+        "entry_symbol": "folded_w4a8",
+        "fold_inexact_value_count": 0,
+        "fold_lossless": true,
+        "graph_ir_sha256": "adf5660a585fefd4a52394f764d5e023e8d0fb2e92366f529d1648ce58ac88db",
+        "hsaco_sha256": "600c7979a9ede097171dded5cd370631fc2a4158b24e36cc013f54b1fe6340b5",
+        "numeric_policy": "folded_row_reference_explicit_approximate",
+        "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+        "route": "folded_row_reference_bm256_tm4",
+        "schedule_hash": "e2c6ce9cde09a1b82a796bbdcdd03e3c19601d48d8718d7c56958d1b687053d5",
+        "selected_schedule": {
+          "block_k": 64,
+          "block_m": 256,
+          "block_n": 64,
+          "epilogue_schedule": "complete_tile_vector_scales",
+          "raster_group_m": 4,
+          "row_guard": "cta",
+          "staging_prefetch": "register_next_slab",
+          "tile_m_per_wave": 4,
+          "tile_n_per_wave": 2,
+          "workgroup_mode": "wgp"
+        },
+        "target_ir_sha256": "97b5e6c0d7f8f8f5fd825f4035db1625b812290308a2ef9fa08f6876de3b15bd",
+        "tile_ir_sha256": "f3dd1559f47bfb7decb97e0fc35c8a7d413128bf7b10b0b9e2570e39ae255d1f"
+      },
+      "hip_control_package_wall_ms": 644.925238,
+      "launches_per_window": 125,
+      "native_frontend_package_wall_ms": 310.462102,
+      "native_over_hip_device_ratio": 1.0786730722171176,
+      "rows": [
+        {
+          "device_window_per_launch_median_ms": 0.07475912,
+          "device_window_per_launch_samples_ms": [
+            0.08512376,
+            0.07417344,
+            0.07420695999999999,
+            0.07474776,
+            0.07475912,
+            0.08012608,
+            0.07902424000000001
+          ],
+          "engine": "native_mlir",
+          "image_evidence": {
+            "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+            "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+            "grid": [
+              64,
+              1,
+              1
+            ],
+            "image_sha256": "600c7979a9ede097171dded5cd370631fc2a4158b24e36cc013f54b1fe6340b5",
+            "isa": {
+              "s_barrier": 6,
+              "s_waitcnt": 0,
+              "wmma_fp8_fp8": 32
+            },
+            "physical_abi": "expanded_memref",
+            "resources": {
+              "lds_bytes": 25600,
+              "scratch_bytes": 0,
+              "sgpr_count": 24,
+              "sgpr_spill_count": 0,
+              "spills": false,
+              "vgpr_count": 177,
+              "vgpr_spill_count": 0
+            },
+            "route": {
+              "accum": "fp32",
+              "architecture": "gfx1201",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "epilogue_schedule": "complete_tile_vector_scales",
+              "fold_inexact_value_count": 0,
+              "fold_lossless": true,
+              "fold_max_normalized_abs_error": 0.0,
+              "fold_max_normalized_relative_error": 0.0,
+              "image_input_level": "target",
+              "kernel_argument_layout": "expanded_memref",
+              "materializer": "tessera_rocm.scaled_wmma_gemm",
+              "native_compiler_owned": true,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "output": "bf16",
+              "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+              "producer_kind": "native_mlir_typed_lds",
+              "raster": "grouped_m4_1d",
+              "raster_group_m": 4,
+              "route": "folded_row_reference_bm256_tm4",
+              "row_guard": "cta",
+              "row_reference_sha256": "78aacbc3fb34efb8ffa5467b931291ec2bdf5e19564fc45fe97b5affbc893dc6",
+              "schedule_hash": "e2c6ce9cde09a1b82a796bbdcdd03e3c19601d48d8718d7c56958d1b687053d5",
+              "staging_policy": "unconditional_k64",
+              "staging_prefetch": "register_next_slab",
+              "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+              "target_ir_sha256": "97b5e6c0d7f8f8f5fd825f4035db1625b812290308a2ef9fa08f6876de3b15bd",
+              "tile_ir_sha256": "f3dd1559f47bfb7decb97e0fc35c8a7d413128bf7b10b0b9e2570e39ae255d1f",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+              "weight_sha256": "3e33cdfecdb73c95b8105a48018745de79a62f4c22b433b7c6f0e7ace4adc555",
+              "work_item": "ROCM-MXFP4-W4A8-1",
+              "workgroup_mode": "wgp"
+            },
+            "selected_isa": {
+              "entry_symbol": "folded_w4a8",
+              "instruction_count": 3572,
+              "instruction_stream_sha256": "51d9dc062c25c70e5eb8688755c03ad1522daaf1359d7f1e399bdb3d46fd9764",
+              "mnemonics": {
+                "ds_load_2addr_b64": 12,
+                "ds_store_b128": 10,
+                "global_load_b128": 26,
+                "global_load_b32": 64,
+                "global_load_u8": 8,
+                "s_barrier_signal": 3,
+                "s_barrier_wait": 3,
+                "s_wait_loadcnt": 42,
+                "v_wmma_f32_16x16x16_fp8_fp8": 32
+              },
+              "payload_sha256": "600c7979a9ede097171dded5cd370631fc2a4158b24e36cc013f54b1fe6340b5"
+            }
+          },
+          "output_sha256": "bfb4ec87c33e0e9c17862a7ebad32f5af3f6fd40b4d376601a93ac4a74495a48",
+          "plain_event_per_launch_samples_ms": [
+            0.07496389770507812,
+            0.0769666976928711,
+            0.07477045440673828,
+            0.07578737640380859,
+            0.07684329223632813,
+            0.0813444595336914,
+            0.07874911499023438
+          ],
+          "public_launch_wall_median_ms": 16.909954,
+          "public_launch_wall_samples_ms": [
+            27.683423,
+            16.909954,
+            16.832025
+          ],
+          "windows": [
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.0031773278947690017,
+              "device_window_ms": 10.64047,
+              "event_window_ms": 10.674386024475098,
+              "host_window_ms": 10.745916,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.370487213134766,
+              "host_window_ms": 9.452249,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.620837211608887,
+              "host_window_ms": 9.705281,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.008970773620766028,
+              "device_window_ms": 9.27168,
+              "event_window_ms": 9.355607032775879,
+              "host_window_ms": 9.446288,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.0089434786801367,
+              "device_window_ms": 9.27587,
+              "event_window_ms": 9.359577178955078,
+              "host_window_ms": 9.449373,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.346306800842285,
+              "host_window_ms": 9.453371,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.473422050476074,
+              "host_window_ms": 9.571746,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.008637979306272935,
+              "device_window_ms": 9.34347,
+              "event_window_ms": 9.424881935119629,
+              "host_window_ms": 9.528635,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.007687154710769032,
+              "device_window_ms": 9.34489,
+              "event_window_ms": 9.417282104492188,
+              "host_window_ms": 9.462579,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.605411529541016,
+              "host_window_ms": 9.687238,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.168057441711426,
+              "host_window_ms": 10.268526,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.007870732551630013,
+              "device_window_ms": 10.01576,
+              "event_window_ms": 10.095216751098633,
+              "host_window_ms": 10.189415,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.003060812033803513,
+              "device_window_ms": 9.87803,
+              "event_window_ms": 9.908357620239258,
+              "host_window_ms": 10.006195,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.843639373779297,
+              "host_window_ms": 9.919239,
+              "launches": 125
+            }
+          ]
+        },
+        {
+          "device_window_per_launch_median_ms": 0.06930656,
+          "device_window_per_launch_samples_ms": [
+            0.06635935999999999,
+            0.06898192,
+            0.06930656,
+            0.0690848,
+            0.07217984,
+            0.07333087999999999,
+            0.07249191999999999
+          ],
+          "engine": "hip_matched_control",
+          "image_evidence": {
+            "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+            "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
+            "grid": [
+              64,
+              1,
+              1
+            ],
+            "image_sha256": "ef5f16143e0ee2b4ce0d302d428a72e180eea8348a8621a1671dd3faee059f7b",
+            "isa": {
+              "s_barrier": 4,
+              "s_waitcnt": 0,
+              "wmma_fp8_fp8": 32
+            },
+            "physical_abi": "raw_pointer",
+            "resources": {
+              "lds_bytes": 25600,
+              "scratch_bytes": 0,
+              "sgpr_count": 54,
+              "sgpr_spill_count": 0,
+              "spills": false,
+              "vgpr_count": 123,
+              "vgpr_spill_count": 0
+            },
+            "route": {
+              "accum": "fp32",
+              "architecture": "gfx1201",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "epilogue_schedule": "complete_tile_vector_scales",
+              "fold_inexact_value_count": 0,
+              "fold_lossless": true,
+              "fold_max_normalized_abs_error": 0.0,
+              "fold_max_normalized_relative_error": 0.0,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "output": "bf16",
+              "raster": "grouped_m4_1d",
+              "raster_group_m": 4,
+              "route": "folded_row_reference_bm256_tm4",
+              "row_guard": "cta",
+              "row_reference_sha256": "78aacbc3fb34efb8ffa5467b931291ec2bdf5e19564fc45fe97b5affbc893dc6",
+              "staging_policy": "unconditional_k64",
+              "staging_prefetch": "register_next_slab",
+              "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+              "weight_sha256": "3e33cdfecdb73c95b8105a48018745de79a62f4c22b433b7c6f0e7ace4adc555",
+              "work_item": "ROCM-MXFP4-W4A8-1",
+              "workgroup_mode": "wgp"
+            },
+            "selected_isa": {
+              "entry_symbol": "folded_hip_matched_control",
+              "instruction_count": 6954,
+              "instruction_stream_sha256": "fbf530eac43c201d8c1caf47c5fab2d8c2f18db9e243a24977e3a40f63fdc052",
+              "mnemonics": {
+                "ds_load_2addr_b64": 8,
+                "ds_load_b64": 8,
+                "ds_store_b128": 5,
+                "global_load_b128": 18,
+                "global_load_b32": 64,
+                "global_load_d16_u8": 1,
+                "global_load_u8": 3,
+                "s_barrier_signal": 2,
+                "s_barrier_wait": 2,
+                "s_wait_loadcnt": 76,
+                "v_wmma_f32_16x16x16_fp8_fp8": 32
+              },
+              "payload_sha256": "ef5f16143e0ee2b4ce0d302d428a72e180eea8348a8621a1671dd3faee059f7b"
+            }
+          },
+          "output_sha256": "bfb4ec87c33e0e9c17862a7ebad32f5af3f6fd40b4d376601a93ac4a74495a48",
+          "plain_event_per_launch_samples_ms": [
+            0.07005342102050781,
+            0.07040238189697266,
+            0.06913951110839844,
+            0.0694063949584961,
+            0.0735462646484375,
+            0.07310279846191406,
+            0.07336351776123047
+          ],
+          "public_launch_wall_median_ms": 17.578207,
+          "public_launch_wall_samples_ms": [
+            25.013681,
+            17.058156,
+            17.578207
+          ],
+          "windows": [
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.009293069659780271,
+              "device_window_ms": 8.29492,
+              "event_window_ms": 8.37272834777832,
+              "host_window_ms": 8.458002,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 8.756677627563477,
+              "host_window_ms": 8.858376,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 8.800297737121582,
+              "host_window_ms": 8.848307,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.00810378378378375,
+              "device_window_ms": 8.62274,
+              "event_window_ms": 8.693187713623047,
+              "host_window_ms": 8.774076,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.003836937640713602,
+              "device_window_ms": 8.66332,
+              "event_window_ms": 8.696688652038574,
+              "host_window_ms": 8.816135,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 8.642438888549805,
+              "host_window_ms": 8.782772,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 8.675799369812012,
+              "host_window_ms": 8.809483,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.004713043910273513,
+              "device_window_ms": 8.6356,
+              "event_window_ms": 8.676492691040039,
+              "host_window_ms": 8.794424,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006043843361244899,
+              "device_window_ms": 9.02248,
+              "event_window_ms": 9.07734203338623,
+              "host_window_ms": 9.149972,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.193283081054688,
+              "host_window_ms": 9.2744,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.137849807739258,
+              "host_window_ms": 9.220206,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.00985883001377937,
+              "device_window_ms": 9.16636,
+              "event_window_ms": 9.25762939453125,
+              "host_window_ms": 9.336699,
+              "launches": 125
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.00644828471427529,
+              "device_window_ms": 9.06149,
+              "event_window_ms": 9.12030029296875,
+              "host_window_ms": 9.202111,
+              "launches": 125
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 9.170439720153809,
+              "host_window_ms": 9.250965,
+              "launches": 125
+            }
+          ]
+        }
+      ],
+      "shape_mnk": [
+        256,
+        4096,
+        5120
+      ]
+    },
+    {
+      "correctness": "bitwise_matched_and_sampled_independent_oracle",
+      "fold_lossless": true,
+      "frontend_receipt": {
+        "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+        "artifact_image_digest": "4f62b2d49eaaa6dd02110fb6d8856f6de9e026c4e8c5cc9cd613721eb89be14b",
+        "entry_symbol": "folded_w4a8",
+        "fold_inexact_value_count": 0,
+        "fold_lossless": true,
+        "graph_ir_sha256": "1ca4bbc3637aab2d61aa7ac474fbb2e9b357a77ce32aff386f485154368317a2",
+        "hsaco_sha256": "25d59e6f9d26df4f8860495a67f7ea1173c256d30ddf2cd7088eb0ebad4c4ee0",
+        "numeric_policy": "folded_row_reference_explicit_approximate",
+        "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+        "route": "folded_row_reference_bm256_tm4",
+        "schedule_hash": "a3bd1eb5a47ca682f3558f5826e94236d20b7ca9e1716d0f71e17ad7a3ee5502",
+        "selected_schedule": {
+          "block_k": 64,
+          "block_m": 256,
+          "block_n": 64,
+          "epilogue_schedule": "complete_tile_vector_scales",
+          "raster_group_m": 4,
+          "row_guard": "cta",
+          "staging_prefetch": "register_next_slab",
+          "tile_m_per_wave": 4,
+          "tile_n_per_wave": 2,
+          "workgroup_mode": "wgp"
+        },
+        "target_ir_sha256": "708f1e9d168a06457a820167ac3d25a3384959cdc760dc338112a6441b8d3903",
+        "tile_ir_sha256": "a93cefc3a77f2d03ce190cc6ab00fdd6baf89e556610c1785a54e6fd379fb296"
+      },
+      "hip_control_package_wall_ms": 651.675662,
+      "launches_per_window": 72,
+      "native_frontend_package_wall_ms": 265.954371,
+      "native_over_hip_device_ratio": 1.0284089145482198,
+      "rows": [
+        {
+          "device_window_per_launch_median_ms": 0.14725444444444447,
+          "device_window_per_launch_samples_ms": [
+            0.15587861111111112,
+            0.14284680555555554,
+            0.14278597222222222,
+            0.14322458333333332,
+            0.14725444444444447,
+            0.1518540277777778,
+            0.15035652777777778
+          ],
+          "engine": "native_mlir",
+          "image_evidence": {
+            "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+            "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+            "grid": [
+              128,
+              1,
+              1
+            ],
+            "image_sha256": "25d59e6f9d26df4f8860495a67f7ea1173c256d30ddf2cd7088eb0ebad4c4ee0",
+            "isa": {
+              "s_barrier": 6,
+              "s_waitcnt": 0,
+              "wmma_fp8_fp8": 32
+            },
+            "physical_abi": "expanded_memref",
+            "resources": {
+              "lds_bytes": 25600,
+              "scratch_bytes": 0,
+              "sgpr_count": 24,
+              "sgpr_spill_count": 0,
+              "spills": false,
+              "vgpr_count": 177,
+              "vgpr_spill_count": 0
+            },
+            "route": {
+              "accum": "fp32",
+              "architecture": "gfx1201",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "epilogue_schedule": "complete_tile_vector_scales",
+              "fold_inexact_value_count": 0,
+              "fold_lossless": true,
+              "fold_max_normalized_abs_error": 0.0,
+              "fold_max_normalized_relative_error": 0.0,
+              "image_input_level": "target",
+              "kernel_argument_layout": "expanded_memref",
+              "materializer": "tessera_rocm.scaled_wmma_gemm",
+              "native_compiler_owned": true,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "output": "bf16",
+              "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+              "producer_kind": "native_mlir_typed_lds",
+              "raster": "grouped_m4_1d",
+              "raster_group_m": 4,
+              "route": "folded_row_reference_bm256_tm4",
+              "row_guard": "cta",
+              "row_reference_sha256": "e78ff88013c3fd671404fefcf0e73bd7a80bf08e6cec8fde0327ca6365718132",
+              "schedule_hash": "a3bd1eb5a47ca682f3558f5826e94236d20b7ca9e1716d0f71e17ad7a3ee5502",
+              "staging_policy": "unconditional_k64",
+              "staging_prefetch": "register_next_slab",
+              "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+              "target_ir_sha256": "708f1e9d168a06457a820167ac3d25a3384959cdc760dc338112a6441b8d3903",
+              "tile_ir_sha256": "a93cefc3a77f2d03ce190cc6ab00fdd6baf89e556610c1785a54e6fd379fb296",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+              "weight_sha256": "b85f86688e0e984359c617feab95a39cfb2632424ab5d5c784fd674b9af310da",
+              "work_item": "ROCM-MXFP4-W4A8-1",
+              "workgroup_mode": "wgp"
+            },
+            "selected_isa": {
+              "entry_symbol": "folded_w4a8",
+              "instruction_count": 3568,
+              "instruction_stream_sha256": "45599021f4d8718f7665574421aa7bb735e57eb6614dd38027db092ec6dfa3d3",
+              "mnemonics": {
+                "ds_load_2addr_b64": 12,
+                "ds_store_b128": 10,
+                "global_load_b128": 26,
+                "global_load_b32": 64,
+                "global_load_u8": 8,
+                "s_barrier_signal": 3,
+                "s_barrier_wait": 3,
+                "s_wait_loadcnt": 39,
+                "v_wmma_f32_16x16x16_fp8_fp8": 32
+              },
+              "payload_sha256": "25d59e6f9d26df4f8860495a67f7ea1173c256d30ddf2cd7088eb0ebad4c4ee0"
+            }
+          },
+          "output_sha256": "e3ef7f98a4b70e512f11bc299c52f5d51f7d4538838565bad73197687a911b30",
+          "plain_event_per_launch_samples_ms": [
+            0.1510697735680474,
+            0.14345354504055446,
+            0.14186465740203857,
+            0.1443185011545817,
+            0.14953260951571995,
+            0.1511469152238634,
+            0.15120830800798205
+          ],
+          "public_launch_wall_median_ms": 43.251751,
+          "public_launch_wall_samples_ms": [
+            44.576754,
+            43.026808,
+            43.251751
+          ],
+          "windows": [
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.002592579190613214,
+              "device_window_ms": 11.22326,
+              "event_window_ms": 11.252432823181152,
+              "host_window_ms": 11.33524,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.877023696899414,
+              "host_window_ms": 10.950226,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.328655242919922,
+              "host_window_ms": 10.40688,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006164539530000923,
+              "device_window_ms": 10.28497,
+              "event_window_ms": 10.34876537322998,
+              "host_window_ms": 10.42262,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005079279100146975,
+              "device_window_ms": 10.28059,
+              "event_window_ms": 10.333074569702148,
+              "host_window_ms": 10.417881,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.214255332946777,
+              "host_window_ms": 10.356353,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.390932083129883,
+              "host_window_ms": 10.464329,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006691845021022982,
+              "device_window_ms": 10.31217,
+              "event_window_ms": 10.38164234161377,
+              "host_window_ms": 10.470872,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006358922023848568,
+              "device_window_ms": 10.60232,
+              "event_window_ms": 10.670170783996582,
+              "host_window_ms": 10.759983,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.766347885131836,
+              "host_window_ms": 10.84764,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.882577896118164,
+              "host_window_ms": 10.956488,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.004073305030584598,
+              "device_window_ms": 10.93349,
+              "event_window_ms": 10.9782075881958,
+              "host_window_ms": 11.043174,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005543606531755997,
+              "device_window_ms": 10.82567,
+              "event_window_ms": 10.886017799377441,
+              "host_window_ms": 10.957931,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.886998176574707,
+              "host_window_ms": 10.971366,
+              "launches": 72
+            }
+          ]
+        },
+        {
+          "device_window_per_launch_median_ms": 0.14318666666666668,
+          "device_window_per_launch_samples_ms": [
+            0.13714166666666666,
+            0.1424338888888889,
+            0.14318666666666668,
+            0.14277333333333334,
+            0.14740277777777777,
+            0.1487761111111111,
+            0.148175
+          ],
+          "engine": "hip_matched_control",
+          "image_evidence": {
+            "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+            "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
+            "grid": [
+              128,
+              1,
+              1
+            ],
+            "image_sha256": "921dbcfaec29d1f6874b1daf8e846fcebbc40582c8fdb880f1cd51e366d3f157",
+            "isa": {
+              "s_barrier": 4,
+              "s_waitcnt": 0,
+              "wmma_fp8_fp8": 32
+            },
+            "physical_abi": "raw_pointer",
+            "resources": {
+              "lds_bytes": 25600,
+              "scratch_bytes": 0,
+              "sgpr_count": 54,
+              "sgpr_spill_count": 0,
+              "spills": false,
+              "vgpr_count": 123,
+              "vgpr_spill_count": 0
+            },
+            "route": {
+              "accum": "fp32",
+              "architecture": "gfx1201",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "epilogue_schedule": "complete_tile_vector_scales",
+              "fold_inexact_value_count": 0,
+              "fold_lossless": true,
+              "fold_max_normalized_abs_error": 0.0,
+              "fold_max_normalized_relative_error": 0.0,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "output": "bf16",
+              "raster": "grouped_m4_1d",
+              "raster_group_m": 4,
+              "route": "folded_row_reference_bm256_tm4",
+              "row_guard": "cta",
+              "row_reference_sha256": "e78ff88013c3fd671404fefcf0e73bd7a80bf08e6cec8fde0327ca6365718132",
+              "staging_policy": "unconditional_k64",
+              "staging_prefetch": "register_next_slab",
+              "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+              "weight_sha256": "b85f86688e0e984359c617feab95a39cfb2632424ab5d5c784fd674b9af310da",
+              "work_item": "ROCM-MXFP4-W4A8-1",
+              "workgroup_mode": "wgp"
+            },
+            "selected_isa": {
+              "entry_symbol": "folded_hip_matched_control",
+              "instruction_count": 6954,
+              "instruction_stream_sha256": "fbf530eac43c201d8c1caf47c5fab2d8c2f18db9e243a24977e3a40f63fdc052",
+              "mnemonics": {
+                "ds_load_2addr_b64": 8,
+                "ds_load_b64": 8,
+                "ds_store_b128": 5,
+                "global_load_b128": 18,
+                "global_load_b32": 64,
+                "global_load_d16_u8": 1,
+                "global_load_u8": 3,
+                "s_barrier_signal": 2,
+                "s_barrier_wait": 2,
+                "s_wait_loadcnt": 76,
+                "v_wmma_f32_16x16x16_fp8_fp8": 32
+              },
+              "payload_sha256": "921dbcfaec29d1f6874b1daf8e846fcebbc40582c8fdb880f1cd51e366d3f157"
+            }
+          },
+          "output_sha256": "e3ef7f98a4b70e512f11bc299c52f5d51f7d4538838565bad73197687a911b30",
+          "plain_event_per_launch_samples_ms": [
+            0.142582721180386,
+            0.14368147320217556,
+            0.14324670367770725,
+            0.14264392852783203,
+            0.14819790257347953,
+            0.1488563617070516,
+            0.14932429790496826
+          ],
+          "public_launch_wall_median_ms": 42.965942,
+          "public_launch_wall_samples_ms": [
+            42.965942,
+            43.521031,
+            42.946385
+          ],
+          "windows": [
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.004484295429214466,
+              "device_window_ms": 9.8742,
+              "event_window_ms": 9.918678283691406,
+              "host_window_ms": 9.9824,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.265955924987793,
+              "host_window_ms": 10.338649,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.34506607055664,
+              "host_window_ms": 10.416027,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005524986843323267,
+              "device_window_ms": 10.25524,
+              "event_window_ms": 10.312214851379395,
+              "host_window_ms": 10.383485,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.0057099761816989435,
+              "device_window_ms": 10.30944,
+              "event_window_ms": 10.368644714355469,
+              "host_window_ms": 10.440053,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.313762664794922,
+              "host_window_ms": 10.387683,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.270362854003906,
+              "host_window_ms": 10.395357,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005655019324138453,
+              "device_window_ms": 10.27968,
+              "event_window_ms": 10.338142395019531,
+              "host_window_ms": 10.407381,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.003266269204536897,
+              "device_window_ms": 10.613,
+              "event_window_ms": 10.647778511047363,
+              "host_window_ms": 10.744343,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.670248985290527,
+              "host_window_ms": 10.734975,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.717658042907715,
+              "host_window_ms": 10.809588,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005553256140092349,
+              "device_window_ms": 10.71188,
+              "event_window_ms": 10.771697998046875,
+              "host_window_ms": 10.863401,
+              "launches": 72
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005525656369688493,
+              "device_window_ms": 10.6686,
+              "event_window_ms": 10.72787857055664,
+              "host_window_ms": 10.799258,
+              "launches": 72
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 10.751349449157715,
+              "host_window_ms": 10.824216,
+              "launches": 72
+            }
+          ]
+        }
+      ],
+      "shape_mnk": [
+        256,
+        8192,
+        5120
+      ]
+    },
+    {
+      "correctness": "bitwise_matched_and_sampled_independent_oracle",
+      "fold_lossless": true,
+      "frontend_receipt": {
+        "abi_id": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+        "artifact_image_digest": "b20deef1c32a0717d20c09f0363152d42ee856d03e7b79aacebba10e78dddbcb",
+        "entry_symbol": "folded_w4a8",
+        "fold_inexact_value_count": 0,
+        "fold_lossless": true,
+        "graph_ir_sha256": "9ca890919d403c105fe15890d2bc2f1451a3bef161cc996649df88279a5adbf3",
+        "hsaco_sha256": "e974ed0e8e772d29a9e68b24d4f36bd10155e87e3ea6b723696fec9dd896fc56",
+        "numeric_policy": "folded_row_reference_explicit_approximate",
+        "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+        "route": "folded_row_reference_bm256_tm4",
+        "schedule_hash": "a8bc527b3711503b774790ad405cca63cd2c076f8b9b29ce304ea5ecd5475885",
+        "selected_schedule": {
+          "block_k": 64,
+          "block_m": 256,
+          "block_n": 64,
+          "epilogue_schedule": "complete_tile_vector_scales",
+          "raster_group_m": 4,
+          "row_guard": "cta",
+          "staging_prefetch": "register_next_slab",
+          "tile_m_per_wave": 4,
+          "tile_n_per_wave": 2,
+          "workgroup_mode": "wgp"
+        },
+        "target_ir_sha256": "fabb5937c08ca5f08c25bd08c27a04bf5c283c5b009b2f1fcddd3f5f4a355893",
+        "tile_ir_sha256": "afa65dcc213156f2deedd9cbb9169a8a34384df6c9a5e95ab8cb0b8fc1d34c75"
+      },
+      "hip_control_package_wall_ms": 695.340256,
+      "launches_per_window": 43,
+      "native_frontend_package_wall_ms": 302.892866,
+      "native_over_hip_device_ratio": 1.081714619028209,
+      "rows": [
+        {
+          "device_window_per_launch_median_ms": 0.28636558139534884,
+          "device_window_per_launch_samples_ms": [
+            0.28453581395348837,
+            0.27453372093023254,
+            0.2707432558139535,
+            0.28639813953488374,
+            0.2872613953488372,
+            0.28821302325581394,
+            0.28636558139534884
+          ],
+          "engine": "native_mlir",
+          "image_evidence": {
+            "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+            "compiler_fingerprint": "1c459de3a49b45daabaf5829680552ca2fca9e3f767959bfd389bf8f9daf057f",
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "image_sha256": "e974ed0e8e772d29a9e68b24d4f36bd10155e87e3ea6b723696fec9dd896fc56",
+            "isa": {
+              "s_barrier": 6,
+              "s_waitcnt": 0,
+              "wmma_fp8_fp8": 32
+            },
+            "physical_abi": "expanded_memref",
+            "resources": {
+              "lds_bytes": 25600,
+              "scratch_bytes": 0,
+              "sgpr_count": 24,
+              "sgpr_spill_count": 0,
+              "spills": false,
+              "vgpr_count": 177,
+              "vgpr_spill_count": 0
+            },
+            "route": {
+              "accum": "fp32",
+              "architecture": "gfx1201",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "epilogue_schedule": "complete_tile_vector_scales",
+              "fold_inexact_value_count": 0,
+              "fold_lossless": true,
+              "fold_max_normalized_abs_error": 0.0,
+              "fold_max_normalized_relative_error": 0.0,
+              "image_input_level": "target",
+              "kernel_argument_layout": "expanded_memref",
+              "materializer": "tessera_rocm.scaled_wmma_gemm",
+              "native_compiler_owned": true,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "output": "bf16",
+              "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+              "producer_kind": "native_mlir_typed_lds",
+              "raster": "grouped_m4_1d",
+              "raster_group_m": 4,
+              "route": "folded_row_reference_bm256_tm4",
+              "row_guard": "cta",
+              "row_reference_sha256": "9febfa442e392f042ed554036318921c8bbeb3192d4c4f23d5fa6c6ddb22aeb8",
+              "schedule_hash": "a8bc527b3711503b774790ad405cca63cd2c076f8b9b29ce304ea5ecd5475885",
+              "staging_policy": "unconditional_k64",
+              "staging_prefetch": "register_next_slab",
+              "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+              "target_ir_sha256": "fabb5937c08ca5f08c25bd08c27a04bf5c283c5b009b2f1fcddd3f5f4a355893",
+              "tile_ir_sha256": "afa65dcc213156f2deedd9cbb9169a8a34384df6c9a5e95ab8cb0b8fc1d34c75",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+              "weight_sha256": "0d9d9a95f8f06897d89a661f5aa6285142d78690c711c5881e7cf329f566aa9e",
+              "work_item": "ROCM-MXFP4-W4A8-1",
+              "workgroup_mode": "wgp"
+            },
+            "selected_isa": {
+              "entry_symbol": "folded_w4a8",
+              "instruction_count": 3568,
+              "instruction_stream_sha256": "e3da9d7fc7551655cee75e79e34171f9e396063b40b8e41cfb4aeda0a7946154",
+              "mnemonics": {
+                "ds_load_2addr_b64": 12,
+                "ds_store_b128": 10,
+                "global_load_b128": 26,
+                "global_load_b32": 64,
+                "global_load_u8": 8,
+                "s_barrier_signal": 3,
+                "s_barrier_wait": 3,
+                "s_wait_loadcnt": 39,
+                "v_wmma_f32_16x16x16_fp8_fp8": 32
+              },
+              "payload_sha256": "e974ed0e8e772d29a9e68b24d4f36bd10155e87e3ea6b723696fec9dd896fc56"
+            }
+          },
+          "output_sha256": "31352803d35b4332da5059e5aac0138cb3695930c4c4483905c01148aad7299d",
+          "plain_event_per_launch_samples_ms": [
+            0.2801008446272029,
+            0.2730016930158748,
+            0.27446400842001273,
+            0.28323162433712984,
+            0.2898286996885788,
+            0.2910010759220567,
+            0.2873903984247252
+          ],
+          "public_launch_wall_median_ms": 82.488956,
+          "public_launch_wall_samples_ms": [
+            84.707548,
+            82.488956,
+            82.01117
+          ],
+          "windows": [
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006357663842094983,
+              "device_window_ms": 12.23504,
+              "event_window_ms": 12.313323974609375,
+              "host_window_ms": 12.398157,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.044336318969727,
+              "host_window_ms": 12.183638,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 11.739072799682617,
+              "host_window_ms": 11.877705,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006556756940261658,
+              "device_window_ms": 11.80495,
+              "event_window_ms": 11.88286304473877,
+              "host_window_ms": 11.965813,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005306951906725696,
+              "device_window_ms": 11.64196,
+              "event_window_ms": 11.704072952270508,
+              "host_window_ms": 11.81716,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 11.801952362060547,
+              "host_window_ms": 11.909145,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.178959846496582,
+              "host_window_ms": 12.263662,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006409175764468893,
+              "device_window_ms": 12.31512,
+              "event_window_ms": 12.394558906555176,
+              "host_window_ms": 12.519068,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.004558754149669298,
+              "device_window_ms": 12.35224,
+              "event_window_ms": 12.408808708190918,
+              "host_window_ms": 12.485855,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.462634086608887,
+              "host_window_ms": 12.559255,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.513046264648438,
+              "host_window_ms": 12.602628,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.00408674377798024,
+              "device_window_ms": 12.39316,
+              "event_window_ms": 12.444015502929688,
+              "host_window_ms": 12.533145,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.009882618487835207,
+              "device_window_ms": 12.31372,
+              "event_window_ms": 12.436626434326172,
+              "host_window_ms": 12.499321,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.357787132263184,
+              "host_window_ms": 12.427564,
+              "launches": 43
+            }
+          ]
+        },
+        {
+          "device_window_per_launch_median_ms": 0.264733023255814,
+          "device_window_per_launch_samples_ms": [
+            0.25532558139534883,
+            0.2630641860465116,
+            0.26345488372093023,
+            0.264733023255814,
+            0.27750232558139537,
+            0.28027069767441865,
+            0.27742418604651164
+          ],
+          "engine": "hip_matched_control",
+          "image_evidence": {
+            "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+            "compiler_fingerprint": "de26f6803fa2b1ae6cd8edce46655a3f63f1672b6fd82b12b7171b770d14a28b",
+            "grid": [
+              256,
+              1,
+              1
+            ],
+            "image_sha256": "e1e60cde190b304616a20cce97eb12edb60f0e4f392031fdb15c72377f34ac3c",
+            "isa": {
+              "s_barrier": 4,
+              "s_waitcnt": 0,
+              "wmma_fp8_fp8": 32
+            },
+            "physical_abi": "raw_pointer",
+            "resources": {
+              "lds_bytes": 25600,
+              "scratch_bytes": 0,
+              "sgpr_count": 54,
+              "sgpr_spill_count": 0,
+              "spills": false,
+              "vgpr_count": 123,
+              "vgpr_spill_count": 0
+            },
+            "route": {
+              "accum": "fp32",
+              "architecture": "gfx1201",
+              "block_k": 64,
+              "block_m": 256,
+              "block_n": 64,
+              "epilogue_schedule": "complete_tile_vector_scales",
+              "fold_inexact_value_count": 0,
+              "fold_lossless": true,
+              "fold_max_normalized_abs_error": 0.0,
+              "fold_max_normalized_relative_error": 0.0,
+              "numeric_policy": "folded_row_reference_explicit_approximate",
+              "output": "bf16",
+              "raster": "grouped_m4_1d",
+              "raster_group_m": 4,
+              "route": "folded_row_reference_bm256_tm4",
+              "row_guard": "cta",
+              "row_reference_sha256": "9febfa442e392f042ed554036318921c8bbeb3192d4c4f23d5fa6c6ddb22aeb8",
+              "staging_policy": "unconditional_k64",
+              "staging_prefetch": "register_next_slab",
+              "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+              "tile_m_per_wave": 4,
+              "tile_n_per_wave": 2,
+              "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+              "weight_sha256": "0d9d9a95f8f06897d89a661f5aa6285142d78690c711c5881e7cf329f566aa9e",
+              "work_item": "ROCM-MXFP4-W4A8-1",
+              "workgroup_mode": "wgp"
+            },
+            "selected_isa": {
+              "entry_symbol": "folded_hip_matched_control",
+              "instruction_count": 6954,
+              "instruction_stream_sha256": "fbf530eac43c201d8c1caf47c5fab2d8c2f18db9e243a24977e3a40f63fdc052",
+              "mnemonics": {
+                "ds_load_2addr_b64": 8,
+                "ds_load_b64": 8,
+                "ds_store_b128": 5,
+                "global_load_b128": 18,
+                "global_load_b32": 64,
+                "global_load_d16_u8": 1,
+                "global_load_u8": 3,
+                "s_barrier_signal": 2,
+                "s_barrier_wait": 2,
+                "s_wait_loadcnt": 76,
+                "v_wmma_f32_16x16x16_fp8_fp8": 32
+              },
+              "payload_sha256": "e1e60cde190b304616a20cce97eb12edb60f0e4f392031fdb15c72377f34ac3c"
+            }
+          },
+          "output_sha256": "31352803d35b4332da5059e5aac0138cb3695930c4c4483905c01148aad7299d",
+          "plain_event_per_launch_samples_ms": [
+            0.26429648732030114,
+            0.2647167250167492,
+            0.2640035540558571,
+            0.2637961188028025,
+            0.2800638287566429,
+            0.28087547213532205,
+            0.2798494738201762
+          ],
+          "public_launch_wall_median_ms": 82.359318,
+          "public_launch_wall_samples_ms": [
+            83.470353,
+            82.328019,
+            82.359318
+          ],
+          "windows": [
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.005070363154044434,
+              "device_window_ms": 10.979,
+              "event_window_ms": 11.034951210021973,
+              "host_window_ms": 11.109961,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 11.36474895477295,
+              "host_window_ms": 11.47134,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 11.382819175720215,
+              "host_window_ms": 11.467503,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.0068180711275020525,
+              "device_window_ms": 11.31176,
+              "event_window_ms": 11.389413833618164,
+              "host_window_ms": 11.474707,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.008977531694290226,
+              "device_window_ms": 11.32856,
+              "event_window_ms": 11.431183815002441,
+              "host_window_ms": 11.535382,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 11.352152824401855,
+              "host_window_ms": 11.501738,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 11.343233108520508,
+              "host_window_ms": 11.42934,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.006255865251915391,
+              "device_window_ms": 11.38352,
+              "event_window_ms": 11.455182075500488,
+              "host_window_ms": 11.537406,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.007324493865712028,
+              "device_window_ms": 11.9326,
+              "event_window_ms": 12.020645141601562,
+              "host_window_ms": 12.113234,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.042744636535645,
+              "host_window_ms": 12.179521,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.077645301818848,
+              "host_window_ms": 12.15253,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.007030159466877395,
+              "device_window_ms": 12.05164,
+              "event_window_ms": 12.136964797973633,
+              "host_window_ms": 12.210099,
+              "launches": 43
+            },
+            {
+              "bracketed": true,
+              "device_event_disagreement": 0.007045008246104131,
+              "device_window_ms": 11.92924,
+              "event_window_ms": 12.013877868652344,
+              "host_window_ms": 12.082306,
+              "launches": 43
+            },
+            {
+              "bracketed": false,
+              "event_window_ms": 12.033527374267578,
+              "host_window_ms": 12.135978,
+              "launches": 43
+            }
+          ]
+        }
+      ],
+      "shape_mnk": [
+        256,
+        16384,
+        5120
+      ]
+    }
+  ],
+  "schedule_match": "same Target-selected keys; native instruction schedule may differ",
+  "schema": "tessera.rocm.folded_native_package.v1",
+  "source_commit": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "source_sha256": {
+    "benchmarks/rocm/folded_launch_arguments.py": "f1eb90369174f12737da3e9ca1257a0705607981cc1c82ceabfdb5c2fcf91061",
+    "benchmarks/rocm/record_gfx1201_folded_native_package.py": "a9743d1f56e1c76f4b9e1eb99115bb27dd0c88266f6b6ca77dc12ac5ad171e97",
+    "python/tessera/compiler/rocm_mxfp4_folded.py": "0a5b78225344a9630d774b4c8b350c6369ed2150148e1f1aa14d9075030a065f",
+    "python/tessera/compiler/rocm_mxfp4_folded_carrier.py": "88d42c2594879b62d1ba1230a134022276fa15bc2865110f1bd50e4743ebc565",
+    "python/tessera/runtime.py": "0c3ecf41296ccc7c9fb7429a8755c523c09f6dce131226e0c7da2383333d315e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "03fff3491e194dcde210bec86437aa6da33b2407b31784037457af3d95c6ce2d",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "48c54348d7b528b9433b41281147aa0efd47c45d278ead8cd4c5f7b2793f04c2"
+  },
+  "timing_scope": "rotating_three_resident_copies; device windows include dispatch gaps; public launch includes transfers"
+}

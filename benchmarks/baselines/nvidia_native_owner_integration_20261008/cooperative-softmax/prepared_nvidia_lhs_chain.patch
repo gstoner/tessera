@@ -1,0 +1,15 @@
+--- python/tessera/compiler/prepared_nvidia_lhs.py
++++ candidate/prepared_nvidia_lhs.py
+@@ -42,9 +42,10 @@
+         pp = pd.provenance
+         norm = pp["kind"] in {"rmsnorm", "layernorm"}
+         policy = ("sm120_norm_" + pp["schedule"] + "_rows" if norm
+-                  else "sm120_softmax_thread_per_row_128")
++                  else ("sm120_softmax_cooperative_128_rows" if pp["schedule"] == "cooperative_128"
++                        else "sm120_softmax_thread_per_row_128"))
+         scalar_names = ("Rows", "Columns") if norm else ("Rows", "K")
+-        if (pp["schedule"] not in ({"serial", "cooperative_128"} if norm else {"serial"})
++        if (pp["schedule"] not in {"serial", "cooperative_128"}
+                 or pd.geometry != LaunchGeometry(policy=policy)
+                 or pd.workspace != WorkspaceRequirement()
+                 or pd.dynamic_local_memory_bytes or pd.dynamic_local_memory_expression

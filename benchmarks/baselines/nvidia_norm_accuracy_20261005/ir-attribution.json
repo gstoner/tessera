@@ -1,0 +1,133 @@
+{
+  "rows": [
+    {
+      "arm": "baseline",
+      "image_digest": "4beea98b3873ac41e517d164ff70496f80b588faa6fafee564eb13e73cdec7f0",
+      "kind": "rmsnorm",
+      "payload_digest": "fbd1bb40d690cd1421bea55cdbf159889b4d517b5075aa443dbc1d715d221b74",
+      "regular_barriers": 0,
+      "resources": {
+        "registers_per_thread": 18,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 0
+      },
+      "rsqrt_approx": 1,
+      "schedule": "serial",
+      "sqrt_rn": 0
+    },
+    {
+      "arm": "candidate",
+      "image_digest": "7ef493f9d7e21ca1a81fd13ad35a158bd8dc944c351e9445278456465d5e1fa3",
+      "kind": "rmsnorm",
+      "payload_digest": "726d00353e0cb72d95a872a986213516c9621765e99dccf348af538a107cd1a8",
+      "regular_barriers": 0,
+      "resources": {
+        "registers_per_thread": 19,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 0
+      },
+      "rsqrt_approx": 0,
+      "schedule": "serial",
+      "sqrt_rn": 1
+    },
+    {
+      "arm": "baseline",
+      "image_digest": "31d54735cc7877ceff9b3aa1c4e490e4024a8ff3ef232e1c2d91966263885730",
+      "kind": "rmsnorm",
+      "payload_digest": "baf3b6ca4c5c716883c11ea18245398fb78ddb452d9a4f12d64f79638b9b5bdd",
+      "regular_barriers": 9,
+      "resources": {
+        "registers_per_thread": 23,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 512
+      },
+      "rsqrt_approx": 1,
+      "schedule": "cooperative_128",
+      "sqrt_rn": 0
+    },
+    {
+      "arm": "candidate",
+      "image_digest": "cb0529255cab182c91a911392e187c6a893cfb8e198f79e29f359c6dbddd29c2",
+      "kind": "rmsnorm",
+      "payload_digest": "5f34fb7ff05dd2a20394d1b202ab19853a6e1a10b1b670d5558cd66f6af67c31",
+      "regular_barriers": 9,
+      "resources": {
+        "registers_per_thread": 23,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 512
+      },
+      "rsqrt_approx": 0,
+      "schedule": "cooperative_128",
+      "sqrt_rn": 1
+    },
+    {
+      "arm": "baseline",
+      "image_digest": "85e0385080813897acdcba395a0582f44b34a18a58955752fd7afb326261b4df",
+      "kind": "layernorm",
+      "payload_digest": "5fda31918a8d569abaec6663751c38296130f076fce49bf12a136b249cd81509",
+      "regular_barriers": 0,
+      "resources": {
+        "registers_per_thread": 22,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 0
+      },
+      "rsqrt_approx": 1,
+      "schedule": "serial",
+      "sqrt_rn": 0
+    },
+    {
+      "arm": "candidate",
+      "image_digest": "b79da33476e8921a9b8ded4c16893192c4099158ce8d77b5d042a848218a137c",
+      "kind": "layernorm",
+      "payload_digest": "78d599b8c01879e636787c1dee5f8cf71c7233589ed0f4cb1275125ce8f77545",
+      "regular_barriers": 0,
+      "resources": {
+        "registers_per_thread": 24,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 0
+      },
+      "rsqrt_approx": 0,
+      "schedule": "serial",
+      "sqrt_rn": 1
+    },
+    {
+      "arm": "baseline",
+      "image_digest": "5609851d0f2e76ac45ac3b3472ca0ee64b3b23f1db3315afcc5f50f3feed3f53",
+      "kind": "layernorm",
+      "payload_digest": "71f37f21f4136968514d008d128aa6fc4150180a7e622c32bd2c136c47604374",
+      "regular_barriers": 18,
+      "resources": {
+        "registers_per_thread": 29,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 512
+      },
+      "rsqrt_approx": 1,
+      "schedule": "cooperative_128",
+      "sqrt_rn": 0
+    },
+    {
+      "arm": "candidate",
+      "image_digest": "9a93044e87dcd45518cab67ba88940afa6441992f0ba422681f002b8b36b528e",
+      "kind": "layernorm",
+      "payload_digest": "5441a270eaa5e1d87feecaf3d2c10aea09401e6ab93b29bc0b0cec836c06969a",
+      "regular_barriers": 18,
+      "resources": {
+        "registers_per_thread": 34,
+        "spill_load_bytes": 0,
+        "spill_store_bytes": 0,
+        "static_shared_memory_bytes": 512
+      },
+      "rsqrt_approx": 0,
+      "schedule": "cooperative_128",
+      "sqrt_rn": 1
+    }
+  ],
+  "source_sha256": "bc0fc0c66affafe180ebf9cb5291c9fe9d34006b7b2be4190dc1eae930f2e794"
+}

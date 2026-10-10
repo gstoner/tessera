@@ -1,0 +1,94 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2100,14 +2100,41 @@
+       stagePanels * (mt + nt) * 2 + 2 * mt * nt * 8;
+   const bool groupStageReads = prefetch == 0 && groupedLiveVgprs + 64 <= 256;
+ 
++  // Materialize a whole folded slab before the LDS read-completion barrier.
++  // The typed register fragments outlive the barrier; no tile.view escapes
++  // to a later LDS overwrite. Every wave reads, including inactive edge waves,
++  // so the workgroup barrier remains outside the compute-only wave guard.
++  auto captureFoldedSlab = [&](OpBuilder &kb, Location l) {
++    SmallVector<Value> captured;
++    for (int64_t p = 0; p < stageK / 16; ++p) {
++      Value kOff = ci(p * 16);
++      for (int64_t mi = 0; mi < mt; ++mi)
++        captured.push_back(packFragment(kb, l,
++            ldsView(kb, l, ldsA, lrow[mi], kOff, ldsRowMajor),
++            aFragmentTy));
++      for (int64_t ni = 0; ni < nt; ++ni)
++        captured.push_back(packFragment(kb, l,
++            ldsView(kb, l, ldsB, kOff, lcol[ni], ldsColMajor),
++            bFragmentTy));
++    }
++    return captured;
++  };
++
+   // ---- One slab's MMA chain on the partial, from LDS buffer `buf`.
+   auto computeActive = [&](OpBuilder &kb, Location l, Value buf,
+-                     SmallVector<Value> partial) {
++                     SmallVector<Value> partial,
++                     ArrayRef<Value> captured = {}) {
+     Value aRow = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgM))) : c0;
+     Value bCol = buf ? Value(kb.create<arith::MulIOp>(l, buf, ci(wgN))) : c0;
+     for (int64_t p = 0; p < stageK / 16; ++p) {
+       Value kOff = ci(p * 16);
+       SmallVector<Value> af(mt), bf(nt);
++      if (!captured.empty()) {
++        for (int64_t mi = 0; mi < mt; ++mi)
++          af[mi] = captured[p * (mt + nt) + mi];
++        for (int64_t ni = 0; ni < nt; ++ni)
++          bf[ni] = captured[p * (mt + nt) + mt + ni];
++      } else {
+       for (int64_t mi = 0; mi < mt; ++mi) {
+         Value r = buf ? Value(kb.create<arith::AddIOp>(l, lrow[mi], aRow))
+                       : lrow[mi];
+@@ -2120,6 +2147,7 @@
+         // col_major B view: `row` is K, `col` is N (K contiguous per column).
+         bf[ni] = packFragment(kb, l, ldsView(kb, l, ldsB, kOff, c, ldsColMajor),
+                               bFragmentTy);
++      }
+       }
+       for (int64_t mi = 0; mi < mt; ++mi)
+         for (int64_t ni = 0; ni < nt; ++ni) {
+@@ -2148,9 +2176,10 @@
+   };
+ 
+   auto compute = [&](OpBuilder &kb, Location l, Value buf,
+-                     SmallVector<Value> partial) -> SmallVector<Value> {
++                     SmallVector<Value> partial,
++                     ArrayRef<Value> captured = {}) -> SmallVector<Value> {
+     if (!foldedWaveGuard)
+-      return computeActive(kb, l, buf, std::move(partial));
++      return computeActive(kb, l, buf, std::move(partial), captured);
+     Value live = kb.create<arith::CmpIOp>(l, arith::CmpIPredicate::ult,
+         kb.create<arith::AddIOp>(l, baseRow, waveRowOff), M);
+     SmallVector<Type> types(partial.size(), accFragmentTy);
+@@ -2158,7 +2187,7 @@
+     {
+       OpBuilder::InsertionGuard guard(kb);
+       kb.setInsertionPointToStart(branch.thenBlock());
+-      kb.create<scf::YieldOp>(l, computeActive(kb, l, buf, partial));
++      kb.create<scf::YieldOp>(l, computeActive(kb, l, buf, partial, captured));
+       kb.setInsertionPointToStart(branch.elseBlock());
+       kb.create<scf::YieldOp>(l, partial);
+     }
+@@ -2224,8 +2253,16 @@
+     SmallVector<Value> nextA = issue(kb, l, planA, kn);
+     SmallVector<Value> nextB = issue(kb, l, planB, kn);
+     if (prefetch == 1) {
+-      partial = compute(kb, l, Value(), std::move(partial));
+-      barrier(kb, l);
++      if (foldedFullK) {
++        auto captured = captureFoldedSlab(kb, l);
++        // All waves finish LDS reads before any wave can overwrite the slab.
++        // Compute uses only the captured typed register fragments.
++        barrier(kb, l);
++        partial = compute(kb, l, Value(), std::move(partial), captured);
++      } else {
++        partial = compute(kb, l, Value(), std::move(partial));
++        barrier(kb, l);
++      }
+       drain(kb, l, planA, nextA, Value());
+       drain(kb, l, planB, nextB, Value());
+       barrier(kb, l);

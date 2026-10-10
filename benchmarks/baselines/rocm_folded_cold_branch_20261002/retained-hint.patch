@@ -1,0 +1,14 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
+@@ -1658,6 +1658,11 @@
+       Value nonzero = arith::CmpFOp::create(rewriter, loc,
+           arith::CmpFPredicate::ONE, combined, zero);
+       Value regular = arith::AndIOp::create(rewriter, loc, finite, nonzero);
++      // The wide branch preserves exceptional scale-product recovery. A
++      // likelihood hint changes layout/scheduling, never its numeric gate.
++      Value likely = arith::ConstantIntOp::create(rewriter, loc, 1, 1);
++      regular = LLVM::ExpectOp::create(rewriter, loc,
++          TypeRange{rewriter.getI1Type()}, regular, likely).getResult();
+       auto branch = scf::IfOp::create(rewriter, loc,
+           TypeRange{rewriter.getF32Type()}, regular, true);
+       {

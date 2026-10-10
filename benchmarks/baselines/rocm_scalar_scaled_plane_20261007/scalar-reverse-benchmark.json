@@ -1,0 +1,560 @@
+{
+  "schema": 1,
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid_raw_hex": "32386439653765666266326566373136",
+  "hip_runtime_version": 71526333,
+  "hip_driver_version": 71526333,
+  "compiler_sha256": "e4e33848bc4b1b9378789dc2c47539a1f1c405ac0c93ec0e2df9713fdfe071d6",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "recorder_sha256": "1dbd1b1ead6541bb8859dd25851327e699aac2736c8caa9966caee08c3d1efc0",
+  "adapter_source_sha256": {
+    "tessera.runtime": "d8b57debe1eff8b13efe3d6e4f816e93117c7e6e6c49323eef2f54b3f66b6837",
+    "tessera.compiler.native_vmap": "a1c01cac53853ea9076cf2f6064e19e9d0257b442e0372255c81b68dc3c6d336",
+    "tessera.compiler.rocm_typed_scaled_native": "d6910d66ede18c5b31deeb74ec4a57674ba54b3929320a8c8352c1a5dda82b7e",
+    "tessera.compiler.native_scaled_program": "f21f04c9bbe3d29a79c1cc638861d566a9d2201524da893f2a6e72908b30e87d"
+  },
+  "route": "public scalar native_backward -> typed Graph paired AD -> Schedule -> Tile structured reduction -> ROCm Target -> LLVM -> HSACO -> checked HIP owner",
+  "timing_boundaries": {
+    "public": "compiler-free warm native_backward wall time including frontend, ABI, upload, launch, readback and owner disposal",
+    "native": "two-member HIP event launch window averaged by native runtime over 20 repeats; no isolated-kernel claim",
+    "prepared": "native owner update/invoke/read host wall time; preparation excluded"
+  },
+  "limitations": [
+    "tiny static M3 N5 K7 baseline",
+    "FP32 scale gradients only",
+    "K4 scale groups are reverse-only in this packet; primal WMMA requires its own admitted group width",
+    "no speedup or selector promotion",
+    "no sibling architecture proof"
+  ],
+  "rows": [
+    {
+      "mask": 1,
+      "axes": [
+        0,
+        null,
+        null,
+        null
+      ],
+      "output_prefix": [],
+      "transposeA": false,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_each_timing_domain",
+      "changed_input_replay": "passed",
+      "compiler_free_warm_replay": true,
+      "stale_generation": "rejected",
+      "max_abs_error": 3.435916173799569e-08,
+      "public_warm_call_samples_ms": [
+        0.987250404432416,
+        0.9157492313534021,
+        1.0680446401238441,
+        1.0705371852964163,
+        1.0011814069002867
+      ],
+      "public_warm_call_median_ms": 1.0011814069002867,
+      "native_launch_window_samples_ms": [
+        0.012073500081896782,
+        0.01179954968392849,
+        0.011841549538075924,
+        0.011777849867939949,
+        0.011823849752545357
+      ],
+      "native_launch_window_median_ms": 0.011823849752545357,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6645823828876019,
+        0.6579739972949028,
+        0.6603624206036329,
+        0.576497009024024,
+        0.4233419895172119
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6579739972949028,
+      "package_sha256": "ee5e8cf8ba0e123f6da790fe802ba206235a29b02f7c4b31eb0881c0ac932bd8",
+      "images_sha256": [
+        "d3022bd9d6ddcddf41fc8a55abb6963ad5c62c02850d0fe0b91f190dce0177a4",
+        "7b60af5915dd89eda56776ee81a46f3409861491e1846763427248196866cd3c"
+      ],
+      "execution_certificate": {
+        "schema": "tessera.native_vjp_execution.v1",
+        "family": "scaled_product_transpose",
+        "graph_consumer": "tessera.scaled_matmul",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.structured_reduction_kernel",
+        "target_consumer": "rocm.gfx1201_native_scaled_program",
+        "target": "rocm_gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201",
+        "evidence_scope": "exact_device",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "rocm_gfx1201",
+          "device_arch": "gfx1201",
+          "execution_kind": "native_gpu",
+          "execution_mode": "hip_runtime",
+          "artifact_hash": "210fa405d87a815f6f3f89110e9a0222ccb5637392f2043a9dde2b0129b68b44",
+          "digest": "5f5cad94326aed266ab672489cdd63e3b890ab4ec165ffc9e022261d69878ae5"
+        },
+        "proof_mode": "",
+        "topology": "not_applicable",
+        "algorithm": "not_applicable",
+        "input_signature": [
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              3,
+              7
+            ]
+          },
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              7,
+              5
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              5
+            ]
+          }
+        ],
+        "gradient_signature": [
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          }
+        ],
+        "frontend_certificate_digest": "a66cf6b15437eebdfdc663c4bfd38d546db834d2501b5245248a5f3ba7ca6962",
+        "artifact_identities": {
+          "source_graph_ir_digest": "1ef1c3022bd05bbea6e0f7d449af9a16214bbf9223417869050f73c7b5f0dba7",
+          "artifact_hash": "210fa405d87a815f6f3f89110e9a0222ccb5637392f2043a9dde2b0129b68b44"
+        },
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "digest": "d2446ad5218e31852ad5a72c16c93963061ec3db4a70baa36f244f8a6ae80ae2"
+      }
+    },
+    {
+      "mask": 1,
+      "axes": [
+        0,
+        null,
+        null,
+        null
+      ],
+      "output_prefix": [],
+      "transposeA": false,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_each_timing_domain",
+      "changed_input_replay": "passed",
+      "compiler_free_warm_replay": true,
+      "stale_generation": "rejected",
+      "max_abs_error": 1.5272626219253738e-08,
+      "public_warm_call_samples_ms": [
+        1.119106588885188,
+        0.9534297976642847,
+        1.0535262059420347,
+        1.1225166264921427,
+        1.1172024067491293
+      ],
+      "public_warm_call_median_ms": 1.1172024067491293,
+      "native_launch_window_samples_ms": [
+        0.025951851159334183,
+        0.025897899642586708,
+        0.02613385021686554,
+        0.025487899780273438,
+        0.02646385133266449
+      ],
+      "native_launch_window_median_ms": 0.025951851159334183,
+      "prepared_update_invoke_read_samples_ms": [
+        0.7327443920075893,
+        0.7467173971235752,
+        0.7407878059893847,
+        0.7355097681283951,
+        0.7625295780599117
+      ],
+      "prepared_update_invoke_read_median_ms": 0.7407878059893847,
+      "package_sha256": "78a5c3ed394ac8f22af243575c47b28aedc7031e6c51bb43e5a55a6228a36f2d",
+      "images_sha256": [
+        "b5e1846216246b4cbf76923c2a73ca76658bd03eaa18972a6b8cdcb3a87f5879",
+        "92b80b6074f851081df942d2346a22c06fd4a4df58927090cb85cfd7ea065b4b"
+      ],
+      "execution_certificate": {
+        "schema": "tessera.native_vjp_execution.v1",
+        "family": "scaled_product_transpose",
+        "graph_consumer": "tessera.scaled_matmul",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.structured_reduction_kernel",
+        "target_consumer": "rocm.gfx1201_native_scaled_program",
+        "target": "rocm_gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201",
+        "evidence_scope": "exact_device",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "rocm_gfx1201",
+          "device_arch": "gfx1201",
+          "execution_kind": "native_gpu",
+          "execution_mode": "hip_runtime",
+          "artifact_hash": "81af5ea2ce5f7fc5d2fc94a54640ba6e4c5c1b0e166816d242d1f3972bbe915c",
+          "digest": "09fe4c0eb8d2f8e045afa916b034cca69b6196c7ae00c995c92610c4b2e9f222"
+        },
+        "proof_mode": "",
+        "topology": "not_applicable",
+        "algorithm": "not_applicable",
+        "input_signature": [
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              3,
+              7
+            ]
+          },
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              5,
+              7
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              5
+            ]
+          }
+        ],
+        "gradient_signature": [
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          }
+        ],
+        "frontend_certificate_digest": "9ea453919715648ee45d220bbf4ddfc863b0afb7a6113ec69ccf701ba73eb0bf",
+        "artifact_identities": {
+          "source_graph_ir_digest": "721c9959d9406941154b14c97919a43a80bb0fa5806b57b6cdf9a21cd3da391c",
+          "artifact_hash": "81af5ea2ce5f7fc5d2fc94a54640ba6e4c5c1b0e166816d242d1f3972bbe915c"
+        },
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "digest": "691a160fa75e774a816760de54c112f3a6de60f13eca04394e4a181a3ccb3287"
+      }
+    },
+    {
+      "mask": 1,
+      "axes": [
+        0,
+        null,
+        null,
+        null
+      ],
+      "output_prefix": [],
+      "transposeA": true,
+      "transposeB": false,
+      "correctness": "passed_before_and_after_each_timing_domain",
+      "changed_input_replay": "passed",
+      "compiler_free_warm_replay": true,
+      "stale_generation": "rejected",
+      "max_abs_error": 2.407494337219873e-08,
+      "public_warm_call_samples_ms": [
+        0.9365073870867491,
+        0.9030175860971212,
+        0.9008896071463823,
+        0.8831918239593506,
+        0.8848248049616814
+      ],
+      "public_warm_call_median_ms": 0.9008896071463823,
+      "native_launch_window_samples_ms": [
+        0.023909850046038628,
+        0.02402384951710701,
+        0.023967798799276352,
+        0.02392980083823204,
+        0.024027850478887558
+      ],
+      "native_launch_window_median_ms": 0.023967798799276352,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5198279861360788,
+        0.5069175735116005,
+        0.5349832121282816,
+        0.5155518185347319,
+        0.5384437739849091
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5198279861360788,
+      "package_sha256": "a9823bff2a0b39df48d7806f1de54a6bc51538da73d5d3f38fa0becbfb50b12e",
+      "images_sha256": [
+        "d9e986dd70a3c0615fb4562e59baea7b16a3e336ea0e046667815a6e4281a678",
+        "234dd130878488f301a063b5af9a2d472234bd04ce27444ffc5794c06520e7a5"
+      ],
+      "execution_certificate": {
+        "schema": "tessera.native_vjp_execution.v1",
+        "family": "scaled_product_transpose",
+        "graph_consumer": "tessera.scaled_matmul",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.structured_reduction_kernel",
+        "target_consumer": "rocm.gfx1201_native_scaled_program",
+        "target": "rocm_gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201",
+        "evidence_scope": "exact_device",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "rocm_gfx1201",
+          "device_arch": "gfx1201",
+          "execution_kind": "native_gpu",
+          "execution_mode": "hip_runtime",
+          "artifact_hash": "f8842c3cf2c64296ef11e18b62e3c34e6640b31412dbbead8ca8247bd37be953",
+          "digest": "d398d3ebde10d7ba5d92443b8700ebcc6fc323714232a003f0fd072535f329e1"
+        },
+        "proof_mode": "",
+        "topology": "not_applicable",
+        "algorithm": "not_applicable",
+        "input_signature": [
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              7,
+              3
+            ]
+          },
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              7,
+              5
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              5
+            ]
+          }
+        ],
+        "gradient_signature": [
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          }
+        ],
+        "frontend_certificate_digest": "fd726b4d87c32ee476c0bc5da2bbc33d08084cb61fc4eea7ddeb7abffc6704b0",
+        "artifact_identities": {
+          "source_graph_ir_digest": "05d8d61d86b6397d55204def8ef774770862d4ffc3b43ffa2aa3f093e3cb481c",
+          "artifact_hash": "f8842c3cf2c64296ef11e18b62e3c34e6640b31412dbbead8ca8247bd37be953"
+        },
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "digest": "008e56bb5e59b6dcec2ffe6c8145e4cfcdc34a5a7f6f4c6aa84e257a2f3a1a09"
+      }
+    },
+    {
+      "mask": 1,
+      "axes": [
+        0,
+        null,
+        null,
+        null
+      ],
+      "output_prefix": [],
+      "transposeA": true,
+      "transposeB": true,
+      "correctness": "passed_before_and_after_each_timing_domain",
+      "changed_input_replay": "passed",
+      "compiler_free_warm_replay": true,
+      "stale_generation": "rejected",
+      "max_abs_error": 3.109287616265277e-08,
+      "public_warm_call_samples_ms": [
+        0.9533476084470749,
+        0.9128764271736145,
+        0.9712640196084976,
+        0.961513165384531,
+        0.9643043857067823
+      ],
+      "public_warm_call_median_ms": 0.961513165384531,
+      "native_launch_window_samples_ms": [
+        0.028607899323105812,
+        0.02830589935183525,
+        0.028721898794174194,
+        0.02795189991593361,
+        0.03012790158390999
+      ],
+      "native_launch_window_median_ms": 0.028607899323105812,
+      "prepared_update_invoke_read_samples_ms": [
+        0.701496796682477,
+        0.612482987344265,
+        0.5997146014124155,
+        0.6213180255144835,
+        0.6310123950242996
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6213180255144835,
+      "package_sha256": "663bb586c0265df4e6e1d1f919a336957cdcf03c53a9238163d339ffaf13c0d8",
+      "images_sha256": [
+        "f0199528a8df6cc27d74aaae6801743356ed51230d48b4e5a5a1edfdb065c372",
+        "cbabb8b06980c345e6033ddc5f7f826c47fc9ed19930be03e86bf7fb1452c0bf"
+      ],
+      "execution_certificate": {
+        "schema": "tessera.native_vjp_execution.v1",
+        "family": "scaled_product_transpose",
+        "graph_consumer": "tessera.scaled_matmul",
+        "schedule_consumer": "schedule.artifact",
+        "tile_consumer": "tile.structured_reduction_kernel",
+        "target_consumer": "rocm.gfx1201_native_scaled_program",
+        "target": "rocm_gfx1201",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201",
+        "evidence_scope": "exact_device",
+        "physical_attestation": {
+          "schema": "tessera.runtime_physical_execution.v1",
+          "target": "rocm_gfx1201",
+          "device_arch": "gfx1201",
+          "execution_kind": "native_gpu",
+          "execution_mode": "hip_runtime",
+          "artifact_hash": "42f1c5eb6c381b114ea7a95b46f65b5f3898660a0370533d3c2119523cb79166",
+          "digest": "4389c51fd2993dd4810ca6d28d7c54f6f66c82b1b24ed663dba8b29c145053f8"
+        },
+        "proof_mode": "",
+        "topology": "not_applicable",
+        "algorithm": "not_applicable",
+        "input_signature": [
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              7,
+              3
+            ]
+          },
+          {
+            "dtype": "float8_e4m3fn",
+            "shape": [
+              5,
+              7
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              5
+            ]
+          }
+        ],
+        "gradient_signature": [
+          {
+            "dtype": "float32",
+            "shape": [
+              3,
+              2
+            ]
+          },
+          {
+            "dtype": "float32",
+            "shape": [
+              2,
+              2
+            ]
+          }
+        ],
+        "frontend_certificate_digest": "de03792e8dedcf664140d4e708602e39c93148ffa7130366fec84cd41a972b34",
+        "artifact_identities": {
+          "source_graph_ir_digest": "17803dfbab52f7b9ba2d13cffb9c31ff95a147d82a7a15a590c6282f21a37d51",
+          "artifact_hash": "42f1c5eb6c381b114ea7a95b46f65b5f3898660a0370533d3c2119523cb79166"
+        },
+        "source_reexecution": "policy_permitted",
+        "status": "executed",
+        "digest": "217ce0d2638690454889b4b665bfdf0d6b07a01c4f266563dd4031c0930045ae"
+      }
+    }
+  ]
+}

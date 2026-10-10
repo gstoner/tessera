@@ -27,9 +27,13 @@ def test_k64_staging_packet_binds_selected_generator_and_exact_output() -> None:
     assert packet["folded_generator_sha256"] == (
         "d24678f845eae599511a148de70c85a0c81a07ef6525b06bb4fb001debeba34c"
     )
-    assert packet["benchmark_sha256"] == hashlib.sha256(
-        (ROOT / "benchmarks/rocm/benchmark_gfx1201_mxfp4_folded.py").read_bytes()
-    ).hexdigest()
+    # Bind to the exact historical recorder, not today's evolved harness.
+    # The snapshot was verified against the packet's source_revision.
+    snapshot = PACKET.with_name("benchmark_source_20260922.py.txt")
+    assert packet["benchmark_sha256"] == hashlib.sha256(snapshot.read_bytes()).hexdigest()
+    assert packet["benchmark_sha256"] == (
+        "c69c5a4917a1dbb5e731fda54e129ca203b677d78ce912921c6b7b72b30f1a37"
+    )
     # Historical since GFX1201-LANES-2026-09-27: the frontend and materializer
     # now carry the Target IR load schedule. This packet records the original
     # (V1) schedule and stays pinned to the sources it measured.

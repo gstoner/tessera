@@ -1,0 +1,1128 @@
+[  5%] Built target TesseraCollectiveTypesIncGen
+[  5%] Built target TesseraAdjointInterfaceTableGen
+[  6%] Built target TesseraLinalgSolverTableGen
+[  6%] Built target mlir-headers
+[ 10%] Built target TesseraNVIDIATableGen
+[ 11%] Built target mlir-generic-headers
+[ 11%] Built target tessera_layout_algebra
+[ 18%] Built target tessera_solvers_passes
+[ 23%] Built target TesseraPMTableGen
+[ 25%] Built target TPPGen
+[ 25%] Building AttnDialect.cpp.inc...
+[ 27%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 28%] Built target DialectSR
+[ 33%] Built target TesseraTPPPasses
+[ 38%] Built target TesseraNeighbors
+[ 38%] Building AttnDialect.h.inc...
+[ 40%] Built target TesseraCollectiveOpsIncGen
+[ 40%] Built target TPPTypesGen
+[ 40%] Built target obj.TesseraNVIDIAIR
+[ 42%] Built target TesseraAttnTableGen
+[ 42%] Built target TesseraTangentInterfaceTableGen
+[ 44%] Built target tessera_linalg_solver_passes
+[ 45%] Built target obj.TesseraCollectiveDialect
+[ 49%] Built target TesseraSR
+[ 50%] Built target TPPAttrsGen
+[ 50%] Built target TesseraNVIDIAIR
+[ 54%] Built target TesseraIRTableGen
+[ 54%] Built target TesseraCollectiveDialect
+[ 55%] Built target TPPOpsGen
+[ 57%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 57%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 57%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 57%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 61%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 61%] Built target obj.TesseraTPPDialect
+[ 61%] Built target TesseraTileIRTableGen
+[ 61%] Built target TesseraTPPDialect
+[ 61%] Building CXX object src/compiler/ir/CMakeFiles/obj.TesseraIR.dir/TangentInterface.cpp.o
+[ 62%] Building CXX object src/compiler/ir/CMakeFiles/obj.TesseraIR.dir/AdjointInterface.cpp.o
+[ 64%] Built target TesseraTPPInit
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::FlashAttnOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:30:56: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   30 |         tangent=builder.create<mlir::arith::ConstantOp>(getLoc(),
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~
+   31 |             mlir::DenseElementsAttr::get(type,builder.getF32FloatAttr(0.0))).getResult();
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/TilingInterface.h:18,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/include/Tessera/IR/TesseraOps.h:9,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:3:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In function ‘mlir::Value tessera::buildZeroLike(mlir::OpBuilder&, mlir::Location, mlir::Type)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:57:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   56 |   return builder
+      |          ~~~~~~~                       
+   57 |       .create<mlir::arith::ConstantOp>(
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   58 |           loc, mlir::DenseElementsAttr::get(shaped, zero))
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In function ‘mlir::Value tessera::buildFloatSplat(mlir::OpBuilder&, mlir::Location, mlir::Type, double)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:71:39: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   70 |   return builder
+      |          ~~~~~~~                       
+   71 |       .create<mlir::arith::ConstantOp>(
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   72 |           loc, mlir::DenseElementsAttr::get(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   73 |                    shaped, builder.getFloatAttr(element, value)))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In function ‘std::pair<mlir::Value, mlir::Value> tessera::buildNormalizationStats(mlir::OpBuilder&, mlir::Location, mlir::Value, mlir::RankedTensorType, mlir::FloatAttr, bool)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:109:52: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::NormalizationStatsOp; Args = {mlir::TypeRange, mlir::Value&, mlir::IntegerAttr, mlir::FloatAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  109 |   auto stats = builder.create<NormalizationStatsOp>(
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  110 |       loc, mlir::TypeRange{statsType, statsType}, x,
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  111 |       builder.getI64IntegerAttr(-1),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                
+  112 |       eps ? eps : builder.getF64FloatAttr(1.0e-5),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+  113 |       builder.getBoolAttr(centered));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~                
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In function ‘mlir::Value tessera::broadcastLastAxis(mlir::OpBuilder&, mlir::Location, mlir::RankedTensorType, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:126:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::BroadcastInDimOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&, mlir::ArrayAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  125 |   return builder
+      |          ~~~~~~~                
+  126 |       .create<BroadcastInDimOp>(loc, inputType, value, shapeLike,
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  127 |                                 builder.getArrayAttr(dimensions))
+      |                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In function ‘mlir::Value tessera::broadcastChannel(mlir::OpBuilder&, mlir::Location, mlir::RankedTensorType, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:137:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::BroadcastInDimOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&, mlir::ArrayAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  136 |   return builder
+      |          ~~~~~~~                
+  137 |       .create<BroadcastInDimOp>(
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  138 |           loc, inputType, value, shapeLike,
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  139 |           builder.getArrayAttr(
+      |           ~~~~~~~~~~~~~~~~~~~~~ 
+  140 |               {builder.getI64IntegerAttr(inputType.getRank() - 1)}))
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In function ‘mlir::Value tessera::reduceMeanLastAxis(mlir::OpBuilder&, mlir::Location, mlir::RankedTensorType, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:149:24: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceOp; Args = {mlir::RankedTensorType, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  148 |   return builder
+      |          ~~~~~~~        
+  149 |       .create<ReduceOp>(loc, lastAxisReducedType(inputType), value,
+      |       ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  150 |                         builder.getStringAttr("mean"),
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  151 |                         builder.getI64IntegerAttr(inputType.getRank() - 1))
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In function ‘mlir::Value tessera::addIfPresent(mlir::OpBuilder&, mlir::Location, mlir::Type, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:162:31: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  162 |   return builder.create<AddOp>(loc, type, lhs, rhs).getResult();
+      |          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::AddOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:173:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  173 |   return {builder.create<AddOp>(getLoc(), getResult().getType(), tangents[0],
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  174 |                                 tangents[1]).getResult()};
+      |                                 ~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SubOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:209:31: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  208 |     return {builder
+      |             ~~~~~~~            
+  209 |                 .create<SubOp>(getLoc(), getResult().getType(), zero,
+      |                 ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  210 |                                tangents[1])
+      |                                ~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:213:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  213 |   return {builder.create<SubOp>(getLoc(), getResult().getType(), tangents[0],
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  214 |                                 tangents[1]).getResult()};
+      |                                 ~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::MulOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:224:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  223 |                             ? builder
+      |                               ~~~~~~~            
+  224 |                                   .create<MulOp>(getLoc(), type, tangents[0],
+      |                                   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  225 |                                                  getRhs())
+      |                                                  ~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:230:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  229 |                             ? builder
+      |                               ~~~~~~~            
+  230 |                                   .create<MulOp>(getLoc(), type, getLhs(),
+      |                                   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+  231 |                                                  tangents[1])
+      |                                                  ~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:238:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  238 |   return {builder.create<AddOp>(getLoc(), type, lhsTerm, rhsTerm).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In lambda function:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:248:26: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&, mlir::ValueRange, mlir::IntegerAttr, mlir::DictionaryAttr, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  247 |     return builder
+      |            ~~~~~~~        
+  248 |         .create<MatmulOp>(getLoc(), type, lhs, rhs, mlir::ValueRange{},
+      |         ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  249 |                           getTileKAttr(),
+      |                           ~~~~~~~~~~~~~~~
+  250 |                           getNumericPolicyAttr(), getTransposeAAttr(),
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  251 |                           getTransposeBAttr())
+      |                           ~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::MatmulOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:262:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  262 |   return {builder.create<AddOp>(getLoc(), type, lhsTerm, rhsTerm).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SoftmaxOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:298:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  298 |       builder.create<MulOp>(loc, inputType, getY(), tangents[0]).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:305:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  304 |       builder
+      |       ~~~~~~~               
+  305 |           .create<ReduceOp>(loc, reducedType, weighted,
+      |           ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  306 |                             builder.getStringAttr("sum"),
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  307 |                             builder.getI64IntegerAttr(axis))
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:313:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::UnsqueezeOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  313 |   auto expanded = builder.create<UnsqueezeOp>(loc, expandedType, dot);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:317:34: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::BroadcastOp; Args = {mlir::RankedTensorType&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  317 |       builder.create<BroadcastOp>(loc, inputType, expanded.getY()).getY();
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:319:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  319 |       builder.create<SubOp>(loc, inputType, tangents[0], dotBroadcast)
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:321:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  321 |   return {builder.create<MulOp>(loc, inputType, getY(), centered).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::LayerNormOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:338:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  338 |       builder.create<SubOp>(loc, type, getX(), centerB).getResult(),
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:336:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  336 |   mlir::Value normalized = builder.create<MulOp>(
+      |                            ~~~~~~~~~~~~~~~~~~~~~^
+  337 |       loc, type,
+      |       ~~~~~~~~~~                                 
+  338 |       builder.create<SubOp>(loc, type, getX(), centerB).getResult(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  339 |       inverseB).getResult();
+      |       ~~~~~~~~~                                  
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:341:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  341 |   mlir::Value dxCentered = builder.create<SubOp>(
+      |                            ~~~~~~~~~~~~~~~~~~~~~^
+  342 |       loc, type, tangents[0],
+      |       ~~~~~~~~~~~~~~~~~~~~~~~                    
+  343 |       broadcastLastAxis(builder, loc, type, meanDx, getX())).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:346:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  346 |       builder.create<MulOp>(loc, type, tangents[0], normalized).getResult());
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:347:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  347 |   mlir::Value correction = builder.create<MulOp>(
+      |                            ~~~~~~~~~~~~~~~~~~~~~^
+  348 |       loc, type, normalized,
+      |       ~~~~~~~~~~~~~~~~~~~~~~                     
+  349 |       broadcastLastAxis(builder, loc, type, meanProjected, getX())).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:352:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  352 |       builder.create<SubOp>(loc, type, dxCentered, correction).getResult(),
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:350:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  350 |   mlir::Value result = builder.create<MulOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~^
+  351 |       loc, type,
+      |       ~~~~~~~~~~                             
+  352 |       builder.create<SubOp>(loc, type, dxCentered, correction).getResult(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  353 |       inverseB).getResult();
+      |       ~~~~~~~~~                              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:355:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  355 |     result = builder.create<MulOp>(
+      |              ~~~~~~~~~~~~~~~~~~~~~^
+  356 |         loc, type, result,
+      |         ~~~~~~~~~~~~~~~~~~         
+  357 |         broadcastChannel(builder, loc, type, getAffine().front(), getX()))
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:362:30: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  362 |         builder.create<MulOp>(
+      |         ~~~~~~~~~~~~~~~~~~~~~^
+  363 |             loc, type, normalized,
+      |             ~~~~~~~~~~~~~~~~~~~~~~
+  364 |             broadcastChannel(builder, loc, type, tangents[1], getX()))
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::RmsNormOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:386:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  386 |       builder.create<MulOp>(loc, type, getX(), inverseB).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:389:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  389 |       builder.create<MulOp>(loc, type, tangents[0], normalized).getResult());
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:390:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  390 |   mlir::Value correction = builder.create<MulOp>(
+      |                            ~~~~~~~~~~~~~~~~~~~~~^
+  391 |       loc, type, normalized,
+      |       ~~~~~~~~~~~~~~~~~~~~~~                     
+  392 |       broadcastLastAxis(builder, loc, type, meanProjected, getX())).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:395:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  395 |       builder.create<SubOp>(loc, type, tangents[0], correction).getResult(),
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:393:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  393 |   mlir::Value result = builder.create<MulOp>(
+      |                        ~~~~~~~~~~~~~~~~~~~~~^
+  394 |       loc, type,
+      |       ~~~~~~~~~~                             
+  395 |       builder.create<SubOp>(loc, type, tangents[0], correction).getResult(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  396 |       inverseB).getResult();
+      |       ~~~~~~~~~                              
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:398:35: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  398 |     result = builder.create<MulOp>(
+      |              ~~~~~~~~~~~~~~~~~~~~~^
+  399 |         loc, type, result,
+      |         ~~~~~~~~~~~~~~~~~~         
+  400 |         broadcastChannel(builder, loc, type, getAffine().front(), getX()))
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:405:30: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  405 |         builder.create<MulOp>(
+      |         ~~~~~~~~~~~~~~~~~~~~~^
+  406 |             loc, type, normalized,
+      |             ~~~~~~~~~~~~~~~~~~~~~~
+  407 |             broadcastChannel(builder, loc, type, tangents[1], getX()))
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::TanhOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:513:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  513 |       builder.create<MulOp>(getLoc(), type, getY(), getY()).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:515:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  515 |       builder.create<SubOp>(getLoc(), type, one, squared).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:516:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  516 |   return {builder.create<MulOp>(getLoc(), type, tangents[0], slope).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SigmoidOp::buildTangent(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:528:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  528 |       builder.create<SubOp>(getLoc(), type, one, getY()).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:530:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  530 |       builder.create<MulOp>(getLoc(), type, getY(), complement).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/TangentInterface.cpp:531:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  531 |   return {builder.create<MulOp>(getLoc(), type, tangents[0], slope).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::AllReduceOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:180:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AllReduceOp; Args = {mlir::Type, mlir::Value, mlir::StringAttr, mlir::StringAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  180 |   auto grad = builder.create<AllReduceOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  181 |       getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(), getOpAttr());
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/TilingInterface.h:18,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/include/Tessera/IR/TesseraOps.h:9,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:20:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::AllGatherOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:189:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceScatterOp; Args = {mlir::Type, mlir::Value, mlir::StringAttr, mlir::StringAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  189 |   auto grad = builder.create<ReduceScatterOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  190 |       getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  191 |       builder.getStringAttr("sum"));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~           
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::ReduceScatterOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:199:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AllGatherOp; Args = {mlir::Type, mlir::Value, mlir::StringAttr, mlir::StringAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  199 |   auto grad = builder.create<AllGatherOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  200 |       getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(), getOpAttr());
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::AllToAllOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:208:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AllToAllOp; Args = {mlir::Type, mlir::Value, mlir::StringAttr, mlir::StringAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  208 |   auto grad = builder.create<AllToAllOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  209 |       getLoc(), getX().getType(), outputCotangents[0], getAxisAttr(), getOpAttr());
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In function ‘mlir::Value tessera::broadcastLastAxisStat(mlir::OpBuilder&, mlir::Location, mlir::RankedTensorType, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:251:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::BroadcastInDimOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&, mlir::ArrayAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  250 |   return builder
+      |          ~~~~~~~                
+  251 |       .create<BroadcastInDimOp>(loc, inputType, stat, shapeLike,
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  252 |                                 builder.getArrayAttr(dimensions))
+      |                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In function ‘mlir::Value tessera::reduceMeanLastAxis(mlir::OpBuilder&, mlir::Location, mlir::RankedTensorType, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:261:24: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceOp; Args = {mlir::RankedTensorType, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  260 |   return builder
+      |          ~~~~~~~        
+  261 |       .create<ReduceOp>(loc, lastAxisReducedType(inputType), value,
+      |       ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  262 |                         builder.getStringAttr("mean"),
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  263 |                         builder.getI64IntegerAttr(inputType.getRank() - 1))
+      |                         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In function ‘mlir::Value tessera::broadcastChannelVector(mlir::OpBuilder&, mlir::Location, mlir::RankedTensorType, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:275:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::BroadcastInDimOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&, mlir::ArrayAttr&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  274 |   return builder
+      |          ~~~~~~~                
+  275 |       .create<BroadcastInDimOp>(loc, inputType, channel, shapeLike, mapping)
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In function ‘mlir::Value tessera::reduceLeadingSum(mlir::OpBuilder&, mlir::Location, mlir::RankedTensorType, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:292:34: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  291 |     value = builder
+      |             ~~~~~~~               
+  292 |                 .create<ReduceOp>(loc, reducedType, value,
+      |                 ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+  293 |                                   builder.getStringAttr("sum"),
+      |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  294 |                                   builder.getI64IntegerAttr(0))
+      |                                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SubOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:342:61: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  342 |   mlir::Value zero = builder.create<mlir::arith::ConstantOp>(getLoc(), zeroAttr);
+      |                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:343:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  343 |   auto dRhs = builder.create<SubOp>(getLoc(), rhsTy, zero, dy);
+      |               ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::MulOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:352:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  352 |   auto dLhs = builder.create<MulOp>(getLoc(), getLhs().getType(), dy, getRhs());
+      |               ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:353:36: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  353 |   auto dRhs = builder.create<MulOp>(getLoc(), getRhs().getType(), dy, getLhs());
+      |               ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::ReduceOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:599:53: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceBackwardOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr, mlir::StringAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  599 |     auto backward = builder.create<ReduceBackwardOp>(
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  600 |         getLoc(), inTy, getInput(), getResult(), dy, getKindAttr(),
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  601 |         builder.getI64IntegerAttr(axis), builder.getStringAttr("equal"));
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:609:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::UnsqueezeOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  609 |   auto expanded = builder.create<UnsqueezeOp>(getLoc(), expandedTy, dy);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:613:34: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::BroadcastOp; Args = {mlir::RankedTensorType&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  613 |       builder.create<BroadcastOp>(getLoc(), inTy, expanded.getY()).getY();
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:618:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  618 |     grad = builder.create<MulOp>(getLoc(), inTy, grad, scale).getResult();
+      |            ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::LayerNormOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:651:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  651 |       builder.create<SubOp>(loc, inputType, getX(), centerBroadcast).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:653:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  653 |       builder.create<MulOp>(loc, inputType, centered, inverseBroadcast).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:658:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  657 |     projectedDy = builder
+      |                   ~~~~~~~            
+  658 |                       .create<MulOp>(loc, inputType, dy,
+      |                       ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+  659 |                                      broadcastChannelVector(builder, loc,
+      |                                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  660 |                                                             inputType, gamma,
+      |                                                             ~~~~~~~~~~~~~~~~~
+  661 |                                                             getX()))
+      |                                                             ~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:669:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  669 |       builder.create<MulOp>(loc, inputType, projectedDy, normalized).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:675:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  675 |       builder.create<SubOp>(loc, inputType, projectedDy, meanDyBroadcast).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:677:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  676 |   mlir::Value correction = builder
+      |                            ~~~~~~~            
+  677 |                                .create<MulOp>(loc, inputType, normalized,
+      |                                ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  678 |                                               meanDyNormalizedBroadcast)
+      |                                               ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:681:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  681 |       builder.create<SubOp>(loc, inputType, centeredDy, correction).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:684:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  684 |       builder.create<MulOp>(loc, inputType, projected, inverseBroadcast)
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:688:30: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  688 |         builder.create<MulOp>(loc, inputType, dy, normalized).getResult();
+      |         ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SoftmaxOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:721:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  721 |       builder.create<MulOp>(loc, inTy, dy, s).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:728:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  727 |       builder
+      |       ~~~~~~~               
+  728 |           .create<ReduceOp>(loc, reducedTy, weighted,
+      |           ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+  729 |                             builder.getStringAttr("sum"),
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  730 |                             builder.getI64IntegerAttr(axis))
+      |                             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:736:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::UnsqueezeOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  736 |   auto expanded = builder.create<UnsqueezeOp>(loc, expandedTy, dot);
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:740:34: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::BroadcastOp; Args = {mlir::RankedTensorType&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  740 |       builder.create<BroadcastOp>(loc, inTy, expanded.getY()).getY();
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:742:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  742 |       builder.create<SubOp>(loc, inTy, dy, dotBroadcast).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:743:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  743 |   return {builder.create<MulOp>(loc, inTy, centered, s).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SinOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:758:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::CustomAdjointCallOp; Args = {llvm::SmallVector<mlir::Type, 6>, mlir::StringAttr, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  758 |     auto callOp = builder.create<CustomAdjointCallOp>(                        \
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+  759 |         loc, llvm::SmallVector<mlir::Type>{getX().getType()},                 \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  760 |         builder.getStringAttr(KEY),                                           \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  761 |         mlir::ValueRange{outputCotangents[0], getX()});                       \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:765:1: note: in expansion of macro ‘POINTWISE_BUILD_ADJOINT’
+  765 | POINTWISE_BUILD_ADJOINT(SinOp, "sin")
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::LogSoftmaxOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:758:54: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::CustomAdjointCallOp; Args = {llvm::SmallVector<mlir::Type, 6>, mlir::StringAttr, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  758 |     auto callOp = builder.create<CustomAdjointCallOp>(                        \
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+  759 |         loc, llvm::SmallVector<mlir::Type>{getX().getType()},                 \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  760 |         builder.getStringAttr(KEY),                                           \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  761 |         mlir::ValueRange{outputCotangents[0], getX()});                       \
+      |         ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:768:1: note: in expansion of macro ‘POINTWISE_BUILD_ADJOINT’
+  768 | POINTWISE_BUILD_ADJOINT(LogSoftmaxOp, "log_softmax")
+      | ^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::ReluOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:786:46: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::CompareScalarOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::FloatAttr, mlir::StringAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  786 |   auto mask = builder.create<CompareScalarOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  787 |       getLoc(), maskType, getX(), builder.getF64FloatAttr(0.0),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  788 |       builder.getStringAttr("gt"));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~            
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:789:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MaskedFillOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value, mlir::FloatAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  789 |   auto dx = builder.create<MaskedFillOp>(
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  790 |       getLoc(), inputType, outputCotangents[0], mask.getMask(),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  791 |       builder.getF64FloatAttr(0.0));
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~      
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::RmsNormOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:816:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  815 |     projectedDy = builder
+      |                   ~~~~~~~            
+  816 |                       .create<MulOp>(
+      |                       ~~~~~~~~~~~~~~^
+  817 |                           loc, inputType, dy,
+      |                           ~~~~~~~~~~~~~~~~~~~
+  818 |                           broadcastChannelVector(builder, loc, inputType,
+      |                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  819 |                                                  getAffine().front(), getX()))
+      |                                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:823:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  822 |   mlir::Value leading = builder
+      |                         ~~~~~~~            
+  823 |                             .create<MulOp>(loc, inputType, projectedDy,
+      |                             ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  824 |                                            inverseBroadcast)
+      |                                            ~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:827:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  827 |       builder.create<MulOp>(loc, inputType, projectedDy, getX()).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:832:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  832 |       builder.create<MulOp>(loc, inputType, inverseBroadcast, inverseBroadcast)
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:835:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  835 |       builder.create<MulOp>(loc, inputType, inverseSquared, inverseBroadcast)
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:838:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  838 |       builder.create<MulOp>(loc, inputType, getX(), inverseCubed).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:840:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  840 |       builder.create<MulOp>(loc, inputType, scaledX, meanDyXBroadcast)
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:844:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  844 |       builder.create<SubOp>(loc, inputType, leading, correction).getResult());
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:847:30: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  847 |         builder.create<MulOp>(loc, inputType, getX(), inverseBroadcast).getResult();
+      |         ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:850:30: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  850 |         builder.create<MulOp>(loc, inputType, dy, normalized).getResult()));
+      |         ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In function ‘mlir::Value tessera::splatConst(mlir::OpBuilder&, mlir::Location, mlir::Type, double)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:883:49: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  883 |   return builder.create<mlir::arith::ConstantOp>(loc, attr).getResult();
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In function ‘llvm::SmallVector<mlir::Value> tessera::placeholderAdjoint(mlir::OpBuilder&, mlir::Location, mlir::Type, llvm::StringRef, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:891:52: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::CustomAdjointCallOp; Args = {llvm::SmallVector<mlir::Type, 6>, mlir::StringAttr, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  891 |   auto callOp = builder.create<CustomAdjointCallOp>(
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  892 |       loc, llvm::SmallVector<mlir::Type>{ty}, builder.getStringAttr(key),
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  893 |       mlir::ValueRange{dy, x});
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~                      
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::TanhOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:910:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  910 |   mlir::Value t2 = builder.create<MulOp>(loc, ty, t, t).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:912:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  912 |   mlir::Value d = builder.create<SubOp>(loc, ty, one, t2).getResult();
+      |                   ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:913:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  913 |   mlir::Value dx = builder.create<MulOp>(loc, ty, dy, d).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SigmoidOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:931:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  931 |   mlir::Value oneMinusS = builder.create<SubOp>(loc, ty, one, s).getResult();
+      |                           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:932:45: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  932 |   mlir::Value sPrime = builder.create<MulOp>(loc, ty, s, oneMinusS).getResult();
+      |                        ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:933:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  933 |   mlir::Value dx = builder.create<MulOp>(loc, ty, dy, sPrime).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SoftplusOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:950:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SigmoidOp; Args = {mlir::Type&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  950 |   mlir::Value s = builder.create<SigmoidOp>(loc, ty, getX()).getResult();
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:951:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  951 |   mlir::Value dx = builder.create<MulOp>(loc, ty, dy, s).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SiluOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:965:44: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SigmoidOp; Args = {mlir::Type&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  965 |   mlir::Value s = builder.create<SigmoidOp>(loc, ty, getX()).getResult();
+      |                   ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:967:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  967 |   mlir::Value oneMinusS = builder.create<SubOp>(loc, ty, one, s).getResult();
+      |                           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:968:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  968 |   mlir::Value xs = builder.create<MulOp>(loc, ty, getX(), s).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:970:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  970 |       builder.create<MulOp>(loc, ty, xs, oneMinusS).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:972:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  972 |       builder.create<AddOp>(loc, ty, s, correction).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:973:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  973 |   return {builder.create<MulOp>(loc, ty, dy, derivative).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::GeluOp::buildAdjoint(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:994:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  994 |   mlir::Value x2 = builder.create<MulOp>(loc, ty, getX(), getX()).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:995:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  995 |   mlir::Value x3 = builder.create<MulOp>(loc, ty, x2, getX()).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:997:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  997 |       builder.create<MulOp>(loc, ty, cubicCoeff, x3).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:999:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  999 |       builder.create<AddOp>(loc, ty, getX(), cubic).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1001:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1001 |       builder.create<MulOp>(loc, ty, kConst, innerBase).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1002:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::TanhOp; Args = {mlir::Type&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1002 |   mlir::Value t = builder.create<TanhOp>(loc, ty, inner).getResult();
+      |                   ~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1004:47: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1004 |   mlir::Value onePlusT = builder.create<AddOp>(loc, ty, one, t).getResult();
+      |                          ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1006:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1006 |       builder.create<MulOp>(loc, ty, half, onePlusT).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1007:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1007 |   mlir::Value t2 = builder.create<MulOp>(loc, ty, t, t).getResult();
+      |                    ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1009:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SubOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1009 |       builder.create<SubOp>(loc, ty, one, t2).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1011:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1011 |       builder.create<MulOp>(loc, ty, threeCubicCoeff, x2).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1013:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1013 |       builder.create<AddOp>(loc, ty, one, scaledX2).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1015:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1015 |       builder.create<MulOp>(loc, ty, kConst, slopeBase).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1017:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1017 |       builder.create<MulOp>(loc, ty, half, getX()).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1019:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1019 |       builder.create<MulOp>(loc, ty, halfX, oneMinusT2).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1021:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1021 |       builder.create<MulOp>(loc, ty, gatedX, innerSlope).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1023:28: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::AddOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1023 |       builder.create<AddOp>(loc, ty, first, second).getResult();
+      |       ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/AdjointInterface.cpp:1024:32: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MulOp; Args = {mlir::Type&, mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1024 |   return {builder.create<MulOp>(loc, ty, dy, derivative).getResult()};
+      |           ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[ 66%] Built target obj.TesseraIR
+[ 66%] Linking CXX static library libTesseraIR.a
+[ 66%] Built target TesseraIR
+[ 66%] Built target obj.TesseraAttnDialect
+[ 66%] Built target TesseraScheduleIR
+[ 66%] Built target TesseraAttnDialect
+[ 66%] Built target TesseraPM
+[ 67%] Building CXX object src/transforms/lib/CMakeFiles/TesseraPasses.dir/AutodiffPairedPass.cpp.o
+In file included from /home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:72:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/NativeStorageJVP.h: In function ‘llvm::LogicalResult tessera::emitNativeStorageJVP(mlir::ModuleOp, bool)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/NativeStorageJVP.h:26:55: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::FuncOp; Args = {const char (&)[18], mlir::FunctionType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   26 |     auto combined = builder.create<mlir::func::FuncOp>(fwd.getLoc(), "__native_vjp_pair", pairType);
+      |                     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/../../compiler/tile_opt_fa4/include/tessera/Dialect/Attn/AttnDialect.h:27,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:35:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/NativeStorageJVP.h:45:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::ReturnOp; Args = {mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   45 |     builder.create<mlir::func::ReturnOp>(fwd.getLoc(), mlir::ValueRange{primal, cotangent});
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: In function ‘void tessera::{anonymous}::accumulateCotangent(mlir::OpBuilder&, CotangentMap&, mlir::Value, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:1584:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddFOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1584 |           ? builder.create<mlir::arith::AddFOp>(loc, it->second, g).getResult()
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:1585:48: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::AddIOp; Args = {mlir::Value&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 1585 |           : builder.create<mlir::arith::AddIOp>(loc, it->second, g).getResult();
+      |             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: In member function ‘llvm::LogicalResult tessera::{anonymous}::AutodiffPairedPass::buildBackward(mlir::func::FuncOp)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2280:50: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::FuncOp; Args = {std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char> >&, mlir::FunctionType&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2280 |     auto bwd = builder.create<mlir::func::FuncOp>(fwd.getLoc(), bwdName, bwdType);
+      |                ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2398:59: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2398 |             zero = builder.create<mlir::arith::ConstantOp>(
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 2399 |                 fwd.getLoc(), mlir::DenseElementsAttr::get(shaped, z));
+      |                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2437:57: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::TypedAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2437 |           zero = builder.create<mlir::arith::ConstantOp>(
+      |                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 2438 |               fwd.getLoc(), builder.getZeroAttr(ty));
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2444:41: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::func::ReturnOp; Args = {llvm::SmallVector<mlir::Value, 6>&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2444 |     builder.create<mlir::func::ReturnOp>(fwd.getLoc(), results);
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: In member function ‘mlir::Value tessera::{anonymous}::AutodiffPairedPass::buildZeroLike(mlir::OpBuilder&, mlir::Value)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2477:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::DenseElementsAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2476 |       return builder
+      |              ~~~~~~~                       
+ 2477 |           .create<mlir::arith::ConstantOp>(
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+ 2478 |               primal.getLoc(), mlir::DenseElementsAttr::get(shaped, zero))
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:2483:43: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = mlir::arith::ConstantOp; Args = {mlir::TypedAttr&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+ 2482 |       return builder
+      |              ~~~~~~~                       
+ 2483 |           .create<mlir::arith::ConstantOp>(primal.getLoc(), zero)
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp: At global scope:
+/home/angstorms/scratch/next-five-compiler-slices/src/transforms/lib/AutodiffPairedPass.cpp:132:6: warning: ‘bool tessera::{anonymous}::carriesKeyedRngProduct(mlir::Operation*)’ defined but not used [-Wunused-function]
+  132 | bool carriesKeyedRngProduct(mlir::Operation *op) {
+      |      ^~~~~~~~~~~~~~~~~~~~~~
+[ 69%] Linking CXX static library libTesseraPasses.a
+[ 98%] Built target TesseraPasses
+[100%] Built target obj.TesseraNVIDIAConversion
+[100%] Built target TesseraNVIDIAConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt

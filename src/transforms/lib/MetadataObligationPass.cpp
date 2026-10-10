@@ -352,6 +352,8 @@ struct VerifyMetadataObligation
     }
 
     auto current = collect(module);
+    DictionaryAttr moduleDropped = module->getAttrOfType<DictionaryAttr>(kDroppedAttr);
+    llvm::StringSet<> moduleDeclarationExplainedSomething;
 
     for (NamedAttribute scopeEntry : snapshot) {
       StringRef scope = scopeEntry.getName().strref();
@@ -364,6 +366,8 @@ struct VerifyMetadataObligation
           currentIt != current.end() ? currentIt->second : ValueCounts{};
       DictionaryAttr dropped = droppedFor(module, scope);
       llvm::StringSet<> declarationExplainedSomething;
+      auto function = scope == kModuleScope ? func::FuncOp() : module.lookupSymbol<func::FuncOp>(scope);
+      bool usesModuleDeclaration = scope == kModuleScope || !function || !function->hasAttr(kDroppedAttr);
 
       for (auto &nameEntry : before) {
         const std::string &name = nameEntry.first;
@@ -387,6 +391,7 @@ struct VerifyMetadataObligation
         Attribute reasonAttr = dropped ? dropped.get(name) : Attribute();
         if (reasonAttr) {
           declarationExplainedSomething.insert(name);
+          if (usesModuleDeclaration) moduleDeclarationExplainedSomething.insert(name);
           if (!checkReason(module, scope, name, reasonAttr, nameSurvives))
             anyError = true;
           continue;
@@ -424,7 +429,7 @@ struct VerifyMetadataObligation
       // second is the more dangerous -- it looks harmless right up until the
       // function acquires that attribute, at which point it silently licenses a
       // real drop nobody reviewed.
-      if (dropped) {
+      if (dropped && !usesModuleDeclaration) {
         for (NamedAttribute d : dropped) {
           StringRef name = d.getName().strref();
           if (declarationExplainedSomething.contains(name)) continue;
@@ -439,6 +444,15 @@ struct VerifyMetadataObligation
                  "future drop nobody reviewed.";
           anyError = true;
         }
+      }
+    }
+
+    if (moduleDropped) {
+      for (NamedAttribute declaration : moduleDropped) {
+        StringRef name = declaration.getName().strref();
+        if (moduleDeclarationExplainedSomething.contains(name)) continue;
+        module.emitError() << "METADATA_OBLIGATION_STALE_DECLARATION: @" << kModuleScope << " declares `" << name << "` dropped, but no snapshot scope lost that attribute. Remove the declaration; an unused exception licenses a future drop nobody reviewed.";
+        anyError = true;
       }
     }
 

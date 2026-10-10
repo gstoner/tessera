@@ -159,6 +159,9 @@ jobs:
           bash scripts/ci_resolve_llvm.sh --lane compiler-route \
             --manifest ci-toolchain/compiler-route.json
 
+      - name: Install pinned ROCm image SDK (host-free)
+        run: bash scripts/ci_install_pinned_rocm.sh
+
       - name: Install Python deps
         run: |
           python -m pip install --upgrade pip

@@ -1,0 +1,75 @@
+-- Testing: 5 tests, 5 workers --
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_core.mlir (1 of 5)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul.mlir (2 of 5)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_encoded_invalid.mlir (3 of 5)
+FAIL: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_tile.mlir (4 of 5)
+******************** TEST 'Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_tile.mlir' FAILED ********************
+Exit Code: 1
+
+Command Output (stdout):
+--
+# RUN: at line 1
+"/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt" -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir --tessera-autodiff-forward --tessera-graph-to-schedule --tessera-schedule-to-tile | "/usr/lib/llvm-23/bin/FileCheck" /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt -allow-unregistered-dialect /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir --tessera-autodiff-forward --tessera-graph-to-schedule --tessera-schedule-to-tile
+# executed command: /usr/lib/llvm-23/bin/FileCheck /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+# .---command stderr------------
+# | /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir:22:16: error: CHECK-SAME: is not on the same line as the previous match
+# | // CHECK-SAME: scale_k = 128
+# |                ^
+# | <stdin>:79:332: note: 'next' match was here
+# |  tile.scaled_matmul_kernel %17, %20, %23, %26, %28, %c17_i64_10, %c19_i64_11, %c256_i64_12 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 8, scale_k = 128, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 8 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 256 : i64, tessera.problem_m = 17 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 128 : i64, tessera.schedule_hash = "248ef92f25a529cc407da2d4bd06c1842a9c6c412d288336a10231fdc7288b10", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+# |                                                                                                                                                                                                                                                                                                                                            ^
+# | <stdin>:54:353: note: previous match ended here
+# |  tile.scaled_matmul_kernel %2, %5, %8, %11, %13, %c17_i64, %c19_i64, %c256_i64 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 8, scale_k = 128, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 8 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 256 : i64, tessera.problem_m = 17 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 128 : i64, tessera.schedule_hash = "248ef92f25a529cc407da2d4bd06c1842a9c6c412d288336a10231fdc7288b10", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64
+# |                                                                                                                                                                                                                                                                                                                                                                 ^
+# | 
+# | Input file: <stdin>
+# | Check file: /home/angstorms/scratch/next-five-compiler-slices/tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+# | 
+# | -dump-input=help explains the following input dump.
+# | 
+# | Input was:
+# | <<<<<<
+# |            .
+# |            .
+# |            .
+# |           49:  %12 = arith.index_cast %intptr_3 : index to i64 
+# |           50:  %13 = llvm.inttoptr %12 : i64 to !llvm.ptr 
+# |           51:  %c17_i64 = arith.constant 17 : i64 
+# |           52:  %c19_i64 = arith.constant 19 : i64 
+# |           53:  %c256_i64 = arith.constant 256 : i64 
+# |           54:  tile.scaled_matmul_kernel %2, %5, %8, %11, %13, %c17_i64, %c19_i64, %c256_i64 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 8, scale_k = 128, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 8 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 256 : i64, tessera.problem_m = 17 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 128 : i64, tessera.schedule_hash = "248ef92f25a529cc407da2d4bd06c1842a9c6c412d288336a10231fdc7288b10", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64 
+# | same:22'0                                                                                                                                                                                                                                                                                                                                                                    {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   search range start (exclusive)
+# |           55:  %14 = bufferization.to_tensor %alloc : memref<17x19xf32> to tensor<17x19xf32> 
+# |           56:  %15 = bufferization.to_buffer %arg0 : tensor<17x256xf8E4M3FN> to memref<17x256xf8E4M3FN> 
+# |           57:  %intptr_4 = memref.extract_aligned_pointer_as_index %15 : memref<17x256xf8E4M3FN> -> index 
+# |           58:  %16 = arith.index_cast %intptr_4 : index to i64 
+# |           59:  %17 = llvm.inttoptr %16 : i64 to !llvm.ptr 
+# |            .
+# |            .
+# |            .
+# |           74:  %27 = arith.index_cast %intptr_9 : index to i64 
+# |           75:  %28 = llvm.inttoptr %27 : i64 to !llvm.ptr 
+# |           76:  %c17_i64_10 = arith.constant 17 : i64 
+# |           77:  %c19_i64_11 = arith.constant 19 : i64 
+# |           78:  %c256_i64_12 = arith.constant 256 : i64 
+# |           79:  tile.scaled_matmul_kernel %17, %20, %23, %26, %28, %c17_i64_10, %c19_i64_11, %c256_i64_12 {epilogue = #tile.epilogue<bias = false, activation = "none", output = "f32">, mma = #tile.mma_desc<family = "wmma", m = 16, n = 16, k = 16, a = "e4m3", b = "e4m3", acc = "f32", a_layout = "row_major", b_layout = "col_major", k_blocks = 8, scale_k = 128, scale_fmt = "fp32">, numeric_policy = {accum = "f32", execution_mode = "exact_per_block", storage = "e4m3"}, partial_accumulator = {combine = "scale_outer_product_then_add", cross_step_motion = "forbid", init = "zero", instruction_steps = 8 : i64, schedule_scope = "scale_group", scope = "scale_group"}, physical_contract = "rocm_fp8_w8a8_blockscale_v1", staging = "global", tessera.canonical_k_loop = true, tessera.macro_tile_m = 16 : i64, tessera.macro_tile_n = 16 : i64, tessera.pipeline_depth = 1 : i64, tessera.problem_k = 256 : i64, tessera.problem_m = 17 : i64, tessera.problem_n = 19 : i64, tessera.raster_group = 1 : i64, tessera.raster_order = "row_major", tessera.scale_block_n = 128 : i64, tessera.schedule_hash = "248ef92f25a529cc407da2d4bd06c1842a9c6c412d288336a10231fdc7288b10", tessera.tile_k = 16 : i64, tessera.tile_m = 16 : i64, tessera.tile_n = 16 : i64, warps = 1 : i64} : !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, !llvm.ptr, i64, i64, i64 
+# | same:22'1                                                                                                                                                                                                                                                                                                                                                !~~~~~~~~~~~~                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       error: match on wrong
+# | ...
+# `---data was truncated (10240/11095) (change limit with -D output_limit=N)
+# error: command failed with exit status: 1
+
+--
+
+********************
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_schedule.mlir (5 of 5)
+********************
+Failed Tests (1):
+  Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_tile.mlir
+
+
+Testing Time: 0.16s
+
+Total Discovered Tests: 5
+  Passed: 4 (80.00%)
+  Failed: 1 (20.00%)

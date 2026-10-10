@@ -1,0 +1,1 @@
+Compiler, archived leaf source, recorder, HSACO, disassembly and measured frontend source hashes checked. All five format ISA hashes checked. Shared activation hash checked. Zero format arithmetic-bound violations.

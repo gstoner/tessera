@@ -1137,10 +1137,9 @@ def test_gfx1151_direct_kernel_cache_reuses_image_across_shapes(
     """Both native Tile producers take runtime extents and shape-free images.
     The distinct descriptor guards must still reflect each caller's shape.
     """
-    if find_tessera_opt() is None:
-        pytest.skip("tessera-opt is not built on this host")
     from tessera.compiler import rocm_native
-
+    if not rocm_native.native_packaging_available():
+        pytest.skip("requires the executable ROCm compiler backend and AMD device libraries")
     rocm_native._cache.clear()
     initial = package_fn(first, pipeline_name="tessera-lower-to-rocm")
     reused = package_fn(second, pipeline_name="tessera-lower-to-rocm")

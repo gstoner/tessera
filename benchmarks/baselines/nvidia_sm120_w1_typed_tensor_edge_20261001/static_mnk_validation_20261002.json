@@ -1,0 +1,105 @@
+{
+  "architecture": "sm_120",
+  "benchmark_packet": "typed_matmul_static_mnk_tails_20261002.json",
+  "benchmark_packet_sha256": "d07068c0e78706fcbd153eb09bf06a5a28cfb381f4aa40ef560cdbd68e75e6de",
+  "compiler_tools": {
+    "llc": {
+      "path": "/usr/lib/llvm-23/bin/llc",
+      "sha256": "81554da92c973d14b3505f8b6ce30eb66d307cbf76c662bf76478e6b5d3bfad6",
+      "version": [
+        "Ubuntu LLVM version 23.1.1",
+        "  Optimized build.",
+        "  Default target: x86_64-pc-linux-gnu"
+      ]
+    },
+    "llvm-link": {
+      "path": "/usr/lib/llvm-23/bin/llvm-link",
+      "sha256": "16ced40d94d8e4af05f55d01608d1cb8f89cdc8c7ebf501dd3651588175fd3b5"
+    },
+    "mlir-opt": {
+      "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-opt",
+      "sha256": "62a18523fcec89907cd9b0eade4d5976c549d11f85697089766242406ed1c271"
+    },
+    "mlir-translate": {
+      "path": "/home/angstorms/toolchains/llvm-23.1.1-assertions/bin/mlir-translate",
+      "sha256": "1ab0beb342311021e062480166403962d6981ac1e63162947cd80eb5ecb3a80d",
+      "version": [
+        "LLVM (http://llvm.org/):",
+        "  LLVM version 23.1.1",
+        "  Optimized build with assertions."
+      ]
+    },
+    "ptxas": {
+      "path": "/usr/local/cuda/bin/ptxas",
+      "sha256": "9c2c084df7eb9be48f0502b6938ce2571679b2a78cad1c564b583bd7d9ea3c50"
+    },
+    "tessera-nvidia-opt": {
+      "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+      "sha256": "6f23b5bc53acc35ee1d3e738201df21b7d117a145d278995a4929b707bf642d3"
+    },
+    "tessera-opt": {
+      "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+      "sha256": "867d575354f3ce759064ea95cc13d4735a3c3dce8878dd2326a6cd561b73caed"
+    }
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "memory_validation": {
+    "compute_sanitizer": "unavailable_wsl_wddm_debugger_initialization",
+    "memcheck_proved": false,
+    "resident_canary_cases": 6,
+    "status": "passed"
+  },
+  "remaining_w1_1": [
+    "generic_direct_tile_tensor_producers",
+    "fused_and_arbitrary_tensor_lifetime_envelopes"
+  ],
+  "schema": "tessera.nvidia.sm120.static_mnk_validation.v1",
+  "selector_changed": false,
+  "source_revision": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_scheduled_typed_matmul.py": "cca59775ffbe520db3975e5a28a3eac7731432ea85f386d4522c7018408f5198",
+    "python/tessera/compiler/driver.py": "4515e9efef31af3cae8a6838d42be3a35a8637e566029e4a32c61b0876ba36a5",
+    "python/tessera/compiler/emit/nvidia_cuda.py": "6f0ab46c6949a51b91dd7ac124ceb4250648d69fc2630e2ec26e8542f11f9758",
+    "python/tessera/compiler/native_artifact.py": "9ea3f6a4deea0b2d66047bf6f682394cbaff9520352cab6686b5614731892921",
+    "python/tessera/compiler/nvidia_native.py": "9fa380c54f164c9ea29d49eb73fd1db48db6191422987eceaa557531487351b1",
+    "python/tessera/compiler/scheduled_matmul.py": "7916e5adb76d0fc4374cb1f16fa5bc8819965d8c1077262e220cacc6a3f648e7",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "bb8e67783a10c87c210393844fbee5c8ae8bf7ebd7c3d2c0483719e339f12029",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "447b3d24abe34522abf4e9e491624da87c296858b10665317046cd0139adc68e",
+    "tests/device/nvidia/test_scheduled_matmul_consumers.py": "063639112ac4569e4035b55db23ce39b7d5303c3a3d981ce97e807cd917dac8d",
+    "tests/unit/test_scheduled_matmul_consumers.py": "8b1fa5a6c65f9599a5deb9745b9b0d2898490724419fa5819bce751e9af1e5c8"
+  },
+  "source_worktree_dirty": true,
+  "synchronization_key": "NVIDIA-W1.1-STATIC-MNK-TAILS-2026-10-02",
+  "target": "nvidia_sm120",
+  "tests": [
+    {
+      "failed": 0,
+      "group": "shared_contract_gates",
+      "passed": 488,
+      "skipped": 0,
+      "transcript_sha256": "9d0848fa5d8d91a074aefcc13f522941166bf96efb8b2f4adacaefd5475a1d80"
+    },
+    {
+      "failed": 0,
+      "group": "native_admission_and_entry_projection",
+      "passed": 16,
+      "skipped": 0,
+      "transcript_sha256": "4ddfa681cbef2a24532200d83a101e759cd1a9f19d451e3aa28c19039461f037"
+    },
+    {
+      "failed": 0,
+      "group": "tensor_program_and_public_frontend",
+      "passed": 48,
+      "skipped": 0,
+      "transcript_sha256": "3946d2355aab8ee00d038f6028528f3a81701ccb4c697eaebf471b54391c579b"
+    },
+    {
+      "failed": 0,
+      "group": "scheduled_matmul_exact_device",
+      "passed": 32,
+      "skipped": 0,
+      "transcript_sha256": "d1a35cec8c74a5b34d519f3cc6350a89f62038371e351b170a221440f1169f71"
+    }
+  ],
+  "work_item": "W1.1"
+}

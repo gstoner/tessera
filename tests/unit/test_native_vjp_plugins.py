@@ -61,7 +61,12 @@ def test_attention_vjp_declares_only_canonical_rank4_consumers() -> None:
         assert declaration.family == "attention_backward"
         assert declaration.schedule_consumer == "schedule.attention_backward"
         assert declaration.tile_consumer == "tile.attention_backward_kernel"
-        assert set(declaration.target_consumers) == {"x86", "rocm"}
+        assert set(declaration.target_consumers) == {"x86", "rocm", "nvidia_sm120"}
+        selected=declaration.for_target("nvidia_sm120")
+        assert selected.schedule_consumer=="schedule.artifact"
+        assert selected.graph_consumers==("tessera.flash_attn",)
+        assert selected.owns("tessera.flash_attn","nvidia_sm120")
+        assert not selected.owns("tessera.gqa_attention","nvidia_sm120")
     # The public rank-3 wrapper still needs an explicit reshape/transpose
     # product before it can truthfully share the rank-4 physical package.
     assert "multi_head_attention" not in declarations

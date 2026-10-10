@@ -1,0 +1,99 @@
+{
+  "architecture": "sm_120a",
+  "checkpoint": "saved forward output and row_lse from native forward package; deterministic_direct backward",
+  "compiler_tool_hashes": {
+    "TESSERA_NVIDIA_OPT": "f6148d0f2a9a530f216de6f11388f2c39fd741d902a65666840cc50fe1233fc1",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "646a37fd34427db3154ad895b4362b28f20f7162ca2f4c892e7bac4bfcf39f32",
+    "TESSERA_OPT": "44a6de6eb404fc42b288c3d595f4b6bf6c54f8519fbd5e24f4b54f91d2c65e7f"
+  },
+  "correctness": {
+    "all_gradients_match_recompute_and_oracle": true,
+    "forward_execution_kind": "native_gpu",
+    "forward_max_abs_error": 4.470348358154297e-08,
+    "gradient_max_abs_errors": [
+      2.7939677238464355e-09,
+      4.6566128730773926e-09,
+      1.4901161193847656e-07
+    ],
+    "lse_max_abs_error": 2.384185791015625e-07,
+    "recompute_backward_execution_kind": "native_gpu",
+    "saved_backward_execution_kind": "native_gpu"
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "forward_timing": {
+    "device_domain": "CUDA events around repeated native forward launches on resident buffers; transfers excluded",
+    "device_median_ms": 0.026781760156154633,
+    "device_samples_ms_per_launch": [
+      0.026936959475278854,
+      0.02668256126344204,
+      0.02639712020754814,
+      0.026781760156154633,
+      0.02694528177380562,
+      0.027495360001921654,
+      0.02653440088033676
+    ],
+    "end_to_end_domain": "runtime.launch host-array binding, transfers, launch and synchronization",
+    "end_to_end_median_ms": 1.0424409992992878,
+    "end_to_end_samples_ms_per_launch": [
+      1.083434666118895,
+      1.0424409992992878,
+      1.0558929983138416,
+      1.307447664051627,
+      1.0328810021746904,
+      1.0272369981976226,
+      1.0022073353563126
+    ]
+  },
+  "packages": {
+    "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+    "backward_image": "716fa35e0a570f20008a29a489f165a9e614cea36663b7bfb4ca64a3e581f8bd",
+    "backward_schedule": "5608f8028aebd35eb40b328963305cd72915464441877742edebbcd662faf9a7",
+    "backward_tile": "bb4e5957445235384f610acd02d42eb584b06d571ed8edcfd9bec1fc45d04ef5",
+    "forward_abi": "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1",
+    "forward_image": "adda13f24f65534320f36431936d952338471ce22ce9728418724151674020e0"
+  },
+  "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+  "schema": "tessera.nvidia.saved-lse-backward-benchmark.v1",
+  "selector_changed": false,
+  "shape_b_hq_hkv_sq_sk_d_dv": [
+    1,
+    4,
+    2,
+    16,
+    16,
+    32,
+    32
+  ],
+  "target": "nvidia_sm120",
+  "timing": {
+    "device_cv": 0.0009745053092962119,
+    "device_domain": "CUDA events around repeated native backward launches on caller-owned resident buffers and caller stream; transfers are outside the event window",
+    "device_median_ms": 0.08007615804672241,
+    "device_reps": 100,
+    "device_samples_ms_per_launch": [
+      0.08002080023288727,
+      0.07998336106538773,
+      0.0802396759390831,
+      0.08009631931781769,
+      0.0800982415676117,
+      0.0800185576081276,
+      0.08007615804672241
+    ],
+    "end_to_end_cv": 0.051278706755647545,
+    "end_to_end_domain": "runtime.launch on host arrays; includes binding, transfer, launch, and synchronization",
+    "end_to_end_median_ms": 1.350223334156908,
+    "end_to_end_reps": 3,
+    "end_to_end_samples_ms_per_launch": [
+      1.5148009988479316,
+      1.3159463317909588,
+      1.3398100030220423,
+      1.3717603336165969,
+      1.350223334156908,
+      1.4217666660745938,
+      1.2876626666790496
+    ],
+    "samples": 7,
+    "warmup": 3
+  },
+  "work_item": "NVIDIA-ATTENTION-LSE-BACKWARD-2026-10-01"
+}

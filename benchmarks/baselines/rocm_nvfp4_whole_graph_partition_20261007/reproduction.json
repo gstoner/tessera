@@ -1,0 +1,18 @@
+{
+  "shape_mnk": [
+    16,
+    16,
+    64
+  ],
+  "operations": [
+    "nvfp4_requantize",
+    "mxfp4_folded_storage",
+    "scaled_matmul"
+  ],
+  "graph_verification_exit": 0,
+  "whole_graph_schedule_exit": 1,
+  "compiler": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "e4e33848bc4b1b9378789dc2c47539a1f1c405ac0c93ec0e2df9713fdfe071d6",
+  "graph_sha256": "a975e3e55f1ce05e7a620e80340fd5d49925b50c6a412334b61f00c12c29d951",
+  "interpretation": "full semantic Graph verifies; current public packaging partitions it in Python before native stage scheduling"
+}

@@ -1,0 +1,6 @@
+/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_native.py:1523: RuntimeWarning: /home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tessera-opt-folded-graph-reference is older than 1 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+  warn_if_generator_is_stale(tool)
+[256, 4096, 1024] native/control device ratio 1.1070394247913131
+[256, 4096, 2048] native/control device ratio 1.0767437687231287
+[256, 4096, 5120] native/control device ratio 1.0856160684993754
+[256, 8192, 5120] native/control device ratio 1.0304497751692865

@@ -82,7 +82,8 @@ def test_family_plugins_declare_the_complete_compiler_spine():
             assert declaration.migration_state == "compatibility"
             assert declaration.schedule_consumer is None
             assert declaration.tile_consumer is None
-        assert {"x86", "rocm"}.issubset(declaration.target_consumers)
+        assert declaration.target_consumers
+        assert set(declaration.target_consumers).issubset({"x86","rocm","nvidia_sm120"})
 
 
 def test_graph_float_attributes_use_mlir_scientific_syntax():
@@ -305,3 +306,13 @@ def test_rocm_spectral_jvp_package_is_lowered_for_and_names_its_chip(chip):
     consumer = f"rocm.{chip}_spectral"
     assert contract["consumer_declaration"]["target"] == consumer
     assert {action["target_consumer"] for action in contract["tile_program"]["actions"]} == {consumer}
+
+def test_attention_plugin_reports_only_implemented_physical_target():
+    declaration=native_jvp_plugin_declarations()["flash_attn"]
+    assert declaration.family=="attention_checkpoint"
+    assert set(declaration.target_consumers)=={"nvidia_sm120"}
+    for target in ("x86","rocm"):
+        source=IROp(op_name="tessera.flash_attn",operands=["q","k","v"],operand_types=[],result="out")
+        with pytest.raises(ValueError,match="no Target consumer"):
+            plan_native_jvp_family(source=source,primal_inputs=(),wrt_indices=(0,),
+                target=target,architecture="unused",execution_mode="unused")

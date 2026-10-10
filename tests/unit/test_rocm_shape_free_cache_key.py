@@ -27,6 +27,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
+from tests.unit.rocm_kernel_identity_reference import project_reference
 from tessera.compiler import rocm_native, scheduled_kernel
 from tessera.compiler.graph_ir import GraphIRFunction, GraphIRModule, IRArg, IROp, IRType
 
@@ -83,7 +84,7 @@ def _target(shape: tuple[int, int, int], *, symbol: str = "gfx1151_unary", attrs
 
 
 def _project(target_ir: str) -> str:
-    return rocm_native._shape_free_target_ir(target_ir, family="reduction", directive="tessera_rocm.reduce")
+    return project_reference(target_ir, family="reduction", directive="tessera_rocm.reduce")
 
 
 # --- the projection -----------------------------------------------------------------------------
@@ -162,6 +163,8 @@ class _FakeCompiler:
         self.target_runs = 0
 
     def run_opt(self, _tool: Path, source: str, pipeline: str) -> str:
+        if "tessera-rocm-project-kernel-identity" in pipeline:
+            return project_reference(source, family="reduction", directive="tessera_rocm.reduce")
         if "output=target" in pipeline:
             self.target_runs += 1
             return source
@@ -400,3 +403,182 @@ def test_scheduled_attention_shape_and_symbol_reuse_one_image(architecture):
     biased = rocm_native.package_scheduled_attention(artifact, pipeline_name=PIPELINE)
     assert biased.image.compile_state == "cold"
     assert biased.image.image_digest != packages[0].image.image_digest
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.skipif(
+    os.environ.get("TESSERA_GFX1201_DEVICE_PROOF") != "1",
+    reason="set TESSERA_GFX1201_DEVICE_PROOF=1 on Tajasaurus",
+)
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_gfx1201_scheduled_matmul_shape_and_symbol_reuse_one_image(dtype):
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module
+
+    assert rt._rocm_live_arch() == "gfx1201"
+    rocm_native._cache.clear()
+    rocm_native._shape_free_targets.clear()
+    packages = []
+    shapes = ((16, 16, 16), (32, 32, 32))
+    for index, shape in enumerate(shapes):
+        module = _module(target="rocm", shape=shape, dtype=dtype)
+        module.functions[0].name = f"gfx1201_matmul_shape_{index}"
+        artifact = scheduled_matmul.lower_scheduled_matmul(
+            module, target="rocm_gfx1201"
+        )
+        package = rocm_native.package_scheduled_matmul(
+            artifact, pipeline_name=PIPELINE
+        )
+        assert package.image.compile_state == ("cold" if index == 0 else "warm_cache")
+        if index:
+            assert package.descriptor.entry_symbol == packages[0][1].descriptor.entry_symbol
+            assert package.descriptor.shape_guards != packages[0][1].descriptor.shape_guards
+        packages.append((artifact, package, shape))
+
+        m, k, n = shape
+        rng = np.random.default_rng(1201 + index)
+        storage_dtype = np.float16
+        if dtype == "bf16":
+            import ml_dtypes
+            storage_dtype = ml_dtypes.bfloat16
+        a = (rng.standard_normal((m, k)) * 0.25).astype(storage_dtype)
+        b = (rng.standard_normal((k, n)) * 0.25).astype(storage_dtype)
+        out = np.zeros((m, n), np.float32)
+        runtime = rt.RuntimeArtifact(
+            metadata={"target": package.image.target},
+            native_image=package.image,
+            launch_descriptor=package.descriptor,
+            tile_ir=package.tile_ir,
+            target_ir=package.target_ir,
+        )
+        result = rt.launch(runtime, {"buffers": {"a": a, "b": b, "o": out},
+                                    "scalars": {"M": m, "N": n, "K": k}})
+        assert result["ok"] and result["execution_kind"] == "native_gpu", result
+        expected = a.astype(np.float32) @ b.astype(np.float32)
+        np.testing.assert_allclose(out, expected, rtol=0, atol=5e-2)
+
+    first_artifact, first, _ = packages[0]
+    second_artifact, second, _ = packages[1]
+    assert first.image.image_digest == second.image.image_digest
+    assert first.image.payload == second.image.payload
+    assert first.tile_ir != second.tile_ir
+    assert first.descriptor.provenance["schedule_digest"] != second.descriptor.provenance["schedule_digest"]
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("architecture",["gfx1151","gfx1201"])
+@pytest.mark.parametrize("dtype",["fp16","bf16"])
+@pytest.mark.parametrize("fused",[False,True])
+def test_unrolled_register_matmul_reuses_image_and_preserves_recipe(architecture,dtype,fused):
+    gate="TESSERA_ROCM_E2E_DEVICE_TEST" if architecture=="gfx1151" else "TESSERA_GFX1201_DEVICE_PROOF"
+    if os.environ.get(gate)!="1":
+        pytest.skip(f"requires exact owning {architecture} device")
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module
+    assert rt._rocm_live_arch()==architecture
+    rocm_native._cache.clear()
+    rocm_native._shape_free_targets.clear()
+    packages=[]
+    first_artifact=None
+    for index,shape in enumerate(((32,64,32),(17,67,23),(128,128,128))):
+        module=_module(target="rocm",shape=shape,dtype=dtype,bias=fused,
+                       activation="relu" if fused else "none")
+        module.functions[0].name=f"unrolled_shape_{index}"
+        artifact=scheduled_matmul.lower_scheduled_matmul(module,target=f"rocm_{architecture}")
+        if first_artifact is None:first_artifact=artifact
+        package=rocm_native.package_scheduled_matmul(artifact,pipeline_name=PIPELINE,k_unroll=2)
+        assert package.image.compile_state==("cold" if index==0 else "warm_cache")
+        assert package.descriptor.provenance["k_unroll"]==2
+        packages.append(package)
+        m,k,n=shape
+        storage=np.float16 if dtype=="fp16" else pytest.importorskip("ml_dtypes").bfloat16
+        rng=np.random.default_rng(120602+index)
+        a=(rng.normal(size=(m,k))*.2).astype(storage)
+        b=(rng.normal(size=(k,n))*.2).astype(storage)
+        out=np.empty((m,n),np.float32)
+        args={"a":a,"b":b,"o":out,"M":m,"N":n,"K":k}
+        expected=a.astype(np.float32)@b.astype(np.float32)
+        if fused:
+            bias=(rng.normal(size=n)*.1).astype(np.float32)
+            args["bias"]=bias
+            expected=np.maximum(expected+bias,0)
+        runtime=rt.RuntimeArtifact(metadata={"target":package.image.target},
+             native_image=package.image,launch_descriptor=package.descriptor,
+             tile_ir=package.tile_ir,target_ir=package.target_ir)
+        receipt=rt.launch(runtime,args)
+        assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
+        np.testing.assert_allclose(out,expected,rtol=2e-4,atol=2e-4)
+    assert len({p.image.image_digest for p in packages})==1
+    assert len({p.descriptor.entry_symbol for p in packages})==1
+    assert len({p.descriptor.provenance["schedule_digest"] for p in packages})==3
+    other=rocm_native.package_scheduled_matmul(first_artifact,pipeline_name=PIPELINE,k_unroll=1)
+    assert other.image.compile_state=="cold"
+    assert other.descriptor.provenance["k_unroll"]==1
+    assert other.image.payload != packages[0].image.payload
+
+
+@pytest.mark.hardware_rocm
+@pytest.mark.parametrize("architecture",["gfx1151","gfx1201"])
+@pytest.mark.parametrize("dtype",["fp16","bf16"])
+@pytest.mark.parametrize("fused",[False,True])
+def test_lds_matmul_reuses_image_and_preserves_wave_recipe(architecture,dtype,fused):
+    gate="TESSERA_ROCM_E2E_DEVICE_TEST" if architecture=="gfx1151" else "TESSERA_GFX1201_DEVICE_PROOF"
+    if os.environ.get(gate)!="1":
+        pytest.skip(f"requires exact owning {architecture} device")
+    from tessera import runtime as rt
+    from tessera.compiler import scheduled_matmul
+    from tests.unit.test_scheduled_matmul_consumers import _module
+    assert rt._rocm_live_arch()==architecture
+    rocm_native._cache.clear()
+    rocm_native._shape_free_targets.clear()
+    packages=[]
+    first_artifact=None
+    first_args=None
+    first_expected=None
+    for index,shape in enumerate(((32,64,32),(17,67,23),(128,128,128))):
+        module=_module(target="rocm",shape=shape,dtype=dtype,bias=fused,
+                       activation="relu" if fused else "none")
+        module.functions[0].name=f"unrolled_shape_{index}"
+        artifact=scheduled_matmul.lower_scheduled_matmul(module,target=f"rocm_{architecture}")
+        if first_artifact is None:first_artifact=artifact
+        package=rocm_native.package_scheduled_matmul(artifact,pipeline_name=PIPELINE,staging="lds",lds_waves=(2,2))
+        assert package.image.compile_state==("cold" if index==0 else "warm_cache")
+        assert package.descriptor.provenance["staging"]=="lds"
+        assert package.descriptor.provenance["workgroup"]==[128,1,1]
+        packages.append(package)
+        m,k,n=shape
+        storage=np.float16 if dtype=="fp16" else pytest.importorskip("ml_dtypes").bfloat16
+        rng=np.random.default_rng(120602+index)
+        a=(rng.normal(size=(m,k))*.2).astype(storage)
+        b=(rng.normal(size=(k,n))*.2).astype(storage)
+        out=np.empty((m,n),np.float32)
+        args={"a":a,"b":b,"o":out,"M":m,"N":n,"K":k}
+        expected=a.astype(np.float32)@b.astype(np.float32)
+        if fused:
+            bias=(rng.normal(size=n)*.1).astype(np.float32)
+            args["bias"]=bias
+            expected=np.maximum(expected+bias,0)
+        if index==0:
+            first_args=args
+            first_expected=expected
+        runtime=rt.RuntimeArtifact(metadata={"target":package.image.target},
+             native_image=package.image,launch_descriptor=package.descriptor,
+             tile_ir=package.tile_ir,target_ir=package.target_ir)
+        receipt=rt.launch(runtime,args)
+        assert receipt["ok"] and receipt["execution_kind"]=="native_gpu",receipt
+        np.testing.assert_allclose(out,expected,rtol=2e-4,atol=2e-4)
+    assert len({p.image.image_digest for p in packages})==1
+    assert len({p.descriptor.entry_symbol for p in packages})==1
+    assert len({p.descriptor.provenance["schedule_digest"] for p in packages})==3
+    other=rocm_native.package_scheduled_matmul(first_artifact,pipeline_name=PIPELINE,staging="lds",lds_waves=(1,2))
+    assert other.image.compile_state=="cold"
+    assert other.descriptor.provenance["workgroup"]==[64,1,1]
+    assert other.image.payload != packages[0].image.payload
+    alternate=rt.RuntimeArtifact(metadata={"target":other.image.target},
+        native_image=other.image,launch_descriptor=other.descriptor,
+        tile_ir=other.tile_ir,target_ir=other.target_ir)
+    result=rt.launch(alternate,first_args)
+    assert result["ok"] and result["execution_kind"]=="native_gpu",result
+    np.testing.assert_allclose(first_args["o"],first_expected,rtol=2e-4,atol=2e-4)

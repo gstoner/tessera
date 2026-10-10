@@ -1,0 +1,6 @@
+(4, 4, 16, 3, 8, 7, 41) candidate/reference 1.0088926059962025
+(3, 5, 7, 3, 17, 5, 25) candidate/reference 0.9971977355380027
+(5, 8, 9, 1, 31, 8, 51) candidate/reference 0.9971058008690228
+(4, 3, 1, 2, 257, 0, 3) candidate/reference 1.007182367364946
+(2, 3, 3, 1, 1, 2, 5) candidate/reference 1.0060716158449456
+(32, 64, 16, 8, 128, 0, 1024) candidate/reference 1.0031352951698707

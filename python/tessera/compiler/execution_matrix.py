@@ -76,6 +76,7 @@ class ExecutionRow:
     backward_aliases: tuple[str, ...] = ()
     residual_policy: str = ""
     residual_tradeoff: str = ""
+    owns_stream: bool = False  # reject caller streams for an owned-stream host ABI
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,8 @@ class BackwardComposition:
 # functions live in `runtime.py`; this module deliberately does NOT import
 # runtime.py (avoid the cycle — runtime.py imports `execution_matrix`).
 KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
+    "rocm_native_descriptor": "Checked ROCm native image/descriptor bridge; movement proof is architecture-specific.",
+
     "apple_cpu_accelerate": "Apple Silicon CPU via the Accelerate cblas_sgemm shim",
     "apple_gpu_mps":        "Apple Silicon GPU via MPS / MSL / MPSGraph (per envelope)",
     "apple_gpu_moe_transport_compiled": "Apple GPU local MoE transport via "
@@ -558,6 +561,8 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
     "nvidia_dense_krylov_compiled": "Single cooperative-grid SM120 dense-operator "
                             "CG or restarted GMRES package with resident Arnoldi "
                             "state and deterministic multi-CTA reductions",
+    "rocm_scaled_jvp_program_compiled": "gfx1201 compiler-owned FP8 scale JVP SSA program with native HIP buffer and completion ownership",
+    "rocm_scaled_primal_program_compiled": "gfx1201 compiler-owned FP8 product/sum primal SSA program with native HIP buffer and completion ownership",
     "rocm_jvp_compiled": "gfx1151 content-addressed forward-product package; "
                             "executes compiler-bound primal and tangent child "
                             "Tile packages without returning to Graph IR",
@@ -1145,6 +1150,9 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "ROCDL -> hsaco, in-process via tessera-opt), then HIP "
                             "loads + launches it. Interleaved-pair RoPE over "
                             "[M, D] (one workgroup per row); f32/f16/bf16",
+    "rocm_nvfp4_program": "Checked native checkpoint conversion/storage/packed matmul on one owned HIP stream",
+    "nvidia_lhs_program": "Checked native LHS normalization/softmax and complete matmul epilogue on one owned CUDA stream",
+    "nvidia_rhs_program": "Checked native RMSNorm/LayerNorm RHS and typed matmul packages on one owned CUDA stream",
     "nvidia_mma":           "NVIDIA GPU (consumer Blackwell sm_120) warp-level "
                             "mma.sync GEMM via the shipped libtessera_nvidia_gemm.so "
                             "tessera_nvidia_mma_gemm_{f16,bf16,tf32} C ABI symbol "
@@ -1160,8 +1168,10 @@ KNOWN_EXECUTORS: dict[EXECUTOR_ID, str] = {
                             "filter consumers over the canonical CUDA FFT ABI",
     "nvidia_spectral_jvp_compiled": "Exact-SM120 analytic STFT/ISTFT forward-product "
                             "package with content-addressed Schedule→Tile lineage",
+    "nvidia_sm120_attention_vjp_compiled": "Exact-SM120 pinned native saved-LSE attention reverse product",
+    "nvidia_sm120_attention_jvp_compiled": "Exact-SM120 pinned native saved-LSE attention forward product",
     "nvidia_sm120_jvp_compiled": "Exact-SM120 content-addressed compiler JVP "
-                            "package, including deterministic Philox mask replay",
+                            "package, including deterministic Philox mask replay and pinned saved-LSE attention",
     "nvidia_sm120_spectral_backward_compiled": "Exact-SM120 compound spectral "
                             "VJP package over the canonical CUDA FFT ABI",
     "nvidia_matmul_relu_compiled": "NVIDIA GPU (consumer Blackwell sm_120) "
@@ -2745,11 +2755,28 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
                "loads + launches it. Handles tessera.rmsnorm(_safe) + "
                "tessera.layer_norm by op name.",
         execution_mode="hip_runtime"),
+    ("rocm", "rocm_scaled_primal_program_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_scaled_primal_program_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_scaled_primal_program_compiled", runtime_status="success",
+        reason="Typed E4M3FN/f32 product/sum primal Graph lowered through native Schedule, Tile and HSACO; checked HIP owner retains intermediate and returned buffers.",
+        execution_mode="hip_runtime", evidence_target="rocm_gfx1201",
+        numerical_fixture="tests/device/rocm/test_composed_scaled_maps.py",
+        device_proof="device_verified_jit", proof_build="llvm23-core+rocm-gfx1201",
+        owns_stream=True),
+    ("rocm", "rocm_scaled_jvp_program_compiled"): ExecutionRow(
+        target="rocm", compiler_path="rocm_scaled_jvp_program_compiled",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_scaled_jvp_program_compiled", runtime_status="success",
+        reason="Typed E4M3FN/f32 scale JVP Graph lowered through native AD, Schedule, Tile and HSACO; one native HIP owner executes the actual SSA products/sum.",
+        execution_mode="hip_runtime", direction="forward",
+        op_family="scaled_matmul_jvp", evidence_target="rocm_gfx1201",
+        numerical_fixture="tests/device/rocm/test_public_scaled_jvp.py"),
     ("rocm", "rocm_jvp_compiled"): ExecutionRow(
         target="rocm", compiler_path="rocm_jvp_compiled",
         execution_kind="native_gpu", executable=True,
         executor_id="rocm_jvp_compiled", runtime_status="success",
-        reason="A gfx1151-only content-addressed product executes exact HIP "
+        reason="An exact-family content-addressed product executes HIP (gfx1151 or explicitly admitted gfx1201) "
                "primal/tangent child packages in compiler-fixed order.",
         execution_mode="hip_runtime", direction="forward"),
     ("rocm", "rocm_norm_jvp_compiled"): ExecutionRow(
@@ -3759,6 +3786,38 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
     # rocm_compiled analog) is a later follow-up. The row targets the proven arch
     # nvidia_sm120 — the NVRTC symbol auto-detects compute_XX, but only sm_120 is
     # hardware-proven, so the other arches stay unimplemented.
+    ("rocm_gfx1201", "canonical_rocm_nvfp4_program"): ExecutionRow(
+        target="rocm_gfx1201",compiler_path="canonical_rocm_nvfp4_program",
+        execution_kind="native_gpu",executable=True,executor_id="rocm_nvfp4_program",
+        runtime_status="success",execution_mode="hip_runtime",owns_stream=True,
+        reason="Named static primal NVFP4 converter/storage/packed matmul through three "
+               "verified native Graph/Schedule/Tile/LLVM/HSACO packages, private HIP stream "
+               "and checked five-input frontend ABI; broader AD/layout/quality remain open.",
+        numerical_fixture="tests/device/rocm/test_nvfp4_resident_jit.py",
+        evidence_target="rocm_gfx1201",proof_build=".build-gfx1201-current",
+        device_proof="device_verified_jit"),
+    ("nvidia_sm120", "canonical_nvidia_lhs_program"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="canonical_nvidia_lhs_program",
+        execution_kind="native_gpu", executable=True, executor_id="nvidia_lhs_program",
+        runtime_status="success", execution_mode="cuda_runtime", owns_stream=True,
+        reason="Static primal fp16/BF16 RMSNorm/LayerNorm/softmax LHS -> fp16/fp32 matmul with native epilogues through two checked "
+               "Graph/Schedule/Tile/PTX packages. Portable argument/shape/epsilon lineage "
+               "is validated before allocation; host inputs, one owned CUDA stream, host output. "
+               "No dynamic/composed AD or FP8/MXFP8/MXFP4 support is inferred.",
+        numerical_fixture="tests/device/nvidia/test_lhs_tensor_jit.py",
+        evidence_target="nvidia_sm120", proof_build=".build-sm120-w1-1",
+        device_proof="device_verified_jit"),
+    ("nvidia_sm120", "canonical_nvidia_rhs_program"): ExecutionRow(
+        target="nvidia_sm120", compiler_path="canonical_nvidia_rhs_program",
+        execution_kind="native_gpu", executable=True, executor_id="nvidia_rhs_program",
+        runtime_status="success", execution_mode="cuda_runtime", owns_stream=True,
+        reason="Static primal fp16/BF16 RMSNorm/LayerNorm RHS -> fp32 matmul through two checked "
+               "Graph/Schedule/Tile/PTX packages. Portable argument/shape/epsilon lineage "
+               "is validated before allocation; host inputs, one owned CUDA stream, host output. "
+               "No fused/dynamic/composed AD or FP8/MXFP8/MXFP4 support is inferred.",
+        numerical_fixture="tests/device/nvidia/test_layernorm_rhs_jit.py",
+        evidence_target="nvidia_sm120", proof_build=".build-sm120-w1-1",
+        device_proof="device_verified_jit"),
     ("nvidia_sm120", "nvidia_mma"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_mma",
         execution_kind="native_gpu", executable=True,
@@ -3819,6 +3878,29 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         evidence_target="nvidia_sm120",
         numerical_fixture="tests/device/nvidia/test_spectral_jvp.py",
         proof_build="cuda13.3+cufft+sm120+RTX5070"),
+    ("nvidia_sm120", "nvidia_sm120_attention_vjp_compiled"): ExecutionRow(
+        target="nvidia_sm120",compiler_path="nvidia_sm120_attention_vjp_compiled",
+        execution_kind="native_gpu",executable=True,
+        executor_id="nvidia_sm120_attention_vjp_compiled",runtime_status="success",owns_stream=True,
+        reason="Pinned native Graph/AD/Schedule/Tile saved-LSE forward/reverse images; "
+               "static fp32 Q/K/V and supported score bias, native requested gradient lineage.",
+        execution_mode="cuda_runtime",direction="reverse",
+        op_family="attention_backward",device_proof="device_verified_abi",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_public_attention_vjp.py",
+        proof_build="LLVM23+CUDA13.3+RTX5070"),
+    ("nvidia_sm120", "nvidia_sm120_attention_jvp_compiled"): ExecutionRow(
+        target="nvidia_sm120",compiler_path="nvidia_sm120_attention_jvp_compiled",
+        execution_kind="native_gpu",executable=True,
+        executor_id="nvidia_sm120_attention_jvp_compiled",runtime_status="success",
+        reason="Pinned native Graph/AD/Schedule/Tile saved-LSE primal/tangent images; "
+               "direct distinct fp32 Q/K/V and optional rank-four full/broadcast bias; "
+               "native prepared ownership with explicit active tangent roles.",
+        execution_mode="cuda_runtime",direction="forward",
+        op_family="attention_jvp",device_proof="device_verified_abi",
+        evidence_target="nvidia_sm120",
+        numerical_fixture="tests/device/nvidia/test_attention_native_jvp.py",
+        proof_build="LLVM/MLIR23.1.1+CUDA13.4.59+RTX5070"),
     ("nvidia_sm120", "nvidia_sm120_jvp_compiled"): ExecutionRow(
         target="nvidia_sm120", compiler_path="nvidia_sm120_jvp_compiled",
         execution_kind="native_gpu", executable=True,
@@ -4408,6 +4490,39 @@ _MATRIX: dict[tuple[str, str], ExecutionRow] = {
         proof_build="cuda13.3+sm120"),
 }
 
+# Exact static movement packages use the descriptor bridge, which verifies
+# target/image/ABI and invocation before submission. This row records that
+# runtime route, not admission of every operation or general page layout.
+for _movement_target in ("rocm_gfx1151", "rocm_gfx1201"):
+    _movement_path = _movement_target + "_native_descriptor"
+    _MATRIX[(_movement_target, _movement_path)] = ExecutionRow(
+        target=_movement_target, compiler_path=_movement_path,
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_native_descriptor", runtime_status="success",
+        reason="Static f32/i32 paged movement through native Graph/Schedule/Tile/Target/LLVM "
+               "and checked image/descriptor ABI; MoE token gather proved on gfx1151 only.",
+        execution_mode="hip_runtime", direction="forward", op_family="movement",
+        device_proof="device_verified_jit", evidence_target=_movement_target,
+        numerical_fixture="tests/unit/test_rocm_movement_compiler_spine.py",
+        proof_build="llvm23.1.1+owning-rocm-movement-20261005",
+    )
+
+# Bounded original Graph math packages; owning architecture proof is separate.
+for _math_target in ("rocm_gfx1151","rocm_gfx1201"):
+    _MATRIX[(_math_target,"rocm_math_native_descriptor")] = ExecutionRow(
+        target=_math_target, compiler_path="rocm_math_native_descriptor",
+        execution_kind="native_gpu", executable=True,
+        executor_id="rocm_native_descriptor", runtime_status="success",
+        reason="Static row-major f32 sqrt/exp/add/div/cumsum/cummax, optionally "
+               "preceded by exact same-storage f16/bf16 Graph widening casts, "
+               "through native Graph/Schedule/Tile/Target/LLVM and checked ABI. "
+               "General composition and dynamic shapes remain gated.",
+        execution_mode="hip_runtime", direction="forward", op_family="math",
+        device_proof="device_verified_jit", evidence_target=_math_target,
+        numerical_fixture="tests/device/rocm/test_native_math_package_jit.py",
+        proof_build="llvm23.1.1+owning-rocm-math-20261006",
+    )
+
 # Project only the bounded public gfx1201 proofs.  The broader compiler-family
 # promotion table and scheduled ABI allowlist are not themselves public
 # runtime claims; every row here names the exact target, public compiler path,
@@ -4438,14 +4553,14 @@ for _proof in GFX1201_PUBLIC_PROOFS:
 #
 # Note: ``rocm`` is NO LONGER here — it has an executable ``rocm_wmma`` row
 # above (RDNA WMMA GEMM). Most named ROCm sub-arches — including
-# ``rocm_gfx1151``, the Strix Halo box's own arch — stay listed here as "no
+# unproved ROCm sub-architectures stay listed here as "no
 # per-arch executor row". ``rocm_gfx1201`` is the bounded exception: its exact
 # scheduled-package proofs are projected above without granting gfx1200 proof.
 # For the remaining targets,
 # the shipped GEMM symbol HIPRTC-compiles for whatever arch the device
 # enumerates, so the generic ``rocm`` lane is what actually executes on gfx1151;
-# the sub-arch aliases earn distinct rows only if a sub-arch needs distinct
-# dispatch. Listing every registered ROCm sub-arch here (not just some) keeps the
+# gfx1151 now has its own checked native movement descriptor row above.
+# Remaining unproved sub-arch aliases stay listed here. This keeps the
 # classification total — every capability is either executable or explicitly
 # unimplemented, no silent ``lookup() -> None`` gaps.
 #
@@ -4456,7 +4571,7 @@ for _proof in GFX1201_PUBLIC_PROOFS:
 _UNIMPLEMENTED_TARGETS: tuple[str, ...] = (
     "nvidia_sm80", "nvidia_sm90", "nvidia_sm100",
     "rocm_gfx90a", "rocm_gfx940", "rocm_gfx942", "rocm_gfx950",
-    "rocm_gfx1100", "rocm_gfx1151", "rocm_gfx1200",
+    "rocm_gfx1100", "rocm_gfx1200",
 )
 
 

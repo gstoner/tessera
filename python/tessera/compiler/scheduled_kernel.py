@@ -187,8 +187,10 @@ def lower_scheduled_kernel(
     if schedule is not None:
         module = copy.deepcopy(module)
         if (module.functions and module.functions[0].body
-                and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin"}):
+                and module.functions[0].body[0].op_name in {"tessera.reduce", "tessera.sum", "tessera.mean", "tessera.max", "tessera.min", "tessera.amax", "tessera.amin", "tessera.rmsnorm", "tessera.rmsnorm_safe", "tessera.layer_norm", "tessera.softmax", "tessera.softmax_safe"}):
             module.functions[0].body[0].kwargs["schedule"] = schedule
+        else:
+            raise ValueError("explicit Schedule policy requires a normalization, reduction or softmax")
     contract = _graph_contract(module, target)
     if architecture is not None:
         if target != 'x86' or architecture not in ('zen5-avx512','x86_64_base'):
@@ -209,6 +211,8 @@ def lower_scheduled_kernel(
         op.kwargs = {**op.kwargs, "axis": -1}
     if contract[5] == "norm":
         op.kwargs = {"eps": contract[21]}
+        if "schedule" in module.functions[0].body[0].kwargs:
+            op.kwargs["schedule"] = contract[20]
         if target == "x86":
             # The x86 native-package request marker (NativeX86Kernel.h): an
             # isolated norm is claimed for `schedule.norm` only when the module
@@ -223,6 +227,8 @@ def lower_scheduled_kernel(
             # gfx1151 keepdims (E2E-REAL-6). Only a true value is spelled so the
             # established rank-reducing f32 Graph text is byte-identical.
             op.kwargs["keepdims"] = True
+    if contract[5] == "softmax" and contract[20] != "serial":
+        op.kwargs = {**op.kwargs, "schedule": contract[20]}
     targeted.module_attrs["tessera.target"] = f'"{contract[0]}"'
     targeted.module_attrs["tessera.arch"] = f'"{contract[1]}"'
     graph_ir = targeted.to_mlir(target=target, canonical=True)
@@ -235,6 +241,19 @@ def lower_scheduled_kernel(
                 _X86_GRAPH_CACHE.move_to_end(cache_key)
                 return cached
     schedule_ir = run_tessera_opt(tool, graph_ir, "--tessera-graph-to-schedule")
+    if contract[5] == "norm" and contract[0] == "nvidia_sm120":
+        # Read the compiler-owned physical decision; no Python shape selector.
+        rows = re.findall(r"(?m)^\s*%[^=]+ = schedule\.norm[^\n]+", schedule_ir)
+        if len(rows) != 1:
+            raise RuntimeError("native normalization needs one Schedule decision")
+        decision = re.search(r'\bschedule = "([^"]+)"', rows[0])
+        mode = decision[1] if decision is not None else "serial"
+        if mode not in {"serial","cooperative_128"}:
+            raise RuntimeError("native normalization Schedule policy is unsupported")
+        if ("schedule" in module.functions[0].body[0].kwargs
+                and mode != contract[20]):
+            raise RuntimeError("native normalization ignored an explicit Schedule policy")
+        contract = (*contract[:20], mode, *contract[21:])
     tile_ir = run_tessera_opt(tool, schedule_ir, "--tessera-schedule-to-tile")
     hashes = _HASH_RE.findall(tile_ir)
     if len(hashes) != 1:
@@ -245,7 +264,7 @@ def lower_scheduled_kernel(
         tile_ir=tile_ir,
         target=contract[0],
         architecture=contract[1],
-        function_name=(f"tessera_tile_norm_{contract[6]}_{contract[10]}_{hashes[0][:10]}"
+        function_name=(f"tessera_tile_norm_{contract[6]}_{contract[10]}"+("" if contract[20]=="serial" else "_cooperative_128")+f"_{hashes[0][:10]}"
                        if contract[5] == "norm" and contract[0] == "nvidia_sm120" else contract[2]),
         input_name=contract[3],
         output_name=contract[4],
@@ -309,7 +328,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     # The admitted targets package the same stable row-softmax semantic
     # from a native Schedule/Tile consumer. Keep gfx1201 and Apple withheld
     # until their own Graph lane and exact-device rows exist.
-    if op.op_name == "tessera.softmax_safe" and target not in {"rocm_gfx1151", "x86"}:
+    if op.op_name == "tessera.softmax_safe" and target not in {"rocm_gfx1151", "x86", "nvidia_sm120"}:
         raise ValueError("scheduled softmax_safe is admitted only where it has a proved consumer")
     if rocm_unary:
         softmax_like = op.op_name in {"tessera.softmax", "tessera.softmax_safe"}
@@ -353,7 +372,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
             norm[0] not in {"fp16", "bf16", "fp32"} or norm[1] != "rmsnorm"
         ):
             norm = None
-        if norm is None or op.kwargs.get("numeric_policy") is not None or mode != "serial":
+        if norm is None or op.kwargs.get("numeric_policy") is not None or (mode != "serial" and (target != "nvidia_sm120" or mode != "cooperative_128")):
             raise ValueError("unsupported scheduled normalization contract")
         try:
             epsilon = struct.unpack("f", struct.pack("f", norm[2]))[0]
@@ -365,8 +384,8 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
         rows, columns = math.prod(input_shape[:-1]), input_shape[-1]
         outer = axis_extent = inner = 1
     elif op.op_name in {"tessera.softmax", "tessera.softmax_safe"}:
-        if mode != "serial":
-            raise ValueError("reduction scheduling policy is not applicable to softmax")
+        if mode != "serial" and (target != "nvidia_sm120" or mode != "cooperative_128"):
+            raise ValueError("softmax scheduling requires serial or SM120 cooperative_128")
         if op.kwargs.get("axis", -1) != -1 or output_shape != input_shape:
             raise ValueError("scheduled softmax requires shape-preserving last-axis semantics")
         family, kind, axis, keepdims = "softmax", "softmax", -1, False
@@ -413,7 +432,7 @@ def _graph_contract(module: GraphIRModule, target: str) -> tuple:
     storage = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[dtype]
     entry = function.name
     if target == "nvidia_sm120":
-        entry = f"tessera_tile_softmax_{storage}" if family == "softmax" else f"tessera_tile_reduce_{kind}_{storage}_{mode}"
+        entry = (f"tessera_tile_softmax_{storage}" + ("_cooperative_128" if mode == "cooperative_128" else "")) if family == "softmax" else f"tessera_tile_reduce_{kind}_{storage}_{mode}"
     return (
         compiler_target, architecture, entry, input_name, output_name,
         family, kind, input_shape, output_shape, dtype, storage, "f32", rows,

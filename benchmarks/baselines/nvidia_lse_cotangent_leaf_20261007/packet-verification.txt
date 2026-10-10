@@ -1,0 +1,1 @@
+Final isolated packet: 36 rows / 180 poisoned numerical windows. Source and NVIDIA compiler/runtime SHA256 match current files.

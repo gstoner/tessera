@@ -242,3 +242,24 @@ def test_markdown_companion_exists_with_canonical_phrases() -> None:
             f"dashboard missing canonical phrase {phrase!r} — "
             f"a refactor changed the render format"
         )
+
+
+def test_qualified_verifier_implementations_are_counted(tmp_path):
+    from tessera.compiler.verifier_coverage import _scan_cpp_for_verify_impls
+    source = tmp_path / "qualified.cpp"
+    source.write_text("""
+mlir::LogicalResult tessera::NVFP4RequantizeOp::verify() {
+  return checkPolicy(getOperation());
+}
+LogicalResult tessera::layout::StorageOp::verify() { return success(); }
+LogicalResult PlainOp::verify() { return validateShape(); }
+""")
+    assert _scan_cpp_for_verify_impls((source,)) == {
+        "NVFP4RequantizeOp": "real", "StorageOp": "trivial_stub", "PlainOp": "real"}
+
+
+@pytest.mark.parametrize("name", ["NVFP4RequantizeOp", "MXFP4FoldedStorageOp", "FlashAttnBwdOp"])
+def test_new_native_graph_contracts_have_real_verifiers(coverage_entries, name):
+    matching = [entry for entry in coverage_entries if entry.op_class == name]
+    assert len(matching) == 1
+    assert matching[0].impl_status == "real"

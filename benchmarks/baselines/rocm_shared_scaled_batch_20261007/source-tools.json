@@ -1,0 +1,16 @@
+{
+  "src/compiler/ir/TesseraOps.cpp": "3b84b1783f543165dcc45aef0caab5c140cd20a21bb471f26d82eb1ec46d0a27",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "f68c4b6fdc051ec5060da6c2d2eb57519ca42629ab2400123454b73b8d0c72c4",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "bd74c2ebbdedda26e5d0dc473461818001685c8c5f9f63a476970198a270ecab",
+  "src/transforms/lib/NativeScaledMatmulProgram.h": "349813ee1b7efdcc256bd4a81ec222d0e8d7b0ed1190244743778c35adb089ca",
+  "python/tessera/compiler/graph_ir.py": "7fd3729782030c5cff2dcdeb2578fd2f51192564ac9b9ad02fe8d787d0404c14",
+  "python/tessera/compiler/rocm_typed_scaled_native.py": "a801e237fb92ac97a0ad2de857337091c3a57625f1e0a953470a76993cd853ba",
+  "python/tessera/compiler/reference_typed_scaled_matmul.py": "7e8cd1de3fb8efe4777074c47426adb1694d304beaa4dd5dc5749612804b598a",
+  "python/tessera/compiler/native_scaled_program.py": "011647fbe02aa226aff89f6a1cf377ab1052550b552231156bce7443a7e76dd4",
+  "python/tessera/compiler/capabilities.py": "af52261a6bec165601329bbf7ddc8a5971681b64099ba166950a9b85c0385b2e",
+  "tests/device/rocm/test_public_typed_scaled_primal.py": "8baa641da2c363690d3f5af8ab8c86d83add26ed3c565e7a4ca94a32163e26fc",
+  "tests/device/rocm/test_public_scaled_jvp.py": "6f66546cd9dd4b712551b0fc343ba6c6c7e8d68f9e33759587b032fe65f64ce4",
+  "tests/unit/test_rocm_shared_scaled_batch.py": "a9331ba7fd503936645cd3f9beaa96fe8783c21ab7ccd8d1a8182f73b42362f9",
+  "benchmarks/rocm/benchmark_shared_scaled_batch.py": "0c33091c00e8ff0c9f0ce6f2d756f3421b3765f7501d7831a62e7988a7ceaa4d",
+  "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c"
+}

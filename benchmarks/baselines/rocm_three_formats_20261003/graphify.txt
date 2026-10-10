@@ -1,0 +1,1 @@
+bash: line 41: graphify: command not found

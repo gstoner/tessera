@@ -169,7 +169,8 @@ def test_math_probe_rejects_nan_and_wrong_shape(monkeypatch):
     import numpy as np
     from types import SimpleNamespace
     monkeypatch.setattr(benchmark, "_cases", lambda *args: [("unary", "sqrt", (np.ones(2),), {}, lambda: np.ones(2))])
-    rt = SimpleNamespace(RuntimeArtifact=lambda **kw: kw)
+    monkeypatch.setattr(benchmark,"_artifact",lambda *a,**k:SimpleNamespace(native_image=None))
+    rt = SimpleNamespace()
     for output in (np.array([np.nan, 1]), np.ones((1,2))):
         rt.launch = lambda *args: {"ok": True, "execution_kind": "native_gpu", "output": output}
         with pytest.raises(RuntimeError, match="nonfinite"):
@@ -241,3 +242,21 @@ def test_rocm_cache_comparison_excludes_serialized_native_sum(monkeypatch):
     rows = [{"family": "reduce", "op_name": "sum", "warm_median_ms": 1.0,
              "compiler_boundary": "serialized_native_package"}]
     assert benchmark._rocm_cache_comparison(SimpleNamespace(), rows, 2) == []
+
+
+@pytest.mark.parametrize("dtype_name",["f32","f16","bf16"])
+@pytest.mark.parametrize("op_name",["sqrt","exp","add","div","cumsum","cummax"])
+def test_gfx1151_math_recorder_executes_native_graph_package(dtype_name,op_name):
+    from tessera import runtime as rt
+    from tessera.compiler.rocm_native import native_packaging_available
+    if os.environ.get("TESSERA_ROCM_CHIP")!="gfx1151" or not native_packaging_available():
+        pytest.skip("requires owning gfx1151 compiler and device")
+    assert rt._rocm_live_arch()=="gfx1151"
+    family,name,operands,kwargs,oracle=next(case for case in benchmark._cases("rocm",dtype_name) if case[1]==op_name)
+    artifact=benchmark._artifact(rt,"rocm",family,name,operands,kwargs)
+    assert artifact.launch_descriptor.provenance["route"]=="canonical_native_math_schedule"
+    assert artifact.graph_ir and artifact.schedule_ir and artifact.tile_ir and artifact.target_ir
+    if dtype_name!="f32":assert "tessera.cast" in artifact.graph_ir
+    result=benchmark._checked_launch(rt,"rocm",artifact,benchmark._native_arguments(artifact,operands))
+    assert result["output"].dtype==np.float32
+    np.testing.assert_allclose(result["output"],oracle(),rtol=2e-5,atol=2e-5)

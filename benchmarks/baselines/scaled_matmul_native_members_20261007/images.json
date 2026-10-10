@@ -1,0 +1,50 @@
+[
+  {
+    "step": 0,
+    "family": "matmul",
+    "command": [
+      "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+      "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_member.mlir",
+      "--pass-pipeline=builtin.module(tessera-autodiff-forward{export-scaled-program=true select-scaled-member=0},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=matmul input=tile output=binary arch=gfx1201})"
+    ],
+    "exit_code": 0,
+    "payload_bytes": 14456,
+    "sha256": "56be70a98a4d945db9642499d19e3d335f112b5bf43cb7f64f992cc94e8d4c0b"
+  },
+  {
+    "step": 1,
+    "family": "matmul",
+    "command": [
+      "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+      "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_member.mlir",
+      "--pass-pipeline=builtin.module(tessera-autodiff-forward{export-scaled-program=true select-scaled-member=1},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=matmul input=tile output=binary arch=gfx1201})"
+    ],
+    "exit_code": 0,
+    "payload_bytes": 14456,
+    "sha256": "c8c3a3cc36a8382fb982e8f928e7bda2ad96498a840d02d6e4f4d4b53a4f896d"
+  },
+  {
+    "step": 2,
+    "family": "matmul",
+    "command": [
+      "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+      "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_member.mlir",
+      "--pass-pipeline=builtin.module(tessera-autodiff-forward{export-scaled-program=true select-scaled-member=2},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=matmul input=tile output=binary arch=gfx1201})"
+    ],
+    "exit_code": 0,
+    "payload_bytes": 14456,
+    "sha256": "a4f249a33ec9d11c8718798209062b09879c3e6002177ab4740a5b014623e707"
+  },
+  {
+    "step": 3,
+    "family": "scalar_binary",
+    "command": [
+      "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+      "tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul_member.mlir",
+      "--pass-pipeline=builtin.module(tessera-autodiff-forward{export-scaled-program=true select-scaled-member=3},tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=scalar_binary input=tile output=binary arch=gfx1201})"
+    ],
+    "exit_code": 0,
+    "payload_bytes": 4640,
+    "sha256": "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2"
+  }
+]

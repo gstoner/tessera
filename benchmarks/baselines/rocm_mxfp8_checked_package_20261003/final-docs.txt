@@ -1,0 +1,3 @@
+wrote bootstrap_prune: docs/audit/generated/bootstrap_prune_gap.csv, docs/audit/generated/bootstrap_prune_gap.md
+wrote docs_freshness: docs/audit/generated/docs_freshness.md
+ok: 2 generated doc(s) in sync

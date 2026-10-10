@@ -1,0 +1,249 @@
+[  1%] Building Tessera/AdjointInterface.h.inc...
+[  1%] Built target mlir-generic-headers
+[  1%] Built target TesseraCliffordTableGen
+[  1%] Built target TesseraEBMTableGen
+[  1%] Built target mlir-headers
+[  3%] Built target tessera_layout_algebra
+[  3%] Built target TesseraCollectiveTypesIncGen
+[  3%] Built target TesseraX86TableGen
+[  3%] Building Tessera/AdjointInterface.cpp.inc...
+[  5%] Built target TesseraNVIDIATableGen
+[  5%] Building ScheduleDialect.h.inc...
+[  7%] Built target TesseraROCMTableGen
+[  7%] Building AttnDialect.cpp.inc...
+[  7%] Built target TesseraAdjointInterfaceTableGen
+[  9%] Built target TesseraNeighbors
+[ 12%] Built target tessera_solvers_passes
+[ 12%] Built target DialectSR
+[ 12%] Building AttnDialect.h.inc...
+[ 12%] Building ScheduleDialect.cpp.inc...
+[ 12%] Built target TPPGen
+[ 16%] Built target TesseraTPPPasses
+[ 18%] Built target TesseraLinalgSolverTableGen
+[ 20%] Built target TesseraEBMPassesIncGen
+[ 20%] Built target TesseraCliffordPassesIncGen
+[ 22%] Building Tessera/LinearTransposeInterface.h.inc...
+[ 24%] Built target TesseraAttnTableGen
+[ 27%] Built target TesseraPMTableGen
+[ 29%] Built target TesseraCollectiveOpsIncGen
+[ 29%] Built target obj.TesseraX86IR
+[ 29%] Building Tessera/LinearTransposeInterface.cpp.inc...
+[ 29%] Built target obj.TesseraNVIDIAIR
+[ 33%] Built target obj.TesseraROCMIR
+[ 33%] Built target TesseraSR
+[ 35%] Built target TPPTypesGen
+[ 37%] Built target tessera_linalg_solver_passes
+[ 37%] Built target TesseraLinearTransposeInterfaceTableGen
+[ 38%] Built target obj.TesseraEBM
+[ 38%] Built target TesseraNVIDIAIR
+[ 38%] Built target obj.TesseraCollectiveDialect
+[ 38%] Built target TesseraROCMIR
+[ 40%] Built target TesseraX86IR
+[ 42%] Built target obj.TesseraClifford
+[ 44%] Building Tessera/TangentInterface.cpp.inc...
+[ 44%] Building Tessera/TangentInterface.h.inc...
+[ 44%] Built target TPPAttrsGen
+[ 44%] Built target TesseraClifford
+[ 44%] Built target TesseraCollectiveDialect
+[ 44%] Built target TesseraTangentInterfaceTableGen
+[ 44%] Built target TPPOpsGen
+[ 44%] Built target TesseraEBM
+[ 46%] Building TesseraOpsDialect.cpp.inc...
+[ 46%] Building TesseraOps.cpp.inc...
+[ 46%] Building TesseraOpsDialect.h.inc...
+[ 46%] Building TesseraOpsEnums.h.inc...
+[ 46%] Building TesseraOpsEnums.cpp.inc...
+[ 46%] Building TesseraOpsTypes.cpp.inc...
+[ 46%] Built target obj.TesseraTPPDialect
+[ 46%] Building TesseraOpsTypes.h.inc...
+[ 46%] Built target TesseraTPPDialect
+[ 46%] Built target TesseraTPPInit
+[ 46%] Built target TesseraIRTableGen
+[ 46%] Building Tessera/Dialect/Tile/TileAttrs.cpp.inc...
+[ 46%] Building Tessera/Dialect/Tile/TileOps.h.inc...
+[ 46%] Building Tessera/Dialect/Tile/TileOpsDialect.cpp.inc...
+[ 46%] Building Tessera/Dialect/Tile/TileOpsDialect.h.inc...
+[ 46%] Building Tessera/Dialect/Tile/TileAttrs.h.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileOps.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileTypes.cpp.inc...
+[ 48%] Building Tessera/Dialect/Tile/TileTypes.h.inc...
+[ 48%] Built target TesseraTileIRTableGen
+[ 50%] Building CXX object src/compiler/ir/CMakeFiles/obj.TesseraIR.dir/LinearTransposeInterface.cpp.o
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In function ‘llvm::SmallVector<mlir::Value> tessera::transposeImplicitBroadcast(mlir::Operation*, mlir::Value, mlir::Value, mlir::OpBuilder&, mlir::ValueRange, llvm::StringRef)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:66:58: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::CustomAdjointCallOp; Args = {llvm::SmallVector<mlir::Type, 6>, mlir::StringAttr, mlir::ValueRange}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   66 |       auto fallback = builder.create<CustomAdjointCallOp>(
+      |                       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+   67 |           op->getLoc(), llvm::SmallVector<mlir::Type>{input.getType()},
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   68 |           builder.getStringAttr(fallbackKey), mlir::ValueRange{dy, input});
+      |           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from /home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/Interfaces/TilingInterface.h:18,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/include/Tessera/IR/TesseraOps.h:9,
+                 from /home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:3:
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:84:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReduceOp; Args = {mlir::RankedTensorType&, mlir::Value&, mlir::StringAttr, mlir::IntegerAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   83 |     grad = builder
+      |            ~~~~~~~               
+   84 |                .create<ReduceOp>(op->getLoc(), reducedTy, grad,
+      |                ~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   85 |                                  builder.getStringAttr("sum"),
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   86 |                                  builder.getI64IntegerAttr(axis))
+      |                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:90:37: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::RankedTensorType&, mlir::Value&}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+   90 |     grad = builder.create<ReshapeOp>(op->getLoc(), inTy, grad).getY();
+      |            ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::MatmulOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:263:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value&, mlir::Value, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  262 |     dLhs = builder
+      |            ~~~~~~~               
+  263 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  264 |                    getLoc(), getLhs().getType(), dy, getRhs(),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  265 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  266 |                    builder.getBoolAttr(false),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  267 |                    builder.getBoolAttr(!getTransposeB()))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:271:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value, mlir::Value&, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  270 |     dLhs = builder
+      |            ~~~~~~~               
+  271 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  272 |                    getLoc(), getLhs().getType(), getRhs(), dy,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  273 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  274 |                    builder.getBoolAttr(getTransposeB()),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  275 |                    builder.getBoolAttr(true))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:281:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value, mlir::Value&, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  280 |     dRhs = builder
+      |            ~~~~~~~               
+  281 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  282 |                    getLoc(), getRhs().getType(), getLhs(), dy,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  283 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  284 |                    builder.getBoolAttr(!getTransposeA()),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  285 |                    builder.getBoolAttr(false))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:289:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::MatmulOp; Args = {mlir::Type, mlir::Value&, mlir::Value, mlir::ValueRange, mlir::IntegerAttr, std::nullptr_t, mlir::BoolAttr, mlir::BoolAttr}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  288 |     dRhs = builder
+      |            ~~~~~~~               
+  289 |                .create<MatmulOp>(
+      |                ~~~~~~~~~~~~~~~~~^
+  290 |                    getLoc(), getRhs().getType(), dy, getLhs(),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  291 |                    mlir::ValueRange{}, mlir::IntegerAttr(), nullptr,
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  292 |                    builder.getBoolAttr(true),
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~
+  293 |                    builder.getBoolAttr(getTransposeA()))
+      |                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::TransposeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:311:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::TransposeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  311 |   auto grad = builder.create<TransposeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  312 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::ReshapeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:321:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  321 |   auto grad = builder.create<ReshapeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  322 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::SqueezeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:330:42: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::UnsqueezeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  330 |   auto grad = builder.create<UnsqueezeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+  331 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::UnsqueezeOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:341:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::SqueezeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  341 |   auto grad = builder.create<SqueezeOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  342 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::FlattenOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:353:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  352 |   return {builder
+      |           ~~~~~~~                
+  353 |               .create<ReshapeOp>(getLoc(), getX().getType(),
+      |               ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  354 |                                  outputCotangents[0])
+      |                                  ~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::ViewOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:363:33: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::ReshapeOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  362 |   return {builder
+      |           ~~~~~~~                
+  363 |               .create<ReshapeOp>(getLoc(), getX().getType(),
+      |               ~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  364 |                                  outputCotangents[0])
+      |                                  ~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp: In member function ‘llvm::SmallVector<mlir::Value> tessera::PermuteOp::buildLinearTranspose(mlir::OpBuilder&, mlir::ValueRange)’:
+/home/angstorms/scratch/next-five-compiler-slices/src/compiler/ir/LinearTransposeInterface.cpp:380:40: warning: ‘OpTy mlir::OpBuilder::create(mlir::Location, Args&& ...) [with OpTy = tessera::PermuteOp; Args = {mlir::Type, mlir::Value}]’ is deprecated: Use OpTy::create instead [-Wdeprecated-declarations]
+  380 |   auto grad = builder.create<PermuteOp>(
+      |               ~~~~~~~~~~~~~~~~~~~~~~~~~^
+  381 |       getLoc(), getX().getType(), outputCotangents[0]);
+      |       ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/angstorms/toolchains/llvm-project-23.1.1-assertions/mlir/include/mlir/IR/Builders.h:508:8: note: declared here
+  508 |   OpTy create(Location location, Args &&...args) {
+      |        ^~~~~~
+[ 50%] Built target obj.TesseraIR
+[ 51%] Linking CXX static library libTesseraIR.a
+[ 51%] Built target TesseraIR
+[ 51%] Built target TesseraScheduleIR
+[ 51%] Built target obj.TesseraAttnDialect
+[ 51%] Built target TesseraAttnDialect
+[ 51%] Built target TesseraPM
+[ 70%] Built target TesseraPasses
+[ 72%] Built target obj.TesseraNVIDIAConversion
+[ 72%] Built target TesseraNVIDIAConversion
+[ 98%] Built target obj.TesseraROCMConversion
+[ 98%] Built target TesseraROCMConversion
+[100%] Linking CXX executable tessera-opt
+[100%] Built target tessera-opt

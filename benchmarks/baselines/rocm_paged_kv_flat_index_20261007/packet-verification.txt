@@ -1,0 +1,1 @@
+Both architecture packet file hashes, raw image/stage digests, compiler identities and shape-independent payloads verified. Canonical recorder syntax valid.

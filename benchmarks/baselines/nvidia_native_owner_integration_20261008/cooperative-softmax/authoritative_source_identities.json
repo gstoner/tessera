@@ -1,0 +1,63 @@
+{
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": {
+    "before": "34a2de94f8fdbe8105ba6f2f5f923f19c1bc870c37c3c6c8c6c357424461d260",
+    "after": "4afde7ceb8e1f698e5d1fe8856689a42db627d13066075d1bd5f599425ff56b2",
+    "current": "4afde7ceb8e1f698e5d1fe8856689a42db627d13066075d1bd5f599425ff56b2"
+  },
+  "src/compiler/programming_model/lib/PMPasses.cpp": {
+    "before": "de4dfd45373f3117748859faf17c80ce907a55efe8fca8130d10bb5fc438f802",
+    "after": "7c5188717217fd7aa247cbdb9e72f60667492a97ddbaac55289619c1c674394d",
+    "current": "7c5188717217fd7aa247cbdb9e72f60667492a97ddbaac55289619c1c674394d"
+  },
+  "src/compiler/ir/TileOps.cpp": {
+    "before": "23e75608acff823a5dfda877d4c240d010a6b8eee3501c30778cfdad75ee2708",
+    "after": "e18f9fbf548817d04b2b955aa5bea6cfde46d1d31ab477b51daa1b4ecda79b40",
+    "current": "e18f9fbf548817d04b2b955aa5bea6cfde46d1d31ab477b51daa1b4ecda79b40"
+  },
+  "python/tessera/compiler/scheduled_kernel.py": {
+    "before": "39045675ed862c81e0bbac96794fe3d1fc00caed8e9d027202d7abea87d0fb64",
+    "after": "94c9177d8f2a0481580db78a8194630a2fbc1fa9c0d208a3d8acb90c5535708a",
+    "current": "94c9177d8f2a0481580db78a8194630a2fbc1fa9c0d208a3d8acb90c5535708a"
+  },
+  "python/tessera/compiler/nvidia_native.py": {
+    "before": "298bfbe5d85af104f6ad92d5dff5c6a829f431a82fd2ddbf304df41e3a6549ae",
+    "after": "1eb682bc64e659271bcb2ebfd50329fddf7d986e5e939742c039a6989dde221c",
+    "current": "1eb682bc64e659271bcb2ebfd50329fddf7d986e5e939742c039a6989dde221c"
+  },
+  "python/tessera/runtime.py": {
+    "before": "d8b57debe1eff8b13efe3d6e4f816e93117c7e6e6c49323eef2f54b3f66b6837",
+    "after": "b8a443edd08d3452e25f39d0a3f767d13f385afc8c1629901d70ff56b91db5b0",
+    "current": "b23de1d3907272dee1deac8c19577208c504de2a85c728a28796d0edf8f42f8f"
+  },
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": {
+    "before": "c0758845535dc38cec20ff641e73f3844018e47bf4f11414347a7c3074424324",
+    "after": "b8f9314793ecddf152de492eec4849414c6b16fbf080fe03033281152849a47d",
+    "current": "b8f9314793ecddf152de492eec4849414c6b16fbf080fe03033281152849a47d"
+  },
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": {
+    "before": "804872425d2f7a262c253c03e758a534f140376303954d4f02cea13a8acfe306",
+    "after": "7b57cc8d8613742415fc4339570ace6ac689ed63fb8284aec8a01c42ecbcafbd",
+    "current": "7b57cc8d8613742415fc4339570ace6ac689ed63fb8284aec8a01c42ecbcafbd"
+  },
+  "python/tessera/compiler/prepared_nvidia_lhs.py": {
+    "before": "9197c74ebdc0a9b424627b48b974988e21e55a699975495223461d4166d2c8f5",
+    "after": "3b6c5c6388f8e510f07cee01c2056100dfddc96a128626bb16318a1477402e6c",
+    "current": "3b6c5c6388f8e510f07cee01c2056100dfddc96a128626bb16318a1477402e6c"
+  },
+  "python/tessera/compiler/nvidia_tensor_lhs.py": {
+    "before": "b4f09399e6d55d9ced43c5fb84f5cb5a84f240680ac2f0e42b7069e7cf43778e",
+    "after": "17e1ba50d2867b076eeac8bb57dc65fc2ae7b69a5843db353917afd92a90a2de",
+    "current": "17e1ba50d2867b076eeac8bb57dc65fc2ae7b69a5843db353917afd92a90a2de"
+  },
+  "tests/unit/test_nvidia_scheduled_kernel.py": {
+    "before": "625e8d4aa1b3ec0ef0f5e77dbe31235ca65cecc3bba8cf64feb71f18848db4db",
+    "after": "c810d9a0c603f94b11631877117e66d2e06fae610ad7af74187dd99f2df3022d",
+    "current": "aee0fbeaf4d5e39469ad953634019fd6806132396bc3e423084a93da8be8d1b4"
+  },
+  "tests/device/nvidia/test_cooperative_softmax.py": {
+    "current": "cdc60e43111e15eb94b47d6c4bf3b4c98cd97ecac40e98146c5472c7d0b710fa"
+  },
+  "benchmarks/nvidia/benchmark_cooperative_softmax_chain.py": {
+    "current": "b50994cf8935e9a3013354bed471c82d3e3fd7b2eb875681398d203a7ddb4fb9"
+  }
+}

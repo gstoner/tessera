@@ -1,5 +1,6 @@
 set(LLVM_TARGET_DEFINITIONS ${CMAKE_CURRENT_SOURCE_DIR}/../../include/TesseraROCM/IR/TesseraROCMOps.td)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../include/TesseraROCM/IR)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../../../../ir/include)
 mlir_tablegen(TesseraROCMOps.h.inc -gen-op-decls)
 mlir_tablegen(TesseraROCMOps.cpp.inc -gen-op-defs)
 mlir_tablegen(TesseraROCMDialect.h.inc -gen-dialect-decls -dialect=tessera_rocm)

@@ -178,3 +178,43 @@ def test_dense_attention_value_product_and_transpose_with_causal_alignment():
         assert_directional_close(tangent, finite)
         w = rng.normal(size=tangent.shape)
         assert_forward_reverse_duality(tangent, w, (dv,), (weights.T @ w,))
+
+def test_exact_block_scaled_product_all_floating_roles_directional_and_dual():
+    # Abstract Graph algebra: quantized storage values are held fixed when
+    # checking the physical scale-only envelope elsewhere. This witness covers
+    # floating semantic roles without asserting an encoded-byte derivative.
+    rng=np.random.default_rng(709)
+    m,n,k,sk,sn=3,7,13,5,3
+    groups=(k+sk-1)//sk;columns=(n+sn-1)//sn
+    a,b=rng.normal(size=(m,k)),rng.normal(size=(k,n))
+    sa,sb=rng.uniform(.2,1,(m,groups)),rng.uniform(.2,1,(groups,columns))
+    da,db,dsa,dsb=(rng.normal(size=x.shape) for x in (a,b,sa,sb))
+    col=np.arange(n)//sn
+    def product(a_value,b_value,sa_value,sb_value):
+        out=np.zeros((m,n))
+        for g in range(groups):
+            lo,hi=g*sk,min((g+1)*sk,k)
+            out+=(a_value[:,lo:hi]@b_value[lo:hi])*sa_value[:,g,None]*sb_value[g,col]
+        return out
+    tangent=(product(da,b,sa,sb)+product(a,db,sa,sb)+
+             product(a,b,dsa,sb)+product(a,b,sa,dsb))
+    # Four active roles form a degree-four directional polynomial. Reduce
+    # central O(h^2) truncation error without relaxing the proof tolerance.
+    finite=central_directional_difference(product,(a,b,sa,sb),(da,db,dsa,dsb),step=1e-5)
+    assert_directional_close(tangent,finite,rtol=1e-7,atol=1e-8)
+    w=rng.normal(size=(m,n))
+    ga,gb,gsa,gsb=(np.zeros_like(x) for x in (a,b,sa,sb))
+    for g in range(groups):
+        lo,hi=g*sk,min((g+1)*sk,k)
+        p=a[:,lo:hi]@b[lo:hi]
+        weighted=w*sa[:,g,None]*sb[g,col]
+        ga[:,lo:hi]=weighted@b[lo:hi].T
+        gb[lo:hi]=a[:,lo:hi].T@weighted
+        gsa[:,g]=np.sum(w*p*sb[g,col],axis=1)
+        for c in range(columns):
+            mask=col==c
+            gsb[g,c]=np.sum(w[:,mask]*p[:,mask]*sa[:,g,None])
+    assert_forward_reverse_duality(tangent,w,(da,db,dsa,dsb),(ga,gb,gsa,gsb),
+                                  rtol=1e-10,atol=1e-10)
+    policy=DERIVATIVE_PROOF_MATRIX["scaled_matmul"].boundary_policy
+    assert "encoded" in policy and "scale" in policy

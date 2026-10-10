@@ -1,0 +1,8 @@
+tests/tessera-ir/phase2/e2e_matmul_scheduled_nvidia_dynamic_row_rhs_invalid.mlir:7:10: error: rhs_storage_order requires the SM120 typed view contract; bounded dynamic storage requires col_major
+    %d = tessera.matmul %a, %b {
+         ^
+tests/tessera-ir/phase2/e2e_matmul_scheduled_nvidia_dynamic_row_rhs_invalid.mlir:7:10: note: see current operation: %0 = "tessera.matmul"(%arg0, %arg1) <{transposeA = false, transposeB = false}> {rhs_storage_order = "row_major", shape_bounds = [32, 24, 32]} : (tensor<?x?xf16>, tensor<?x?xf16>) -> tensor<?x?xf32>
+tests/tessera-ir/phase2/e2e_matmul_scheduled_nvidia_dynamic_row_rhs_invalid.mlir:7:10: error: E2E-REAL-2 Graph->Schedule requires static rank-2 x86 f32/bf16->f32, ROCm f16->f32, NVIDIA f16/bf16->f32 or signed int4->i32, or Apple-GPU f32->f32 matmul with no transpose
+    %d = tessera.matmul %a, %b {
+         ^
+tests/tessera-ir/phase2/e2e_matmul_scheduled_nvidia_dynamic_row_rhs_invalid.mlir:7:10: note: see current operation: %0 = "tessera.matmul"(%arg0, %arg1) <{transposeA = false, transposeB = false}> {rhs_storage_order = "row_major", shape_bounds = [32, 24, 32]} : (tensor<?x?xf16>, tensor<?x?xf16>) -> tensor<?x?xf32>

@@ -504,3 +504,77 @@ bodies and at most 4096 logical temporary bytes. Inner states may still be
 replayed by the compiler's backward product. Dynamic capacities, mixed-type
 saved predicates, general while tapes and asynchronous retirement are outside
 this physical envelope and must refuse rather than silently fall back.
+
+### Native typed block-scale transpose program
+
+For static typed E4M3FN matrices, f32 scales/output and exact-per-block
+accumulation, the compiler constructs scale adjoints with structured
+tensor/SCF reductions. Each original K group and N scale block stays distinct;
+shared scale storage sums over all logical batch axes. Matrix storage receives
+no implicit straight-through derivative. Encoded E8M0 and packed physical
+profiles are outside this derivative contract.
+
+Paired AD's export-scaled-transpose option accepts explicit unique scale
+argument indices whose returned adjoints are floating scale reductions.
+Frontend argument permutations retain their role mapping. It outlines the actual generated regions and derives
+their captured tensor arguments in stable source argument order. The native
+scale_vjp manifest records requested gradient order, immutable backward Graph
+witness, byte storage and first-write/last-read lifetimes. Projection with
+select-scaled-transpose-member preserves the complete program witness.
+The static gfx1201 FP32-scale profile has compiler-owned native member images,
+checked lifetime ownership, public reverse execution and independent owning
+numerical/timing proof. Dynamic/composed/encoded-scale derivatives and sibling
+physical consumers remain open; program export alone is insufficient evidence.
+See benchmarks/baselines/rocm_deep_leading_map_20261007/README.md.
+
+## Experimental gfx1201 scale-adjoint wave schedule
+
+The native scale-transpose Schedule admits scale-transpose-wave=true. One
+32-lane wave owns each output gradient and partitions the innermost additive
+contribution loop in the proved carried reduction chain. Native proof requires zero initialization and exactly one carried
+accumulator use through additive or nested-reduction links. K-group dot
+products and scale/cotangent multiplication stay intact. Five XOR shuffle/add
+stages combine contributions; lane zero stores. Both schedules carry a companion
+FP32 rounding residual through the outer additive chain, including shared batch
+axes; K-group dot-product loops remain unchanged. The compensated_fp32 policy
+is bound to Schedule identity and the native body seal. FP32 addition order may
+differ between schedules, so unchanged numerical bounds govern parity. Algorithm/width bind
+Schedule identity, Tile/Target body seal and exported native launch ABI.
+Serial remains default; no implicit discrete-scale AD or sibling support.
+Evidence: benchmarks/baselines/rocm_scaled_vjp_wave_20261007/README.md.
+
+The public gfx1201 scale-VJP plugin exposes the experimental process option
+TESSERA_ROCM_SCALE_VJP_SCHEDULE with values serial_per_scale_element (default)
+and wave_per_scale_element. Selection is frozen per invocation, participates
+in immutable package caching and is recorded in execution receipts. Invalid
+values refuse before device probing or compilation. This option changes native
+Schedule policy only; it does not change the semantic derivative or enable
+encoded-scale derivatives. Both schedules have named public scalar/mapped
+gfx1201 proof; generic AD and sibling execution remain separate obligations.
+Evidence: benchmarks/baselines/rocm_scaled_vjp_compensated_20261007/README.md.
+
+### Ragged public scale-adjoint admission
+
+The named gfx1201 FP32-scale reverse map validates logical group counts with
+ceiling division and accepts a final partial K group. Native reverse construction
+clips that group's reduction bounds. This semantic admission is distinct from
+the primal WMMA physical schedule, whose alignment requirements remain intact.
+Mapped scale storage must include the final group; missing storage rejects
+before compiler capture. One/two matching leading maps have owning numerical
+and public timing proof for K129 and K1536. Generic dynamic/composed/encoded-scale
+derivatives and sibling execution remain open.
+Evidence: benchmarks/baselines/rocm_public_scaled_vjp_regimes_20261007/README.md.
+
+### Static leading-prefix scale maps and source bounds
+
+The typed gfx1201 frontend preserves arbitrary positive matching leading map
+depth. Native Graph verification checks prefix agreement and scale extents;
+Schedule and native codegen flatten physical batches without a Python launch
+loop. Capability admission records rank >= 2, and native scale-transpose
+construction preserves all static prefix axes. Three/four-map primal/JVP/VJP
+owning cases pass with unchanged bounds; encoded scales support primal only.
+Mixed/nonleading axes, dynamic/composed graphs and generic AD remain open.
+Native reverse entry checks source constraints before capture and clears stale
+execution receipts. Cross-backend host ordering proof does not establish sibling
+physical scale-map execution.
+Evidence: benchmarks/baselines/rocm_deep_leading_map_20261007/README.md.

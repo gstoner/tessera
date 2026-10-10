@@ -1,0 +1,2705 @@
+{
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.41579375,
+          0.38585775,
+          0.347129875,
+          0.377460375,
+          0.350061125,
+          0.396329125
+        ],
+        "native": [
+          0.142566375,
+          0.140664,
+          0.138912625,
+          0.122420125,
+          0.142010125,
+          0.136869
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.38165906250000003,
+        "native": 0.1397883125
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.01023935992270708,
+          0.010138880461454391,
+          0.009086079895496368
+        ],
+        "consumer": [
+          0.009020799770951271,
+          0.009121919982135296,
+          0.010815360583364964
+        ]
+      },
+      "image_digests": [
+        "d0edac2544a50c64aff5aeebe6f5eadb7f73bd256ebca25af566111a5456395a",
+        "2d637cc0d8399b958b0348194b5d87b8e7bed3a23bd270d925031194d01fc215"
+      ],
+      "descriptor_digests": [
+        "aed33922cca9af1e311b1e00d57242c759220f05d57868a828b5c659b28d7fb0",
+        "cd4e16118aee835ba8a0c5ae5ee9ee6c549eca5f65a662ece9747292b9b423f8"
+      ],
+      "max_abs_error": 0.00013017235323786736,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.386654125,
+          0.365115,
+          0.363545,
+          0.358592375,
+          0.36286,
+          0.35894625
+        ],
+        "native": [
+          0.14181775,
+          0.126752625,
+          0.1243725,
+          0.136013875,
+          0.1190375,
+          0.1270975
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3632025,
+        "native": 0.12692506250000002
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.009345919825136662,
+          0.009127039462327957,
+          0.0088723199442029
+        ],
+        "consumer": [
+          0.010248320177197456,
+          0.00838720053434372,
+          0.009068160317838192
+        ]
+      },
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "b846352da427d2a82eeeffc6eb0c26d1afb11207c934f06fbeaa1c6a220f9722"
+      ],
+      "descriptor_digests": [
+        "5042160b1cd7d2fa3040758eae20bd5d7d33dd478c92d72d7cb61041bdd51948",
+        "3e7fad8346431ee244b170193a36adf45c219a0b64c36a215dcafb31fd3876d6"
+      ],
+      "max_abs_error": 5.21540641784668e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.379332625,
+          0.377064,
+          0.368689,
+          0.399661625,
+          0.36086875,
+          0.3618375
+        ],
+        "native": [
+          0.14435525,
+          0.14383025,
+          0.15022025,
+          0.137572625,
+          0.146802875,
+          0.155242875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3728765,
+        "native": 0.1455790625
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.010090240277349949,
+          0.008420479483902454,
+          0.009719680063426495
+        ],
+        "consumer": [
+          0.010876160115003586,
+          0.008821120485663414,
+          0.009150080382823944
+        ]
+      },
+      "image_digests": [
+        "d0edac2544a50c64aff5aeebe6f5eadb7f73bd256ebca25af566111a5456395a",
+        "56513b05f0cb3e32f943b7870eac506b6ad59770ab9de602fb13393614db1785"
+      ],
+      "descriptor_digests": [
+        "aed33922cca9af1e311b1e00d57242c759220f05d57868a828b5c659b28d7fb0",
+        "89f088c4336919347b1db8827528d0d600a2d9c1c6e31b4a28d9e3c6f3dd7fb4"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.41404425,
+          0.4066105,
+          0.396759125,
+          0.38442175,
+          0.38964525,
+          0.40610425
+        ],
+        "native": [
+          0.14431275,
+          0.1409365,
+          0.14443775,
+          0.138657625,
+          0.146589,
+          0.140306375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.4014316875,
+        "native": 0.142624625
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.00829504057765007,
+          0.011797120794653893,
+          0.009567360393702984
+        ],
+        "consumer": [
+          0.008359679952263832,
+          0.008442879654467106,
+          0.010005760006606579
+        ]
+      },
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "222f4b87240b5d36c5171cca5d65fee847f15111b6051fe8a0a8202ab2697173"
+      ],
+      "descriptor_digests": [
+        "5042160b1cd7d2fa3040758eae20bd5d7d33dd478c92d72d7cb61041bdd51948",
+        "845f5d169e233fb5ab72845502b6144a741a49ad26901e50c84db5386c8f44b6"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.3751415,
+          0.36179,
+          0.372438875,
+          0.36365125,
+          0.349079875,
+          0.361875125
+        ],
+        "native": [
+          0.124997625,
+          0.1154025,
+          0.121410125,
+          0.113101125,
+          0.12350125,
+          0.118174875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.36276318750000003,
+        "native": 0.1197925
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.0122035201638937,
+          0.010759039781987667,
+          0.009831679984927177
+        ],
+        "consumer": [
+          0.00843327958136797,
+          0.008559360168874264,
+          0.009031039662659168
+        ]
+      },
+      "image_digests": [
+        "b2b2c7ab163c754a391bcbcc5ae2aec91fd164c6961a4a7a0ddd09f57bf5afac",
+        "8729c3a3346ba61d19a9c8bb6dccc9f2e21dbacac39725458cd80012143d2ae4"
+      ],
+      "descriptor_digests": [
+        "04606745ec62271999b50c0a7940e530495a73dc261bb06849ff7e0361d7f6fa",
+        "63402990708c7c54165e70d3020248d0b1ec649e2e4e3329ab550db1857b77e9"
+      ],
+      "max_abs_error": 3.1851232051849365e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.3732015,
+          0.3608525,
+          0.390267875,
+          0.353478625,
+          0.36586,
+          0.37887275
+        ],
+        "native": [
+          0.126127625,
+          0.113435,
+          0.117216125,
+          0.12341125,
+          0.115128625,
+          0.1230125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.36953075,
+        "native": 0.1201143125
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.008319360204041004,
+          0.008034559898078442,
+          0.007546239998191595
+        ],
+        "consumer": [
+          0.008014080114662647,
+          0.008401920087635517,
+          0.008500480093061924
+        ]
+      },
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "61dbc31873702a0f148ad35f8eeb9cebbab944ae9c67994433f09fd2a601a98e"
+      ],
+      "descriptor_digests": [
+        "db3f971e134cb4df5ac4dbaa7000b8d9543a155894a21e37908a02fa59919617",
+        "7e58f9e274b5edfbab96df1f50cfab933f776091ab4c58a3cbdc4dcd8bdc6396"
+      ],
+      "max_abs_error": 4.6193599700927734e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.40086175,
+          0.396861625,
+          0.37814025,
+          0.388097875,
+          0.439774625,
+          0.60509625
+        ],
+        "native": [
+          0.158701625,
+          0.136804,
+          0.143079,
+          0.14205775,
+          0.156860375,
+          0.161176625
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3988616875,
+        "native": 0.1499696875
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.008707839995622635,
+          0.009435520507395267,
+          0.009603199549019337
+        ],
+        "consumer": [
+          0.008491519838571548,
+          0.009524480439722538,
+          0.009430400095880032
+        ]
+      },
+      "image_digests": [
+        "b2b2c7ab163c754a391bcbcc5ae2aec91fd164c6961a4a7a0ddd09f57bf5afac",
+        "1e874782d8a2d814f61204656494e5b50cdeb5ce149f9bf22e169804919b8776"
+      ],
+      "descriptor_digests": [
+        "04606745ec62271999b50c0a7940e530495a73dc261bb06849ff7e0361d7f6fa",
+        "b8c99ee85d69b088765d11886b252e9d73ebff1f0a55e433c47e4c87dbd7bb54"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.431957,
+          0.39907425,
+          0.392307875,
+          0.420152,
+          0.373838875,
+          0.3886465
+        ],
+        "native": [
+          0.143989125,
+          0.14057275,
+          0.137767625,
+          0.144114,
+          0.15185025,
+          0.137751375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.39569106249999997,
+        "native": 0.14228093749999998
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.00907904002815485,
+          0.009434239938855171,
+          0.00885119941085577
+        ],
+        "consumer": [
+          0.008645759895443916,
+          0.01079103909432888,
+          0.008527999743819237
+        ]
+      },
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "0ae4ab3c88fa53782d6eea369c90175931c1b0610e7458eeb77396ba880da466"
+      ],
+      "descriptor_digests": [
+        "db3f971e134cb4df5ac4dbaa7000b8d9543a155894a21e37908a02fa59919617",
+        "9084f25ec2ed75342dd854c7b79369772bc0bd8ad0d30a0f3fa6dfa9e2fa23ca"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.349637375,
+          0.36763,
+          0.33542475,
+          0.366518875,
+          0.33425975,
+          0.346877375
+        ],
+        "native": [
+          0.132743875,
+          0.1192125,
+          0.12806025,
+          0.122492625,
+          0.129415125,
+          0.124596375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.348257375,
+        "native": 0.12632831249999998
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.00900223944336176,
+          0.00913344044238329,
+          0.0088172797113657
+        ],
+        "consumer": [
+          0.00996864028275013,
+          0.009143040515482426,
+          0.009546239860355854
+        ]
+      },
+      "image_digests": [
+        "a60c4a6198c8dcb633da3f54e6737f5b02510e300306bb2c14658a40421aa54b",
+        "2d637cc0d8399b958b0348194b5d87b8e7bed3a23bd270d925031194d01fc215"
+      ],
+      "descriptor_digests": [
+        "58b4ec044aa13e7acc1831f57d69cc686f106b9b2e223a9a009c0b53c0b7d0e8",
+        "cd4e16118aee835ba8a0c5ae5ee9ee6c549eca5f65a662ece9747292b9b423f8"
+      ],
+      "max_abs_error": 5.41098415851593e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.40562175,
+          0.366355,
+          0.369360125,
+          0.382679,
+          0.3599825,
+          0.363200125
+        ],
+        "native": [
+          0.12576625,
+          0.12529125,
+          0.124475,
+          0.12365375,
+          0.128536375,
+          0.126158875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3678575625,
+        "native": 0.12552875
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.008113279938697815,
+          0.008391040377318859,
+          0.010872960090637207
+        ],
+        "consumer": [
+          0.008197760209441185,
+          0.010102399624884129,
+          0.009405439719557762
+        ]
+      },
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "b846352da427d2a82eeeffc6eb0c26d1afb11207c934f06fbeaa1c6a220f9722"
+      ],
+      "descriptor_digests": [
+        "c88d15dea001392ba288c9d32aad24526d0ef890eb86cd1de1af41d59c93e85f",
+        "3e7fad8346431ee244b170193a36adf45c219a0b64c36a215dcafb31fd3876d6"
+      ],
+      "max_abs_error": 5.639158189296722e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.38695525,
+          0.395352875,
+          0.39750925,
+          0.389799125,
+          0.374733875,
+          0.392342875
+        ],
+        "native": [
+          0.154015375,
+          0.1606855,
+          0.154120375,
+          0.1410915,
+          0.14131025,
+          0.146769125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.391071,
+        "native": 0.15039225
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.010207359679043293,
+          0.009380480274558067,
+          0.010720000602304935
+        ],
+        "consumer": [
+          0.009093119762837887,
+          0.00910848006606102,
+          0.008401280269026756
+        ]
+      },
+      "image_digests": [
+        "a60c4a6198c8dcb633da3f54e6737f5b02510e300306bb2c14658a40421aa54b",
+        "56513b05f0cb3e32f943b7870eac506b6ad59770ab9de602fb13393614db1785"
+      ],
+      "descriptor_digests": [
+        "58b4ec044aa13e7acc1831f57d69cc686f106b9b2e223a9a009c0b53c0b7d0e8",
+        "89f088c4336919347b1db8827528d0d600a2d9c1c6e31b4a28d9e3c6f3dd7fb4"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.4063405,
+          0.3808615,
+          0.386932875,
+          0.4039055,
+          0.397950375,
+          0.3847065
+        ],
+        "native": [
+          0.138146375,
+          0.351714875,
+          0.153249125,
+          0.136849,
+          0.137595125,
+          0.14619025
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.392441625,
+        "native": 0.1421683125
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.009152639657258987,
+          0.011576959863305092,
+          0.008598399348556995
+        ],
+        "consumer": [
+          0.008094079792499542,
+          0.008794879540801048,
+          0.00853568036109209
+        ]
+      },
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "222f4b87240b5d36c5171cca5d65fee847f15111b6051fe8a0a8202ab2697173"
+      ],
+      "descriptor_digests": [
+        "c88d15dea001392ba288c9d32aad24526d0ef890eb86cd1de1af41d59c93e85f",
+        "845f5d169e233fb5ab72845502b6144a741a49ad26901e50c84db5386c8f44b6"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.387029,
+          0.36395625,
+          0.3429135,
+          0.370461375,
+          0.344434875,
+          0.355456125
+        ],
+        "native": [
+          0.133682625,
+          0.11939,
+          0.132488875,
+          0.122060125,
+          0.131748875,
+          0.128723875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3597061875,
+        "native": 0.130236375
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.008784639649093151,
+          0.012339199893176556,
+          0.00905727967619896
+        ],
+        "consumer": [
+          0.010524159297347069,
+          0.009279360063374043,
+          0.009160320274531841
+        ]
+      },
+      "image_digests": [
+        "504ae1b7cee6782d01ff018d442f713fc9efbbb5396b5656f8185f4db806f9d4",
+        "8729c3a3346ba61d19a9c8bb6dccc9f2e21dbacac39725458cd80012143d2ae4"
+      ],
+      "descriptor_digests": [
+        "6f5ea368f69eea97344cf58dfde3b92820b00860a5ac969ad24c4cab873ca563",
+        "63402990708c7c54165e70d3020248d0b1ec649e2e4e3329ab550db1857b77e9"
+      ],
+      "max_abs_error": 3.8743019104003906e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.386415375,
+          0.378825125,
+          0.38907525,
+          0.375496625,
+          0.35958,
+          0.392234125
+        ],
+        "native": [
+          0.136383875,
+          0.11856375,
+          0.122471375,
+          0.123301375,
+          0.117417375,
+          0.12020125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.38262025,
+        "native": 0.12133631249999999
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.009174400009214878,
+          0.007774080149829388,
+          0.008826879784464836
+        ],
+        "consumer": [
+          0.008090879768133163,
+          0.008645759895443916,
+          0.008851840160787106
+        ]
+      },
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "61dbc31873702a0f148ad35f8eeb9cebbab944ae9c67994433f09fd2a601a98e"
+      ],
+      "descriptor_digests": [
+        "d58b1a9b354537fb25638e585e13b9993aceb4538325ea08bc1b137e1cb4adce",
+        "7e58f9e274b5edfbab96df1f50cfab933f776091ab4c58a3cbdc4dcd8bdc6396"
+      ],
+      "max_abs_error": 4.6938657760620117e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.38300525,
+          0.389844125,
+          0.397846625,
+          0.374949,
+          0.368022625,
+          0.394902875
+        ],
+        "native": [
+          0.155121625,
+          0.146525375,
+          0.153164125,
+          0.148316625,
+          0.14924775,
+          0.14600025
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.38642468750000003,
+        "native": 0.1487821875
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.010070400312542915,
+          0.01407680008560419,
+          0.01018815953284502
+        ],
+        "consumer": [
+          0.01082880049943924,
+          0.00854399986565113,
+          0.010199679993093014
+        ]
+      },
+      "image_digests": [
+        "504ae1b7cee6782d01ff018d442f713fc9efbbb5396b5656f8185f4db806f9d4",
+        "1e874782d8a2d814f61204656494e5b50cdeb5ce149f9bf22e169804919b8776"
+      ],
+      "descriptor_digests": [
+        "6f5ea368f69eea97344cf58dfde3b92820b00860a5ac969ad24c4cab873ca563",
+        "b8c99ee85d69b088765d11886b252e9d73ebff1f0a55e433c47e4c87dbd7bb54"
+      ],
+      "max_abs_error": 0.001953125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.427416875,
+          0.396606625,
+          0.3826715,
+          0.397517875,
+          0.3995955,
+          0.40328675
+        ],
+        "native": [
+          0.13982275,
+          0.15830925,
+          0.154434125,
+          0.157713,
+          0.146084125,
+          0.135206375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3985566875,
+        "native": 0.150259125
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.0605388768017292,
+          0.009241599589586258,
+          0.010123520158231258
+        ],
+        "consumer": [
+          0.008684800006449223,
+          0.008734080009162426,
+          0.00930688064545393
+        ]
+      },
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "0ae4ab3c88fa53782d6eea369c90175931c1b0610e7458eeb77396ba880da466"
+      ],
+      "descriptor_digests": [
+        "d58b1a9b354537fb25638e585e13b9993aceb4538325ea08bc1b137e1cb4adce",
+        "9084f25ec2ed75342dd854c7b79369772bc0bd8ad0d30a0f3fa6dfa9e2fa23ca"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.370343875,
+          0.348291125,
+          0.36675375,
+          0.341358625,
+          0.34741875,
+          0.35848
+        ],
+        "native": [
+          0.1327415,
+          0.124397625,
+          0.14282775,
+          0.1407015,
+          0.128488875,
+          0.128725125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3533855625,
+        "native": 0.1307333125
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.013499519787728786,
+          0.011297919787466526,
+          0.009692159481346607
+        ],
+        "consumer": [
+          0.008536959998309612,
+          0.00836608000099659,
+          0.012123520486056805
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "2d637cc0d8399b958b0348194b5d87b8e7bed3a23bd270d925031194d01fc215"
+      ],
+      "descriptor_digests": [
+        "2178d1101a6ca6cd9bc516b94b3abce02bea4fe1afc9cafbea758e52412fdfa0",
+        "cd4e16118aee835ba8a0c5ae5ee9ee6c549eca5f65a662ece9747292b9b423f8"
+      ],
+      "max_abs_error": 1.3271346688270569e-08,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.382624625,
+          0.36630125,
+          0.354441125,
+          0.35793375,
+          0.372462625,
+          0.373947625
+        ],
+        "native": [
+          0.139014,
+          0.156862875,
+          0.12859275,
+          0.129861375,
+          0.135877625,
+          0.1242575
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.36938193750000003,
+        "native": 0.1328695
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.012066559866070747,
+          0.013687039725482464,
+          0.013035519979894161
+        ],
+        "consumer": [
+          0.011397119611501694,
+          0.010264960117638111,
+          0.010332800447940826
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "b846352da427d2a82eeeffc6eb0c26d1afb11207c934f06fbeaa1c6a220f9722"
+      ],
+      "descriptor_digests": [
+        "d4e13e4cc128768cbb82628b931d65a6203ea0ae794c9cf2d231a9c0042dad18",
+        "3e7fad8346431ee244b170193a36adf45c219a0b64c36a215dcafb31fd3876d6"
+      ],
+      "max_abs_error": 1.0826624929904938e-08,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.37341025,
+          0.3792815,
+          0.3935905,
+          0.37824025,
+          0.368498875,
+          0.3818415
+        ],
+        "native": [
+          0.16391925,
+          0.148899,
+          0.152881625,
+          0.15174525,
+          0.16699425,
+          0.15988425
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.378760875,
+        "native": 0.15638293749999999
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.012951680459082127,
+          0.014513920992612839,
+          0.01309823989868164
+        ],
+        "consumer": [
+          0.011266560293734074,
+          0.009223680011928082,
+          0.01166464015841484
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "56513b05f0cb3e32f943b7870eac506b6ad59770ab9de602fb13393614db1785"
+      ],
+      "descriptor_digests": [
+        "2178d1101a6ca6cd9bc516b94b3abce02bea4fe1afc9cafbea758e52412fdfa0",
+        "89f088c4336919347b1db8827528d0d600a2d9c1c6e31b4a28d9e3c6f3dd7fb4"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.399802875,
+          0.3767515,
+          0.40291175,
+          0.3836915,
+          0.37078275,
+          0.395865375
+        ],
+        "native": [
+          0.153635375,
+          0.148199125,
+          0.152334125,
+          0.143074,
+          0.153983,
+          0.14944275
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3897784375,
+        "native": 0.1508884375
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.011163519695401192,
+          0.013609600253403187,
+          0.013807999901473522
+        ],
+        "consumer": [
+          0.011996159330010414,
+          0.01126271951943636,
+          0.013871359638869762
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "222f4b87240b5d36c5171cca5d65fee847f15111b6051fe8a0a8202ab2697173"
+      ],
+      "descriptor_digests": [
+        "d4e13e4cc128768cbb82628b931d65a6203ea0ae794c9cf2d231a9c0042dad18",
+        "845f5d169e233fb5ab72845502b6144a741a49ad26901e50c84db5386c8f44b6"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.38588525,
+          0.342616125,
+          0.35616,
+          0.364736375,
+          0.345544875,
+          0.3505625
+        ],
+        "native": [
+          0.137576375,
+          0.130088875,
+          0.12325875,
+          0.1362765,
+          0.131455125,
+          0.133280125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.35336124999999996,
+        "native": 0.132367625
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.012240639887750149,
+          0.01406784076243639,
+          0.01441279985010624
+        ],
+        "consumer": [
+          0.011391359381377697,
+          0.00886464025825262,
+          0.009401599876582623
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "8729c3a3346ba61d19a9c8bb6dccc9f2e21dbacac39725458cd80012143d2ae4"
+      ],
+      "descriptor_digests": [
+        "18eab67ddf4e9cfc493e01236f82bdc143634642c02a5ae52983ef95015b86d9",
+        "63402990708c7c54165e70d3020248d0b1ec649e2e4e3329ab550db1857b77e9"
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.373278875,
+          0.367792625,
+          0.368153875,
+          0.36560125,
+          0.35470125,
+          0.384937875
+        ],
+        "native": [
+          0.135250125,
+          0.124555125,
+          0.130918875,
+          0.35987875,
+          0.135357625,
+          0.130443875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.36797325000000003,
+        "native": 0.1330845
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.014303999952971935,
+          0.012336640618741512,
+          0.011204480193555355
+        ],
+        "consumer": [
+          0.009891840629279613,
+          0.010479999706149101,
+          0.011851520277559757
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "61dbc31873702a0f148ad35f8eeb9cebbab944ae9c67994433f09fd2a601a98e"
+      ],
+      "descriptor_digests": [
+        "7550a017633bfe15ddc3b957042a0c4002eac9e606c346720f7ecea22b61bfd5",
+        "7e58f9e274b5edfbab96df1f50cfab933f776091ab4c58a3cbdc4dcd8bdc6396"
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.37996025,
+          0.376937625,
+          0.38163775,
+          0.39262275,
+          0.401066625,
+          0.387884
+        ],
+        "native": [
+          0.149474125,
+          0.153871625,
+          0.178391875,
+          0.14495025,
+          0.158727875,
+          0.149399125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.384760875,
+        "native": 0.151672875
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.01401280052959919,
+          0.01188287977129221,
+          0.01009088009595871
+        ],
+        "consumer": [
+          0.013507839292287827,
+          0.010189440101385117,
+          0.01162688061594963
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "1e874782d8a2d814f61204656494e5b50cdeb5ce149f9bf22e169804919b8776"
+      ],
+      "descriptor_digests": [
+        "18eab67ddf4e9cfc493e01236f82bdc143634642c02a5ae52983ef95015b86d9",
+        "b8c99ee85d69b088765d11886b252e9d73ebff1f0a55e433c47e4c87dbd7bb54"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.39505175,
+          0.38625525,
+          0.40817925,
+          0.395967875,
+          0.392760375,
+          0.415125625
+        ],
+        "native": [
+          0.157756625,
+          0.1427515,
+          0.147760375,
+          0.153376625,
+          0.155459125,
+          0.169103
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3955098125,
+        "native": 0.15441787499999998
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.01254976075142622,
+          0.01396607980132103,
+          0.013744000345468521
+        ],
+        "consumer": [
+          0.012938879430294037,
+          0.01238527987152338,
+          0.012931200675666332
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "0ae4ab3c88fa53782d6eea369c90175931c1b0610e7458eeb77396ba880da466"
+      ],
+      "descriptor_digests": [
+        "7550a017633bfe15ddc3b957042a0c4002eac9e606c346720f7ecea22b61bfd5",
+        "9084f25ec2ed75342dd854c7b79369772bc0bd8ad0d30a0f3fa6dfa9e2fa23ca"
+      ],
+      "max_abs_error": 0.0,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.3516875,
+          0.33951625,
+          0.342897375,
+          0.376271375,
+          0.35973875,
+          0.3632375
+        ],
+        "native": [
+          0.137811375,
+          0.126641375,
+          0.14113275,
+          0.133709,
+          0.156546625,
+          0.138870125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.35571312499999996,
+        "native": 0.13834075
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.011319040320813656,
+          0.011063679121434689,
+          0.011770879849791527
+        ],
+        "consumer": [
+          0.016268160194158554,
+          0.014551680535078049,
+          0.017395200207829475
+        ]
+      },
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "fae4e257dd56cdb3a550803991a659bca21aec722f7830d98d4d9b988328faac"
+      ],
+      "descriptor_digests": [
+        "873c7b9bcea7a181f13663539c0248ed1692fe6c924880df6ffee9619289c8fa",
+        "683337b7fdddd4c0b2e2405cc452f9e7bd8a5ed3df49d8a5a5dca483fb024c1c"
+      ],
+      "max_abs_error": 0.0004974138864781708,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.3929955,
+          0.38004275,
+          0.3630475,
+          0.37055875,
+          0.36290375,
+          0.372728875
+        ],
+        "native": [
+          0.171308125,
+          0.170148,
+          0.157855375,
+          0.155464125,
+          0.147542875,
+          0.1498065
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3716438125,
+        "native": 0.15665975
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.010300799272954464,
+          0.014102400280535221,
+          0.010421119630336761
+        ],
+        "consumer": [
+          0.026579199358820915,
+          0.07366912066936493,
+          0.027704959735274315
+        ]
+      },
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "b846352da427d2a82eeeffc6eb0c26d1afb11207c934f06fbeaa1c6a220f9722"
+      ],
+      "descriptor_digests": [
+        "5042160b1cd7d2fa3040758eae20bd5d7d33dd478c92d72d7cb61041bdd51948",
+        "3e7fad8346431ee244b170193a36adf45c219a0b64c36a215dcafb31fd3876d6"
+      ],
+      "max_abs_error": 0.0004974138864781708,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.383106625,
+          0.38518775,
+          0.376798875,
+          0.3820065,
+          0.36345,
+          0.37107775
+        ],
+        "native": [
+          0.169244375,
+          0.166848,
+          0.189047,
+          0.174938125,
+          0.179518125,
+          0.184627
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3794026875,
+        "native": 0.17722812500000001
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.00981760025024414,
+          0.008826239965856075,
+          0.010444159619510174
+        ],
+        "consumer": [
+          0.017342720180749893,
+          0.01419072039425373,
+          0.015216000378131866
+        ]
+      },
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "ccf69c344eeef68f445ba6adba763377ac8454298e76b1484f279738b9857ca2"
+      ],
+      "descriptor_digests": [
+        "873c7b9bcea7a181f13663539c0248ed1692fe6c924880df6ffee9619289c8fa",
+        "7a2ef0270942fbf520eb723d60d9230356eb314a334b8f6aa5bfd76898eb053e"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.420689625,
+          0.4087005,
+          0.41113425,
+          0.40930675,
+          0.413963125,
+          0.419009375
+        ],
+        "native": [
+          0.207957125,
+          0.197547,
+          0.176858,
+          0.182687,
+          0.1853245,
+          0.17907075
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.41254868749999996,
+        "native": 0.18400575
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.013904000632464886,
+          0.013153919950127602,
+          0.012779519893229008
+        ],
+        "consumer": [
+          0.02998591959476471,
+          0.02780672162771225,
+          0.028494078665971756
+        ]
+      },
+      "image_digests": [
+        "9586dd979ee847889493caf56002ce98c004c3e9ca80e4ea989eeb7ca9ea05fe",
+        "222f4b87240b5d36c5171cca5d65fee847f15111b6051fe8a0a8202ab2697173"
+      ],
+      "descriptor_digests": [
+        "5042160b1cd7d2fa3040758eae20bd5d7d33dd478c92d72d7cb61041bdd51948",
+        "845f5d169e233fb5ab72845502b6144a741a49ad26901e50c84db5386c8f44b6"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.346748625,
+          0.3457985,
+          0.349156125,
+          0.343677375,
+          0.350268625,
+          0.361601375
+        ],
+        "native": [
+          0.1462965,
+          0.124365,
+          0.12493875,
+          0.127836375,
+          0.1244475,
+          0.130296375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.347952375,
+        "native": 0.1263875625
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.010373760014772415,
+          0.009592319838702679,
+          0.010459519922733307
+        ],
+        "consumer": [
+          0.013018239289522171,
+          0.01366335991770029,
+          0.01285696029663086
+        ]
+      },
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "abb4407fb2d08c2b1ad16366b5867900e06e739048b90390082dba11ef340846"
+      ],
+      "descriptor_digests": [
+        "7f798f25b166e8eda195b3e6f03c445826f32c009ccfc4bc1a7074c13ad0798a",
+        "dca6ed013ba5960a9b3ea648ead4d9f79b1652e0cc9f330a5e987438e753e7b9"
+      ],
+      "max_abs_error": 3.641471266746521e-05,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.372158875,
+          0.3561025,
+          0.36128875,
+          0.362872625,
+          0.3582075,
+          0.3591225
+        ],
+        "native": [
+          0.16875925,
+          0.147730375,
+          0.14191025,
+          0.143549,
+          0.151204125,
+          0.14946525
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.360205625,
+        "native": 0.14859781249999998
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.009838080033659935,
+          0.010257920250296593,
+          0.009790719486773014
+        ],
+        "consumer": [
+          0.026474881917238235,
+          0.026651520282030106,
+          0.02787904068827629
+        ]
+      },
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "61dbc31873702a0f148ad35f8eeb9cebbab944ae9c67994433f09fd2a601a98e"
+      ],
+      "descriptor_digests": [
+        "db3f971e134cb4df5ac4dbaa7000b8d9543a155894a21e37908a02fa59919617",
+        "7e58f9e274b5edfbab96df1f50cfab933f776091ab4c58a3cbdc4dcd8bdc6396"
+      ],
+      "max_abs_error": 3.641471266746521e-05,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.428637,
+          0.42529325,
+          0.41142325,
+          0.419413125,
+          0.379339,
+          0.411374375
+        ],
+        "native": [
+          0.17214925,
+          0.1665055,
+          0.1698905,
+          0.158153,
+          0.154764125,
+          0.153807875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.41541818750000004,
+        "native": 0.16232924999999998
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.010912640020251274,
+          0.010714240372180939,
+          0.010798079892992973
+        ],
+        "consumer": [
+          0.014311039820313454,
+          0.015016320161521435,
+          0.013063039630651474
+        ]
+      },
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "1912a115ddeb4de25a67dc5a909bccbb4112964706fe780cdcdf4353ba016657"
+      ],
+      "descriptor_digests": [
+        "7f798f25b166e8eda195b3e6f03c445826f32c009ccfc4bc1a7074c13ad0798a",
+        "dda9faf8701486d21664fa75a54b7bcdd8c90804085aa77e588ad1db3c0b93e9"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "rmsnorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.396235375,
+          0.45087975,
+          0.396789125,
+          0.39761425,
+          0.393155375,
+          0.399376625
+        ],
+        "native": [
+          0.1703655,
+          0.1888645,
+          0.160053,
+          0.16326425,
+          0.156423,
+          0.153585375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3972016875,
+        "native": 0.161658625
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.009613440372049809,
+          0.010734080336987972,
+          0.007518080063164234
+        ],
+        "consumer": [
+          0.027658240869641304,
+          0.026425600051879883,
+          0.02633408084511757
+        ]
+      },
+      "image_digests": [
+        "ce62d6d9b2faddef6cb0b4341ab6a4b68590483ca951f0b3d374f13db5ea25da",
+        "0ae4ab3c88fa53782d6eea369c90175931c1b0610e7458eeb77396ba880da466"
+      ],
+      "descriptor_digests": [
+        "db3f971e134cb4df5ac4dbaa7000b8d9543a155894a21e37908a02fa59919617",
+        "9084f25ec2ed75342dd854c7b79369772bc0bd8ad0d30a0f3fa6dfa9e2fa23ca"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.349448625,
+          0.35662875,
+          0.350213875,
+          0.34283225,
+          0.352735,
+          0.356483625
+        ],
+        "native": [
+          0.155310375,
+          0.1445315,
+          0.136825125,
+          0.14075775,
+          0.131366375,
+          0.1352315
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3514744375,
+        "native": 0.1387914375
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.008629759773612022,
+          0.008059520274400711,
+          0.00857280008494854
+        ],
+        "consumer": [
+          0.013822079636156559,
+          0.015567359514534473,
+          0.015082240104675293
+        ]
+      },
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "fae4e257dd56cdb3a550803991a659bca21aec722f7830d98d4d9b988328faac"
+      ],
+      "descriptor_digests": [
+        "2d930ac4ba09af5e389ac8fd9773b24334de9f44e600720b018d918a9a5d3398",
+        "683337b7fdddd4c0b2e2405cc452f9e7bd8a5ed3df49d8a5a5dca483fb024c1c"
+      ],
+      "max_abs_error": 0.00035195599775761366,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.4058755,
+          0.390347875,
+          0.383449125,
+          0.39207525,
+          0.387727875,
+          0.389135375
+        ],
+        "native": [
+          0.158032875,
+          0.162100375,
+          0.157124125,
+          0.15977925,
+          0.1690605,
+          0.17048925
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.389741625,
+        "native": 0.1609398125
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.009399039670825005,
+          0.009062400087714195,
+          0.010612479411065578
+        ],
+        "consumer": [
+          0.026330240070819855,
+          0.026292478665709496,
+          0.026467841118574142
+        ]
+      },
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "b846352da427d2a82eeeffc6eb0c26d1afb11207c934f06fbeaa1c6a220f9722"
+      ],
+      "descriptor_digests": [
+        "c88d15dea001392ba288c9d32aad24526d0ef890eb86cd1de1af41d59c93e85f",
+        "3e7fad8346431ee244b170193a36adf45c219a0b64c36a215dcafb31fd3876d6"
+      ],
+      "max_abs_error": 0.00035195599775761366,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.412834375,
+          0.396001625,
+          0.392774125,
+          0.40676925,
+          0.399768,
+          0.395257875
+        ],
+        "native": [
+          0.19038325,
+          0.176800625,
+          0.16827675,
+          0.18537575,
+          0.166418,
+          0.1597605
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3978848125,
+        "native": 0.1725386875
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.011731840670108795,
+          0.007984640076756477,
+          0.01020928006619215
+        ],
+        "consumer": [
+          0.013053439557552338,
+          0.013980159536004066,
+          0.013550720177590847
+        ]
+      },
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "ccf69c344eeef68f445ba6adba763377ac8454298e76b1484f279738b9857ca2"
+      ],
+      "descriptor_digests": [
+        "2d930ac4ba09af5e389ac8fd9773b24334de9f44e600720b018d918a9a5d3398",
+        "7a2ef0270942fbf520eb723d60d9230356eb314a334b8f6aa5bfd76898eb053e"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.395664125,
+          0.403797875,
+          0.41404175,
+          0.422927,
+          0.419707,
+          0.423219375
+        ],
+        "native": [
+          0.175634375,
+          0.1694805,
+          0.180493125,
+          0.194862,
+          0.19949575,
+          0.197678375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.416874375,
+        "native": 0.1876775625
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.0102463997900486,
+          0.00944191962480545,
+          0.008464640006422997
+        ],
+        "consumer": [
+          0.026415998116135597,
+          0.02648960053920746,
+          0.02643200010061264
+        ]
+      },
+      "image_digests": [
+        "4447c461c8b83570016f64f21bc9c8b9eba94246ad08d3341541a9e915efbeaf",
+        "222f4b87240b5d36c5171cca5d65fee847f15111b6051fe8a0a8202ab2697173"
+      ],
+      "descriptor_digests": [
+        "c88d15dea001392ba288c9d32aad24526d0ef890eb86cd1de1af41d59c93e85f",
+        "845f5d169e233fb5ab72845502b6144a741a49ad26901e50c84db5386c8f44b6"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.382527625,
+          0.368628875,
+          0.374125125,
+          0.387577875,
+          0.3620275,
+          0.3772565
+        ],
+        "native": [
+          0.163953,
+          0.16089675,
+          0.1422265,
+          0.135493875,
+          0.140549,
+          0.232526125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3756908125,
+        "native": 0.151561625
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.010320639237761497,
+          0.011506560258567333,
+          0.008655359968543053
+        ],
+        "consumer": [
+          0.015290239825844765,
+          0.013634559698402882,
+          0.013744640164077282
+        ]
+      },
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "abb4407fb2d08c2b1ad16366b5867900e06e739048b90390082dba11ef340846"
+      ],
+      "descriptor_digests": [
+        "57bd63797cb6ea0a3c1d6fe8a7512823931bf1b29691ec820310e0816f03dd36",
+        "dca6ed013ba5960a9b3ea648ead4d9f79b1652e0cc9f330a5e987438e753e7b9"
+      ],
+      "max_abs_error": 3.6638230085372925e-05,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.372496375,
+          0.3607775,
+          0.360301375,
+          0.360540125,
+          0.356907375,
+          0.360222625
+        ],
+        "native": [
+          0.155081625,
+          0.162428,
+          0.163813,
+          0.135697625,
+          0.14637775,
+          0.156452875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.36042074999999996,
+        "native": 0.15576725
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.008955519646406174,
+          0.008401920087635517,
+          0.007603840436786413
+        ],
+        "consumer": [
+          0.026396799832582474,
+          0.026373760774731636,
+          0.026439039036631584
+        ]
+      },
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "61dbc31873702a0f148ad35f8eeb9cebbab944ae9c67994433f09fd2a601a98e"
+      ],
+      "descriptor_digests": [
+        "d58b1a9b354537fb25638e585e13b9993aceb4538325ea08bc1b137e1cb4adce",
+        "7e58f9e274b5edfbab96df1f50cfab933f776091ab4c58a3cbdc4dcd8bdc6396"
+      ],
+      "max_abs_error": 3.6638230085372925e-05,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.37364525,
+          0.378192625,
+          0.368773875,
+          0.38055025,
+          0.36743625,
+          0.437109625
+        ],
+        "native": [
+          0.178338125,
+          0.16081925,
+          0.14419275,
+          0.148806625,
+          0.155779125,
+          0.158851625
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.3759189375,
+        "native": 0.15731537499999998
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.008927999995648861,
+          0.008742399513721466,
+          0.008235519751906395
+        ],
+        "consumer": [
+          0.014483200386166573,
+          0.01423231977969408,
+          0.01695871911942959
+        ]
+      },
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "1912a115ddeb4de25a67dc5a909bccbb4112964706fe780cdcdf4353ba016657"
+      ],
+      "descriptor_digests": [
+        "57bd63797cb6ea0a3c1d6fe8a7512823931bf1b29691ec820310e0816f03dd36",
+        "dda9faf8701486d21664fa75a54b7bcdd8c90804085aa77e588ad1db3c0b93e9"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "layernorm",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.390741625,
+          0.394405375,
+          0.392946625,
+          0.39161425,
+          0.3767065,
+          0.397044125
+        ],
+        "native": [
+          0.179391875,
+          0.17561425,
+          0.18817575,
+          0.16663925,
+          0.17383925,
+          0.1643055
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.39228043749999997,
+        "native": 0.17472675
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.009775360114872456,
+          0.011399680748581886,
+          0.008095359429717064
+        ],
+        "consumer": [
+          0.02686207927763462,
+          0.026483841240406036,
+          0.02640319988131523
+        ]
+      },
+      "image_digests": [
+        "7f5b2f55f3998e2a7b638d8322f233f2972ec43caba9be13bbe4e0782a7343e5",
+        "0ae4ab3c88fa53782d6eea369c90175931c1b0610e7458eeb77396ba880da466"
+      ],
+      "descriptor_digests": [
+        "d58b1a9b354537fb25638e585e13b9993aceb4538325ea08bc1b137e1cb4adce",
+        "9084f25ec2ed75342dd854c7b79369772bc0bd8ad0d30a0f3fa6dfa9e2fa23ca"
+      ],
+      "max_abs_error": 0.0078125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.43000075,
+          0.408799375,
+          0.404478,
+          0.405632875,
+          0.4049405,
+          0.410258
+        ],
+        "native": [
+          0.417379375,
+          0.416908125,
+          0.395400375,
+          0.39904925,
+          0.408705625,
+          0.401783125
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.40721612500000004,
+        "native": 0.405244375
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.2502918541431427,
+          0.25017791986465454,
+          0.25093311071395874
+        ],
+        "consumer": [
+          0.012248959392309189,
+          0.014197119511663914,
+          0.012191999703645706
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "fae4e257dd56cdb3a550803991a659bca21aec722f7830d98d4d9b988328faac"
+      ],
+      "descriptor_digests": [
+        "852994d52a86457464b35ed1cc62ccb27c6dd610884762f796f5653539c37759",
+        "683337b7fdddd4c0b2e2405cc452f9e7bd8a5ed3df49d8a5a5dca483fb024c1c"
+      ],
+      "max_abs_error": 9.91845354292309e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.444803375,
+          0.448851,
+          0.447112125,
+          0.43963325,
+          0.42849325,
+          0.445890875
+        ],
+        "native": [
+          0.4368545,
+          0.42736075,
+          0.439395875,
+          0.4348145,
+          0.4251795,
+          0.43783975
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.445347125,
+        "native": 0.4358345
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.25068289041519165,
+          0.25041282176971436,
+          0.2512979209423065
+        ],
+        "consumer": [
+          0.0265574399381876,
+          0.025041280314326286,
+          0.02560384012758732
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "b846352da427d2a82eeeffc6eb0c26d1afb11207c934f06fbeaa1c6a220f9722"
+      ],
+      "descriptor_digests": [
+        "d4e13e4cc128768cbb82628b931d65a6203ea0ae794c9cf2d231a9c0042dad18",
+        "3e7fad8346431ee244b170193a36adf45c219a0b64c36a215dcafb31fd3876d6"
+      ],
+      "max_abs_error": 9.91845354292309e-07,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.422881875,
+          0.4064755,
+          0.40293675,
+          0.40754925,
+          0.405838,
+          0.40495925
+        ],
+        "native": [
+          0.417045625,
+          0.417713125,
+          0.414344375,
+          0.415407,
+          0.41374175,
+          0.411895625
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.40615674999999996,
+        "native": 0.41487568750000003
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.2505241632461548,
+          0.25068607926368713,
+          0.2508102357387543
+        ],
+        "consumer": [
+          0.012875519692897797,
+          0.01333760004490614,
+          0.012718720361590385
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "ccf69c344eeef68f445ba6adba763377ac8454298e76b1484f279738b9857ca2"
+      ],
+      "descriptor_digests": [
+        "852994d52a86457464b35ed1cc62ccb27c6dd610884762f796f5653539c37759",
+        "7a2ef0270942fbf520eb723d60d9230356eb314a334b8f6aa5bfd76898eb053e"
+      ],
+      "max_abs_error": 0.0001220703125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "fp16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.437327,
+          0.42732825,
+          0.4364085,
+          0.43434575,
+          0.426662,
+          0.4302895
+        ],
+        "native": [
+          0.443990875,
+          0.424710625,
+          0.44883975,
+          0.443877125,
+          0.433355875,
+          0.427298375
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.432317625,
+        "native": 0.43861649999999996
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.2504998445510864,
+          0.2509145438671112,
+          0.25009024143218994
+        ],
+        "consumer": [
+          0.026151038706302643,
+          0.026210561394691467,
+          0.026024319231510162
+        ]
+      },
+      "image_digests": [
+        "3fda6f9b4734f27f7f36680862f1b85451de257103e196a29e37347bfb6b45a5",
+        "222f4b87240b5d36c5171cca5d65fee847f15111b6051fe8a0a8202ab2697173"
+      ],
+      "descriptor_digests": [
+        "d4e13e4cc128768cbb82628b931d65a6203ea0ae794c9cf2d231a9c0042dad18",
+        "845f5d169e233fb5ab72845502b6144a741a49ad26901e50c84db5386c8f44b6"
+      ],
+      "max_abs_error": 0.0001220703125,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.425653125,
+          0.4021755,
+          0.407121875,
+          0.40703425,
+          0.403806625,
+          0.405376875
+        ],
+        "native": [
+          0.416183125,
+          0.400468,
+          0.39173775,
+          0.390444,
+          0.39983925,
+          0.390771625
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.4062055625,
+        "native": 0.3957885
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.2509535849094391,
+          0.25120192766189575,
+          0.2507891356945038
+        ],
+        "consumer": [
+          0.01289087999612093,
+          0.01363328006118536,
+          0.013575680553913116
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "abb4407fb2d08c2b1ad16366b5867900e06e739048b90390082dba11ef340846"
+      ],
+      "descriptor_digests": [
+        "7b9fa1572fc30c77a4abc38bd8b55beac19c471909b00d62becf06c01a48273e",
+        "dca6ed013ba5960a9b3ea648ead4d9f79b1652e0cc9f330a5e987438e753e7b9"
+      ],
+      "max_abs_error": 2.501285052858293e-06,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": false,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.459559875,
+          0.449448375,
+          0.443932125,
+          0.4394285,
+          0.444653375,
+          0.454746
+        ],
+        "native": [
+          0.442703375,
+          0.432512,
+          0.424538125,
+          0.42689325,
+          0.43179825,
+          0.425305625
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.447050875,
+        "native": 0.42934574999999997
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.25065281987190247,
+          0.2513887882232666,
+          0.250430703163147
+        ],
+        "consumer": [
+          0.026185600087046623,
+          0.025143038481473923,
+          0.02558847889304161
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "61dbc31873702a0f148ad35f8eeb9cebbab944ae9c67994433f09fd2a601a98e"
+      ],
+      "descriptor_digests": [
+        "7550a017633bfe15ddc3b957042a0c4002eac9e606c346720f7ecea22b61bfd5",
+        "7e58f9e274b5edfbab96df1f50cfab933f776091ab4c58a3cbdc4dcd8bdc6396"
+      ],
+      "max_abs_error": 2.501285052858293e-06,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": false,
+      "rhs_order": "F",
+      "wall_samples_ms": {
+        "control": [
+          0.4282845,
+          0.411330625,
+          0.412317,
+          0.400340375,
+          0.40677425,
+          0.412908125
+        ],
+        "native": [
+          0.4249945,
+          0.4224295,
+          0.41392675,
+          0.411444375,
+          0.422896875,
+          0.423056875
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.4118238125,
+        "native": 0.4226631875
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.2507603168487549,
+          0.2505311965942383,
+          0.25040894746780396
+        ],
+        "consumer": [
+          0.013365119695663452,
+          0.013870719820261002,
+          0.013541760854423046
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "1912a115ddeb4de25a67dc5a909bccbb4112964706fe780cdcdf4353ba016657"
+      ],
+      "descriptor_digests": [
+        "7b9fa1572fc30c77a4abc38bd8b55beac19c471909b00d62becf06c01a48273e",
+        "dda9faf8701486d21664fa75a54b7bcdd8c90804085aa77e588ad1db3c0b93e9"
+      ],
+      "max_abs_error": 3.0517578125e-05,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    },
+    {
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "kind": "softmax",
+      "dtype": "bf16",
+      "fused": true,
+      "dynamic": true,
+      "rhs_order": "C",
+      "wall_samples_ms": {
+        "control": [
+          0.444252125,
+          0.42667575,
+          0.42131075,
+          0.421086875,
+          0.425757,
+          0.423367
+        ],
+        "native": [
+          0.427325625,
+          0.431042,
+          0.43381575,
+          0.43385825,
+          0.43230325,
+          0.43419475
+        ]
+      },
+      "wall_medians_ms": {
+        "control": 0.424562,
+        "native": 0.4330595
+      },
+      "component_device_dispatch_samples_ms": {
+        "producer": [
+          0.2503347098827362,
+          0.2504543960094452,
+          0.2506752014160156
+        ],
+        "consumer": [
+          0.02641855925321579,
+          0.026044800877571106,
+          0.0260518416762352
+        ]
+      },
+      "image_digests": [
+        "bd47151f667807d31a654070cef78afbc419c1b94795c35da8e9771f12befbe8",
+        "0ae4ab3c88fa53782d6eea369c90175931c1b0610e7458eeb77396ba880da466"
+      ],
+      "descriptor_digests": [
+        "7550a017633bfe15ddc3b957042a0c4002eac9e606c346720f7ecea22b61bfd5",
+        "9084f25ec2ed75342dd854c7b79369772bc0bd8ad0d30a0f3fa6dfa9e2fa23ca"
+      ],
+      "max_abs_error": 3.0517578125e-05,
+      "correctness": "independent_oracle_before_and_after_each_arm"
+    }
+  ],
+  "schema": "tessera.nvidia.resident_native_sequence.v1",
+  "compiler_sha256": "b1c5a5f51ff7554d448a304fd468f0c0e266f38592c87aefc4dbc81580f5cbfe",
+  "runtime_sha256": "3b95f5004f676d07568144fd75cb8f56179360fc9451b9f66c6200e0547b2845",
+  "source_sha256": {
+    "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/record_resident_tensor_owner.py": "1b7e728e3590b5565e9d635de821da831cadd5d2fc127814cf4b600f5df154e2",
+    "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/resident_nvidia_tensor.py": "dd8aad7ae8a13f4f6072f316eec9b13ce03cee5e6f40c58acaa2d07550086e1f",
+    "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/nvidia_native.py": "98efe61bac95c01f6b41379f8cc2a53de85a1b8530e01865221adbb8220287e8",
+    "/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "1963607551ded65227d92ec76ac3e0e4ae97acfa7b209deb5ed9e9dc0fc87aa2",
+    "/home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "fb3d53f960c64c80023e12d42a1bac8005369d1713832ef823ca222cd3d879e4"
+  },
+  "timing_scope": "Same-image resident synchronized wall calls include Python binding/validation and native submission/completion. Component CUDA event dispatch windows are separate; no isolated-kernel or host-wall speedup inference.",
+  "host_interference": "Concurrent host/device activity is not isolated; results characterize this run and do not promote a selector."
+}

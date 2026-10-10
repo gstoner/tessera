@@ -1,0 +1,25 @@
+{
+  "source_sha256": {
+    "src/compiler/ir/TesseraOps.cpp": "f36069e11a7fe6dea6c28e27adc0d9a53c92d126c97f8d28dd241dfc74a5ba59",
+    "src/compiler/ir/LinearTransposeInterface.cpp": "6353a615043ffa58d7d2d3d3e0c219d173293039c35e81c1d05e7e70fb89f1a6",
+    "src/compiler/ir/TesseraOps.td": "a2f51786d5f67bb42c7e279d4b81e6183480262805f9a8d9259d1b2337acfe3b",
+    "src/compiler/ir/include/Tessera/IR/ScaledBatchContract.h": "f26267b12239d264cb3a342d534108734792cc8ad87c5e785abcddd3bb2e354c",
+    "tests/unit/test_native_independent_scale_batch.py": "f832eb2829a7346b5396d32ce63b4eaff4d5d41b3c3c50c685e67361e076b6a6",
+    "benchmarks/rocm/record_independent_batch_reverse_packages.py": "8d66d16d89829416bfdf565e74b6fa89292edef6910585bf3fb1a61689cc832a",
+    "benchmarks/rocm/record_independent_batch_reverse_device.py": "495777896751c657f393642598ab1810f81de014a16056b3e977d483abf595ef"
+  },
+  "compiler_sha256": "1fcf742130a71ca0d6163aeaee071caba1052f084923cd77856ad87022653174",
+  "matching_cmake_build": "passed",
+  "focused_tests_passed": 589,
+  "owning_cases_passed": 68,
+  "candidate_and_integrated_manifests_identical": 68,
+  "post_device_package_recorder_compiler_hashes_verified": true,
+  "corrected_timing_receipt": {
+    "compiler_sha256": "ed1c775c7e092b2e1e4971baaab0402966f7526d4ccdb5dbe470b7affe920ec8",
+    "package_sha256": "7f584474fbb58f55a8d95bc4aaee35c9d40eff606190f196d12f65a6ad0cc371",
+    "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+    "recorder_sha256": "1ac66ecc9e17ae56d26cea587f84142c6b39913c6a29f9fc1742880673e5cc46",
+    "owning_cases_passed": 68,
+    "event_unit_contract": "event-unit-contract.json"
+  }
+}

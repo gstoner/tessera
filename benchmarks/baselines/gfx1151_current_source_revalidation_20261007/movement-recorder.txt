@@ -1,0 +1,2 @@
+paged_kv_read: device=0.8755676774964674 e2e=1.064x
+moe_dispatch: device=diagnostic e2e=2.972x

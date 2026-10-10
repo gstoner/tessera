@@ -37,6 +37,8 @@ class OpSpec:
 _SPECS = [
     OpSpec("gemm", "tessera.matmul", 2, 2, lowering="loop_nest"),
     OpSpec("matmul", "tessera.matmul", 2, 2, lowering="loop_nest"),
+    OpSpec("scaled_matmul", "tessera.scaled_matmul", 4, 4,
+           lowering="loop_nest", shape_rule="scaled_matmul"),
     OpSpec("batched_gemm", "tessera.batched_gemm", 2, 2, lowering="loop_nest"),
     OpSpec("es_low_rank_correction", "tessera.es_low_rank_correction", 3, 3,
            lowering="loop_nest", shape_rule="es_population_features"),
@@ -247,7 +249,7 @@ _SPECS = [
     # SILENT at the Graph IR level and only surfaced two stages later as
     # "schedule-ir stage was claimed but schedule_ir is empty".
     OpSpec("moe", "tessera.moe", 2, 4, effect="collective", lowering="moe"),
-    OpSpec("moe_dispatch", "tessera.moe_dispatch", 2, 2, effect="collective", lowering="moe_transport"),
+    OpSpec("moe_dispatch", "tessera.moe_dispatch", 2, 2, effect="collective", lowering="moe_transport", shape_rule="moe_dispatch"),
     OpSpec("moe_combine", "tessera.moe_combine", 2, 2, effect="collective", lowering="moe_transport"),
     OpSpec("all_reduce", "tessera.all_reduce", 1, 1, effect="collective", lowering="collective"),
     OpSpec("reduce_scatter", "tessera.reduce_scatter", 1, 1, effect="collective", lowering="collective"),
@@ -355,6 +357,8 @@ _SPECS = [
     OpSpec("quantize_fp4", "tessera.quantize_fp4", 1, 1, lowering="quantize"),
     OpSpec("dequantize_fp4", "tessera.dequantize_fp4", 2, 2, lowering="quantize"),
     OpSpec("quantize_nvfp4", "tessera.quantize_nvfp4", 1, 1, lowering="quantize"),
+    OpSpec("nvfp4_requantize", "tessera.nvfp4_requantize", 3, 3, lowering="quantize", shape_rule="nvfp4_requantize"),
+    OpSpec("mxfp4_folded_storage", "tessera.mxfp4_folded_storage", 2, 2, lowering="layout_transform", shape_rule="mxfp4_folded_storage"),
     OpSpec("dequantize_nvfp4", "tessera.dequantize_nvfp4", 2, 2, lowering="quantize"),
     # Theme 5 — Multi-Latent Attention primitives. The three projection ops
     # are matmul-shaped but distinct names so a future FlashMLA target pass
@@ -846,11 +850,13 @@ OP_SHAPE_RULE: dict = {
     # hottest accelerator path -- so declaring this rule also makes the
     # storage-dtype enforcement apply to it.
     **{f"tessera.{n}": "same_as_first" for n in
-       ("flash_attn", "gated_attention", "mla_decode")},
+       ("gated_attention", "mla_decode")},
+    # Attention contracts Q/K over D but stores values over independent Dv.
+    "tessera.flash_attn": "attention_value_width",
     # Elementwise-shaped indexing and transport: result keeps the data
     # operand's shape and dtype.
     **{f"tessera.{n}": "same_as_first" for n in
-       ("index_update", "scatter", "take", "moe_dispatch", "spectral_filter")},
+       ("index_update", "scatter", "take", "spectral_filter")},
     # Clifford binary products keep the multivector shape; `inner` contracts
     # the trailing (blade) axis to a scalar per row.
     **{f"tessera.{n}": "same_as_first" for n in
@@ -1118,6 +1124,9 @@ COMPUTE_FLOAT_DTYPE = "fp32"
 #: The declared vocabulary. `graph_ir` implements each name; a rule named here
 #: with no implementation (or vice versa) is a drift-gated error.
 SHAPE_RULE_NAMES = frozenset({
+    "nvfp4_requantize",
+    "mxfp4_folded_storage",
+    "scaled_matmul",
     # MC1 matrix-function family.
     "matrix_scalar",   # (..., m, n) -> (...)   det/logdet/trace/norm
     "vec",             # (..., m, n) -> (..., m*n), column-major
@@ -1126,6 +1135,7 @@ SHAPE_RULE_NAMES = frozenset({
     "same_as_first",
     "alibi_bias",
     "depth_attention",
+    "attention_value_width",
     "matmul_2d",
     "es_population_features",
     "coalition_marginal",
@@ -1189,6 +1199,7 @@ SHAPE_RULE_NAMES = frozenset({
     "qkv_projection",
     "state_matrix",
     "kv_cache_read",
+    "moe_dispatch",
     "all_gather",
     "reduce_scatter",
     "unclassified",

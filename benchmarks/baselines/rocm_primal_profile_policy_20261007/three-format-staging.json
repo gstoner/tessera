@@ -1,0 +1,652 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "rocminfo": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "rows": [
+    {
+      "shape_mnk": [
+        200,
+        256,
+        256
+      ],
+      "format": "fp8",
+      "compile_ms": 278.8871980737895,
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+      "entry": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+      "grid": [
+        8,
+        13,
+        1
+      ],
+      "block": [
+        32,
+        1,
+        1
+      ],
+      "image_sha256": "7d22e7b49a1f6a5c39bc682d128fcc673413d58e401b8354d0c438054145a84c",
+      "correctness": "independent_forward_bound_and_bitwise_existing_launcher_parity",
+      "changed_scale_correctness": "independent_forward_bound",
+      "arms": {
+        "0": {
+          "native_event_ms": [
+            0.12537917494773865,
+            0.027416519820690155,
+            0.03570863977074623,
+            0.02813982032239437,
+            0.028192611411213875,
+            0.02719695121049881,
+            0.02640026994049549,
+            0.02520092949271202,
+            0.02407839149236679,
+            0.0247614998370409,
+            0.02420336939394474
+          ],
+          "native_event_median_ms": 0.02719695121049881,
+          "update_invoke_read_ms": [
+            8.08538100682199,
+            7.820641854777932,
+            1.169682014733553,
+            1.1289441026747227,
+            1.1190050281584263,
+            1.1423190589994192,
+            1.1189549695700407,
+            1.0996179189532995,
+            1.098386012017727,
+            11.615932919085026,
+            9.016373893246055
+          ],
+          "update_invoke_read_median_ms": 1.1423190589994192,
+          "prepare_invoke_read_close_ms": [
+            1.5804025111719966,
+            1.3427419820800424,
+            1.3482565991580486,
+            1.362816384062171,
+            1.2769906083121896,
+            1.3365642167627811,
+            1.4250471023842692
+          ],
+          "prepare_invoke_read_close_median_ms": 1.3482565991580486
+        },
+        "1": {
+          "native_event_ms": [
+            0.029263438656926155,
+            0.029494820162653923,
+            0.02963041141629219,
+            0.02911585010588169,
+            0.033278688788414,
+            0.030960988253355026,
+            0.031146081164479256,
+            0.03091878816485405,
+            0.030937690287828445,
+            0.030345940962433815,
+            0.027543189004063606
+          ],
+          "native_event_median_ms": 0.030345940962433815,
+          "update_invoke_read_ms": [
+            0.5414229817688465,
+            0.4270039498806,
+            0.5106739699840546,
+            0.47193095088005066,
+            0.4268039483577013,
+            0.41610398329794407,
+            0.49031595699489117,
+            0.497668981552124,
+            0.5150327924638987,
+            0.41550304740667343,
+            3.081008093431592
+          ],
+          "update_invoke_read_median_ms": 0.49031595699489117,
+          "prepare_invoke_read_close_ms": [
+            1.0826047975569963,
+            1.3188412180170417,
+            1.7571409931406379,
+            0.6200161064043641,
+            0.6174962036311626,
+            0.612880289554596,
+            0.6161967990919948
+          ],
+          "prepare_invoke_read_close_median_ms": 0.6200161064043641
+        }
+      },
+      "boundary": "diagnostic_one_member_plan_from_existing_compiler_package"
+    },
+    {
+      "shape_mnk": [
+        200,
+        256,
+        256
+      ],
+      "format": "mxfp8",
+      "compile_ms": 192.68480595201254,
+      "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+      "entry": "tessera_rocm_scaled_matmul_b867c3d0aa38586b",
+      "grid": [
+        16,
+        13,
+        1
+      ],
+      "block": [
+        32,
+        1,
+        1
+      ],
+      "image_sha256": "0cecb063223641fd071dff788f6416e47d85cfe0c11e1fc16da8c0c3eedeed65",
+      "correctness": "independent_forward_bound_and_bitwise_existing_launcher_parity",
+      "changed_scale_correctness": "independent_forward_bound",
+      "arms": {
+        "0": {
+          "native_event_ms": [
+            0.1750117689371109,
+            0.013403159566223621,
+            0.11954615265130997,
+            0.013836829923093319,
+            0.013640140183269978,
+            0.013658139854669571,
+            0.013607339933514595,
+            0.013621640391647816,
+            0.013638339936733246,
+            0.013560649938881397,
+            0.013420350849628448
+          ],
+          "native_event_median_ms": 0.013638339936733246,
+          "update_invoke_read_ms": [
+            1.4404398389160633,
+            1.4527819585055113,
+            1.6073770821094513,
+            1.9166579004377127,
+            1.5261848457157612,
+            1.3796219136565924,
+            1.3616681098937988,
+            5.752961849793792,
+            1.3097119517624378,
+            1.3995799235999584,
+            1.7123010475188494
+          ],
+          "update_invoke_read_median_ms": 1.4527819585055113,
+          "prepare_invoke_read_close_ms": [
+            3.0929330037906766,
+            1.5017830999568105,
+            1.5023745829239488,
+            1.5127394115552306,
+            1.4996052952483296,
+            1.4907405944541097,
+            1.5108478022739291
+          ],
+          "prepare_invoke_read_close_median_ms": 1.5023745829239488
+        },
+        "1": {
+          "native_event_ms": [
+            0.014358780346810818,
+            0.0171431303024292,
+            0.01432798057794571,
+            0.014322489500045776,
+            0.014067599549889565,
+            0.014288480393588543,
+            0.014311280101537704,
+            0.014276889152824879,
+            0.014350080862641335,
+            0.015142739750444889,
+            0.014088399708271027
+          ],
+          "native_event_median_ms": 0.014322489500045776,
+          "update_invoke_read_ms": [
+            0.8491808548569679,
+            0.7088219281286001,
+            0.754079082980752,
+            0.8981139399111271,
+            0.7054959423840046,
+            3.8383149076253176,
+            0.7108461577445269,
+            0.5929109174758196,
+            0.6123590283095837,
+            14.276040019467473,
+            0.8749701082706451
+          ],
+          "update_invoke_read_median_ms": 0.754079082980752,
+          "prepare_invoke_read_close_ms": [
+            1.7652601934969425,
+            0.9823824046179652,
+            0.5668194964528084,
+            0.5916618974879384,
+            0.5648768041282892,
+            0.5317555973306298,
+            0.5053682951256633
+          ],
+          "prepare_invoke_read_close_median_ms": 0.5668194964528084
+        }
+      },
+      "boundary": "diagnostic_one_member_plan_from_existing_compiler_package"
+    },
+    {
+      "shape_mnk": [
+        200,
+        256,
+        256
+      ],
+      "format": "mxfp4_folded",
+      "compile_ms": 269.67648696154356,
+      "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+      "entry": "tessera_rocm_folded_matmul_130d3100d2bc4ad0",
+      "grid": [
+        4,
+        1,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "image_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+      "correctness": "independent_forward_bound_and_bitwise_existing_launcher_parity",
+      "changed_scale_correctness": "independent_forward_bound",
+      "arms": {
+        "0": {
+          "native_event_ms": [
+            0.02066762000322342,
+            0.0206433292478323,
+            0.020255640149116516,
+            0.020253630355000496,
+            0.020672820508480072,
+            0.02027404122054577,
+            0.020702920854091644,
+            0.020224040374159813,
+            0.020674018189311028,
+            0.020696818828582764,
+            0.020318439230322838
+          ],
+          "native_event_median_ms": 0.0206433292478323,
+          "update_invoke_read_ms": [
+            1.600002869963646,
+            1.5570889227092266,
+            1.6034787986427546,
+            4.963828949257731,
+            6.972688948735595,
+            1.4174049720168114,
+            1.503919018432498,
+            1.6075570601969957,
+            7.141286041587591,
+            1.293647801503539,
+            1.2124830391258001
+          ],
+          "update_invoke_read_median_ms": 1.600002869963646,
+          "prepare_invoke_read_close_ms": [
+            1.7432388151064515,
+            1.4774908078834414,
+            1.381550100632012,
+            1.3515127124264836,
+            1.4695599908009171,
+            1.4710549032315612,
+            1.4961377950385213
+          ],
+          "prepare_invoke_read_close_median_ms": 1.4710549032315612
+        },
+        "1": {
+          "native_event_ms": [
+            0.020936880260705948,
+            0.020279889926314354,
+            0.020445190370082855,
+            0.02047359012067318,
+            0.0208272784948349,
+            0.02046339027583599,
+            0.020837578922510147,
+            0.020338689908385277,
+            0.020861079916357994,
+            0.020449791103601456,
+            0.02033430151641369
+          ],
+          "native_event_median_ms": 0.02046339027583599,
+          "update_invoke_read_ms": [
+            0.6061270833015442,
+            0.6251020822674036,
+            0.5260440520942211,
+            0.6208152044564486,
+            0.517247011885047,
+            0.6089219823479652,
+            0.5193508695811033,
+            0.613651005551219,
+            8.640117011964321,
+            2.5129050482064486,
+            0.5684748757630587
+          ],
+          "update_invoke_read_median_ms": 0.6089219823479652,
+          "prepare_invoke_read_close_ms": [
+            0.9488624986261129,
+            1.892143301665783,
+            0.9582855040207505,
+            0.5671722115948796,
+            0.5811717826873064,
+            0.5269212881103158,
+            0.5231874063611031
+          ],
+          "prepare_invoke_read_close_median_ms": 0.5811717826873064
+        }
+      },
+      "boundary": "diagnostic_one_member_plan_from_existing_compiler_package"
+    },
+    {
+      "shape_mnk": [
+        256,
+        256,
+        1536
+      ],
+      "format": "fp8",
+      "compile_ms": 79.07516998238862,
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+      "entry": "tessera_rocm_scaled_matmul_9160add00a4b6aae",
+      "grid": [
+        8,
+        16,
+        1
+      ],
+      "block": [
+        32,
+        1,
+        1
+      ],
+      "image_sha256": "7d22e7b49a1f6a5c39bc682d128fcc673413d58e401b8354d0c438054145a84c",
+      "correctness": "independent_forward_bound_and_bitwise_existing_launcher_parity",
+      "changed_scale_correctness": "independent_forward_bound",
+      "arms": {
+        "0": {
+          "native_event_ms": [
+            0.033632148057222366,
+            0.03361376002430916,
+            0.01811743900179863,
+            0.017253469675779343,
+            0.01815953105688095,
+            0.017954939976334572,
+            0.017737749963998795,
+            0.017223060131072998,
+            0.0174417607486248,
+            0.017892248928546906,
+            0.017341870814561844
+          ],
+          "native_event_median_ms": 0.017892248928546906,
+          "update_invoke_read_ms": [
+            10.692499112337828,
+            3.3560339361429214,
+            3.3288919366896152,
+            8.084867149591446,
+            4.539061104878783,
+            3.140732878819108,
+            5.557026015594602,
+            2.9487370047718287,
+            4.76164510473609,
+            3.3462548162788153,
+            3.7059010937809944
+          ],
+          "update_invoke_read_median_ms": 3.7059010937809944,
+          "prepare_invoke_read_close_ms": [
+            3.4948634915053844,
+            3.35495350882411,
+            3.3380562905222178,
+            3.345680795609951,
+            3.2901157857850194,
+            3.304807795211673,
+            3.360890899784863
+          ],
+          "prepare_invoke_read_close_median_ms": 3.345680795609951
+        },
+        "1": {
+          "native_event_ms": [
+            0.018222399055957794,
+            0.0206979401409626,
+            0.01767401024699211,
+            0.017260819673538208,
+            0.017635609954595566,
+            0.01754882000386715,
+            0.017559809610247612,
+            0.01737941987812519,
+            0.01708441972732544,
+            0.017496120184659958,
+            0.017022429034113884
+          ],
+          "native_event_median_ms": 0.01754882000386715,
+          "update_invoke_read_ms": [
+            0.6736658979207277,
+            0.5447189323604107,
+            0.543256988748908,
+            0.530783087015152,
+            0.6568639073520899,
+            0.661082100123167,
+            0.5563108716160059,
+            0.6251118611544371,
+            0.55487803183496,
+            2.7580021414905787,
+            0.6483669858425856
+          ],
+          "update_invoke_read_median_ms": 0.6251118611544371,
+          "prepare_invoke_read_close_ms": [
+            1.1152861174196005,
+            1.569296303205192,
+            0.5165085196495056,
+            0.4939845995977521,
+            0.6207854952663183,
+            0.49860530998557806,
+            0.46971128322184086
+          ],
+          "prepare_invoke_read_close_median_ms": 0.5165085196495056
+        }
+      },
+      "boundary": "diagnostic_one_member_plan_from_existing_compiler_package"
+    },
+    {
+      "shape_mnk": [
+        256,
+        256,
+        1536
+      ],
+      "format": "mxfp8",
+      "compile_ms": 79.04812903143466,
+      "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+      "entry": "tessera_rocm_scaled_matmul_b867c3d0aa38586b",
+      "grid": [
+        16,
+        16,
+        1
+      ],
+      "block": [
+        32,
+        1,
+        1
+      ],
+      "image_sha256": "0cecb063223641fd071dff788f6416e47d85cfe0c11e1fc16da8c0c3eedeed65",
+      "correctness": "independent_forward_bound_and_bitwise_existing_launcher_parity",
+      "changed_scale_correctness": "independent_forward_bound",
+      "arms": {
+        "0": {
+          "native_event_ms": [
+            0.023932581767439842,
+            0.02320699952542782,
+            0.023169798776507378,
+            0.02316579967737198,
+            0.023069798946380615,
+            0.023195801302790642,
+            0.02327980101108551,
+            0.024355269968509674,
+            0.023269999772310257,
+            0.023616991937160492,
+            0.02319740131497383
+          ],
+          "native_event_median_ms": 0.02320699952542782,
+          "update_invoke_read_ms": [
+            3.151673125103116,
+            3.1082460191100836,
+            11.964918812736869,
+            3.1137908808887005,
+            3.326728008687496,
+            3.0009360052645206,
+            3.0514930840581656,
+            4.58672596141696,
+            3.3863710705190897,
+            3.6434410139918327,
+            3.8240610156208277
+          ],
+          "update_invoke_read_median_ms": 3.326728008687496,
+          "prepare_invoke_read_close_ms": [
+            3.4890327835455537,
+            3.329311986453831,
+            3.3944358117878437,
+            3.3662840956822038,
+            3.401651605963707,
+            3.433396201580763,
+            3.4102289006114006
+          ],
+          "prepare_invoke_read_close_median_ms": 3.401651605963707
+        },
+        "1": {
+          "native_event_ms": [
+            0.023504668846726418,
+            0.022997569292783737,
+            0.023076770827174187,
+            0.024325348436832428,
+            0.023405270650982857,
+            0.02305998094379902,
+            0.02325046993792057,
+            0.023165669292211533,
+            0.022921578958630562,
+            0.022899579256772995,
+            0.023063568398356438
+          ],
+          "native_event_median_ms": 0.023076770827174187,
+          "update_invoke_read_ms": [
+            0.5743559449911118,
+            0.5676329601556063,
+            0.5668119993060827,
+            0.5471741314977407,
+            0.6472750101238489,
+            0.5712900310754776,
+            0.5568820051848888,
+            3.358356887474656,
+            11.907690903171897,
+            0.6189309060573578,
+            0.5435668863356113
+          ],
+          "update_invoke_read_median_ms": 0.5712900310754776,
+          "prepare_invoke_read_close_ms": [
+            1.4098390936851501,
+            1.1882251827046275,
+            0.5929504055529833,
+            0.5697401007637382,
+            0.5650873063132167,
+            0.5804895889014006,
+            0.5621426040306687
+          ],
+          "prepare_invoke_read_close_median_ms": 0.5804895889014006
+        }
+      },
+      "boundary": "diagnostic_one_member_plan_from_existing_compiler_package"
+    },
+    {
+      "shape_mnk": [
+        256,
+        256,
+        1536
+      ],
+      "format": "mxfp4_folded",
+      "compile_ms": 308.9233781211078,
+      "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+      "entry": "tessera_rocm_folded_matmul_708d500594ff51c6",
+      "grid": [
+        4,
+        1,
+        1
+      ],
+      "block": [
+        256,
+        1,
+        1
+      ],
+      "image_sha256": "1d261b9d0c54e32cd5ce81f7a58b87462aa763ae6d27902a53344104b2121161",
+      "correctness": "independent_forward_bound_and_bitwise_existing_launcher_parity",
+      "changed_scale_correctness": "independent_forward_bound",
+      "arms": {
+        "0": {
+          "native_event_ms": [
+            0.06175779923796654,
+            0.02982337959110737,
+            0.02898968942463398,
+            0.02787700854241848,
+            0.027915410697460175,
+            0.027229120954871178,
+            0.027186229825019836,
+            0.027115030214190483,
+            0.027079429477453232,
+            0.027281029149889946,
+            0.02714543044567108
+          ],
+          "native_event_median_ms": 0.027281029149889946,
+          "update_invoke_read_ms": [
+            3.6435150541365147,
+            3.9332848973572254,
+            3.5280371084809303,
+            3.4490160178393126,
+            3.3740331418812275,
+            15.006352914497256,
+            3.8795131258666515,
+            3.1272079795598984,
+            5.620248150080442,
+            3.736970014870167,
+            3.787537105381489
+          ],
+          "update_invoke_read_median_ms": 3.736970014870167,
+          "prepare_invoke_read_close_ms": [
+            3.3800484146922827,
+            3.4538951935246587,
+            3.473182115703821,
+            3.4788138000294566,
+            3.0812964076176286,
+            3.045534109696746,
+            3.0855793971568346
+          ],
+          "prepare_invoke_read_close_median_ms": 3.3800484146922827
+        },
+        "1": {
+          "native_event_ms": [
+            0.027538549154996872,
+            0.027513349428772926,
+            0.02705344930291176,
+            0.02703186124563217,
+            0.027172649279236794,
+            0.02714466117322445,
+            0.02761274017393589,
+            0.027161451056599617,
+            0.027536148205399513,
+            0.02707556076347828,
+            0.02538228966295719
+          ],
+          "native_event_median_ms": 0.027161451056599617,
+          "update_invoke_read_ms": [
+            0.7489488925784826,
+            0.7829440291970968,
+            0.7761709857732058,
+            0.797090120613575,
+            0.7831337861716747,
+            0.77385688200593,
+            0.7946658879518509,
+            4.364079097285867,
+            0.7568839937448502,
+            4.962278995662928,
+            0.7030819542706013
+          ],
+          "update_invoke_read_median_ms": 0.7829440291970968,
+          "prepare_invoke_read_close_ms": [
+            0.7917347131296992,
+            1.7233168007805943,
+            0.6307506933808327,
+            0.7831202121451497,
+            0.7609219057485461,
+            0.7638945942744613,
+            0.7772730896249413
+          ],
+          "prepare_invoke_read_close_median_ms": 0.7772730896249413
+        }
+      },
+      "boundary": "diagnostic_one_member_plan_from_existing_compiler_package"
+    }
+  ],
+  "runtime_sha256": "fc383fba15cf107cb1c4a361487ba07e9b424c96830f9c017056ac38910efc84",
+  "timing_note": "native one-member events include enqueue gaps; host intervals include copy/readback/ABI marshaling; diagnostic plan is not public JIT/AD projection"
+}

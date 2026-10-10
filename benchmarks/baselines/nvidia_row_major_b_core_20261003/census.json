@@ -1,0 +1,18 @@
+{
+  "schema": "tessera.nvidia.w1_producer_census.v1",
+  "source_sha256": "31814c2d01477926476abc1d7cb882c8a31fd4187a43b3d2f461c25455233710",
+  "path": "src/transforms/lib/TileIRLoweringPass.cpp",
+  "legacy_registration_guard": "if (smVersion < 120) {",
+  "guard_line": 1482,
+  "registered_constructors": [
+    "LowerKReductionAddToTileMMA",
+    "LowerMatmulToTileMMA"
+  ],
+  "sm120_owner": "canonical recovery -> native Graph/Schedule/Tile",
+  "open": [
+    "row-major RHS Schedule and checked resident edge",
+    "arbitrary producers",
+    "noncanonical accumulators",
+    "older exact-device evidence"
+  ]
+}

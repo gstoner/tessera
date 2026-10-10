@@ -159,7 +159,11 @@ def test_s8_current_gen_reasoning_corner_cases_are_explicit():
     assert np.bincount(q_batch["route"], minlength=q_params["experts"].shape[0]).tolist() == [3, 0, 0, 0]
     assert np.all(np.isfinite(qwen.forward(q_params, q_batch)))
 
-    dispatched = ts.ops.moe_dispatch(q_batch["router_scores"], q_batch["route"])
+    # Expert IDs are routing decisions; the tensor gather ABI consumes the
+    # stable token order grouped by those decisions, as explicit int32 indices.
+    token_order = np.argsort(q_batch["route"], kind="stable").astype(np.int32)
+    dispatched = ts.ops.moe_dispatch(q_batch["router_scores"], token_order)
+    np.testing.assert_allclose(dispatched, q_batch["router_scores"][token_order])
     combined = ts.ops.moe_combine(np.stack([dispatched, dispatched]), q_batch["route"], reduce="mean")
     np.testing.assert_allclose(combined, dispatched)
 

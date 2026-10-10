@@ -1,0 +1,254 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "selector_promotion": false,
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "d786dc0e6f7d5ae72ccb8b4f7ba5f52cabe5265269f245e7009a6ba806491720",
+    "python/tessera/compiler/rocm_nvfp4_program.py": "ab73b8f0de772e9e551e1faa197fce930cbc414477c55f413a1f2c3354aa1550",
+    "python/tessera/runtime.py": "0d05f0f4b8bdfe0e0e86d1b1db7a98e6092031dee8a92a86b18afd808513036b",
+    "benchmarks/rocm/benchmark_nvfp4_manifest_cache.py": "75ad55160f1a9b811861425fc50ba54c6de8dbbb0df4811e65af03d4893838e5"
+  },
+  "rows": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "reordered_arguments": false,
+      "wall_samples_ms": {
+        "retained_artifact": [
+          18.880059,
+          11.543188,
+          11.493662,
+          11.703472,
+          11.611828,
+          11.850062,
+          11.238707
+        ],
+        "rebuilt_manifest_control": [
+          24.252832,
+          22.293273,
+          15.438261,
+          15.673798,
+          16.420722,
+          15.825678,
+          14.88253
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_artifact": 11.611828,
+        "rebuilt_manifest_control": 15.825678
+      },
+      "retained_over_rebuilt": 0.7337333667473835,
+      "component_image_digests": [
+        "f0ccb4bc8b203eee5296c4183927b7ae864fca9eeacb76e18a7273aac6233a15",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "fb5cf1ae08bb92f1b60f77ab0d296d452517f25d8686c5ca8521b4eb570a1fa7"
+      ],
+      "correctness": "independent folded oracle after every timed call",
+      "timing_scope": "ordinary allocating JIT, identical Graph/images; control rebuilds manifest before the same checked runtime launch"
+    },
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "reordered_arguments": true,
+      "wall_samples_ms": {
+        "retained_artifact": [
+          11.862295,
+          12.010388,
+          11.885409,
+          11.846425,
+          12.386584,
+          11.767425,
+          11.133496
+        ],
+        "rebuilt_manifest_control": [
+          16.400193,
+          16.185674,
+          15.774771,
+          16.470667,
+          16.540971,
+          15.913415,
+          15.688157
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_artifact": 11.862295,
+        "rebuilt_manifest_control": 16.185674
+      },
+      "retained_over_rebuilt": 0.7328885408170213,
+      "component_image_digests": [
+        "f0ccb4bc8b203eee5296c4183927b7ae864fca9eeacb76e18a7273aac6233a15",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "fb5cf1ae08bb92f1b60f77ab0d296d452517f25d8686c5ca8521b4eb570a1fa7"
+      ],
+      "correctness": "independent folded oracle after every timed call",
+      "timing_scope": "ordinary allocating JIT, identical Graph/images; control rebuilds manifest before the same checked runtime launch"
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "reordered_arguments": false,
+      "wall_samples_ms": {
+        "retained_artifact": [
+          12.616778,
+          13.074637,
+          13.349887,
+          13.521143,
+          12.57554,
+          12.805578,
+          12.784067
+        ],
+        "rebuilt_manifest_control": [
+          16.603335,
+          16.522473,
+          16.576302,
+          17.615765,
+          17.028325,
+          17.448996,
+          16.746276
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_artifact": 12.805578,
+        "rebuilt_manifest_control": 16.746276
+      },
+      "retained_over_rebuilt": 0.7646821299254831,
+      "component_image_digests": [
+        "5beb1458e38ddee1de15014ef995013ad33885087d7b787cb3fb64e0eea03ce8",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "89ad4fd5a1feeaecb5a68817034fcef3ac749ea710aaadf438f74116c2067db1"
+      ],
+      "correctness": "independent folded oracle after every timed call",
+      "timing_scope": "ordinary allocating JIT, identical Graph/images; control rebuilds manifest before the same checked runtime launch"
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "reordered_arguments": true,
+      "wall_samples_ms": {
+        "retained_artifact": [
+          13.95985,
+          12.544661,
+          12.198512,
+          12.792464,
+          12.834194,
+          12.802473,
+          12.909828
+        ],
+        "rebuilt_manifest_control": [
+          16.240751,
+          16.877036,
+          16.247565,
+          16.386289,
+          17.226232,
+          16.920419,
+          16.470249
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_artifact": 12.802473,
+        "rebuilt_manifest_control": 16.470249
+      },
+      "retained_over_rebuilt": 0.7773090133610003,
+      "component_image_digests": [
+        "5beb1458e38ddee1de15014ef995013ad33885087d7b787cb3fb64e0eea03ce8",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "89ad4fd5a1feeaecb5a68817034fcef3ac749ea710aaadf438f74116c2067db1"
+      ],
+      "correctness": "independent folded oracle after every timed call",
+      "timing_scope": "ordinary allocating JIT, identical Graph/images; control rebuilds manifest before the same checked runtime launch"
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "reordered_arguments": false,
+      "wall_samples_ms": {
+        "retained_artifact": [
+          11.194287,
+          11.376217,
+          11.412286,
+          11.686279,
+          11.722858,
+          11.924503,
+          11.066638
+        ],
+        "rebuilt_manifest_control": [
+          15.048292,
+          15.055626,
+          15.901376,
+          15.704822,
+          15.808299,
+          15.55703,
+          16.222262
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_artifact": 11.412286,
+        "rebuilt_manifest_control": 15.704822
+      },
+      "retained_over_rebuilt": 0.7266740113323157,
+      "component_image_digests": [
+        "025492857bf2cca4f126e7f10ff5e96e2a116365d7e881140ba7108bf7bbc97d",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "78dee9efa9c19beeb657d7158547b3bdbb6b45bce215ae4cfa801eb66b7792d4"
+      ],
+      "correctness": "independent folded oracle after every timed call",
+      "timing_scope": "ordinary allocating JIT, identical Graph/images; control rebuilds manifest before the same checked runtime launch"
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "reordered_arguments": true,
+      "wall_samples_ms": {
+        "retained_artifact": [
+          11.745772,
+          11.74547,
+          11.504341,
+          11.735257,
+          11.411269,
+          12.197341,
+          11.544278
+        ],
+        "rebuilt_manifest_control": [
+          15.225199,
+          15.473501,
+          15.959657,
+          15.418567,
+          15.370876,
+          15.355467,
+          16.19712
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_artifact": 11.735257,
+        "rebuilt_manifest_control": 15.418567
+      },
+      "retained_over_rebuilt": 0.7611120410865679,
+      "component_image_digests": [
+        "025492857bf2cca4f126e7f10ff5e96e2a116365d7e881140ba7108bf7bbc97d",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "78dee9efa9c19beeb657d7158547b3bdbb6b45bce215ae4cfa801eb66b7792d4"
+      ],
+      "correctness": "independent folded oracle after every timed call",
+      "timing_scope": "ordinary allocating JIT, identical Graph/images; control rebuilds manifest before the same checked runtime launch"
+    }
+  ]
+}

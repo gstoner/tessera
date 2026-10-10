@@ -238,6 +238,7 @@ class TraceBuilder:
     args: List[Tuple[str, Tuple[int, ...], str]] = field(default_factory=list)
     body: List[IROp] = field(default_factory=list)
     outputs: List[str] = field(default_factory=list)
+    evaluate_catalog_outputs: bool = False
     _counter: int = 0
 
     def arg(self, ssa: str, shape, dtype: str, value: Any = None) -> Tracer:
@@ -265,8 +266,23 @@ class TraceBuilder:
         call_args: List[Any] = []
         call_kwargs = dict(kwargs)
         ir_kwargs = dict(kwargs)
-        for a in args:
-            if isinstance(a, Tracer):
+        for position, a in enumerate(args):
+            if graph_name == "tessera.cast" and position == 1:
+                if not isinstance(a, str):
+                    raise TesseraTraceError("cast dtype must be a static dtype spelling")
+                if "dtype" in kwargs:
+                    raise TesseraTraceError("trace: duplicate cast dtype")
+                ir_kwargs["dtype"] = a
+                call_args.append(a)
+            elif graph_name == "tessera.kv_cache.read" and position in (1, 2):
+                if isinstance(a, Tracer):
+                    raise TesseraTraceError("paged cache bounds must be static attributes")
+                attribute = ("start", "end")[position - 1]
+                if attribute in kwargs:
+                    raise TesseraTraceError(f"trace: duplicate cache bound {attribute!r}")
+                ir_kwargs[attribute] = a
+                call_args.append(a)
+            elif isinstance(a, Tracer):
                 tracer_args.append(a)
                 call_args.append(a)
             elif (isinstance(a, (list, tuple)) and a
@@ -318,11 +334,38 @@ class TraceBuilder:
         # real numpy op to get the result's shape/dtype (works for ANY op, no
         # per-op shape rule). Falls back to the shape-rule path for value-less
         # specs (the executable subset only).
-        if tracer_args and all(t.value is not None for t in tracer_args):
+        physical_movement = (
+            (graph_name == "tessera.kv_cache.read" and len(tracer_args) == 2)
+            or (graph_name == "tessera.moe_dispatch" and len(tracer_args) == 2
+                and len(tracer_args[1].shape) == 1 and tracer_args[1].dtype in {"int32", "i32"}))
+        if graph_name == "tessera.kv_cache.read" and physical_movement and ir_kwargs.get("end") is None:
+            start = ir_kwargs.get("start")
+            if isinstance(start, int) and not isinstance(start, bool):
+                ir_kwargs["end"] = start + 1
+        values: tuple[Any, ...]
+        attention_types_only = graph_name == "tessera.flash_attn" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        scaled_types_only = graph_name == "tessera.scaled_matmul" and (
+            not self.evaluate_catalog_outputs or not tracer_args
+            or not all(value.value is not None for value in tracer_args))
+        if physical_movement or attention_types_only or scaled_types_only or graph_name in {"tessera.nvfp4_requantize","tessera.mxfp4_folded_storage"}:
+            # Catalog-owned result contracts avoid host arithmetic during tracing,
+            # including attention output/row-LSE and packed conversion results.
+            from .graph_ir import _infer_result_types, tensor_ir_type
+            inferred = _infer_result_types(graph_name, [
+                tensor_ir_type(tuple(map(str, value.shape)), value.dtype)
+                for value in tracer_args], ir_kwargs)
+            out_shapes = tuple(tuple(map(int, value.shape)) for value in inferred)
+            dtypes = tuple(value.dtype for value in inferred)
+            values = (None,) * len(inferred)
+        elif tracer_args and all(t.value is not None for t in tracer_args):
             def _concrete(x: Any) -> Any:
                 if isinstance(x, Tracer):
                     return x.value
-                return [t.value for t in x]  # variadic group
+                if isinstance(x, list):
+                    return [t.value for t in x]  # variadic group
+                return x  # Static positional cache bounds.
             concrete_kwargs = {
                 key: _concrete(item)
                 if isinstance(item, Tracer) or (
@@ -353,7 +396,7 @@ class TraceBuilder:
             arrays = tuple(np.asarray(value) for value in concrete_outputs)
             out_shapes = tuple(tuple(value.shape) for value in arrays)
             dtypes = tuple(_np_dtype_to_elem(value.dtype) for value in arrays)
-            values: tuple[Any, ...] = arrays
+            values = arrays
         else:
             out_shapes = (
                 _infer_shape(name, [t.shape for t in tracer_args], ir_kwargs),
@@ -382,7 +425,7 @@ class TraceBuilder:
             for item in tracer_args
         ]
         from .op_catalog import shape_rule_for
-        if tracer_args and shape_rule_for(graph_name) == "same_as_first":
+        if tracer_args and shape_rule_for(graph_name) in {"same_as_first", "attention_value_width"}:
             # The concrete NumPy reference can promote low-precision storage
             # (notably bfloat16 RMSNorm) through scalar arithmetic. Graph IR's
             # canonical same_as_first contract owns storage dtype; eager values
@@ -633,6 +676,10 @@ class TraceBuilder:
 
 
 def _spec_shape_dtype(spec: Any) -> Tuple[Tuple[int, ...], str]:
+    from .nvfp4_tensor import NVFP4Tensor
+    if isinstance(spec, NVFP4Tensor):
+        spec.validate()
+        return spec.shape, spec.dtype
     if isinstance(spec, np.ndarray):
         return tuple(spec.shape), _np_dtype_to_elem(spec.dtype)
     if isinstance(spec, tuple) and len(spec) == 2 and not isinstance(spec[1], int):
@@ -669,6 +716,10 @@ def _np_dtype_to_elem(dt) -> str:
         return "f64"
     if name == "int64":
         return "i64"
+    if name == "int32":
+        return "int32"
+    if name == "uint8":
+        return "uint8"  # Storage container remains planned/gated outside named contracts.
     return "f32"
 
 
@@ -682,6 +733,7 @@ def trace(
     source_state_views: tuple = (),
     source_error_specs: tuple = (),
     source_object_fields: tuple = (),
+    evaluate_catalog_outputs: bool = False,
 ) -> TracedFunction:
     """Interpret ``fn`` over ``Tracer`` args, returning the recorded
     :class:`TracedFunction`. ``example_specs`` are arrays (concrete tracing —
@@ -703,7 +755,9 @@ def trace(
         fn = recover_callable(fn, max_steps=max_steps, state_groups=source_state_groups,state_views=source_state_views,error_specs=source_error_specs,object_fields=source_object_fields)
     if arg_names is not None and len(arg_names) != len(example_specs):
         raise TesseraTraceError("trace arg_names must match the example arity")
-    tb = TraceBuilder()
+    if type(evaluate_catalog_outputs) is not bool:
+        raise TesseraTraceError("catalog output evaluation must be a boolean oracle option")
+    tb = TraceBuilder(evaluate_catalog_outputs=evaluate_catalog_outputs)
     arg_tracers = []
     for i, spec in enumerate(example_specs):
         shape, dtype = _spec_shape_dtype(spec)
@@ -768,12 +822,12 @@ def to_graph_ir_module(
             raise TesseraTraceError(
                 f"trace output %{output} has no typed Graph IR definition"
             )
-        if index < len(traced.output_specs):
+        result_index = operation.result_names.index(output)
+        if operation.inferred_types:
+            result_types.append(operation.inferred_types[result_index])
+        elif index < len(traced.output_specs):
             shape, dtype = traced.output_specs[index]
-            typed = tensor_ir_type(tuple(str(dim) for dim in shape), dtype)
-            result_types.append(IRType(
-                operation.result_type, typed.shape, typed.dtype, typed.layout,
-            ))
+            result_types.append(tensor_ir_type(tuple(str(dim) for dim in shape), dtype))
         else:
             result_types.append(IRType(operation.result_type))
     structured_cfg = recover_structured_cfg(traced.body)

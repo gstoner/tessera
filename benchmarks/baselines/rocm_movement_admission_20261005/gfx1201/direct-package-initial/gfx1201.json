@@ -1,0 +1,397 @@
+{
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "pci_bus_id": "0000:03:00.0",
+    "architecture": "gfx1201",
+    "ordinal": 0
+  },
+  "architecture": "gfx1201",
+  "rows": [
+    {
+      "family": "paged_kv",
+      "shape": [
+        4,
+        4,
+        3,
+        8,
+        1,
+        5
+      ],
+      "correctness": "bit_exact_before_after_each_trial",
+      "host_wall_samples_ms": {
+        "retained": [
+          0.9219823,
+          0.6065109,
+          0.5895851999999999,
+          0.6081326,
+          0.6078249,
+          0.6030238,
+          0.6061216,
+          0.6071616,
+          0.5967938,
+          0.5951176
+        ],
+        "compiled": [
+          0.7588351,
+          0.7627615,
+          0.49961029999999995,
+          0.5028846,
+          0.5050296999999999,
+          0.5086857,
+          0.517781,
+          0.5104185,
+          0.5128027000000001,
+          0.500961
+        ]
+      },
+      "host_wall_medians_ms": {
+        "retained": 0.60631625,
+        "compiled": 0.5095521000000001
+      },
+      "retained_over_compiled": 1.1899004046887451,
+      "non_regression_10pct": true,
+      "compiler_resident_dispatch_ms": [
+        0.004127281252294779,
+        0.0043074218556284904,
+        0.004131796769797802,
+        0.004124609287828207,
+        0.004120859317481518
+      ],
+      "retained_native_dispatch_ms": [
+        0.0037397812120616436,
+        0.0037424375768750906,
+        0.003709921846166253,
+        0.0035243125166743994,
+        0.003096187487244606
+      ],
+      "native_staging_counter_deltas": [
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        }
+      ],
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "schedule_digest": "abf0c28d727cb55186a0e9ac61d465f21ddc0cd4299bbce54587c03868d9db18"
+    },
+    {
+      "family": "paged_kv",
+      "shape": [
+        32,
+        16,
+        4,
+        64,
+        3,
+        31
+      ],
+      "correctness": "bit_exact_before_after_each_trial",
+      "host_wall_samples_ms": {
+        "retained": [
+          1.6582394,
+          1.6778838,
+          1.6851132,
+          1.7182459,
+          1.7024578000000001,
+          1.5926402,
+          1.5939116,
+          1.6956226,
+          1.7464582,
+          1.7036646000000002
+        ],
+        "compiled": [
+          1.5514775,
+          1.5302696,
+          1.5565963999999999,
+          1.5437639,
+          1.4870305,
+          1.4893,
+          1.5123735,
+          1.5955748,
+          1.5582656,
+          1.5568868999999999
+        ]
+      },
+      "host_wall_medians_ms": {
+        "retained": 1.6903679,
+        "compiled": 1.5476207
+      },
+      "retained_over_compiled": 1.0922365538274335,
+      "non_regression_10pct": true,
+      "compiler_resident_dispatch_ms": [
+        0.006209968589246273,
+        0.006200749892741442,
+        0.0063201249577105045,
+        0.01053745299577713,
+        0.0059488750994205475
+      ],
+      "retained_native_dispatch_ms": [
+        0.005628734361380339,
+        0.00534934364259243,
+        0.005625593941658735,
+        0.0053518591448664665,
+        0.0056318435817956924
+      ],
+      "native_staging_counter_deltas": [
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        }
+      ],
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "schedule_digest": "913113a646d63738173a01386705d9ef704756d1e230843b1c038393a592fc98"
+    },
+    {
+      "family": "paged_kv",
+      "shape": [
+        64,
+        32,
+        8,
+        128,
+        7,
+        249
+      ],
+      "correctness": "bit_exact_before_after_each_trial",
+      "host_wall_samples_ms": {
+        "retained": [
+          3.7854767000000002,
+          3.7766408,
+          3.7095658,
+          3.8120863999999997,
+          3.6249183,
+          3.7427962,
+          3.7337870000000004,
+          3.7055171000000002,
+          3.7177363999999997,
+          3.6656190000000004
+        ],
+        "compiled": [
+          2.8458116,
+          2.8339328999999998,
+          2.7129406,
+          2.7672215000000002,
+          2.7607383,
+          2.7419999,
+          2.7186249,
+          2.7144559,
+          2.7012888,
+          2.7352355
+        ]
+      },
+      "host_wall_medians_ms": {
+        "retained": 3.7257617,
+        "compiled": 2.7386177
+      },
+      "retained_over_compiled": 1.3604533776291596,
+      "non_regression_10pct": true,
+      "compiler_resident_dispatch_ms": [
+        0.02069973386824131,
+        0.020620359107851982,
+        0.020522546023130417,
+        0.020622702315449715,
+        0.020635657012462616
+      ],
+      "retained_native_dispatch_ms": [
+        0.009211359545588493,
+        0.009060890413820744,
+        0.00887573417276144,
+        0.008630593307316303,
+        0.008820265531539917
+      ],
+      "native_staging_counter_deltas": [
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        }
+      ],
+      "payload_sha256": "eaf0ca00621d0cad7b0a3ccee3a69ca3ac2b09e1ec60b0c4f0735324c202f664",
+      "image_digest": "9598e93bcebbf7560b22788f7254e9113f69e007648551e24298093498bc1237",
+      "abi_id": "tessera.rocm.paged_kv.pages_table_o_dims.f32_i32.v1",
+      "schedule_digest": "05fb56372c40ab647b12c809917546e8aea66940c463252bfe1357b099b8bfff"
+    }
+  ],
+  "repeats": 10,
+  "admission_scope": "ten alternating warm end-to-end trials; compiled pooled native service vs retained production helper",
+  "event_scope": "diagnostic only: Python descriptor dispatch windows and native HIP-batched retained event windows have different host submission overhead",
+  "all_non_regression": true,
+  "selector_changed": false,
+  "compiler_sha256": "23343e05ddafa84e0137ebe19e231d989f8f5d6c893633a006d7c4ee4c9ae779",
+  "native_movement_library_sha256": "6717845ae07c5162b5125ebc759b21c0c777fcb9af684cddabf2bde4f4b3674c",
+  "source_sha256": {
+    "python/tessera/runtime.py": "f52bee98cbf8c67efd9cc6f92d4e48a08275f45e8a248ce4a544cdf20e3e9dd7",
+    "python/tessera/compiler/emit/rocm_hip.py": "c2dc1fc7e2650427235b7447544f19913eff934bee0940cc83a53b69be7cf748",
+    "python/tessera/compiler/rocm_native.py": "4b726a22c716e94c2ddb647942c943a7379b97a77bcc89dad90e93b5f8a5de50",
+    "benchmarks/rocm/benchmark_movement_route_admission.py": "f276532ea6cd1ffb194b5e0b239b67fd03c0fd75ec258a0a89cc839a8992c4a9",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "1f40f122005fc15dc46a7d70779a03db96f23273194d9133decdd9b9e839318d"
+  }
+}

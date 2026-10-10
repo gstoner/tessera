@@ -1,0 +1,1465 @@
+{
+  "schema": "tessera.nvidia.lse_cotangent_leaf.v1",
+  "work_item": "NVIDIA-LSE-1",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "bd8083842d99254d4c679a7f1529dbde0e273985f51d7a365ae1e6573e76149d",
+        "schedule_ir_digest": "1faef4c5df4e5b2b5e1784bf5fd2e5b1bf742b6023c7d642ae7a98de6492f76b",
+        "schedule_digest": "b2e43e9ff9ffcfdd35adbd68460f4b666462459c4ab8dd89deb40ebb8d08e3f2"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_b2e43e9ff9",
+      "tile_digest": "a65e8c0e11ffa2b6e903e0f04d2cc92edc7e424a51d3a0a23ca12871b7e398c5",
+      "target_digest": "ef07dfa30e1aee871daa26daefff12ef25be67e5eafa8400a3083eebb5327a29",
+      "image_digest": "adebe9508dbd600d76da90e8549effc5b52ae73fb9f46c08fda4fb0a99ca01ee",
+      "device_event_samples_ms": [
+        0.01115488052368164,
+        0.01162592053413391,
+        0.011959999799728394,
+        0.01106112003326416,
+        0.012876800298690795
+      ],
+      "max_abs_errors": [
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01162592053413391
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "1cf074261a865692b1b1e1b5fac1b2583a9a7f3757e15c5dfc07a724cd6e1114",
+        "schedule_ir_digest": "b9c210e62fc6447412d934876ab926d3a8bd6aa3e270e9bc783bee8ddcd5bdc2",
+        "schedule_digest": "0b46263b82482c25122655d4574e28aea4ada8dc976ad50d791b1e1a9261486e"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_0b46263b82",
+      "tile_digest": "060161398677455d28d22ceda69301bb883ada331c697bab8afce8fc028c90b2",
+      "target_digest": "dbcc1410432283d290f8809d53e622e5e16ab0baa12f309caf96749f0a1eb51d",
+      "image_digest": "082d03a938757d7ff7605902a729726eea26ab4cdff3cf9a67fa27d33dcac013",
+      "device_event_samples_ms": [
+        0.012807999849319457,
+        0.012549120187759399,
+        0.011632959842681884,
+        0.012880959510803223,
+        0.011643520593643188
+      ],
+      "max_abs_errors": [
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.012549120187759399
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "1cf074261a865692b1b1e1b5fac1b2583a9a7f3757e15c5dfc07a724cd6e1114",
+        "schedule_ir_digest": "b9c210e62fc6447412d934876ab926d3a8bd6aa3e270e9bc783bee8ddcd5bdc2",
+        "schedule_digest": "0b46263b82482c25122655d4574e28aea4ada8dc976ad50d791b1e1a9261486e"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_0b46263b82",
+      "tile_digest": "060161398677455d28d22ceda69301bb883ada331c697bab8afce8fc028c90b2",
+      "target_digest": "dbcc1410432283d290f8809d53e622e5e16ab0baa12f309caf96749f0a1eb51d",
+      "image_digest": "082d03a938757d7ff7605902a729726eea26ab4cdff3cf9a67fa27d33dcac013",
+      "device_event_samples_ms": [
+        0.012388479709625245,
+        0.012462079524993896,
+        0.012385599613189698,
+        0.011488959789276124,
+        0.010928640365600586
+      ],
+      "max_abs_errors": [
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08,
+        1.6300917587974695e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.012385599613189698
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "9f6445e04c81b0072286433f0af39cdcd6d6a626fdcca721ae158dab0f7d747d",
+        "schedule_ir_digest": "11b23c925d8db8a8985bc5a41c298071ba8ea506615f950c48b824f7428f6ee6",
+        "schedule_digest": "112a59e964576a0b379897abc36ea2c3a4f99c3dc06f9e2186987d266737d65f"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_112a59e964",
+      "tile_digest": "2e32e1e0ffb28892a143d4588853eb9888be7d48db44274189623bf2fd5e3451",
+      "target_digest": "27d47d2e2b4eb5840080a32da59f0a0c61b1da62387c13c83ff62a96f3425022",
+      "image_digest": "c83523e528523733af843bec1c4798fc08b5f73934a903113c43d9e39353d7c5",
+      "device_event_samples_ms": [
+        0.012068480253219604,
+        0.012854399681091309,
+        0.010493760108947753,
+        0.012166399955749512,
+        0.011078720092773437
+      ],
+      "max_abs_errors": [
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.012068480253219604
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "da75afa7e0cd5aa01d958ef0e5f2224b0d90521c66a3062b3467dcbe583b3e6a",
+        "schedule_ir_digest": "464ed54bdaf535a8420592ac6d86606140ba5738219477c293bf35acfaa27f0c",
+        "schedule_digest": "98859dc30a5b6d5422fe975ea76214eabe1e3f8d363c505170e39c3e77c0e9ee"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_98859dc30a",
+      "tile_digest": "34345e6f8bdc8cbc1e87948b057a1c64bf7049505b35594989261db490f5a2c0",
+      "target_digest": "bb2aa6eaed4edc0c5541eaced2a15dba4863712951493bab0b37adc2860f47e3",
+      "image_digest": "bfbd674126833ecddcc5bd269958faa17cb54db7f3491662e87fc267c51970d0",
+      "device_event_samples_ms": [
+        0.011951040029525756,
+        0.011247999668121338,
+        0.012741440534591674,
+        0.012229440212249755,
+        0.012432960271835327
+      ],
+      "max_abs_errors": [
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.012229440212249755
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "da75afa7e0cd5aa01d958ef0e5f2224b0d90521c66a3062b3467dcbe583b3e6a",
+        "schedule_ir_digest": "464ed54bdaf535a8420592ac6d86606140ba5738219477c293bf35acfaa27f0c",
+        "schedule_digest": "98859dc30a5b6d5422fe975ea76214eabe1e3f8d363c505170e39c3e77c0e9ee"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_98859dc30a",
+      "tile_digest": "34345e6f8bdc8cbc1e87948b057a1c64bf7049505b35594989261db490f5a2c0",
+      "target_digest": "bb2aa6eaed4edc0c5541eaced2a15dba4863712951493bab0b37adc2860f47e3",
+      "image_digest": "bfbd674126833ecddcc5bd269958faa17cb54db7f3491662e87fc267c51970d0",
+      "device_event_samples_ms": [
+        0.011974400281906128,
+        0.012322239875793457,
+        0.010193279981613158,
+        0.012546240091323853,
+        0.011943360567092895
+      ],
+      "max_abs_errors": [
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08,
+        2.0167758636724376e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.011974400281906128
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "9e9e993962920333b006f4d8b52a36a3caebb52867cdc72f777a39413bd6da48",
+        "schedule_ir_digest": "f0df3fca72b861a22e08e861b14e9888578134311ac210fa6daf1bbd8ece6995",
+        "schedule_digest": "8ad7c4ca87b37a0383821236194f7037cd2115e6447e7ab05c04fc689c6606f6"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_8ad7c4ca87",
+      "tile_digest": "7aab9f243c94dbeb4c62fa6dd5eb283d9b7c58f9b3ef3c677d8b09eb81b43d42",
+      "target_digest": "38e89de6bcae81997156b509fa6a9dc69d71ab286e4cf54784fa952543a9e335",
+      "image_digest": "f59740c72e0327b779d2790afed7373471efd5404c74e1e3c78a2bd9cb2aed0b",
+      "device_event_samples_ms": [
+        0.010622400045394897,
+        0.013193279504776001,
+        0.011369600296020507,
+        0.010935360193252563,
+        0.011063040494918823
+      ],
+      "max_abs_errors": [
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.011063040494918823
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "755bc8e3c386818071ccfa4e4c4f08c3ec220ff9e2bb834ab17ba89fb38dd4fb",
+        "schedule_ir_digest": "d87315317f2299be58d4c5b8ec1e2deabf690ff48a2a4eff677bb4762f999468",
+        "schedule_digest": "95cdf1ed13b1a57c2189ffed63e421c8e279185a3bc3d0fd911186a7ccb4999d"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_95cdf1ed13",
+      "tile_digest": "bcf04a2e806b46c102a3b0f8b75d6c99ed56ff2cc605f6cad87158376838e0bf",
+      "target_digest": "1fc3bbe302b4579e29c65983ec9ad0d96704d5dfab2dad895ed25ef408daf1e7",
+      "image_digest": "09e8e05ba1184ff7d43a96c97ea045ae3564263d4d89341602483803e1d31cbd",
+      "device_event_samples_ms": [
+        0.01216320037841797,
+        0.012128000259399413,
+        0.012004799842834472,
+        0.011191040277481079,
+        0.013190079927444458
+      ],
+      "max_abs_errors": [
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.012128000259399413
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "755bc8e3c386818071ccfa4e4c4f08c3ec220ff9e2bb834ab17ba89fb38dd4fb",
+        "schedule_ir_digest": "d87315317f2299be58d4c5b8ec1e2deabf690ff48a2a4eff677bb4762f999468",
+        "schedule_digest": "95cdf1ed13b1a57c2189ffed63e421c8e279185a3bc3d0fd911186a7ccb4999d"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_95cdf1ed13",
+      "tile_digest": "bcf04a2e806b46c102a3b0f8b75d6c99ed56ff2cc605f6cad87158376838e0bf",
+      "target_digest": "1fc3bbe302b4579e29c65983ec9ad0d96704d5dfab2dad895ed25ef408daf1e7",
+      "image_digest": "09e8e05ba1184ff7d43a96c97ea045ae3564263d4d89341602483803e1d31cbd",
+      "device_event_samples_ms": [
+        0.011547520160675048,
+        0.011915839910507202,
+        0.011271680593490601,
+        0.011272319555282594,
+        0.011360960006713867
+      ],
+      "max_abs_errors": [
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08,
+        2.0096066921659883e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.011360960006713867
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "95372a55f1dd6993296efb4a31ab908acc28a4d0c58ada240a9e53339a68466f",
+        "schedule_ir_digest": "7890fbfb5239305072b60f3851a2c4533f5c8348c77e5f72142fa9811da671b4",
+        "schedule_digest": "38392c374ba8785b601f337ac8b1376231642df0b20484fa3b8c220347d53eff"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_38392c374b",
+      "tile_digest": "287defbdc288ce209b5c535e1dc78d4dc7d0999608b15390a37b4e905a5f46fc",
+      "target_digest": "0f58376a185d2581be2ede02f715e3b0fa83f818be7acfff2071be92b230945c",
+      "image_digest": "87081d876f6d176e8b084e96c9e4e089f635457de96a4a26806eae9d61bc57c8",
+      "device_event_samples_ms": [
+        0.011195520162582398,
+        0.011141760349273682,
+        0.01161120057106018,
+        0.011852799654006959,
+        0.011433600187301636
+      ],
+      "max_abs_errors": [
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.011433600187301636
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "e8656147c1fdddd5e4c760acf38c768327cdb57a98ece63a386234f0c811e926",
+        "schedule_ir_digest": "b2ac5a052da5a500a0090559b3bbf9bcb2f3d133b467710c411b21ff96f1717c",
+        "schedule_digest": "65771f1d4e3af529bd23b0241129ba4a1147a16bd30000c940bc9852733286fb"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_65771f1d4e",
+      "tile_digest": "1f2ce4ce599de7e597aa3b791c133c3b456d851d0291dcacbac4804621343910",
+      "target_digest": "34d5adfc262d2a56a36e330bfa4f2cf34e55b592997803b32db017eb4129c2b3",
+      "image_digest": "51e6e1496e6bf60afba455302f688841fdcc61f69f85cfec09d39ce5750462c7",
+      "device_event_samples_ms": [
+        0.012038719654083253,
+        0.011504000425338745,
+        0.012478400468826294,
+        0.011871999502182007,
+        0.011475520133972168
+      ],
+      "max_abs_errors": [
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.011871999502182007
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "e8656147c1fdddd5e4c760acf38c768327cdb57a98ece63a386234f0c811e926",
+        "schedule_ir_digest": "b2ac5a052da5a500a0090559b3bbf9bcb2f3d133b467710c411b21ff96f1717c",
+        "schedule_digest": "65771f1d4e3af529bd23b0241129ba4a1147a16bd30000c940bc9852733286fb"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_65771f1d4e",
+      "tile_digest": "1f2ce4ce599de7e597aa3b791c133c3b456d851d0291dcacbac4804621343910",
+      "target_digest": "34d5adfc262d2a56a36e330bfa4f2cf34e55b592997803b32db017eb4129c2b3",
+      "image_digest": "51e6e1496e6bf60afba455302f688841fdcc61f69f85cfec09d39ce5750462c7",
+      "device_event_samples_ms": [
+        0.011724799871444702,
+        0.011441279649734497,
+        0.012402880191802978,
+        0.011743359565734864,
+        0.011436480283737182
+      ],
+      "max_abs_errors": [
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08,
+        1.501821604577014e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.011724799871444702
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "78c814efbebc6b11cd24d3cfe26ed84387a49fde42a7a1ac9ae01a65dc553ca5",
+        "schedule_ir_digest": "d6615f908ae0a6ffcc3d2eb4dcd35e8d5fa01fc9cc0573990d110a953cbaa844",
+        "schedule_digest": "d950f0a8291c469887398c57251f6ff7b64272b4e73be27da8a1a843158b36c5"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_d950f0a829",
+      "tile_digest": "dc9dfbeb0fb1dcb2d6b0faf64e8a215ef349ba60bf6dac5301a7041b2aec0fda",
+      "target_digest": "76eba7f37a4eefb7c3befb4459aea2914e912aad1907b9f1aa63068c73c1455a",
+      "image_digest": "1086c329ef488a4a9eba03fb7a5250fda6ee3172b8fa095dc09d8cf3a1f81403",
+      "device_event_samples_ms": [
+        0.012747520208358764,
+        0.015472320318222045,
+        0.01312000036239624,
+        0.013348480463027954,
+        0.013086080551147461
+      ],
+      "max_abs_errors": [
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01312000036239624
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "63b4b00eae4d658f301e18a765b60b897ba103ff9f3b9c9794cfd1de990551f3",
+        "schedule_ir_digest": "0bb5231292aff3f7c90172dbd396a97c76dabb7f74e41807069e1d2208146ec6",
+        "schedule_digest": "a4e6f5938f1cf0fbddec87162de2cf06a4c610cf047b393862f1551fb6d6affe"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_a4e6f5938f",
+      "tile_digest": "26d51a28af00cf4f3d4405cc89c6fe0c9590c2b4f1af907f7801c46531758f19",
+      "target_digest": "a5d6c6b8ca18309060acee09aab918dc4a0960e0faba7983c0e9b15b8653cde7",
+      "image_digest": "e89d31d4e5576c8f1df9503f840953d5f50771be5a0e38c785926ccf33b89f75",
+      "device_event_samples_ms": [
+        0.01407423973083496,
+        0.014312959909439087,
+        0.012834880352020264,
+        0.01373088002204895,
+        0.01345088005065918
+      ],
+      "max_abs_errors": [
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01373088002204895
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "63b4b00eae4d658f301e18a765b60b897ba103ff9f3b9c9794cfd1de990551f3",
+        "schedule_ir_digest": "0bb5231292aff3f7c90172dbd396a97c76dabb7f74e41807069e1d2208146ec6",
+        "schedule_digest": "a4e6f5938f1cf0fbddec87162de2cf06a4c610cf047b393862f1551fb6d6affe"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_a4e6f5938f",
+      "tile_digest": "26d51a28af00cf4f3d4405cc89c6fe0c9590c2b4f1af907f7801c46531758f19",
+      "target_digest": "a5d6c6b8ca18309060acee09aab918dc4a0960e0faba7983c0e9b15b8653cde7",
+      "image_digest": "e89d31d4e5576c8f1df9503f840953d5f50771be5a0e38c785926ccf33b89f75",
+      "device_event_samples_ms": [
+        0.013982720375061035,
+        0.013513920307159423,
+        0.014588799476623535,
+        0.013469760417938232,
+        0.013668800592422486
+      ],
+      "max_abs_errors": [
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08,
+        5.6875803788880575e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.013668800592422486
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "32aa747daebdb6a1fe7ff191349d321867f83ffc8d359ab560ebe65378c176fb",
+        "schedule_ir_digest": "e8f80acec4ec53f495ac1ce295161957fa357889fb831ada5ed5540dcd36fe72",
+        "schedule_digest": "0e8201d0bb3876f6b4c660d257b22b070511d7e9d1a85fe20acb6567242df0b7"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_0e8201d0bb",
+      "tile_digest": "ae0eda3bce51d491c4d8fcfbfe5d960b27476da495ff5ed8912669c6cc2d6d64",
+      "target_digest": "6a1cdbdb45e9e8a33645f20c6c42d2fe03fcc5e07739eb3f5fadbb965e8b3e00",
+      "image_digest": "3eff69940e1016d3aee9747108b5b2d55d4df25140d00758508037e28dc9fda6",
+      "device_event_samples_ms": [
+        0.01243839979171753,
+        0.012563199996948242,
+        0.012808959484100341,
+        0.012909120321273804,
+        0.014987519979476928
+      ],
+      "max_abs_errors": [
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.012808959484100341
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "b388f1467fcee77918c271ed222d0c7b537881ac40d711b21c363a7fab26e91a",
+        "schedule_ir_digest": "4563aeee069fe339335233b45be8f495d60a208d39193f4e6259b12af36c36cb",
+        "schedule_digest": "75383309d19b5a5cc65d0a69feb20059d16017910703ac6bb57f14ee18614e53"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_75383309d1",
+      "tile_digest": "53eab70992f9f86a3fd33a5c903b373c2c3c9461d5807e81cfb2e728702797ce",
+      "target_digest": "6981889c72b6861471756ac0ff3e18801330c326fc3dde248629f61c9986ea61",
+      "image_digest": "28c00a281caefb87a623a47bca641b7ffba082800b0e501f7b5b94dfcaae7ca2",
+      "device_event_samples_ms": [
+        0.013284800052642822,
+        0.014028799533843995,
+        0.014163199663162231,
+        0.013245439529418946,
+        0.013015680313110352
+      ],
+      "max_abs_errors": [
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.013284800052642822
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "b388f1467fcee77918c271ed222d0c7b537881ac40d711b21c363a7fab26e91a",
+        "schedule_ir_digest": "4563aeee069fe339335233b45be8f495d60a208d39193f4e6259b12af36c36cb",
+        "schedule_digest": "75383309d19b5a5cc65d0a69feb20059d16017910703ac6bb57f14ee18614e53"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_75383309d1",
+      "tile_digest": "53eab70992f9f86a3fd33a5c903b373c2c3c9461d5807e81cfb2e728702797ce",
+      "target_digest": "6981889c72b6861471756ac0ff3e18801330c326fc3dde248629f61c9986ea61",
+      "image_digest": "28c00a281caefb87a623a47bca641b7ffba082800b0e501f7b5b94dfcaae7ca2",
+      "device_event_samples_ms": [
+        0.013815360069274902,
+        0.01382207989692688,
+        0.014527360200881958,
+        0.014475200176239014,
+        0.014074560403823853
+      ],
+      "max_abs_errors": [
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08,
+        2.4281231122968983e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.014074560403823853
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "6998f96ab50889abdf04e0846f5957650679f1a283e9225149204889799cd4f7",
+        "schedule_ir_digest": "c231fa7480a1a970f412b1ec1eaf98a1c3dcdd168c12c137f679c30335e9398f",
+        "schedule_digest": "5e46b32aa57ef83a34ae3d120a891df5f8210d2a5d0cf6f33dd7812069156b9f"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_5e46b32aa5",
+      "tile_digest": "a102ccff57052d6cd3e531634e111f72b23e239416062d2be702b2f25610be88",
+      "target_digest": "d2a7e1c2ad020df5e329799d6544b20632b8488d895eed5765b43df4a0751e56",
+      "image_digest": "03d5de1e72f5cbe5ee3a65819950edaa420b6de82f0ff80b9752117a19687b91",
+      "device_event_samples_ms": [
+        0.012516800165176391,
+        0.012619839906692505,
+        0.012026560306549073,
+        0.013421119451522827,
+        0.012535040378570556
+      ],
+      "max_abs_errors": [
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.012535040378570556
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "bcdf2c1b65ec21929865f4043146d458b332387abbc1211e4b770bb5cbc15ee3",
+        "schedule_ir_digest": "0edb56de096e9cff616a4f121bc587be2d1f05608e92199b61fba34f751a891e",
+        "schedule_digest": "bd2ff1735b85cc88200c2f13a8f32317675568d4e9b51faf44ee3ba50a2c811f"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_bd2ff1735b",
+      "tile_digest": "64f64ff4a825b0560c463f3515918154b0cd9d166b3b8c9011eb855e4fe7d480",
+      "target_digest": "be1a2c2c887620dd6e996c1bcf93a4332005e0b371f702ed7ca3791075147472",
+      "image_digest": "be46d0c28f163e7a1799aa548885c652d9f7377f6b319f00dda31259967fca84",
+      "device_event_samples_ms": [
+        0.01392192006111145,
+        0.013215999603271484,
+        0.013270720243453979,
+        0.01512063980102539,
+        0.013928639888763427
+      ],
+      "max_abs_errors": [
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01392192006111145
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "bcdf2c1b65ec21929865f4043146d458b332387abbc1211e4b770bb5cbc15ee3",
+        "schedule_ir_digest": "0edb56de096e9cff616a4f121bc587be2d1f05608e92199b61fba34f751a891e",
+        "schedule_digest": "bd2ff1735b85cc88200c2f13a8f32317675568d4e9b51faf44ee3ba50a2c811f"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_bd2ff1735b",
+      "tile_digest": "64f64ff4a825b0560c463f3515918154b0cd9d166b3b8c9011eb855e4fe7d480",
+      "target_digest": "be1a2c2c887620dd6e996c1bcf93a4332005e0b371f702ed7ca3791075147472",
+      "image_digest": "be46d0c28f163e7a1799aa548885c652d9f7377f6b319f00dda31259967fca84",
+      "device_event_samples_ms": [
+        0.0128329598903656,
+        0.012989439964294434,
+        0.013424639701843261,
+        0.012588160037994385,
+        0.012828160524368287
+      ],
+      "max_abs_errors": [
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08,
+        3.85946237191348e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.0128329598903656
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "85d3b5202a6b0965c805270741a18114dab0cd8d4a878beb27118f1a0a597aa5",
+        "schedule_ir_digest": "ba9470c1a4c66f23d43bba0459849b050552e6bfbc1e5256bbb2294b911d5681",
+        "schedule_digest": "d12b5b9d9b8b5a4d1ed63c41370ffb77b565094f7c7312141926e8f2e1166655"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_d12b5b9d9b",
+      "tile_digest": "d422f4fa100852200fb384e6c101410577592d7ccec07601d28bfae58ad4f2eb",
+      "target_digest": "b9e5c3d31e8c4324a1506acf2c8406222a4aee5312376ebda6f24bac72282341",
+      "image_digest": "c9d457325ebd9d5939d9701a5aa4d7d17daada03939cb0b328669fb63b3f9c49",
+      "device_event_samples_ms": [
+        0.014010239839553833,
+        0.014334080219268798,
+        0.014614080190658569,
+        0.014187840223312377,
+        0.014264320135116576
+      ],
+      "max_abs_errors": [
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.014264320135116576
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "8b893d108e5777cf47424bc0839026807f8ede4f9ff9ad27e2be1288bea3ad60",
+        "schedule_ir_digest": "cbb25b126fe0ad218a409d7f32feffc7d406e31e0d80b9e527c65efce955d82d",
+        "schedule_digest": "8a6d1cf1c028b42f344610beb413143dc651f3596100ec381c9fa1eb67a708c8"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_8a6d1cf1c0",
+      "tile_digest": "9d1ccb2fbaf457f25053abccb6136d2bf6c9f9cff324da65a467e0428a45adcd",
+      "target_digest": "e289517f5b4e86f5ecf6e92b8b4558deb113afd4538ca941039baeee04f5d0f2",
+      "image_digest": "3214076fc804394ea23779ca732518bb4806622b9adffb5c104f10e5a84afa63",
+      "device_event_samples_ms": [
+        0.013652160167694091,
+        0.013598719835281372,
+        0.013114240169525147,
+        0.013383040428161621,
+        0.014162559509277344
+      ],
+      "max_abs_errors": [
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.013598719835281372
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "8b893d108e5777cf47424bc0839026807f8ede4f9ff9ad27e2be1288bea3ad60",
+        "schedule_ir_digest": "cbb25b126fe0ad218a409d7f32feffc7d406e31e0d80b9e527c65efce955d82d",
+        "schedule_digest": "8a6d1cf1c028b42f344610beb413143dc651f3596100ec381c9fa1eb67a708c8"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_8a6d1cf1c0",
+      "tile_digest": "9d1ccb2fbaf457f25053abccb6136d2bf6c9f9cff324da65a467e0428a45adcd",
+      "target_digest": "e289517f5b4e86f5ecf6e92b8b4558deb113afd4538ca941039baeee04f5d0f2",
+      "image_digest": "3214076fc804394ea23779ca732518bb4806622b9adffb5c104f10e5a84afa63",
+      "device_event_samples_ms": [
+        0.015504000186920166,
+        0.015051840543746949,
+        0.014850560426712036,
+        0.014988160133361817,
+        0.015456960201263428
+      ],
+      "max_abs_errors": [
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08,
+        3.110331736611016e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.015051840543746949
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "fc1056b81878edbeb123a9932bb0ef026d0ce7ca59a59d70a1d267060c8fce47",
+        "schedule_ir_digest": "b6d3f6a16342cbaec68758e2830638ef44024f049400cc6d0054c094014a713a",
+        "schedule_digest": "2a442dbd7280d38b0075b2fcf490cc9e48b212452d5e2b019a1e714109e70380"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_2a442dbd72",
+      "tile_digest": "ffde337b6c8514e9c948ab8b8f24c39fb9409ae4b83a867ec9c781e341dfec68",
+      "target_digest": "f0ae506579cdbc5eeb19bc7f615fddc04bc0e67d165db2e5873c18ea6449078b",
+      "image_digest": "88ef530d76b28d7e1ce975776f0305446c4636f8a0241c6842c74031880b74c3",
+      "device_event_samples_ms": [
+        0.01676512002944946,
+        0.016905280351638793,
+        0.01758463978767395,
+        0.016486079692840577,
+        0.016751999855041503
+      ],
+      "max_abs_errors": [
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01676512002944946
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "758c0af4c466d5793f567e4edfde25446ee6692c81fab59936ef7355af48de03",
+        "schedule_ir_digest": "c23077a7b327220cec24bd8d7fbc7e4563861afcaec611462ed893beb46150c2",
+        "schedule_digest": "08d221d28f25bc22d6e8e5005d32b678bf74f36d6e655869693646138c7788da"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_08d221d28f",
+      "tile_digest": "9561776f95819949d4a70e16782928cf9b0d2d0b5aa65c516cb68b7b68196319",
+      "target_digest": "14e653dcaac80f33242f2209855f7b9bf9b68407f3b7ca7d2af3f2f21a24a687",
+      "image_digest": "4387ae0da10b8580c41475ce9ae8c34b40a63864a04b9d1bb016ceb61360a872",
+      "device_event_samples_ms": [
+        0.017605119943618776,
+        0.01742848038673401,
+        0.016380800008773802,
+        0.016630079746246338,
+        0.016593600511550902
+      ],
+      "max_abs_errors": [
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.016630079746246338
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": false,
+      "bias": false,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "758c0af4c466d5793f567e4edfde25446ee6692c81fab59936ef7355af48de03",
+        "schedule_ir_digest": "c23077a7b327220cec24bd8d7fbc7e4563861afcaec611462ed893beb46150c2",
+        "schedule_digest": "08d221d28f25bc22d6e8e5005d32b678bf74f36d6e655869693646138c7788da"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_08d221d28f",
+      "tile_digest": "9561776f95819949d4a70e16782928cf9b0d2d0b5aa65c516cb68b7b68196319",
+      "target_digest": "14e653dcaac80f33242f2209855f7b9bf9b68407f3b7ca7d2af3f2f21a24a687",
+      "image_digest": "4387ae0da10b8580c41475ce9ae8c34b40a63864a04b9d1bb016ceb61360a872",
+      "device_event_samples_ms": [
+        0.01768671989440918,
+        0.01822751998901367,
+        0.016753920316696168,
+        0.01580127954483032,
+        0.016653120517730713
+      ],
+      "max_abs_errors": [
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08,
+        4.307700952888016e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.016753920316696168
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "eb1d949ecc66b18dd2e6ef7ccf42b6337a4e4755cfe4d5f0c7ba74bedcf50198",
+        "schedule_ir_digest": "c5b09b01ecf3ef171730805ea5584b880124aadee67c8fedee8254c9f1434461",
+        "schedule_digest": "dec7d61af6af0c50fb80f07906d14641f3e87ecd24ca551228a060985356d10d"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_dec7d61af6",
+      "tile_digest": "272176701a94aaf8748cf5629de26aab2a21339d79ac7d28e5dbd1c1e46ecea6",
+      "target_digest": "cd6fa493af8aa84d062d255fbbc7700aeb8ee2d1b6134cc98e509cfb1d7eb58f",
+      "image_digest": "b7a62a1dc09d71de37e497b2796f111e569caece279e08371ffbc8b84e4ff70f",
+      "device_event_samples_ms": [
+        0.016291520595550536,
+        0.016072319746017458,
+        0.015099200010299683,
+        0.015472320318222045,
+        0.015346879959106446
+      ],
+      "max_abs_errors": [
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.015472320318222045
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "85f898b4503a523bd3184c145f5ee0fa3cab6d24c9e5e37615d7f506921e3ae4",
+        "schedule_ir_digest": "a1e26fd51f96656b62dd5f3378bffd66ed73d7a4a40fb20f5809962dbebf3099",
+        "schedule_digest": "42943134da39509af40eec53458196d98df5fbe1d7441d067ea04d85b3c7ce8d"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_42943134da",
+      "tile_digest": "ff189b150ccc9bcd17bbe8552931b64045e8a0e7cdf0d5e61ba4da8319b3913c",
+      "target_digest": "8f8a3e881012e29b257955da7ab0aa32e892d8adc4ec4d4e79c958d95e0b43de",
+      "image_digest": "7a257665c37f18384bda7fe7858bb196d2b4466800cb5da514e426944ccc63e7",
+      "device_event_samples_ms": [
+        0.015917439460754395,
+        0.01662816047668457,
+        0.0167903995513916,
+        0.017772799730300902,
+        0.017950400114059448
+      ],
+      "max_abs_errors": [
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.0167903995513916
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": false,
+      "bias": true,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "85f898b4503a523bd3184c145f5ee0fa3cab6d24c9e5e37615d7f506921e3ae4",
+        "schedule_ir_digest": "a1e26fd51f96656b62dd5f3378bffd66ed73d7a4a40fb20f5809962dbebf3099",
+        "schedule_digest": "42943134da39509af40eec53458196d98df5fbe1d7441d067ea04d85b3c7ce8d"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_42943134da",
+      "tile_digest": "ff189b150ccc9bcd17bbe8552931b64045e8a0e7cdf0d5e61ba4da8319b3913c",
+      "target_digest": "8f8a3e881012e29b257955da7ab0aa32e892d8adc4ec4d4e79c958d95e0b43de",
+      "image_digest": "7a257665c37f18384bda7fe7858bb196d2b4466800cb5da514e426944ccc63e7",
+      "device_event_samples_ms": [
+        0.01715872049331665,
+        0.01805600047111511,
+        0.017024320363998414,
+        0.018300479650497435,
+        0.01762176036834717
+      ],
+      "max_abs_errors": [
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08,
+        3.302091294843379e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01762176036834717
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "28519c889b2aded9b327173cd679cf33e71999c2f1c5c3e58705f753e5d4ac62",
+        "schedule_ir_digest": "713ef09ac6a234441597de36116fdb79cf7c61091ce1727db2724a40376623e3",
+        "schedule_digest": "334178a8bd8772b617cf5312d1c39d6d2b22f69216654fa29c7fc090d0460ec2"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_334178a8bd",
+      "tile_digest": "f4fec4da7375c6bc03310b28cd193fe4771defa14e74778644443a1577a51b25",
+      "target_digest": "6f92b7624549296ed321835a091f21fd613ab832e3e276b8c5c63e1c12ccaaf6",
+      "image_digest": "a86d2a35f7041907506c60c7413e945ebc2f7f71731fdfc9aa8905e968b7b430",
+      "device_event_samples_ms": [
+        0.01741919994354248,
+        0.034808320999145506,
+        0.016411199569702148,
+        0.017910399436950684,
+        0.01779551982879639
+      ],
+      "max_abs_errors": [
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01779551982879639
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "d88224f75583921995474e7abcf2b285ffb93764338906ac0896d294dbcf8a1c",
+        "schedule_ir_digest": "07d91bb41db535b8eee278325c76bc31e159c3c829e50a029139dea92e8b6175",
+        "schedule_digest": "10d0201cf5eae307c0d46840f58778fa5ddeb12d2d5960b6e00430872dc74702"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_10d0201cf5",
+      "tile_digest": "8bf58689817dcb251cd64bbe20b1ed118907a0b0b2196d54835cabc98415a50f",
+      "target_digest": "4d491de8ad6f5962a506b27bd360e6485cb3da7d0662aa870141f2a9c06b7817",
+      "image_digest": "7c62d1298617cddfea366b1b0d5b16d97b23d963a3e54c8619ca543063d12ff6",
+      "device_event_samples_ms": [
+        0.01721567988395691,
+        0.01794335961341858,
+        0.015199680328369141,
+        0.017778240442276,
+        0.017496639490127565
+      ],
+      "max_abs_errors": [
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.017496639490127565
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": true,
+      "bias": false,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "d88224f75583921995474e7abcf2b285ffb93764338906ac0896d294dbcf8a1c",
+        "schedule_ir_digest": "07d91bb41db535b8eee278325c76bc31e159c3c829e50a029139dea92e8b6175",
+        "schedule_digest": "10d0201cf5eae307c0d46840f58778fa5ddeb12d2d5960b6e00430872dc74702"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_10d0201cf5",
+      "tile_digest": "8bf58689817dcb251cd64bbe20b1ed118907a0b0b2196d54835cabc98415a50f",
+      "target_digest": "4d491de8ad6f5962a506b27bd360e6485cb3da7d0662aa870141f2a9c06b7817",
+      "image_digest": "7c62d1298617cddfea366b1b0d5b16d97b23d963a3e54c8619ca543063d12ff6",
+      "device_event_samples_ms": [
+        0.017863680124282837,
+        0.0190665602684021,
+        0.01801535964012146,
+        0.018212159872055055,
+        0.016191359758377075
+      ],
+      "max_abs_errors": [
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08,
+        5.042696471502239e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01801535964012146
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "legacy_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "1570ce58c588e1a17dc80f5fc0bf0aa2f151d25f8d513a9cbb1efcba87fe5d24",
+        "schedule_ir_digest": "8d7d507f5a9350faa44acddf1000aa7ba8a687150b7beb76f7b0a089c7045d82",
+        "schedule_digest": "69fa0c5f8873cf755ba0defb9b84432390c2e02abd0d0b6542290efc4c75af82"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_69fa0c5f88",
+      "tile_digest": "11b973e18c4c5312d852cdd1d4ea707caa97345ea82ef387ccad7596df2ac345",
+      "target_digest": "99c3d660405bac64a234918a9039fe14d499380f9eba587e0a2e2042c85f324f",
+      "image_digest": "9f67547c808d6fdea35f0dfd7289b22a3620c71207eaaccf5c63ec2991f69b80",
+      "device_event_samples_ms": [
+        0.018532480001449584,
+        0.01615839958190918,
+        0.01841439962387085,
+        0.017588160037994384,
+        0.018368320465087892
+      ],
+      "max_abs_errors": [
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.018368320465087892
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "enabled_zero_lse_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "0c3047480dbf3b03ab0d0046c5853acf223944e311ba9b2835c3ee4a549ab50c",
+        "schedule_ir_digest": "cbc9f6316660478dbaa0acc49dd6ec5c5f4f8d1d9e3cd8a2898a3fd84ec04ef8",
+        "schedule_digest": "96fd0c6adbcaf2186c0e876d16d01d877e9f420c24e9198556b2745686b93094"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_96fd0c6adb",
+      "tile_digest": "78486b0af6ff39e69477bb0d282c11f733e96648eb56e39821ef01cf1637bf5b",
+      "target_digest": "bbc551833dd31565500ca827138a805e690844689a7bd06fe8d97b872d9392a9",
+      "image_digest": "e449ded32816af414156eff5d3735a0097f785b97bb39e5534c696d622805fb8",
+      "device_event_samples_ms": [
+        0.017264319658279417,
+        0.021421120166778565,
+        0.015645439624786376,
+        0.01633247971534729,
+        0.018441920280456544
+      ],
+      "max_abs_errors": [
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.017264319658279417
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        7,
+        9,
+        8,
+        6
+      ],
+      "causal": true,
+      "bias": true,
+      "mode": "mixed_seed",
+      "compiler_ancestry": {
+        "graph_ir_digest": "0c3047480dbf3b03ab0d0046c5853acf223944e311ba9b2835c3ee4a549ab50c",
+        "schedule_ir_digest": "cbc9f6316660478dbaa0acc49dd6ec5c5f4f8d1d9e3cd8a2898a3fd84ec04ef8",
+        "schedule_digest": "96fd0c6adbcaf2186c0e876d16d01d877e9f420c24e9198556b2745686b93094"
+      },
+      "entry": "tessera_tile_attention_backward_lse_output_cotangent_96fd0c6adb",
+      "tile_digest": "78486b0af6ff39e69477bb0d282c11f733e96648eb56e39821ef01cf1637bf5b",
+      "target_digest": "bbc551833dd31565500ca827138a805e690844689a7bd06fe8d97b872d9392a9",
+      "image_digest": "e449ded32816af414156eff5d3735a0097f785b97bb39e5534c696d622805fb8",
+      "device_event_samples_ms": [
+        0.018428800106048585,
+        0.017643200159072878,
+        0.018032000064849854,
+        0.016624319553375243,
+        0.01796288013458252
+      ],
+      "max_abs_errors": [
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08,
+        6.83484228658493e-08
+      ],
+      "reps": 100,
+      "timing_scope": "resident CUDA-event windows around Python diagnostic driver launches; includes driver gaps; allocation/upload/download/oracle excluded",
+      "device_event_median_ms": 0.01796288013458252
+    }
+  ],
+  "boundary": "authored typed Graph -> native Schedule/Tile -> NVIDIA Target/NVVM/PTX; checked package and multi-result AD integration pending",
+  "core_compiler_sha256": "91fe237448411e927faaa1b38575a3622ae192f763200cadec8041131fea0fc4",
+  "source_sha256": {
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "1b1888bf3e2bcfea0fdbbdf16033f2ee07a8f22d73efe1447e42cd3458c3f0c4",
+    "src/compiler/ir/TileOps.cpp": "4c980912f34bcd4bf6b85296f135520bba5a7ca5a7e5763a9e9781a3c7283025",
+    "src/compiler/ir/include/Tessera/Dialect/Tile/TileOps.td": "aa9a872fa9a5d827d943ae002bbd328f5d24b9a55cfc9e9bb1a80251409d4e95",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "d18f31f3dd3b6f109dcf1cd81061bacdac7a0f2a81d0f6ed3316c5899f8b1055",
+    "tests/device/nvidia/test_lse_cotangent_native.py": "4c6cbabc87961a784f76d77bbf3ea1ece7be922107eac4899776de329a9e316d",
+    "benchmarks/nvidia/record_lse_cotangent_leaf.py": "ddaa7d3871ae13b534256b090f4f495a3c260207795a73a62425748db14ac477",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "78d0482a328e81e5157037483d5f0035ab2dbb14324c63f5db3fddcff9d14a91",
+    "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": "b46a0f1a29fe53e3fb774d3f5bd377563c0098c69403829d08fbc2b77093c731",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "57fb87125e795c20c4e5ac9e253457fadeb2f719f56acda98d4f30d985510c78",
+    "src/compiler/ir/TesseraOps.cpp": "441794710512d274fbf518b3dc9f75e713b24e4357be76a981d850ae3dafb99d",
+    "python/tessera/compiler/scheduled_checkpoint.py": "0b6f0da579c97d2f4473a8b610ad47b675091fe83b83532a2d4871cf7df3dc6f",
+    "tests/unit/test_lse_cotangent_schedule.py": "f44ee7b8d2d0d902bb2171b61d02a9dae690a1ddd78ee0c4b4e8d0f6f1bf4d28"
+  },
+  "compiler_sha256": "86aaa8f30d0eea3b2087fa0350493d59a6d245651d22bbe43eb5cdb74a64e523",
+  "runtime_library_sha256": "8f5b0971f85df399a905b1c59ad54a6dd4765e7876c82c953134c905618c242f"
+}

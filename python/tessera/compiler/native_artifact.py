@@ -1036,7 +1036,15 @@ class LaunchDescriptor:
                 raise _error("E_LAUNCH_BINDING_MISMATCH", f"buffer {binding.name!r} dtype mismatch")
             if len(actual.shape) != binding.rank:
                 raise _error("E_LAUNCH_BINDING_MISMATCH", f"buffer {binding.name!r} rank mismatch")
-            if actual.layout != binding.layout:
+            # Contiguous row/column order has the same physical addresses
+            # when only one axis can vary (for example 1xK, Mx1 or 1x1).
+            # A strided label carries no such proof and must match exactly.
+            equivalent_contiguous_layout = (
+                actual.layout in {"row_major", "col_major"}
+                and binding.layout in {"row_major", "col_major"}
+                and sum(dim > 1 for dim in actual.shape) <= 1
+            )
+            if actual.layout != binding.layout and not equivalent_contiguous_layout:
                 raise _error("E_LAUNCH_BINDING_MISMATCH", f"buffer {binding.name!r} layout mismatch")
             if actual.address_alignment < binding.alignment or actual.address_alignment % binding.alignment:
                 raise _error("E_LAUNCH_BINDING_MISMATCH", f"buffer {binding.name!r} alignment mismatch")

@@ -1,0 +1,53 @@
+--- /home/angstorms/scratch/next-five-compiler-slices/src/compiler/programming_model/lib/PMPasses.cpp
++++ /home/angstorms/scratch/nvidia-cooperative-softmax-candidate-20261008/PMPasses.cpp
+@@ -1664,6 +1664,11 @@
+     for (int64_t dim : input.getShape().drop_back()) schedule.rows *= dim;
+     schedule.columns = input.getShape().back();
+     schedule.workgroupSize = rocm ? 256 : nvidia ? 128 : 1;
++    if (auto mode = op->getAttrOfType<StringAttr>("schedule"))
++      schedule.reductionSchedule = mode.getValue();
++    if (schedule.reductionSchedule != "serial" &&
++        (!nvidia || schedule.reductionSchedule != "cooperative_128"))
++      return failure();
+     return schedule;
+   }
+ 
+@@ -3484,6 +3489,8 @@
+         state.addAttribute("kind", builder.getStringAttr(selected->kind));
+         state.addAttribute("epsilon", builder.getF32FloatAttr(selected->epsilon));
+       } else if (selected->family == "softmax") {
++        if (selected->reductionSchedule != "serial")
++          state.addAttribute("schedule", builder.getStringAttr(selected->reductionSchedule));
+         state.addAttribute("exp_mode", builder.getStringAttr(selected->expMode));
+         state.addAttribute("ftz", builder.getBoolAttr(false));
+       } else {
+@@ -5279,7 +5286,9 @@
+                   !eps || eps.getValueAsDouble() != selected->epsilon;
+       } else if (isSoftmax)
+         altered = altered || attrString("exp_mode") != selected->expMode ||
+-                  attrBool("ftz") != false;
++                  attrBool("ftz") != false ||
++                  (attrString("schedule").empty() ? StringRef("serial") :
++                   attrString("schedule")) != selected->reductionSchedule;
+       else
+         altered = altered || attrString("kind") != selected->kind ||
+                   attrBool("keepdims") != selected->keepdims ||
+@@ -5319,7 +5328,8 @@
+           return signalPassFailure();
+         }
+         // Preserve the established runtime launch symbols and serial schedule.
+-        std::string name = isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage).str() :
++        std::string name = isNorm ? (Twine("tessera_tile_norm_") + selected->kind + "_" + selected->storage + (selected->reductionSchedule == "serial" ? "_" : "_cooperative_128_") + hash.getValue().take_front(10)).str() : isSoftmax ? (Twine("tessera_tile_softmax_") + selected->storage +
++            (selected->reductionSchedule == "serial" ? "" : "_cooperative_128")).str() :
+             (Twine("tessera_tile_reduce_") + selected->kind + "_" + selected->storage + "_" + selected->reductionSchedule).str();
+         if (SymbolTable::lookupSymbolIn(mod, name)) {
+           scheduled->emitError("NVIDIA scheduled kernel symbol already exists");
+@@ -5348,6 +5358,8 @@
+           state.addAttribute("affine", kb.getBoolAttr(false));
+           state.addAttribute("tessera.norm_epsilon", kb.getF32FloatAttr(selected->epsilon));
+         } else if (isSoftmax) {
++          if (scheduled->hasAttr("schedule"))
++            state.addAttribute("schedule", scheduled->getAttr("schedule"));
+           for (StringRef key : {"exp_mode", "ftz"})
+             state.addAttribute(key, scheduled->getAttr(key));
+         } else {

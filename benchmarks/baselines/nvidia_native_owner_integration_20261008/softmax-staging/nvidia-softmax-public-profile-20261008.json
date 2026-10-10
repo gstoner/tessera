@@ -1,0 +1,322 @@
+{
+  "scope": "diagnostic cProfile during aggregate CPU test run; not a performance promotion or isolated device metric",
+  "calls": 300,
+  "total_seconds": 0.5171131659999995,
+  "rows": [
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py",
+      "line": 955,
+      "name": "__call__",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.005306499,
+      "cumulative_seconds": 0.520392917
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py",
+      "line": 1745,
+      "name": "_try_native_descriptor_call",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.018374355000000002,
+      "cumulative_seconds": 0.48958412100000004
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 35757,
+      "name": "launch",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.001042241,
+      "cumulative_seconds": 0.379384011
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 35579,
+      "name": "_launch_native_descriptor",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.007052489,
+      "cumulative_seconds": 0.378113715
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 3066,
+      "name": "_submit_nvidia_sm120_native",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.303187044,
+      "cumulative_seconds": 0.31338231
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 1353,
+      "name": "to_mlir",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.001829967,
+      "cumulative_seconds": 0.06989158000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 1432,
+      "name": "to_mlir",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.001941432,
+      "cumulative_seconds": 0.046207204
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 1038,
+      "name": "to_mlir",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.003060227,
+      "cumulative_seconds": 0.041290742000000005
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 755,
+      "name": "_loc_suffix",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.000736698,
+      "cumulative_seconds": 0.035242993
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 773,
+      "name": "_loc_path",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.00135947,
+      "cumulative_seconds": 0.034017561
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py",
+      "line": 1413,
+      "name": "_establish_tracer_authority",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.0037689110000000002,
+      "cumulative_seconds": 0.020450005
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 1350,
+      "name": "verify",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.000494395,
+      "cumulative_seconds": 0.020079875
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 1467,
+      "name": "verify_module",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.0015962020000000001,
+      "cumulative_seconds": 0.019585480000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 879,
+      "name": "descriptor_digest",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.000753512,
+      "cumulative_seconds": 0.019516099000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 35525,
+      "name": "_split_native_arguments",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.002006677,
+      "cumulative_seconds": 0.019173853
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 1505,
+      "name": "verify_function",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.0028267640000000003,
+      "cumulative_seconds": 0.017418221
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py",
+      "line": 1311,
+      "name": "_trace_frontend_capture",
+      "primitive_calls": 600,
+      "total_calls": 600,
+      "self_seconds": 0.003451046,
+      "cumulative_seconds": 0.016175401000000002
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 86,
+      "name": "_sha256_json",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.000441395,
+      "cumulative_seconds": 0.014731953
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 35440,
+      "name": "_native_buffer_value",
+      "primitive_calls": 600,
+      "total_calls": 600,
+      "self_seconds": 0.004167189,
+      "cumulative_seconds": 0.014449694
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/graph_ir.py",
+      "line": 1672,
+      "name": "_verify_op_types",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.0007737200000000001,
+      "cumulative_seconds": 0.013328331
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 6361,
+      "name": "_ensure_builtin_native_launcher",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.013040332,
+      "cumulative_seconds": 0.013040332
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 82,
+      "name": "_canonical_json",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.000552479,
+      "cumulative_seconds": 0.0119722
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/legality.py",
+      "line": 74,
+      "name": "check_op_legality",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.001854841,
+      "cumulative_seconds": 0.010802356
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py",
+      "line": 1336,
+      "name": "<genexpr>",
+      "primitive_calls": 1200,
+      "total_calls": 1200,
+      "self_seconds": 0.0032097120000000004,
+      "cumulative_seconds": 0.010073832000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 2884,
+      "name": "_register_nvidia_ptx",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.00265654,
+      "cumulative_seconds": 0.007217419
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/legality.py",
+      "line": 170,
+      "name": "_check_capability",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.001099118,
+      "cumulative_seconds": 0.006053444000000001
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 1013,
+      "name": "validate_invocation",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.002614033,
+      "cumulative_seconds": 0.00479902
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/effects.py",
+      "line": 177,
+      "name": "infer_graph_effects",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.000999453,
+      "cumulative_seconds": 0.0047509150000000005
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/gpu_target.py",
+      "line": 182,
+      "name": "ptx_for_driver_jit",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.001469842,
+      "cumulative_seconds": 0.004193831
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 858,
+      "name": "_content_dict",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.0023490670000000003,
+      "cumulative_seconds": 0.004030634
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/capabilities.py",
+      "line": 115,
+      "name": "supports_op",
+      "primitive_calls": 300,
+      "total_calls": 300,
+      "self_seconds": 0.0010666900000000001,
+      "cumulative_seconds": 0.00396285
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 746,
+      "name": "__post_init__",
+      "primitive_calls": 600,
+      "total_calls": 600,
+      "self_seconds": 0.0014345590000000002,
+      "cumulative_seconds": 0.0031515090000000003
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py",
+      "line": 712,
+      "name": "_ordered_inputs",
+      "primitive_calls": 1200,
+      "total_calls": 1200,
+      "self_seconds": 0.0017743210000000001,
+      "cumulative_seconds": 0.002973832
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/capabilities.py",
+      "line": 89,
+      "name": "normalize_target",
+      "primitive_calls": 1500,
+      "total_calls": 1500,
+      "self_seconds": 0.00156389,
+      "cumulative_seconds": 0.002562239
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/matmul_pipeline.py",
+      "line": 1244,
+      "name": "normalize_target_kind",
+      "primitive_calls": 900,
+      "total_calls": 900,
+      "self_seconds": 0.00048446100000000005,
+      "cumulative_seconds": 0.002153691
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "python/tessera/compiler/native_vmap.py": "a2b817731a65d890a0db7349d8d040382e5a72202bd3952f68d0dfde68629085",
+  "python/tessera/compiler/capabilities.py": "692665a315b09880353ef5f5f8aaf8bf13686fa17d946892f571738d6cbe0eb8",
+  "python/tessera/compiler/jit.py": "f2a6e7330261a0a6450f9a63f4e2f755fe45dc359ad3a7c4151f3f24876d6973",
+  "src/compiler/ir/LinearTransposeInterface.cpp": "32e4af54b9ec47e4145b789b0158d2f24d20f42e758bf7860770643c00a65ba0",
+  "tests/unit/test_native_deep_typed_vmap.py": "ef722bdb65592d22e873a6a75ab0417d9b9ed548f8d9facce641e10af5b9e419",
+  "tests/unit/test_native_reverse_source_constraints.py": "e7bbc8058abbca19b10bddc23ab488471857a6a8dd7634b3b75b3b82ac8cec49",
+  "tests/device/rocm/test_deep_typed_scaled_vmap.py": "9110676c07e87c8f1cd6ec0548597de29559ee980e5d6a21fd4235dcc2e18790",
+  "compiler": "250d95c88882ac1456196c28f9ec1a2f93c115d7a919b656f05d36660f747482",
+  "layout_library": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "gfx1201_native_owner": "f328ab1b65729ade80684227b3b31f6be5f2cf3e108969a53b70d22e8e48e391"
+}

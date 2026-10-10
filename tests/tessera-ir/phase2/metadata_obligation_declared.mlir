@@ -152,3 +152,15 @@ module attributes {
     return %a : tensor<8x16xf32>
   }
 }
+// -----
+
+// A module-level declaration may explain metadata from an erased Graph scope.
+// CHECK-LABEL: func.func @lowered
+module attributes {
+  tessera.metadata_snapshot = {graph = {layout = ["\22row_major\22", 1]}},
+  tessera.lowering.dropped = {layout = "consumed_by_pass"}
+} {
+  func.func @lowered() {
+    return
+  }
+}

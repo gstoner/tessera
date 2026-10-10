@@ -1,0 +1,2 @@
+name, uuid, compute_cap
+NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0

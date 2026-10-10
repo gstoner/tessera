@@ -61,14 +61,21 @@ def test_every_lowering_kind_maps_to_a_policy():
 
 @pytest.mark.parametrize("target", _ALL_TARGETS)
 def test_bf16_activation_is_supported_wherever_the_target_declares_bf16(target):
-    """The headline fix, and the one that removes the contradiction."""
+    """Derived BF16 rules respect an explicit physical operation contract."""
     declared = get_target_capability(target).supported_dtypes
     if "bf16" not in declared:
         pytest.skip(f"{target} does not declare bf16 storage")
     for op in ("tessera.gelu", "tessera.softmax", "tessera.silu"):
-        assert supports_op(target, op, dtype="bf16").supported, (
-            f"{target} rejects {op} at bf16 while declaring bf16 storage"
-        )
+        result = supports_op(target, op, dtype="bf16")
+        explicit = get_target_capability(target).supported_ops.get(op)
+        if explicit is not None and "bf16" not in explicit.dtypes:
+            assert not result.supported
+            assert result.runtime_status == "unsupported"
+            assert "dtype" in result.reason
+        else:
+            assert result.supported, (
+                f"{target} rejects {op} despite admitting its bf16 contract"
+            )
 
 
 def test_all_targets_agree_about_bf16_gelu():

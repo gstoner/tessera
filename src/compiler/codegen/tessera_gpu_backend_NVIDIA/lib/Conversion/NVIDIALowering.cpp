@@ -26,6 +26,7 @@
 #include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/DialectConversion.h"
 
+#include <functional>
 #include <optional>
 
 #include "TesseraNVIDIADialect.h.inc"
@@ -440,10 +441,14 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
   Operation *op = kernel.getOperation();
   auto desc = op->getAttrOfType<tessera::tile::TileMmaDescAttr>("mma");
   auto epilogue = op->getAttrOfType<tessera::tile::TileEpilogueAttr>("epilogue");
+  auto batchPolicy = op->getAttrOfType<StringAttr>("batching");
+  const bool independentRhs = batchPolicy && batchPolicy.getValue() == "independent_rhs";
+  const bool sharedLhs = batchPolicy && batchPolicy.getValue() == "shared_lhs";
+  const bool batched = independentRhs || sharedLhs || (batchPolicy && batchPolicy.getValue() == "shared_rhs_rows");
   std::optional<Sm120FragmentDescriptor> physical = selectSm120Fragment(desc);
   if (!physical || physical->packing != Sm120InputPacking::PackedX8E2M1 ||
       !epilogue || epilogue.getBias() || epilogue.getActivation() != "none" ||
-      epilogue.getOutputType() != "f32" || kernel.getInputs().size() != 8) {
+      epilogue.getOutputType() != "f32" || kernel.getInputs().size() != (batched ? 10u : 8u)) {
     op->emitError("sm_120 NVFP4 matmul_kernel requires packed A/B, scale A/B, "
                   "D, M/N/K, f32 output, and no fused epilogue");
     return failure();
@@ -459,6 +464,19 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
     op->emitError("SM120 NVFP4 Tile requires the named K16 block-scale contract");
     return failure();
   }
+  for (StringRef name : {"transposeA", "transposeB"}) {
+    Attribute value = op->getAttr(name);
+    if (value && !isa<BoolAttr>(value)) {
+      op->emitError("SM120 NVFP4 orientation flags must be boolean");
+      return failure();
+    }
+  }
+  auto orientation = [&](StringRef name) {
+    auto value = op->getAttrOfType<BoolAttr>(name);
+    return value && value.getValue();
+  };
+  const bool transposeA = orientation("transposeA");
+  const bool transposeB = orientation("transposeB");
   ValueRange inputs = kernel.getInputs();
   Value aBase = inputs[0], bBase = inputs[1];
   Value scaleABase = inputs[2], scaleBBase = inputs[3];
@@ -481,7 +499,16 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
   Value blockY32 = NVVM::BlockIdYOp::create(builder, loc, i32);
   Value blockX = arith::ExtUIOp::create(builder, loc, builder.getI64Type(), blockX32);
   Value blockY = arith::ExtUIOp::create(builder, loc, builder.getI64Type(), blockY32);
-  Value mt = mulI64(builder, loc, blockY, sixteen64);
+  Value localBlockY = blockY;
+  Value batchIndex = zero64;
+  if (batched) {
+    m = inputs[8];
+    Value rowsPerBatchTile = arith::DivUIOp::create(
+        builder, loc, addI64(builder, loc, m, i64Constant(builder, loc, 15)), sixteen64);
+    batchIndex = arith::DivUIOp::create(builder, loc, blockY, rowsPerBatchTile);
+    localBlockY = arith::RemUIOp::create(builder, loc, blockY, rowsPerBatchTile);
+  }
+  Value mt = mulI64(builder, loc, localBlockY, sixteen64);
   Value nt = mulI64(builder, loc, blockX, i64Constant(builder, loc, 8));
   Value tid = NVVM::ThreadIdXOp::create(builder, loc, i32);
   Value lane = arith::AndIOp::create(
@@ -498,6 +525,25 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
   Value scaleK = arith::DivUIOp::create(
       builder, loc, addI64(builder, loc, k, i64Constant(builder, loc, 15)),
       sixteen64);
+
+  if (batched) {
+    auto offset = [&](Value base, Type element, Value count) -> Value {
+      return LLVM::GEPOp::create(builder, loc, base.getType(), element, base,
+                                SmallVector<LLVM::GEPArg>{count});
+    };
+    Value batchRow = mulI64(builder, loc, batchIndex, m);
+    if (!sharedLhs)
+      aBase = offset(aBase, i8, mulI64(builder, loc, batchRow, packedK));
+    if (independentRhs || sharedLhs)
+      bBase = offset(bBase, i8, mulI64(builder, loc, batchIndex,
+          mulI64(builder, loc, packedK, n)));
+    if (!sharedLhs)
+      scaleABase = offset(scaleABase, i8, mulI64(builder, loc, batchRow, scaleK));
+    if (independentRhs || sharedLhs)
+      scaleBBase = offset(scaleBBase, i8, mulI64(builder, loc, batchIndex,
+          mulI64(builder, loc, scaleK, n)));
+    dBase = offset(dBase, f32, mulI64(builder, loc, batchRow, n));
+  }
 
   auto packCodes = [&](Value base, Value row, Value col, bool operandA) {
     Value word = zero32;
@@ -517,6 +563,10 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
                    packedIndex)
           : addI64(builder, loc, mulI64(builder, loc, packedIndex, n),
                    logicalCol);
+      if (operandA && transposeA)
+        linear = addI64(builder, loc, mulI64(builder, loc, packedIndex, m), logicalRow);
+      if (!operandA && transposeB)
+        linear = addI64(builder, loc, mulI64(builder, loc, logicalCol, packedK), packedIndex);
       Value byte = maskedLoadScalar(builder, loc, base, i8, linear, valid, 1);
       Value extended = arith::ExtUIOp::create(builder, loc, i32, byte);
       Value parity64 = arith::RemUIOp::create(
@@ -553,6 +603,10 @@ static LogicalResult materializeSm120Nvfp4MatmulKernel(
       Value linear = operandA
           ? addI64(builder, loc, mulI64(builder, loc, row, scaleK), kBlock)
           : addI64(builder, loc, mulI64(builder, loc, kBlock, n), col);
+      if (operandA && transposeA)
+        linear = addI64(builder, loc, mulI64(builder, loc, kBlock, m), row);
+      if (!operandA && transposeB)
+        linear = addI64(builder, loc, mulI64(builder, loc, col, scaleK), kBlock);
       Value byte = maskedLoadScalar(builder, loc, base, i8, linear, valid, 1);
       Value extended = arith::ExtUIOp::create(builder, loc, i32, byte);
       if (j != 0)
@@ -1846,6 +1900,11 @@ static LogicalResult materializeSm120SoftmaxKernel(
     return failure();
   }
 
+  auto schedule = op->getAttrOfType<StringAttr>("schedule");
+  bool cooperative = schedule && schedule.getValue() == "cooperative_128";
+  if (schedule && schedule.getValue() != "serial" && !cooperative)
+    return op->emitError("SM120 softmax schedule must be serial|cooperative_128");
+
   Location loc = op->getLoc();
   Value xBase = inputs[0], outBase = inputs[1];
   Value rows = inputs[2], columns = inputs[3];
@@ -1860,7 +1919,7 @@ static LogicalResult materializeSm120SoftmaxKernel(
       builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
   Value thread = arith::ExtUIOp::create(
       builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
-  Value row = addI64(
+  Value row = cooperative ? block : addI64(
       builder, loc, mulI64(builder, loc, block, i64Constant(builder, loc, 128)),
       thread);
   Value active = lessI64(builder, loc, row, rows);
@@ -1889,12 +1948,56 @@ static LogicalResult materializeSm120SoftmaxKernel(
         ValueRange{linear});
     LLVM::StoreOp::create(builder, loc, stored, ptr, storageAlignment);
   };
+  Value scratch;
+  if (cooperative) {
+    FailureOr<Value> allocated = sm120ReductionScratch(op, builder);
+    if (failed(allocated))
+      return op->emitError("failed to materialize cooperative softmax scratch");
+    scratch = *allocated;
+  }
+  auto reduceF32 = [&](Value partial, bool maximum) -> Value {
+    if (!cooperative) return partial;
+    Value lanePointer = LLVM::GEPOp::create(
+        builder, loc, scratch.getType(), f32, scratch, ValueRange{thread});
+    LLVM::StoreOp::create(builder, loc, partial, lanePointer, 4);
+    NVVM::BarrierOp::create(builder, loc);
+    for (int64_t stride = 64; stride >= 1; stride >>= 1) {
+      Value participates = lessI64(
+          builder, loc, thread, i64Constant(builder, loc, stride));
+      auto combine = scf::IfOp::create(builder, loc, participates, false);
+      {
+        OpBuilder::InsertionGuard combineGuard(builder);
+        builder.setInsertionPointToStart(combine.thenBlock());
+        Value lhsPointer = LLVM::GEPOp::create(
+            builder, loc, scratch.getType(), f32, scratch, ValueRange{thread});
+        Value rhsPointer = LLVM::GEPOp::create(
+            builder, loc, scratch.getType(), f32, scratch,
+            ValueRange{addI64(builder, loc, thread,
+                             i64Constant(builder, loc, stride))});
+        Value lhs = LLVM::LoadOp::create(builder, loc, f32, lhsPointer, 4);
+        Value rhs = LLVM::LoadOp::create(builder, loc, f32, rhsPointer, 4);
+        Value combined = maximum
+            ? Value(arith::MaximumFOp::create(builder, loc, lhs, rhs))
+            : Value(arith::AddFOp::create(builder, loc, lhs, rhs));
+        LLVM::StoreOp::create(builder, loc, combined, lhsPointer, 4);
+      }
+      builder.setInsertionPointAfter(combine);
+      NVVM::BarrierOp::create(builder, loc);
+    }
+    Value leaderPointer = LLVM::GEPOp::create(
+        builder, loc, scratch.getType(), f32, scratch,
+        ValueRange{i64Constant(builder, loc, 0)});
+    Value result = LLVM::LoadOp::create(builder, loc, f32, leaderPointer, 4);
+    // Every lane must capture the broadcast before sum reduction reuses it.
+    NVVM::BarrierOp::create(builder, loc);
+    return result;
+  };
   auto guarded = scf::IfOp::create(builder, loc, active, /*withElseRegion=*/false);
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(guarded.thenBlock());
-    Value zero = i64Constant(builder, loc, 0);
-    Value one = i64Constant(builder, loc, 1);
+    Value zero = cooperative ? thread : i64Constant(builder, loc, 0);
+    Value one = i64Constant(builder, loc, cooperative ? 128 : 1);
     Value rowBase = mulI64(builder, loc, row, columns);
     Value negInf = arith::ConstantFloatOp::create(
         builder, loc, f32,
@@ -1912,7 +2015,7 @@ static LogicalResult materializeSm120SoftmaxKernel(
       scf::YieldOp::create(builder, loc, ValueRange{next});
     }
     builder.setInsertionPointAfter(maxLoop);
-    Value maximum = maxLoop.getResult(0);
+    Value maximum = reduceF32(maxLoop.getResult(0), true);
     Value zeroF32 = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat(0.0f));
     auto sumLoop = scf::ForOp::create(
@@ -1930,7 +2033,7 @@ static LogicalResult materializeSm120SoftmaxKernel(
       scf::YieldOp::create(builder, loc, ValueRange{next});
     }
     builder.setInsertionPointAfter(sumLoop);
-    Value denominator = sumLoop.getResult(0);
+    Value denominator = reduceF32(sumLoop.getResult(0), false);
     auto storeLoop = scf::ForOp::create(builder, loc, zero, columns, one);
     {
       OpBuilder::InsertionGuard loopGuard(builder);
@@ -2117,7 +2220,9 @@ static LogicalResult materializeSm120ReduceKernel(
   return success();
 }
 
-// Compiler-owned row normalization. One thread owns one flattened row and
+// Compiler-owned row normalization. Serial assigns one thread per row;
+// cooperative_128 assigns one CTA per row with coalesced loads and a checked
+// shared-memory reduction. Both schedules use centered LayerNorm variance and
 // performs every reduction in f32 before rounding the normalized value back to
 // the declared storage type. Epsilon is embedded in the immutable PTX image,
 // leaving the launch ABI as X/O/Rows/Columns.
@@ -2133,6 +2238,10 @@ static LogicalResult materializeSm120NormKernel(
   bool f16Storage = storage && storage.getValue() == "f16";
   bool bf16Storage = storage && storage.getValue() == "bf16";
   bool layer = kind && kind.getValue() == "layernorm";
+  auto schedule = op->getAttrOfType<StringAttr>("schedule");
+  bool cooperative = schedule && schedule.getValue() == "cooperative_128";
+  if (schedule && schedule.getValue() != "serial" && !cooperative)
+    return op->emitError("SM120 norm schedule must be serial|cooperative_128");
   if (inputs.size() != 5 || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
       !accum || accum.getValue() != "f32" || !kind ||
@@ -2158,7 +2267,7 @@ static LogicalResult materializeSm120NormKernel(
       builder, loc, i64, NVVM::BlockIdXOp::create(builder, loc, i32));
   Value thread = arith::ExtUIOp::create(
       builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
-  Value row = addI64(
+  Value row = cooperative ? block : addI64(
       builder, loc, mulI64(builder, loc, block, i64Constant(builder, loc, 128)),
       thread);
   Value active = lessI64(builder, loc, row, rows);
@@ -2182,18 +2291,83 @@ static LogicalResult materializeSm120NormKernel(
         ValueRange{linear});
     LLVM::StoreOp::create(builder, loc, stored, ptr, alignment);
   };
+  Value scratch;
+  if (cooperative) {
+    FailureOr<Value> allocated = sm120ReductionScratch(op, builder);
+    if (failed(allocated)) return failure();
+    scratch = *allocated;
+  }
+  // All 128 threads participate, including neutral lanes on a ragged row.
+  // The row guard is CTA-uniform. The final barrier also protects the next
+  // reduction's reuse of scratch from racing with readers of this result.
+  auto reduceSum = [&](Value partial) -> Value {
+    if (!cooperative) return partial;
+    Value ptr = LLVM::GEPOp::create(
+        builder, loc, scratch.getType(), f32, scratch, ValueRange{thread});
+    LLVM::StoreOp::create(builder, loc, partial, ptr, 4);
+    NVVM::BarrierOp::create(builder, loc);
+    for (int64_t stride = 64; stride >= 1; stride >>= 1) {
+      auto combine = scf::IfOp::create(builder, loc,
+          lessI64(builder, loc, thread, i64Constant(builder, loc, stride)), false);
+      {
+        OpBuilder::InsertionGuard guard(builder);
+        builder.setInsertionPointToStart(combine.thenBlock());
+        Value rhsPtr = LLVM::GEPOp::create(
+            builder, loc, scratch.getType(), f32, scratch,
+            ValueRange{addI64(builder, loc, thread, i64Constant(builder, loc, stride))});
+        Value lhs = LLVM::LoadOp::create(builder, loc, f32, ptr, 4);
+        Value rhs = LLVM::LoadOp::create(builder, loc, f32, rhsPtr, 4);
+        LLVM::StoreOp::create(builder, loc,
+            arith::AddFOp::create(builder, loc, lhs, rhs), ptr, 4);
+      }
+      builder.setInsertionPointAfter(combine);
+      NVVM::BarrierOp::create(builder, loc);
+    }
+    Value leader = LLVM::GEPOp::create(builder, loc, scratch.getType(), f32, scratch,
+        ValueRange{i64Constant(builder, loc, 0)});
+    Value reduced = LLVM::LoadOp::create(builder, loc, f32, leader, 4);
+    NVVM::BarrierOp::create(builder, loc);
+    return reduced;
+  };
   auto guarded =
       scf::IfOp::create(builder, loc, active, /*withElseRegion=*/false);
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(guarded.thenBlock());
-    Value zero = i64Constant(builder, loc, 0);
-    Value one = i64Constant(builder, loc, 1);
+    Value zero = cooperative ? thread : i64Constant(builder, loc, 0);
+    Value one = i64Constant(builder, loc, cooperative ? 128 : 1);
     Value rowBase = mulI64(builder, loc, row, columns);
     Value zeroF32 = arith::ConstantFloatOp::create(
         builder, loc, f32, APFloat(0.0f));
+    // Serial long rows otherwise lose low-order contributions before storage
+    // rounding. Kahan compensation uses only f32 operations; cooperative lanes
+    // keep their short local sums and shared pairwise reduction.
+    SmallVector<Value> initial{zeroF32};
+    if (!cooperative) initial.push_back(zeroF32);
+    auto accumulate = [&](ValueRange state, Value contribution) {
+      if (cooperative)
+        return SmallVector<Value>{arith::AddFOp::create(
+            builder, loc, state[0], contribution)};
+      Value corrected =
+          arith::SubFOp::create(builder, loc, contribution, state[1]);
+      Value next = arith::AddFOp::create(builder, loc, state[0], corrected);
+      Value correction = arith::SubFOp::create(
+          builder, loc, arith::SubFOp::create(builder, loc, next, state[0]),
+          corrected);
+      // Keep IEEE non-finite propagation: Inf plus finite remains Inf.
+      // The compensation formula alone would turn Inf-Inf into a NaN
+      // correction and incorrectly poison otherwise-zero RMSNorm outputs.
+      Value infinity = arith::ConstantFloatOp::create(
+          builder, loc, f32, APFloat::getInf(APFloat::IEEEsingle()));
+      Value finite = arith::CmpFOp::create(
+          builder, loc, arith::CmpFPredicate::OLT,
+          math::AbsFOp::create(builder, loc, next), infinity);
+      correction =
+          arith::SelectOp::create(builder, loc, finite, correction, zeroF32);
+      return SmallVector<Value>{next, correction};
+    };
     auto sumLoop = scf::ForOp::create(
-        builder, loc, zero, columns, one, ValueRange{zeroF32});
+        builder, loc, zero, columns, one, initial);
     {
       OpBuilder::InsertionGuard loopGuard(builder);
       builder.setInsertionPointToStart(sumLoop.getBody());
@@ -2202,21 +2376,21 @@ static LogicalResult materializeSm120NormKernel(
       Value value = loadF32(linear);
       Value contribution =
           layer ? value : Value(arith::MulFOp::create(builder, loc, value, value));
-      Value next = arith::AddFOp::create(
-          builder, loc, sumLoop.getRegionIterArgs()[0], contribution);
-      scf::YieldOp::create(builder, loc, ValueRange{next});
+      auto next = accumulate(sumLoop.getRegionIterArgs(), contribution);
+      scf::YieldOp::create(builder, loc, next);
     }
     builder.setInsertionPointAfter(sumLoop);
+    Value total = reduceSum(sumLoop.getResult(0));
     Value columnsF32 =
         arith::UIToFPOp::create(builder, loc, f32, columns);
     Value mean = layer
                      ? Value(arith::DivFOp::create(
-                           builder, loc, sumLoop.getResult(0), columnsF32))
+                           builder, loc, total, columnsF32))
                      : zeroF32;
-    Value varianceSum = sumLoop.getResult(0);
+    Value varianceSum = total;
     if (layer) {
       auto varianceLoop = scf::ForOp::create(
-          builder, loc, zero, columns, one, ValueRange{zeroF32});
+          builder, loc, zero, columns, one, initial);
       {
         OpBuilder::InsertionGuard loopGuard(builder);
         builder.setInsertionPointToStart(varianceLoop.getBody());
@@ -2226,18 +2400,16 @@ static LogicalResult materializeSm120NormKernel(
             arith::SubFOp::create(builder, loc, loadF32(linear), mean);
         Value squared =
             arith::MulFOp::create(builder, loc, centered, centered);
-        Value next = arith::AddFOp::create(
-            builder, loc, varianceLoop.getRegionIterArgs()[0], squared);
-        scf::YieldOp::create(builder, loc, ValueRange{next});
+        auto next = accumulate(varianceLoop.getRegionIterArgs(), squared);
+        scf::YieldOp::create(builder, loc, next);
       }
       builder.setInsertionPointAfter(varianceLoop);
-      varianceSum = varianceLoop.getResult(0);
+      varianceSum = reduceSum(varianceLoop.getResult(0));
     }
     Value variance =
         arith::DivFOp::create(builder, loc, varianceSum, columnsF32);
     Value adjusted = arith::AddFOp::create(builder, loc, variance, epsilon);
-    Value inverse = NVVM::RsqrtOp::create(
-        builder, loc, f32, adjusted, /*ftz=*/false);
+    Value denominator = math::SqrtOp::create(builder, loc, adjusted);
     auto outputLoop =
         scf::ForOp::create(builder, loc, zero, columns, one);
     {
@@ -2249,7 +2421,7 @@ static LogicalResult materializeSm120NormKernel(
       if (layer)
         value = arith::SubFOp::create(builder, loc, value, mean);
       storeF32(
-          linear, arith::MulFOp::create(builder, loc, value, inverse));
+          linear, arith::DivFOp::create(builder, loc, value, denominator));
     }
   }
   builder.setInsertionPointAfter(guarded);
@@ -2282,7 +2454,10 @@ static LogicalResult materializeSm120AttentionKernel(
   unsigned dimStart = lseIndex + unsigned(hasSavedLse);
   bool f16Storage = storage && storage.getValue() == "f16";
   bool bf16Storage = storage && storage.getValue() == "bf16";
-  if (in.size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) || !storage ||
+  auto biasShape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+  bool dynamicBias = biasShape && llvm::any_of(biasShape.asArrayRef(),
+      [](int64_t dim) { return ShapedType::isDynamic(dim); });
+  if (in.size() != 11 + unsigned(hasBias) + unsigned(hasSavedLse) + 4 * unsigned(dynamicBias) || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") || !accum ||
       accum.getValue() != "f32" || !scaleAttr || !causalAttr || !biasAttr ||
       !windowLeftAttr || !windowRightAttr || !softcapAttr || !dropoutAttr ||
@@ -2293,10 +2468,14 @@ static LogicalResult materializeSm120AttentionKernel(
                   "accum, complete mask/dropout/LSE attrs, and the canonical ABI");
     return failure();
   }
-  auto biasShape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
   if (op->hasAttr("bias_shape") && (!biasShape || !hasBias || biasShape.size() != 4 ||
-      llvm::any_of(biasShape.asArrayRef(), [](int64_t dim) { return dim <= 0; })))
-    return op->emitError("attention broadcast bias requires four positive physical dimensions");
+      biasShape[0] <= 0 || biasShape[1] <= 0 ||
+      llvm::any_of(biasShape.asArrayRef(), [](int64_t dim) {
+        return dim <= 0 && !ShapedType::isDynamic(dim);
+      })))
+    return op->emitError("attention broadcast bias requires fixed batch/head and positive or symbolic sequence dimensions");
+  if (dynamicBias && !hasSavedLse)
+    return op->emitError("symbolic physical bias requires saved LSE");
   Location loc = op->getLoc();
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
@@ -2374,9 +2553,9 @@ static LogicalResult materializeSm120AttentionKernel(
         Value bh = biasShape && biasShape[1] == 1 ? i64Constant(builder, loc, 0) : hq;
         Value bq = biasShape && biasShape[2] == 1 ? i64Constant(builder, loc, 0) : q;
         Value bk = biasShape && biasShape[3] == 1 ? i64Constant(builder, loc, 0) : key;
-        Value physicalHeads = biasShape ? i64Constant(builder, loc, biasShape[1]) : Hq;
-        Value physicalQueries = biasShape ? i64Constant(builder, loc, biasShape[2]) : Sq;
-        Value physicalKeys = biasShape ? i64Constant(builder, loc, biasShape[3]) : Sk;
+        Value physicalHeads = biasShape ? (ShapedType::isDynamic(biasShape[1]) ? in[dimStart + 7 + 1] : i64Constant(builder, loc, biasShape[1])) : Hq;
+        Value physicalQueries = biasShape ? (ShapedType::isDynamic(biasShape[2]) ? in[dimStart + 7 + 2] : i64Constant(builder, loc, biasShape[2])) : Sq;
+        Value physicalKeys = biasShape ? (ShapedType::isDynamic(biasShape[3]) ? in[dimStart + 7 + 3] : i64Constant(builder, loc, biasShape[3])) : Sk;
         Value biasIndex = addI64(builder, loc,
             mulI64(builder, loc,
                 addI64(builder, loc, mulI64(builder, loc,
@@ -2459,7 +2638,7 @@ static LogicalResult materializeSm120AttentionKernel(
             key);
         Value hash = addI64(builder, loc,
             mulI64(builder, loc, counter, i64Constant(builder, loc, 1664525)),
-            i64Constant(builder, loc, dropoutSeedAttr.getInt() + 1013904223));
+            i64Constant(builder, loc, static_cast<int64_t>(static_cast<uint32_t>(dropoutSeedAttr.getInt())) + 1013904223LL));
         hash = arith::AndIOp::create(
             builder, loc, hash, i64Constant(builder, loc, 0xffffffffULL));
         uint64_t threshold = static_cast<uint64_t>(
@@ -2549,15 +2728,52 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   auto lseCheckpoint = op->getAttrOfType<StringAttr>("lse_checkpoint");
   const bool hasBias = biasAttr && biasAttr.getValue();
   const bool hasSavedLse = lseCheckpoint && lseCheckpoint.getValue() == "saved";
+  auto savedOutputAttr = op->getAttrOfType<BoolAttr>("saved_output");
+  const bool hasSavedOutput = savedOutputAttr && savedOutputAttr.getValue();
+  auto lseCotangentAttr = op->getAttrOfType<BoolAttr>("lse_cotangent");
+  const bool hasLseCotangent = lseCotangentAttr && lseCotangentAttr.getValue();
+  if (op->hasAttr("lse_cotangent") && !lseCotangentAttr)
+    return op->emitError("lse_cotangent must be boolean");
+  auto biasGradientAttr = op->getAttrOfType<BoolAttr>("bias_gradient");
+  const bool hasBiasGradient = biasGradientAttr && biasGradientAttr.getValue();
+  auto activityAttr = op->getAttr("gradient_activity");
+  auto activity = dyn_cast_or_null<DenseI64ArrayAttr>(activityAttr);
+  if (activityAttr && (!activity || !hasSavedLse || !hasSavedOutput ||
+      activity.size() != 3 + unsigned(hasBiasGradient) ||
+      llvm::any_of(activity.asArrayRef(), [](int64_t x) { return x != 0 && x != 1; }) ||
+      llvm::none_of(activity.asArrayRef(), [](int64_t x) { return x == 1; })))
+    return op->emitError("gradient_activity requires nonempty binary saved-checkpoint result roles");
+  auto gradientActive = [&](unsigned index) { return !activity || activity[index] == 1; };
+  auto outputAttr = op->getAttr("gradient_output");
+  auto output = dyn_cast_or_null<StringAttr>(outputAttr);
+  bool compact = bool(outputAttr);
+  unsigned removed = 0;
+  if (compact) {
+    if (!output || output.getValue() != "compact_v1" || !activity)
+      return op->emitError("compact gradient output requires verified saved-checkpoint activity");
+    auto launch = op->getAttrOfType<StringAttr>("gradient_launch");
+    if (!launch || (launch.getValue() != "packed_v1" && launch.getValue() != "logical_v1"))
+      return op->emitError("compact checkpoint launch requires packed_v1 or logical_v1");
+    auto threads = op->getAttrOfType<IntegerAttr>("block_threads");
+    if (!threads || !threads.getType().isInteger(64) || (threads.getInt() != 64 && threads.getInt() != 128))
+      return op->emitError("compact checkpoint threads require 64 or 128");
+    removed = llvm::count(activity.asArrayRef(), int64_t(0));
+  }
   const bool f16Storage = storage && storage.getValue() == "f16";
   const bool bf16Storage = storage && storage.getValue() == "bf16";
-  if (in.size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse) || !storage ||
+  auto biasShape = op->getAttrOfType<DenseI64ArrayAttr>("bias_shape");
+  bool dynamicBias = biasShape && llvm::any_of(biasShape.asArrayRef(),
+      [](int64_t dim) { return ShapedType::isDynamic(dim); });
+  if (in.size() != 14 + unsigned(hasBias) + unsigned(hasSavedLse) + unsigned(hasSavedOutput) + unsigned(hasBiasGradient) + unsigned(hasLseCotangent) - removed + 4 * unsigned(dynamicBias) || !storage ||
       (!f16Storage && !bf16Storage && storage.getValue() != "f32") ||
+      (hasLseCotangent && (!hasSavedLse || !hasSavedOutput || storage.getValue() != "f32")) ||
+      (hasBiasGradient && (!hasBias || !hasSavedOutput || !hasSavedLse || storage.getValue() != "f32")) ||
       !accum || accum.getValue() != "f32" ||
       !scaleAttr || !causalAttr || !windowLeftAttr || !windowRightAttr ||
       !softcapAttr || !dropoutAttr || !dropoutSeedAttr || !route ||
       route.getValue() != "deterministic_direct" ||
-      !deterministic || !deterministic.getValue() || !workspace ||
+      !deterministic || !deterministic.getValue() ||
+      (hasSavedOutput && (!hasSavedLse || storage.getValue() != "f32")) || !workspace ||
       workspace.getInt() != 0 || !workspaceOwner ||
       workspaceOwner.getValue() != "output_element" ||
       (lseCheckpoint && lseCheckpoint.getValue() != "recompute" &&
@@ -2568,6 +2784,15 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     return failure();
   }
 
+  if (op->hasAttr("bias_shape") && (!biasShape || !hasBias || biasShape.size() != 4 ||
+      biasShape[0] <= 0 || biasShape[1] <= 0 ||
+      llvm::any_of(biasShape.asArrayRef(), [](int64_t dim) {
+        return dim <= 0 && !ShapedType::isDynamic(dim);
+      })))
+    return op->emitError("attention backward broadcast bias requires fixed batch/head and positive or symbolic sequence dimensions");
+
+  if (dynamicBias && (!hasSavedLse || !hasSavedOutput))
+    return op->emitError("symbolic physical bias requires saved output and LSE");
   Location loc = op->getLoc();
   Type i32 = builder.getI32Type();
   Type i64 = builder.getI64Type();
@@ -2576,12 +2801,21 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
                          ? Type(builder.getF16Type())
                          : bf16Storage ? Type(builder.getBF16Type()) : Type(f32);
   unsigned storageAlignment = (f16Storage || bf16Storage) ? 2 : 4;
-  const unsigned biasIndex = 4;
-  const unsigned lseIndex = 4 + unsigned(hasBias);
-  const unsigned dqIndex = lseIndex + unsigned(hasSavedLse);
-  const unsigned dkIndex = dqIndex + 1;
-  const unsigned dvIndex = dqIndex + 2;
-  const unsigned dimIndex = dqIndex + 3;
+  const unsigned savedOutputIndex = 4;
+  const unsigned biasIndex = 4 + unsigned(hasSavedOutput);
+  const unsigned lseIndex = biasIndex + unsigned(hasBias);
+  const unsigned lseCotangentIndex = lseIndex + unsigned(hasSavedLse);
+  const unsigned outputBase = lseCotangentIndex + unsigned(hasLseCotangent);
+  auto gradientIndex = [&](unsigned role) {
+    unsigned index = outputBase;
+    for (unsigned i = 0; i < role; ++i) index += !compact || gradientActive(i);
+    return index;
+  };
+  const unsigned dqIndex = gradientIndex(0);
+  const unsigned dkIndex = gradientIndex(1);
+  const unsigned dvIndex = gradientIndex(2);
+  const unsigned dbIndex = gradientIndex(3);
+  const unsigned dimIndex = outputBase + 3 + unsigned(hasBiasGradient) - removed;
   Value B = in[dimIndex], Hq = in[dimIndex + 1], Hkv = in[dimIndex + 2];
   Value Sq = in[dimIndex + 3], Sk = in[dimIndex + 4];
   Value D = in[dimIndex + 5], Dv = in[dimIndex + 6];
@@ -2675,11 +2909,18 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     builder.setInsertionPointAfter(dot);
     Value value = arith::MulFOp::create(builder, loc, dot.getResult(0), scale);
     if (hasBias) {
+      Value bb = biasShape && biasShape[0] == 1 ? zero : b;
+      Value bh = biasShape && biasShape[1] == 1 ? zero : hq;
+      Value bq = biasShape && biasShape[2] == 1 ? zero : q;
+      Value bk = biasShape && biasShape[3] == 1 ? zero : key;
+      Value ph = biasShape ? (ShapedType::isDynamic(biasShape[1]) ? in[dimIndex + 7 + 1] : i64Constant(builder, loc, biasShape[1])) : Hq;
+      Value pq = biasShape ? (ShapedType::isDynamic(biasShape[2]) ? in[dimIndex + 7 + 2] : i64Constant(builder, loc, biasShape[2])) : Sq;
+      Value pk = biasShape ? (ShapedType::isDynamic(biasShape[3]) ? in[dimIndex + 7 + 3] : i64Constant(builder, loc, biasShape[3])) : Sk;
       Value index = addI64(builder, loc,
           mulI64(builder, loc,
               addI64(builder, loc,
                   mulI64(builder, loc,
-                      addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q), Sk), key);
+                      addI64(builder, loc, mulI64(builder, loc, bb, ph), bh), pq), bq), pk), bk);
       value = arith::AddFOp::create(builder, loc, value, load(biasIndex, index));
     }
     return value;
@@ -2727,6 +2968,22 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     builder.setInsertionPointAfter(dot);
     return dot.getResult(0);
   };
+  auto doDotOutput = [&](Value b, Value hq, Value q) -> Value {
+    Value zf = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
+    auto dot = scf::ForOp::create(builder, loc, zero, Dv, one, ValueRange{zf});
+    {
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(dot.getBody());
+      Value d = dot.getInductionVar();
+      Value index = outputIndex(b, hq, q, d);
+      Value product = arith::MulFOp::create(
+          builder, loc, load(0, index), load(savedOutputIndex, index));
+      scf::YieldOp::create(builder, loc, ValueRange{
+          arith::AddFOp::create(builder, loc, dot.getRegionIterArgs()[0], product)});
+    }
+    builder.setInsertionPointAfter(dot);
+    return dot.getResult(0);
+  };
   auto dropoutScale = [&](Value b, Value hq, Value q, Value key) -> Value {
     Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
     if (dropoutAttr.getValueAsDouble() <= 0.0)
@@ -2738,7 +2995,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
         key);
     Value hash = addI64(builder, loc,
         mulI64(builder, loc, counter, i64Constant(builder, loc, 1664525)),
-        i64Constant(builder, loc, dropoutSeedAttr.getInt() + 1013904223));
+        i64Constant(builder, loc, static_cast<int64_t>(static_cast<uint32_t>(dropoutSeedAttr.getInt())) + 1013904223LL));
     hash = arith::AndIOp::create(
         builder, loc, hash, i64Constant(builder, loc, 0xffffffffULL));
     uint64_t threshold = static_cast<uint64_t>(
@@ -2752,13 +3009,23 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     Value zerof = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
     return arith::SelectOp::create(builder, loc, keep, invKeep, zerof);
   };
-  // Return the row maximum, softmax denominator, and dO dot O delta.
+  // Return the saved row maximum, normalization, and row delta.
   auto rowStats = [&](Value b, Value hq, Value hkv, Value q) -> SmallVector<Value, 3> {
     if (hasSavedLse) {
       Value rowIndex = addI64(builder, loc,
           mulI64(builder, loc,
               addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q);
       Value savedLse = load(lseIndex, rowIndex);
+      if (hasSavedOutput) {
+        Value onef = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(1.0f));
+        Value delta = doDotOutput(b, hq, q);
+        // dScores = P * (dO.V - dot(dO,O) + dLSE). The LSE term
+        // contributes only to Q/K/bias; dV still uses the original probability.
+        if (hasLseCotangent)
+          delta = arith::SubFOp::create(builder, loc, delta,
+                                      load(lseCotangentIndex, rowIndex));
+        return {savedLse, onef, delta};
+      }
       Value zf = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
       auto deltaLoop = scf::ForOp::create(builder, loc, zero, Sk, one, ValueRange{zf});
       {
@@ -2836,7 +3103,8 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   Value thread = arith::ExtUIOp::create(
       builder, loc, i64, NVVM::ThreadIdXOp::create(builder, loc, i32));
   Value linear = addI64(builder, loc,
-      mulI64(builder, loc, block, i64Constant(builder, loc, 128)), thread);
+      mulI64(builder, loc, block, i64Constant(builder, loc,
+          compact ? op->getAttrOfType<IntegerAttr>("block_threads").getInt() : 128)), thread);
   Value dqCount = mulI64(builder, loc, mulI64(builder, loc,
       mulI64(builder, loc, B, Hq), Sq), D);
   Value dkCount = mulI64(builder, loc, mulI64(builder, loc,
@@ -2844,11 +3112,20 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   Value dvCount = mulI64(builder, loc, mulI64(builder, loc,
       mulI64(builder, loc, B, Hkv), Sk), Dv);
 
+  bool packed = compact && op->getAttrOfType<StringAttr>("gradient_launch").getValue() == "packed_v1";
+  if (packed && !gradientActive(0)) dqCount = zero;
+  if (packed && !gradientActive(1)) dkCount = zero;
+  if (packed && !gradientActive(2)) dvCount = zero;
   auto dqGuard = scf::IfOp::create(builder, loc,
       lessI64(builder, loc, linear, dqCount), false);
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(dqGuard.thenBlock());
+    if (!gradientActive(0)) {
+      if (!compact)
+        store(dqIndex, linear,
+              arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f)));
+    } else {
     Value d = arith::RemUIOp::create(builder, loc, linear, D);
     Value t0 = arith::DivUIOp::create(builder, loc, linear, D);
     Value q = arith::RemUIOp::create(builder, loc, t0, Sq);
@@ -2879,6 +3156,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     }
     builder.setInsertionPointAfter(sum);
     store(dqIndex, linear, sum.getResult(0));
+    }
   }
   builder.setInsertionPointAfter(dqGuard);
 
@@ -2890,6 +3168,11 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(dkGuard.thenBlock());
+    if (!gradientActive(1)) {
+      if (!compact)
+        store(dkIndex, dkLinear,
+              arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f)));
+    } else {
     Value d = arith::RemUIOp::create(builder, loc, dkLinear, D);
     Value t0 = arith::DivUIOp::create(builder, loc, dkLinear, D);
     Value key = arith::RemUIOp::create(builder, loc, t0, Sk);
@@ -2930,6 +3213,7 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     }
     builder.setInsertionPointAfter(headLoop);
     store(dkIndex, dkLinear, headLoop.getResult(0));
+    }
   }
   builder.setInsertionPointAfter(dkGuard);
 
@@ -2942,6 +3226,11 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
   {
     OpBuilder::InsertionGuard guard(builder);
     builder.setInsertionPointToStart(dvGuard.thenBlock());
+    if (!gradientActive(2)) {
+      if (!compact)
+        store(dvIndex, dvLinear,
+              arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f)));
+    } else {
     Value d = arith::RemUIOp::create(builder, loc, dvLinear, Dv);
     Value t0 = arith::DivUIOp::create(builder, loc, dvLinear, Dv);
     Value key = arith::RemUIOp::create(builder, loc, t0, Sk);
@@ -2962,8 +3251,25 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
         OpBuilder::InsertionGuard qGuard(builder);
         builder.setInsertionPointToStart(qLoop.getBody());
         Value q = qLoop.getInductionVar();
-        SmallVector<Value, 3> stats = rowStats(b, hq, hkv, q);
-        Value p = probability(b, hq, hkv, q, key, stats[0], stats[1]);
+        Value rowNormalizer;
+        Value rowDenominator;
+        if (hasSavedLse) {
+          Value rowIndex = addI64(builder, loc,
+              mulI64(builder, loc,
+                  addI64(builder, loc, mulI64(builder, loc, b, Hq), hq), Sq), q);
+          rowNormalizer = load(lseIndex, rowIndex);
+          rowDenominator = arith::ConstantFloatOp::create(
+              builder, loc, f32, APFloat(1.0f));
+        } else {
+          SmallVector<Value, 3> stats = rowStats(b, hq, hkv, q);
+          rowNormalizer = stats[0];
+          rowDenominator = stats[1];
+        }
+        // Saved LSE is sufficient for dV probabilities. Do not compute the
+        // dO.V row delta here: it is consumed by dQ/dK only and used to cost
+        // O(Sk*Dv) work for every dV output element.
+        Value p = probability(
+            b, hq, hkv, q, key, rowNormalizer, rowDenominator);
         Value term = arith::MulFOp::create(builder, loc,
             arith::MulFOp::create(builder, loc, p,
                 dropoutScale(b, hq, q, key)),
@@ -2976,8 +3282,115 @@ static LogicalResult materializeSm120AttentionBackwardKernel(
     }
     builder.setInsertionPointAfter(headLoop);
     store(dvIndex, dvLinear, headLoop.getResult(0));
+    }
   }
   builder.setInsertionPointAfter(dvGuard);
+  if (hasBiasGradient && (!compact || gradientActive(3)) && biasShape) {
+    // One thread owns one physical bias gradient. Reduce all corresponding
+    // logical scores in B/Hq/Q/K order; no atomics or dense temporary buffer.
+    Value gradientBegin = addI64(builder, loc, dqDkCount, dvCount);
+    Value biasLinear = arith::SubIOp::create(builder, loc, linear, gradientBegin);
+    SmallVector<Value, 4> physical, logical{B,Hq,Sq,Sk};
+    Value count = one;
+    for (unsigned axis = 0; axis < 4; ++axis) {
+      int64_t extent = biasShape[axis];
+      physical.push_back(ShapedType::isDynamic(extent) ?
+          in[dimIndex + 7 + axis] : i64Constant(builder, loc, extent));
+      count = mulI64(builder, loc, count, physical.back());
+    }
+    auto biasGuard = scf::IfOp::create(builder, loc,
+        arith::AndIOp::create(builder, loc,
+            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::uge, linear, gradientBegin),
+            lessI64(builder, loc, biasLinear, count)), false);
+    {
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(biasGuard.thenBlock());
+    if (!gradientActive(3)) {
+      if (!compact)
+        store(dbIndex, biasLinear,
+              arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f)));
+    } else {
+      SmallVector<Value, 4> coordinates(4);
+      Value remaining = biasLinear;
+      for (int axis = 3; axis >= 0; --axis) {
+        coordinates[axis] = arith::RemUIOp::create(builder, loc, remaining, physical[axis]);
+        remaining = arith::DivUIOp::create(builder, loc, remaining, physical[axis]);
+      }
+      SmallVector<Value, 4> indices;
+      auto contribution = [&]() -> Value {
+        Value b = indices[0], hq = indices[1], q = indices[2], key = indices[3];
+        Value hkv = arith::DivUIOp::create(builder, loc, hq, ratio);
+        auto stats = rowStats(b,hq,hkv,q);
+        Value p = probability(b,hq,hkv,q,key,stats[0],stats[1]);
+        Value ds = arith::MulFOp::create(builder, loc, p,
+            arith::SubFOp::create(builder, loc,
+                arith::MulFOp::create(builder, loc,
+                    dropoutScale(b,hq,q,key), doDotV(b,hq,hkv,q,key)), stats[2]));
+        return arith::MulFOp::create(builder, loc, ds,
+            softcapDerivative(rawScore(b,hq,hkv,q,key)));
+      };
+      std::function<Value(unsigned,Value)> reduce = [&](unsigned axis, Value acc) -> Value {
+        if (axis == 4)
+          return arith::AddFOp::create(builder, loc, acc, contribution());
+        Value begin = biasShape[axis] == 1 ? zero : coordinates[axis];
+        Value end = biasShape[axis] == 1 ? logical[axis] : addI64(builder, loc, begin, one);
+        auto loop = scf::ForOp::create(builder, loc, begin, end, one, ValueRange{acc});
+        {
+          OpBuilder::InsertionGuard loopGuard(builder);
+          builder.setInsertionPointToStart(loop.getBody());
+          indices.push_back(loop.getInductionVar());
+          Value value = reduce(axis+1, loop.getRegionIterArgs()[0]);
+          indices.pop_back();
+          scf::YieldOp::create(builder, loc, ValueRange{value});
+        }
+        builder.setInsertionPointAfter(loop);
+        return loop.getResult(0);
+      };
+      Value zf = arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f));
+      store(dbIndex, biasLinear, reduce(0,zf));
+    }
+    }
+    builder.setInsertionPointAfter(biasGuard);
+  } else   if (hasBiasGradient && (!compact || gradientActive(3))) {
+    Value gradientBegin = addI64(builder, loc, dqDkCount, dvCount);
+    Value biasLinear = arith::SubIOp::create(builder, loc, linear, gradientBegin);
+    Value biasCount = mulI64(builder, loc, mulI64(builder, loc,
+        mulI64(builder, loc, B, Hq), Sq), Sk);
+    auto biasGuard = scf::IfOp::create(builder, loc,
+        arith::AndIOp::create(builder, loc,
+            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::uge, linear, gradientBegin),
+            lessI64(builder, loc, biasLinear, biasCount)), false);
+    {
+      OpBuilder::InsertionGuard guard(builder);
+      builder.setInsertionPointToStart(biasGuard.thenBlock());
+    if (!gradientActive(3)) {
+      if (!compact)
+        store(dbIndex, biasLinear,
+              arith::ConstantFloatOp::create(builder, loc, f32, APFloat(0.0f)));
+    } else {
+      Value key = arith::RemUIOp::create(builder, loc, biasLinear, Sk);
+      Value row = arith::DivUIOp::create(builder, loc, biasLinear, Sk);
+      Value q = arith::RemUIOp::create(builder, loc, row, Sq);
+      Value headBatch = arith::DivUIOp::create(builder, loc, row, Sq);
+      Value hq = arith::RemUIOp::create(builder, loc, headBatch, Hq);
+      Value b = arith::DivUIOp::create(builder, loc, headBatch, Hq);
+      Value hkv = arith::DivUIOp::create(builder, loc, hq, ratio);
+      SmallVector<Value, 3> stats = rowStats(b, hq, hkv, q);
+      Value p = probability(b, hq, hkv, q, key, stats[0], stats[1]);
+      // Bias is added after Q.K scaling. Its derivative therefore has no
+      // extra attention scale, unlike dQ/dK.
+      Value ds = arith::MulFOp::create(builder, loc, p,
+          arith::SubFOp::create(builder, loc,
+              arith::MulFOp::create(builder, loc,
+                  dropoutScale(b, hq, q, key), doDotV(b, hq, hkv, q, key)),
+              stats[2]));
+      ds = arith::MulFOp::create(builder, loc, ds,
+          softcapDerivative(rawScore(b, hq, hkv, q, key)));
+      store(dbIndex, biasLinear, ds);
+    }
+    }
+    builder.setInsertionPointAfter(biasGuard);
+  }
   op->erase();
   return success();
 }
@@ -3467,8 +3880,16 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
   SmallVector<int64_t, 2> expectedShape = role.getValue() == "a"
       ? SmallVector<int64_t, 2>{16, desc.getK()}
       : SmallVector<int64_t, 2>{desc.getK(), 8};
+  // Row-major tensor producers can feed the column-major B register
+  // contract without a staging transpose. Require explicit transpose intent;
+  // paired f16/bf16 registers gather their two K elements at the physical
+  // pitch instead of assuming adjacent addresses.
+  const bool rowMajorB = role.getValue() == "b" &&
+      memory.getOrder() == "row_major" && pack.getTranspose() &&
+      physical->packing == Sm120InputPacking::PairF16;
   if ((role.getValue() != "a" && role.getValue() != "b") ||
-      memory.getOrder() != expectedOrder || memory.getSpace() == "lds" ||
+      (memory.getOrder() != expectedOrder && !rowMajorB) ||
+      (pack.getTranspose() && !rowMajorB) || memory.getSpace() == "lds" ||
       layout.getShardExtents() != ArrayRef<int64_t>(expectedShape) ||
       layout.getSwizzle()) {
     op->emitError("unsupported sm_120 fragment source layout for role ")
@@ -3627,7 +4048,7 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
           builder, loc, inputTy, builder.getZeroAttr(inputTy));
       fragment = arith::SelectOp::create(builder, loc, inBounds, element,
                                          zeroElement);
-    } else if (haveBounds) {
+    } else if (haveBounds || rowMajorB) {
       auto vectorTy = cast<VectorType>(loadTy);
       Value zero = arith::ConstantOp::create(
           builder, loc, vectorTy, builder.getZeroAttr(vectorTy));
@@ -3640,12 +4061,14 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
         Value logicalCol = role.getValue() == "a"
             ? addI64(builder, loc, col, laneValue)
             : col;
-        Value inBounds = arith::AndIOp::create(
-            builder, loc,
-            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
-                                   logicalRow, rowBound),
-            arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
-                                   logicalCol, colBound));
+        Value inBounds;
+        if (haveBounds)
+          inBounds = arith::AndIOp::create(
+              builder, loc,
+              arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
+                                     logicalRow, rowBound),
+              arith::CmpIOp::create(builder, loc, arith::CmpIPredicate::ult,
+                                     logicalCol, colBound));
         Value relativeLogicalRow = role.getValue() == "a"
             ? relativeRow
             : addI64(builder, loc, relativeRow, laneValue);
@@ -3661,15 +4084,19 @@ static FailureOr<SmallVector<Value>> materializeSm120Mma16Pack(
             : *tessera::tile::materializeLinearIndex(
                   builder, loc, logicalRow, logicalCol, leadingDim,
                   memory.getOrder());
-        Value safeLinear = arith::SelectOp::create(
-            builder, loc, inBounds, elementLinear, i64Constant(builder, loc, 0));
+        Value safeLinear = haveBounds
+            ? Value(arith::SelectOp::create(
+                  builder, loc, inBounds, elementLinear,
+                  i64Constant(builder, loc, 0)))
+            : elementLinear;
         Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), inputTy,
                                         base, ValueRange{safeLinear});
         Value element = LLVM::LoadOp::create(builder, loc, inputTy, ptr, alignment);
         Value zeroElement = arith::ConstantOp::create(
             builder, loc, inputTy, builder.getZeroAttr(inputTy));
-        element = arith::SelectOp::create(builder, loc, inBounds, element,
-                                          zeroElement);
+        if (haveBounds)
+          element = arith::SelectOp::create(builder, loc, inBounds, element,
+                                            zeroElement);
         Value laneIndex = arith::ConstantIntOp::create(builder, loc, lane, 64);
         fragment = LLVM::InsertElementOp::create(
             builder, loc, cast<VectorType>(loadTy), fragment, element,
@@ -3788,8 +4215,24 @@ static LogicalResult materializeSm120AccumulatorStore(
   bool isF32 = desc && desc.getAccType() == "f32";
   bool isS32 = desc && (desc.getAccType() == "s32" ||
                         desc.getAccType() == "int32");
+  auto epilogue = store->getAttrOfType<tessera::tile::TileEpilogueAttr>("tile.epilogue");
+  auto residualAttr = store->getAttrOfType<BoolAttr>("tile.residual");
+  const bool hasResidual = residualAttr && residualAttr.getValue();
+  const bool hasBias = epilogue && epilogue.getBias();
+  const size_t extra = size_t(hasBias) + size_t(hasResidual);
+  if (store.getInputs().size() < extra) return failure();
+  const size_t addressInputs = store.getInputs().size() - extra;
+  if (epilogue && (!isF32 ||
+       (epilogue.getOutputType() != "f32" && epilogue.getOutputType() != "f16") ||
+       !tessera::tile::isSupportedActivation(epilogue.getActivation()))) {
+    op->emitError("sm_120 fragment epilogue requires f32 accumulation, "
+                  "none/relu/gelu/silu activation and f32/f16 output");
+    return failure();
+  }
   const bool dynamicLeadingDim = memory && memory.getLeadingDim() == 0;
-  const bool boundedDynamic = dynamicLeadingDim && store.getInputs().size() == 7;
+  const bool boundedDynamic = dynamicLeadingDim && addressInputs == 7;
+  const bool boundedStatic = !dynamicLeadingDim && addressInputs == 6;
+  const bool bounded = boundedDynamic || boundedStatic;
   if (!isCanonicalSm120Mma16(desc) || (!isF32 && !isS32) ||
       !unpackLayout || !storeLayout || !memory ||
       unpackLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
@@ -3797,7 +4240,7 @@ static LogicalResult materializeSm120AccumulatorStore(
       unpackLayout.getSwizzle() ||
       storeLayout.getSwizzle() || memory.getSpace() != "gmem" ||
       memory.getOrder() != "row_major" ||
-      (!boundedDynamic && store.getInputs().size() != 4)) {
+      (!bounded && (dynamicLeadingDim || addressInputs != 4))) {
     op->emitError("sm_120 accumulator store requires unswizzled 16x8 row-major "
                   "gmem output and f32 or s32 accumulator");
     return failure();
@@ -3828,28 +4271,62 @@ static LogicalResult materializeSm120AccumulatorStore(
   Value leadingDim = dynamicLeadingDim
       ? store.getInputs()[6]
       : i64Constant(builder, loc, memory.getLeadingDim());
-  Value rowBound = boundedDynamic ? store.getInputs()[4] : Value();
-  Value colBound = boundedDynamic ? store.getInputs()[5] : Value();
+  Value rowBound = bounded ? store.getInputs()[4] : Value();
+  Value colBound = bounded ? store.getInputs()[5] : Value();
+  Value biasBase = hasBias ? store.getInputs()[addressInputs] : Value();
+  Value residualBase = hasResidual ? store.getInputs().back() : Value();
+  for (Value pointer : {biasBase, residualBase}) {
+    if (pointer && !isa<LLVM::LLVMPointerType>(pointer.getType())) {
+      op->emitError("sm_120 fragment epilogue buffers require !llvm.ptr");
+      return failure();
+    }
+  }
+  Type outputTy = epilogue && epilogue.getOutputType() == "f16"
+      ? Type(builder.getF16Type()) : accumulatorTy;
   for (auto [index, coord] : llvm::enumerate(coords)) {
     Value row = addI64(builder, loc, rowOrigin, coord.first);
     Value col = addI64(builder, loc, colOrigin, coord.second);
     Value linear = *tessera::tile::materializeLinearIndex(
         builder, loc, row, col, leadingDim, "row_major");
-    Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), accumulatorTy, base,
+    Value ptr = LLVM::GEPOp::create(builder, loc, base.getType(), outputTy, base,
                                     ValueRange{linear});
     Value scalar = LLVM::ExtractValueOp::create(
         builder, loc, accumulatorTy, accumulator,
         ArrayRef<int64_t>{static_cast<int64_t>(index)});
-    if (boundedDynamic) {
+    auto emitStore = [&]() {
+      // Loads belong inside the same logical M/N guard as the output store.
+      // Padding lanes must not read bias/residual buffers past their extent.
+      Value value = scalar;
+      if (hasBias) {
+        Value pointer = LLVM::GEPOp::create(builder, loc, biasBase.getType(),
+            builder.getF32Type(), biasBase, ValueRange{col});
+        value = arith::AddFOp::create(builder, loc, value,
+            LLVM::LoadOp::create(builder, loc, builder.getF32Type(), pointer, 4));
+      }
+      if (epilogue)
+        value = tessera::tile::emitScalarFloatActivation(
+            builder, loc, value, epilogue.getActivation());
+      if (hasResidual) {
+        Value pointer = LLVM::GEPOp::create(builder, loc, residualBase.getType(),
+            builder.getF32Type(), residualBase, ValueRange{linear});
+        value = arith::AddFOp::create(builder, loc, value,
+            LLVM::LoadOp::create(builder, loc, builder.getF32Type(), pointer, 4));
+      }
+      if (outputTy.isF16())
+        value = arith::TruncFOp::create(builder, loc, outputTy, value);
+      LLVM::StoreOp::create(builder, loc, value, ptr,
+                           /*alignment=*/outputTy.isF16() ? 2 : 4);
+    };
+    if (bounded) {
       Value valid = arith::AndIOp::create(
           builder, loc, lessI64(builder, loc, row, rowBound),
           lessI64(builder, loc, col, colBound));
       auto guarded = scf::IfOp::create(builder, loc, valid, false);
       OpBuilder::InsertionGuard guard(builder);
       builder.setInsertionPointToStart(guarded.thenBlock());
-      LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/4);
+      emitStore();
     } else {
-      LLVM::StoreOp::create(builder, loc, scalar, ptr, /*alignment=*/4);
+      emitStore();
     }
   }
   return success();
@@ -5223,6 +5700,11 @@ struct LowerTileToNVIDIAPass
 
       if (isTileOp(op, "tile.store")) {
         auto store = cast<tessera::tile::StoreOp>(op);
+        if (store->hasAttr("tile.epilogue") || store->hasAttr("tile.residual")) {
+          op->emitError("SM120 epilogue store requires a typed fragment_unpack producer");
+          signalPassFailure();
+          return;
+        }
         auto memory =
             store->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>(
                 "tile.memory");

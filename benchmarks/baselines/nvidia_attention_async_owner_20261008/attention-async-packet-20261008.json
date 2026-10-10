@@ -1,0 +1,399 @@
+{
+  "schema": "tessera.sm120.attention_async_owner.v1",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "architecture": "sm_120",
+  "compiler_sha256": "6075bf1450770b22635f9a22959638e4845287030d716d37c513cd7a8db51eb0",
+  "sources": {
+    "benchmarks/nvidia/benchmark_attention_async_owner.py": "ca5a8cfa266535244a0bbecc6675f868895ee625a6b99b75be10c0f9a0844a17",
+    "tests/device/nvidia/test_attention_async_owner.py": "ef92aeb421bcb58fd59d56f74b46441887ffd40af7edce69a365a1c41475879c",
+    "tests/device/nvidia/test_jit_multiresult_attention_vjp.py": "bced77b93fbaf3a50df141da3493800427d8ac555dd15de83c9cf3eadcb5ec36",
+    "tests/device/nvidia/test_lse_cotangent_native.py": "19fea1d947a45e6f85da2a3ef2c45f16c4ae7c6d75343f4bb1ec80747d5e96c6",
+    "python/tessera/compiler/resident_attention.py": "894f0d3cb7b224fd954d9230ff69c6544a1313e053a8215b779402763e73e171",
+    "python/tessera/compiler/native_attention_program.py": "5ebb7f5f4026d6e3b5ad0eb03aede97520a82899763dd43a391b948b796e0822",
+    "python/tessera/compiler/nvidia_native.py": "5f4ec0308d3706990c39278b5f5574c9a8737f29071ea1d359815fb08ec478ef",
+    "python/tessera/compiler/jit.py": "2c7b8dc89c56f8ea25b339fc107c56d275685f0c74554ab99e65160e8e7078b8"
+  },
+  "rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": false,
+      "asynchronous": false,
+      "compact": true,
+      "gradient_roles": [
+        2,
+        0
+      ],
+      "program_digest": "db27d710ec3241be265579cb6b516861ab39433d3ef8168446e5c27fca1ae4ff",
+      "forward_image_sha256": "7e86ab1ddf665982daff41d6e5f7a4136411359683e331dea064ad03e8731ba3",
+      "backward_image_sha256": "7255951e3d8cdc0163804f951ac16f32803a30c7dfdd59f5700e2e0ceabc7915",
+      "submission_samples_ms": [
+        0.19055609167976814,
+        0.19569899251853878,
+        0.19359171115369958,
+        0.1769658305089582,
+        0.18213053805414925
+      ],
+      "submission_median_ms": 0.19055609167976814,
+      "completed_host_samples_ms": [
+        0.19577627112580973,
+        0.20043000007386913,
+        0.19806081598455255,
+        0.1819268218241632,
+        0.186660639222034
+      ],
+      "completed_host_median_ms": 0.19577627112580973,
+      "native_owned_stream_event_samples_ms": [
+        0.1912756399674849,
+        0.1966283538124778,
+        0.19483345205133612,
+        0.1788189086047086,
+        0.1834472742947665
+      ],
+      "native_owned_stream_event_median_ms": 0.1912756399674849,
+      "max_abs_error": 2.543465713045201e-08,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": false,
+      "asynchronous": true,
+      "compact": true,
+      "gradient_roles": [
+        2,
+        0
+      ],
+      "program_digest": "db27d710ec3241be265579cb6b516861ab39433d3ef8168446e5c27fca1ae4ff",
+      "forward_image_sha256": "7e86ab1ddf665982daff41d6e5f7a4136411359683e331dea064ad03e8731ba3",
+      "backward_image_sha256": "7255951e3d8cdc0163804f951ac16f32803a30c7dfdd59f5700e2e0ceabc7915",
+      "submission_samples_ms": [
+        0.16632199880074372,
+        0.1433860055509616,
+        0.1765831786377186,
+        0.15810817289589482,
+        0.1620073506439274
+      ],
+      "submission_median_ms": 0.1620073506439274,
+      "completed_host_samples_ms": [
+        0.1701020889661529,
+        0.14742972879585894,
+        0.1800922698087313,
+        0.16162364045158029,
+        0.16555927736176687
+      ],
+      "completed_host_median_ms": 0.16555927736176687,
+      "native_owned_stream_event_samples_ms": [
+        0.1664843667637218,
+        0.14418618245558304,
+        0.17679127779873935,
+        0.15763490850275214,
+        0.16227491335435348
+      ],
+      "native_owned_stream_event_median_ms": 0.16227491335435348,
+      "max_abs_error": 2.543465713045201e-08,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": true,
+      "asynchronous": false,
+      "compact": true,
+      "gradient_roles": [
+        3,
+        2,
+        0
+      ],
+      "program_digest": "703352b543c87b4a79ee0bac2c3e5257b3bb694676657fc090ced8f3d3b202f4",
+      "forward_image_sha256": "144b0e9e664aa6538379348eb8279b69cd862d711d3a3d5551bae6546f2b2511",
+      "backward_image_sha256": "ac74acbbfdaf2c4fb592156009265192143dd8ebb72d2d4d287b6c496dbe11de",
+      "submission_samples_ms": [
+        0.22946253143758935,
+        0.20510190568695014,
+        0.21475400585173207,
+        0.20837110192091626,
+        0.24643372638489713
+      ],
+      "submission_median_ms": 0.21475400585173207,
+      "completed_host_samples_ms": [
+        0.23481263567439534,
+        0.21019754190505904,
+        0.219855912622403,
+        0.2144285456531427,
+        0.2510930009355599
+      ],
+      "completed_host_median_ms": 0.219855912622403,
+      "native_owned_stream_event_samples_ms": [
+        0.23127564516934482,
+        0.20664145729758523,
+        0.21572654897516425,
+        0.21103126352483575,
+        0.24767708778381348
+      ],
+      "native_owned_stream_event_median_ms": 0.21572654897516425,
+      "max_abs_error": 3.1570110414769204e-08,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "bias": true,
+      "asynchronous": true,
+      "compact": true,
+      "gradient_roles": [
+        3,
+        2,
+        0
+      ],
+      "program_digest": "703352b543c87b4a79ee0bac2c3e5257b3bb694676657fc090ced8f3d3b202f4",
+      "forward_image_sha256": "144b0e9e664aa6538379348eb8279b69cd862d711d3a3d5551bae6546f2b2511",
+      "backward_image_sha256": "ac74acbbfdaf2c4fb592156009265192143dd8ebb72d2d4d287b6c496dbe11de",
+      "submission_samples_ms": [
+        0.17360853433439677,
+        0.21038480653342875,
+        0.16715654320168225,
+        0.16388281735337593,
+        0.22633427182551136
+      ],
+      "submission_median_ms": 0.17360853433439677,
+      "completed_host_samples_ms": [
+        0.17737036316909574,
+        0.21474754480137068,
+        0.20125736376609316,
+        0.16745291015302594,
+        0.23042791078544475
+      ],
+      "completed_host_median_ms": 0.20125736376609316,
+      "native_owned_stream_event_samples_ms": [
+        0.17352436889301648,
+        0.21023418686606668,
+        0.19768435304815118,
+        0.16325818408619275,
+        0.226847995411266
+      ],
+      "native_owned_stream_event_median_ms": 0.19768435304815118,
+      "max_abs_error": 3.1570110414769204e-08,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "bias": false,
+      "asynchronous": false,
+      "compact": true,
+      "gradient_roles": [
+        2,
+        0
+      ],
+      "program_digest": "431a6894dbe8cd2d72300968ce9736c96520903a32094664ff66ac3966864132",
+      "forward_image_sha256": "91a36a431e09dd2d384bf131447bf851c205dbf75b9a7b65b7b16393ab3aaac1",
+      "backward_image_sha256": "be864f996190f0b24e3aca76d7724b56bcbdf43794391a49d3b7f466cd4da9ff",
+      "submission_samples_ms": [
+        0.19352728056467391,
+        0.19473446511917494,
+        0.18974708985875954,
+        0.19011617405340075,
+        0.19097618166018615
+      ],
+      "submission_median_ms": 0.19097618166018615,
+      "completed_host_samples_ms": [
+        0.19852736626159062,
+        0.1998128189535981,
+        0.19438445187089118,
+        0.19472172822464595,
+        0.19571354443376715
+      ],
+      "completed_host_median_ms": 0.19571354443376715,
+      "native_owned_stream_event_samples_ms": [
+        0.19454546408219772,
+        0.19633746147155762,
+        0.19104582613164728,
+        0.19132510098544034,
+        0.19231126525185324
+      ],
+      "native_owned_stream_event_median_ms": 0.19231126525185324,
+      "max_abs_error": 6.417219111654049e-08,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "bias": false,
+      "asynchronous": true,
+      "compact": true,
+      "gradient_roles": [
+        2,
+        0
+      ],
+      "program_digest": "431a6894dbe8cd2d72300968ce9736c96520903a32094664ff66ac3966864132",
+      "forward_image_sha256": "91a36a431e09dd2d384bf131447bf851c205dbf75b9a7b65b7b16393ab3aaac1",
+      "backward_image_sha256": "be864f996190f0b24e3aca76d7724b56bcbdf43794391a49d3b7f466cd4da9ff",
+      "submission_samples_ms": [
+        0.1584963703697378,
+        0.15877181431278586,
+        0.15315253668549386,
+        0.1511552783829922,
+        0.15957282051782717
+      ],
+      "submission_median_ms": 0.1584963703697378,
+      "completed_host_samples_ms": [
+        0.16335373088209468,
+        0.16346554779870945,
+        0.15770627545531501,
+        0.1559308200905269,
+        0.1649828204377131
+      ],
+      "completed_host_median_ms": 0.16335373088209468,
+      "native_owned_stream_event_samples_ms": [
+        0.15963345224207098,
+        0.16006982326507568,
+        0.1540916399522261,
+        0.15132218057459051,
+        0.1614778150211681
+      ],
+      "native_owned_stream_event_median_ms": 0.15963345224207098,
+      "max_abs_error": 6.417219111654049e-08,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "bias": true,
+      "asynchronous": false,
+      "compact": true,
+      "gradient_roles": [
+        3,
+        2,
+        0
+      ],
+      "program_digest": "9cfea399147a27afe68b6c01720f41b01db392129e12c75697a56cd80f934ee1",
+      "forward_image_sha256": "d652e5c1892f71c8116275a8e3f255161b76c16d20917cdbdb00df02de9549da",
+      "backward_image_sha256": "34207208869dd1e698fbf4a6f6f53e4319f4efc2b90516a89e229a021102cfe1",
+      "submission_samples_ms": [
+        0.3019722750071775,
+        0.30016137117689307,
+        0.3042034646072848,
+        0.32518372807482426,
+        0.3200145438313484
+      ],
+      "submission_median_ms": 0.3042034646072848,
+      "completed_host_samples_ms": [
+        0.30701336535540497,
+        0.30486054972491483,
+        0.30887081943960354,
+        0.33093117897144775,
+        0.32572191081602464
+      ],
+      "completed_host_median_ms": 0.30887081943960354,
+      "native_owned_stream_event_samples_ms": [
+        0.302495999769731,
+        0.3016116402365945,
+        0.30554181879216974,
+        0.3276450850746848,
+        0.3217396302656694
+      ],
+      "native_owned_stream_event_median_ms": 0.30554181879216974,
+      "max_abs_error": 1.6764358856669048e-07,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    },
+    {
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "bias": true,
+      "asynchronous": true,
+      "compact": true,
+      "gradient_roles": [
+        3,
+        2,
+        0
+      ],
+      "program_digest": "9cfea399147a27afe68b6c01720f41b01db392129e12c75697a56cd80f934ee1",
+      "forward_image_sha256": "d652e5c1892f71c8116275a8e3f255161b76c16d20917cdbdb00df02de9549da",
+      "backward_image_sha256": "34207208869dd1e698fbf4a6f6f53e4319f4efc2b90516a89e229a021102cfe1",
+      "submission_samples_ms": [
+        0.19333353371952067,
+        0.17199217638170178,
+        0.184635176662017,
+        0.16807290111583742,
+        0.17969509777189654
+      ],
+      "submission_median_ms": 0.17969509777189654,
+      "completed_host_samples_ms": [
+        0.20636109084906903,
+        0.18476327055726538,
+        0.19742818337611176,
+        0.1802223639308729,
+        0.19169809423725714
+      ],
+      "completed_host_median_ms": 0.19169809423725714,
+      "native_owned_stream_event_samples_ms": [
+        0.20259200442921033,
+        0.1810269139029763,
+        0.19349236921830612,
+        0.17629381743344394,
+        0.18829963423989035
+      ],
+      "native_owned_stream_event_median_ms": 0.18829963423989035,
+      "max_abs_error": 1.6764358856669048e-07,
+      "correctness": "primal_before_and_gradients_after_each_window"
+    }
+  ],
+  "timing": "Submission is not completed execution. Completed host includes waiting; private-stream event includes native allocation, snapshot copies, kernel, frees and host enqueue gaps. No isolated kernel speedup or automatic promotion claim."
+}

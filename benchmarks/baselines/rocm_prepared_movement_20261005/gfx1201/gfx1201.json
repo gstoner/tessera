@@ -1,0 +1,1425 @@
+{
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "pci_bus_id": "0000:03:00.0",
+    "architecture": "gfx1201",
+    "ordinal": 0
+  },
+  "architecture": "gfx1201",
+  "scope": "host_wall_full_calls_not_isolated_kernel_time",
+  "repeats": 10,
+  "source_and_compiler_sha256": {
+    "python/tessera/autodiff/tape.py": "93ec2d53b889f9fab9a933decd4dceb9fa0302ea22edfea8e3437c6e6e97cad9",
+    "python/tessera/autodiff/jvp.py": "0003ffac027effb5bc5b3a94a3dd4d767f461d321d59b965c09e15bc81b23ecd",
+    "python/tessera/autodiff/vjp.py": "cb8d78c41ab93896f3698f8468a617aa7eb8fe8f0c7a8a093c948114dd6f97ff",
+    "python/tessera/autodiff/law_inputs.py": "c8064345f359b752caf81a1d2330186005af806562d75ca7dd691f7b47d41f45",
+    "python/tessera/__init__.py": "4359098a57300a02196aadd560c7b43cdd0317f1e2faa2c74e186d7a38ee03e4",
+    "python/tessera/compiler/jit.py": "3446d8591bb4214ce67a23a5cc52278545ec726e3c73dfe9127660a9006b4d4d",
+    "python/tessera/compiler/graph_ir.py": "ea9b1a591555379f9e2290a9ce764c5133d817414e75765602d1377c83abd4a4",
+    "python/tessera/compiler/trace.py": "5aac388730910c93b8dcdc1b9090e33ffa8e420ac43f4f8cf50a8a1f1740a0ec",
+    "python/tessera/compiler/prepared_rocm_movement.py": "9f772ed2d835c7c14a69ea74997cc9d688e40db68cdc31e5c3af2ee7a8e7d085",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e44ca5c03002a71016ac532ec2074dac1e5eabb7d4c2b553fe020da7c2b983ce",
+    "python/tessera/compiler/op_catalog.py": "d829d8b1c278d3f82d4a85360a0c6bc6e72b5af86114e04f25772e904e70451d",
+    "python/tessera/compiler/rocm_native.py": "069a42028fdd8d4b89d95ca230e413b004e4d2e3840d4d896a4edc9254cf320b",
+    "src/compiler/programming_model/lib/NativePagedKV.h": "0835c7fffdeb99cc03eb083ab7a9a16f2aaeb5cbbe3d67a726858cc0e9786acd",
+    "src/compiler/programming_model/lib/NativeMoeDispatch.h": "1c681f67c2014b798b3893625cd8cb83f208d7f5cf8bc7756d2eddf5c4feeae4",
+    "benchmarks/rocm/benchmark_public_movement_jit.py": "2607dfac755bec064c52c6353f100e8edd553b3155da39e2dd418a0d2fb59608",
+    "tests/unit/test_public_movement_frontend.py": "6d4f99468c1a10ff7681c3c34fdceaa8265b3535d0dc11374649183c2706d813",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt": "417cb58a5f087b348f35c624cefec65fb0637c6acf1497023ac79fa2967e7c41",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "cf904c5bd5a77a4f51d3e2ba3f14b976cdcba6fb6ff2c60a0babb82c24108f00"
+  },
+  "rows": [
+    {
+      "family": "paged",
+      "large": false,
+      "shape": [
+        4,
+        4,
+        4,
+        3,
+        8,
+        1,
+        5
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 385.582308,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5858567,
+          0.6459496,
+          0.5664266,
+          0.5698411,
+          0.6323184000000001,
+          0.6941558,
+          0.6834097,
+          0.5543766,
+          0.6545294,
+          0.6545447
+        ],
+        "jit_unprepared": [
+          0.9098217,
+          0.9118626000000001,
+          0.7279899000000001,
+          0.7503265,
+          0.9151476000000001,
+          0.8929533,
+          0.9076138,
+          0.7906274,
+          0.9372149999999999,
+          0.7502453
+        ],
+        "descriptor": [
+          0.7291521000000001,
+          0.6347347,
+          0.7341656000000001,
+          0.5534249,
+          0.7246808,
+          0.5785567,
+          0.717108,
+          0.5957485,
+          0.7303934,
+          0.6314727
+        ],
+        "retained": [
+          1.5295790999999999,
+          0.7095876999999999,
+          0.8140700000000001,
+          0.7254910999999999,
+          0.8215068000000001,
+          0.6937960999999999,
+          0.8755022,
+          0.7033909,
+          0.7642974,
+          0.7881336
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.6391340000000001,
+        "jit_unprepared": 0.9002835499999999,
+        "descriptor": 0.67592135,
+        "retained": 0.7762155
+      },
+      "retained_over_jit": 1.2144800620840073,
+      "jit_over_descriptor": 0.94557451099895,
+      "native_staging_counter_deltas": [
+        {
+          "arm": "jit",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        }
+      ],
+      "prepared_over_unprepared": 0.7099252230033528,
+      "retained_non_regression_10pct": true,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0f568eefa366b5eae3262e8fa17feed7bed20e527f34bc0976740ecb33a1602a",
+      "schedule_digest": "c5fb6219e7e53afc0c69391546762fec5fa9e1087f81c20fe7251bd08e09b38f",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "31299313db783d7088561584eb07c2f44368e4e23a60c861d00d9a0647e8f698"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "31299313db783d7088561584eb07c2f44368e4e23a60c861d00d9a0647e8f698",
+          "output_digest": "2251c771f6ecba2c27add264edf0e2ed0f86297aad9840312e6da0ec310abb20"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "2251c771f6ecba2c27add264edf0e2ed0f86297aad9840312e6da0ec310abb20",
+          "output_digest": "75e045bd0ccd5006cee9eb71c2a8ea31980ec1b28b4eb4a5cb885a9c78fe6d53"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.target",
+          "input_digest": "75e045bd0ccd5006cee9eb71c2a8ea31980ec1b28b4eb4a5cb885a9c78fe6d53",
+          "output_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.backend",
+          "input_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e",
+          "output_digest": "609e24b92e6451d932df041ca8a30ab21c136a93140ee674689ce5d99a13a6b0"
+        }
+      ]
+    },
+    {
+      "family": "paged",
+      "large": true,
+      "shape": [
+        8,
+        4,
+        8,
+        4,
+        32,
+        1,
+        5
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 195.540842,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5381807000000001,
+          0.5289842,
+          0.5248703,
+          0.5380846,
+          0.5227874,
+          0.5471648,
+          0.497898,
+          0.5396595,
+          0.5216961999999999,
+          0.5303378000000001
+        ],
+        "jit_unprepared": [
+          0.7781436,
+          0.7590521,
+          0.7455944,
+          0.713913,
+          0.7538071000000001,
+          0.7469971,
+          0.7496291,
+          0.7386191,
+          0.7453029,
+          0.7343029
+        ],
+        "descriptor": [
+          0.5822799,
+          0.6111309,
+          0.5763104,
+          0.5787340999999999,
+          0.5591577,
+          0.5811436999999999,
+          0.5759318,
+          0.5798241,
+          0.5741594,
+          0.5701918
+        ],
+        "retained": [
+          0.6792188,
+          0.6721934,
+          0.7161813,
+          0.6880206,
+          0.6797328,
+          0.6813889,
+          0.695019,
+          0.68774,
+          0.6591484999999999,
+          0.6576326
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.529661,
+        "jit_unprepared": 0.74629575,
+        "descriptor": 0.5775222499999999,
+        "retained": 0.68056085
+      },
+      "retained_over_jit": 1.2848989259167656,
+      "jit_over_descriptor": 0.9171265695823843,
+      "native_staging_counter_deltas": [
+        {
+          "arm": "jit",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        }
+      ],
+      "prepared_over_unprepared": 0.7097199736163579,
+      "retained_non_regression_10pct": true,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0f568eefa366b5eae3262e8fa17feed7bed20e527f34bc0976740ecb33a1602a",
+      "schedule_digest": "feba3c6f330da79bace2573c838a606ec3d9f8203f00c6d07500dde66580fe01",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "67d8e155b56a828389b4a2c3668a5f0ced6bf2766f2ed19659236c99e029cdb2"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "67d8e155b56a828389b4a2c3668a5f0ced6bf2766f2ed19659236c99e029cdb2",
+          "output_digest": "c83da1b7039aa050478401252bb78df07f6028763b1cfefb60c0b4cbdaae0bc5"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "c83da1b7039aa050478401252bb78df07f6028763b1cfefb60c0b4cbdaae0bc5",
+          "output_digest": "2b84349dc198415b7a282c92617164783c3f147d7e53a9a44360028eb9f5bdf6"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.target",
+          "input_digest": "2b84349dc198415b7a282c92617164783c3f147d7e53a9a44360028eb9f5bdf6",
+          "output_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.backend",
+          "input_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e",
+          "output_digest": "609e24b92e6451d932df041ca8a30ab21c136a93140ee674689ce5d99a13a6b0"
+        }
+      ]
+    },
+    {
+      "family": "paged_default",
+      "large": false,
+      "shape": [
+        4,
+        4,
+        4,
+        3,
+        8,
+        3,
+        1
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 182.540318,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5495995,
+          0.5438685999999999,
+          0.5340338,
+          0.5698291,
+          0.5426892999999999,
+          0.5269693,
+          0.5267298,
+          0.5370415000000001,
+          0.5151518,
+          0.5445468
+        ],
+        "jit_unprepared": [
+          0.7687596,
+          0.7475953,
+          0.7247646999999999,
+          0.7381924,
+          0.7323021,
+          0.7443811,
+          0.7419475,
+          0.7433421,
+          0.7314335,
+          0.7156383
+        ],
+        "descriptor": [
+          0.5800085,
+          0.5762063000000001,
+          0.5495253,
+          0.5792321,
+          0.5716856,
+          0.569769,
+          0.5472481,
+          0.5475405,
+          0.5532324,
+          0.5670778000000001
+        ],
+        "retained": [
+          0.6944789,
+          0.6751942,
+          0.6584572,
+          0.6857844,
+          0.6360144,
+          0.6691727000000001,
+          0.6418746,
+          0.7344432000000001,
+          0.6473059,
+          0.6539005
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.5398654,
+        "jit_unprepared": 0.74006995,
+        "descriptor": 0.5684234,
+        "retained": 0.66381495
+      },
+      "retained_over_jit": 1.2295934319924928,
+      "jit_over_descriptor": 0.9497592815496336,
+      "native_staging_counter_deltas": [
+        {
+          "arm": "jit",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        }
+      ],
+      "prepared_over_unprepared": 0.7294788823678087,
+      "retained_non_regression_10pct": true,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0f568eefa366b5eae3262e8fa17feed7bed20e527f34bc0976740ecb33a1602a",
+      "schedule_digest": "4b3ffc662115ca7d2c695602cdee2bd6f5da068a09ad186cbbc7746a3897bb88",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "5e6a4157c997ed44116bc3c3820a2b816be1f43fb2f5be2c7a9b5e3e2324638a"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "5e6a4157c997ed44116bc3c3820a2b816be1f43fb2f5be2c7a9b5e3e2324638a",
+          "output_digest": "fff5aa6eb90ee803d7ed5337012492c25d08d06b1e14663b06870a6c0a317da2"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "fff5aa6eb90ee803d7ed5337012492c25d08d06b1e14663b06870a6c0a317da2",
+          "output_digest": "2220640d2b22c0578f927d20316c64ed0078a38a406da5521b74fc408c3f8e96"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.target",
+          "input_digest": "2220640d2b22c0578f927d20316c64ed0078a38a406da5521b74fc408c3f8e96",
+          "output_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.backend",
+          "input_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e",
+          "output_digest": "609e24b92e6451d932df041ca8a30ab21c136a93140ee674689ce5d99a13a6b0"
+        }
+      ]
+    },
+    {
+      "family": "paged_default",
+      "large": true,
+      "shape": [
+        8,
+        4,
+        8,
+        4,
+        32,
+        3,
+        1
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 184.263261,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5988495,
+          0.5764236,
+          0.5806747999999999,
+          0.5857024,
+          0.5835644,
+          0.5998023,
+          0.5851473,
+          0.5738939000000001,
+          0.5795777,
+          0.5806548
+        ],
+        "jit_unprepared": [
+          0.8225156,
+          0.8022684999999999,
+          0.7770635,
+          0.7788048,
+          0.8052702999999999,
+          0.7830879000000001,
+          0.8047853999999999,
+          0.7990474,
+          0.7693878,
+          0.7925158999999999
+        ],
+        "descriptor": [
+          0.6278438000000001,
+          0.6214155,
+          0.6218041999999999,
+          0.6413325000000001,
+          0.6130846,
+          0.6303536000000001,
+          0.6334725999999999,
+          0.6224103999999999,
+          0.606966,
+          0.6076362
+        ],
+        "retained": [
+          0.7414284999999999,
+          0.7521869999999999,
+          0.7522947,
+          0.7241836,
+          0.7704644,
+          0.7331277,
+          0.7401601,
+          0.7625352999999999,
+          0.725967,
+          0.6778201
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.5821196,
+        "jit_unprepared": 0.7957816499999999,
+        "descriptor": 0.6221072999999999,
+        "retained": 0.7407942999999999
+      },
+      "retained_over_jit": 1.2725809266686776,
+      "jit_over_descriptor": 0.9357221816879501,
+      "native_staging_counter_deltas": [
+        {
+          "arm": "jit",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 0,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 1,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 2,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 3,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 4,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 5,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 6,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 7,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 8,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "descriptor",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        },
+        {
+          "arm": "jit_unprepared",
+          "trial": 9,
+          "allocations": 0,
+          "frees": 0,
+          "reuses": 30,
+          "launches": 10
+        }
+      ],
+      "prepared_over_unprepared": 0.7315066890522043,
+      "retained_non_regression_10pct": true,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0f568eefa366b5eae3262e8fa17feed7bed20e527f34bc0976740ecb33a1602a",
+      "schedule_digest": "fd9c67f710a90a4a044edef68ceb216ad9133d9f06eecd4f2a176bab5759850d",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "92f4247090559e0675fdd6e1ff0fff74d01ddeb78cfc4d1cd14e67db2023effd"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "92f4247090559e0675fdd6e1ff0fff74d01ddeb78cfc4d1cd14e67db2023effd",
+          "output_digest": "e15719d5db36a5e6208949d92409a131b0498db85291d55985d78790834fd2e0"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "e15719d5db36a5e6208949d92409a131b0498db85291d55985d78790834fd2e0",
+          "output_digest": "8bfdded99f38e4913c1ec435dda2cff4861819980f329bac3e957ce8ede2cfbe"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.target",
+          "input_digest": "8bfdded99f38e4913c1ec435dda2cff4861819980f329bac3e957ce8ede2cfbe",
+          "output_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e"
+        },
+        {
+          "producer": "rocm_gfx1201.package_scheduled.backend",
+          "input_digest": "dce1f7a64e7369873ac1e2b02d28505a50a906d6ebcfaa68a1d071aa59650c1e",
+          "output_digest": "609e24b92e6451d932df041ca8a30ab21c136a93140ee674689ce5d99a13a6b0"
+        }
+      ]
+    }
+  ]
+}

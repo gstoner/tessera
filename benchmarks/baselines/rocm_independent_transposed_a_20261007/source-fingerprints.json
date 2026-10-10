@@ -1,0 +1,14 @@
+{
+  "src/compiler/programming_model/lib/PMPasses.cpp": "80d61fc3cd8b90981f9abd680810f641b1ec05da58747c42ffd7182260878d63",
+  "src/compiler/programming_model/ir/ScheduleDialect.cpp": "50ac1be4c8db5dc0c6235e6640e39d41befa46e5c85cc858ed639e6d2b29253b",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "bdbc0fdcba9f5109d016600063b54e05ecca0a50b6b240d0b6e3eb462964c7aa",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "a1ef8b977a0c37954781b6df12245cf6c27ac17e56981e88a7dbc34e9a455baf",
+  "src/transforms/lib/NativeScaledMatmulProgram.h": "e2b1ed8c9423d8edb28f359044746324f6da88f46d045f71f8e0f35e6ee4a160",
+  "python/tessera/compiler/native_scaled_program.py": "f21f04c9bbe3d29a79c1cc638861d566a9d2201524da893f2a6e72908b30e87d",
+  "python/tessera/compiler/native_vmap.py": "5ab6237ce5cf8eaec7c300977f9696e0abb7eba9f59cf229b45ea675bd4272b3",
+  "python/tessera/compiler/rocm_typed_scaled_native.py": "0475858a61ffbf47020cb92e94f98dacd4a72124cbbe7493d01f7b9e30444161",
+  "tests/unit/test_native_independent_transposed_a.py": "17e7f95f177aae10b08d8290e860ba253940c0d63eb3cafed0fbac742c8c5d96",
+  "tests/unit/test_public_independent_scaled_primal.py": "234b6e712659386a8f4b9e574b564ce05a040a307566b212a94dfb0c733b41ad",
+  "tests/device/rocm/test_public_independent_scaled_primal.py": "e14707e2954c50cc6a0cb2deee5ee8475b4d5709291c669c679aa4a67740c87e",
+  "benchmarks/rocm/record_public_independent_scaled_primal.py": "d10078a34e42a8b98ec76626138507d37599555577d7394223892c756ed171f7"
+}

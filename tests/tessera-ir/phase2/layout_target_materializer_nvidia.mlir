@@ -1,9 +1,11 @@
 // RUN: tessera-opt --tessera-nvidia-materialize-layout-casts %s \
 // RUN:   | FileCheck %s --check-prefix=NVIDIA
 // RUN: tessera-opt --tessera-nvidia-materialize-layout-casts \
-// RUN:   --tessera-tile-ir-lowering='sm=120' %s \
+// RUN:   --tessera-tile-ir-lowering='sm=90' %s \
 // RUN:   | FileCheck %s --check-prefix=TILE
 
+// This legacy tensor fixture exercises the SM90 Tile scaffold; SM120 uses
+// the separate native Schedule/Tile typed-view route.
 // NVIDIA materializes the coarse Graph layout into an operand-indexed physical
 // #tile.layout. Schedule-to-Tile consumes that structured attribute directly;
 // no NVIDIA string convention crosses the boundary.

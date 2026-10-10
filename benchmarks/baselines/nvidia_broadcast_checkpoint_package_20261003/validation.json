@@ -1,0 +1,35 @@
+{
+  "bridge_sha256": "b44a9e82793f0146bdf641c43eb7a57124d2b1c6200ea27378c6913c985979a9",
+  "checks": {
+    "compiler_plan": "passed",
+    "diff_check": "passed",
+    "generated_docs": 32,
+    "ruff": "passed"
+  },
+  "compiler_sha256": "c3350de9509f7e986d6e8889fda8c4529f94a5ed94b365a83d13cf513b6a8b8e",
+  "exact_device_tests": 101,
+  "explicit_qkv_only_cases": 2,
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "graphify": "not available in WSL",
+  "host_registry_audit_tests": 537,
+  "paired_cases": 14,
+  "physical_scalar_gate_tests": 32,
+  "production_package_support": "static rank-four f32 broadcast bias on SM120",
+  "public_selected_cases": 2,
+  "schema": "tessera.nvidia.broadcast_checkpoint_package_validation.v1",
+  "scope": "physical broadcast checked packages and private tape; full five-slice objective remains active",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_checkpoint_bias_gradient.py": "70e7375a3e22ac899a51cf91834b64a064fc053e3b74658cb96a03743e2b28fa",
+    "benchmarks/nvidia/benchmark_checkpoint_broadcast_package.py": "934940c99fdc2037bc85302c552adea5ef7e570160b00ec9d7c99fc7a1a72ba9",
+    "benchmarks/nvidia/benchmark_jit_attention_bias_vjp.py": "ae2b176c3ee2064127dbd8731a2bfbcab93136276bf27197a8dd7f3c58d0557f",
+    "python/tessera/compiler/nvidia_native.py": "9b453e8e6532ab1c6bed69134e8dd8bd2aaff55056b3bfcd281c8a6a520def38",
+    "python/tessera/compiler/pass_metadata.py": "c5ccfcf74053c5fe40f546d7d17e9b53be63f4161325c919cfb1066f7fd97c9b",
+    "python/tessera/compiler/resident_attention.py": "f862ecd9575ed89e1c44513f4735f065c16a363c47ef70fa8a17a7184c9c3e2e",
+    "python/tessera/runtime.py": "9036c21b7c92532d6867886b44e58978a918b96deaff7c1cf2320a63588b29e0",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "6dc9ba38280b4e115181c13dbd7ce4230d21da984e568dfe6c2ca1944462453d",
+    "tests/device/nvidia/test_checkpoint_broadcast.py": "fec76b916b258909b20ae8f5ef285945bc3060d024f511fcb9ed8237bdf8264c",
+    "tests/unit/test_checkpoint_broadcast_contract.py": "fef24cb83e8d855526976ee3e0bd0d904994df2538fb7dd660d83d2fb216bb54",
+    "tests/unit/test_nvidia_checkpoint_pair.py": "fadef36bbc7613007e53815c8ae7ce3ab55cea4e2c633c8743c3282e7840c64e"
+  },
+  "timestamp_utc": "2026-10-03T10:56:52.541888+00:00"
+}

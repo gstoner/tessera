@@ -25,6 +25,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "Tessera/Transforms/Passes.h"
+#include "tessera/ProgrammingModel/PMPasses.h"
 #include "Tessera/Dialect/Tile/TileDialect.h"
 #include "tessera/Dialect/Attn/AttnDialect.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
@@ -34,7 +35,10 @@
 #include "mlir/IR/Builders.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/IR/PatternMatch.h"
+#include "mlir/IR/OperationSupport.h"
+#include "mlir/IR/SymbolTable.h"
 #include "mlir/Pass/Pass.h"
+#include "mlir/Pass/PassManager.h"
 #include "mlir/Transforms/GreedyPatternRewriteDriver.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
@@ -1167,7 +1171,10 @@ struct TileIRLoweringPass
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(TileIRLoweringPass)
 
   TileIRLoweringPass() = default;
-  explicit TileIRLoweringPass(int sm) { smVersion = sm; }
+  explicit TileIRLoweringPass(int sm, bool recoverOnly = false) {
+    smVersion = sm;
+    canonicalRecoveryOnly = recoverOnly;
+  }
   TileIRLoweringPass(const TileIRLoweringPass &other)
       : PassWrapper(other) {}
 
@@ -1180,6 +1187,11 @@ struct TileIRLoweringPass
   Option<int>     smVersion{*this, "sm",
                             llvm::cl::desc("Target SM version (e.g. 90)"),
                             llvm::cl::init(90)};
+
+  Option<bool> canonicalRecoveryOnly{
+      *this, "canonical-recovery-only",
+      llvm::cl::desc("Verify/recover canonical SM120 tensor reductions into Graph IR without lowering"),
+      llvm::cl::init(false)};
 
   StringRef getArgument() const override { return "tessera-tile-ir-lowering"; }
   StringRef getDescription() const override {
@@ -1194,6 +1206,8 @@ struct TileIRLoweringPass
     registry.insert<func::FuncDialect>();
     registry.insert<tessera::tile::TesseraTileDialect>();
     registry.insert<tessera::attn::TesseraAttnDialect>();
+    createGraphToSchedulePass()->getDependentDialects(registry);
+    createScheduleToTilePass()->getDependentDialects(registry);
   }
 
   // Same last-dot-component rule the W1.3 verifier uses, for the same reason:
@@ -1259,8 +1273,220 @@ struct TileIRLoweringPass
     }
   }
 
+  // Recover a canonical tensor tiling as one semantic contraction only after
+  // the entire function is equivalent to a fresh generic tiling replay.
+  // Markers alone never authorize dropping a loop, accumulator, side effect,
+  // padding slice or epilogue. Native Schedule then owns storage lifetime and
+  // K accumulator lineage for the recovered Graph operation.
+  LogicalResult recoverCanonicalSM120Matmuls() {
+    SmallVector<func::FuncOp> functions;
+    for (auto fn : getOperation().getOps<func::FuncOp>())
+      functions.push_back(fn);
+    for (func::FuncOp fn : functions) {
+      SmallVector<Operation *> steps;
+      fn.walk([&](Operation *op) {
+        if (op->getName().getStringRef() == "tessera.matmul" &&
+            op->hasAttr("tessera.canonical_k_step"))
+          steps.push_back(op);
+      });
+      if (steps.empty())
+        continue;
+      if (failed(normalizeSM120MatmulEntryNames(getOperation())))
+        return failure();
+      if (steps.size() != 1 || fn.getNumArguments() < 2 ||
+          fn.getNumArguments() > 4 || fn.getNumResults() != 1 ||
+          fn.getBody().getBlocks().size() != 1)
+        return fn.emitError("[TILE_IR_LOWERING] canonical reduction requires "
+                            "a replay-equivalent single matmul function");
+      Operation *step = steps.front();
+      auto graph = cast<func::FuncOp>(fn->clone());
+      graph.getBody().getBlocks().clear();
+      Block *entry = graph.addEntryBlock();
+      OpBuilder builder(entry, entry->end());
+      OperationState state(fn.getLoc(), "tessera.matmul");
+      // Follow only canonical tensor storage wrappers. This identifies roles,
+      // not semantic equivalence: the complete tiling replay below still proves
+      // every slice, pad, accumulator and epilogue before mutation.
+      auto rootArgument = [&](Value value) -> BlockArgument {
+        while (Operation *producer = value.getDefiningOp()) {
+          StringRef name = producer->getName().getStringRef();
+          if (name != "tensor.extract_slice" && name != "tensor.pad" &&
+              name != "tensor.insert_slice" && name != "tensor.cast")
+            return {};
+          value = producer->getOperand(0);
+        }
+        auto argument = dyn_cast<BlockArgument>(value);
+        if (!argument || argument.getOwner() != &fn.getBody().front())
+          return {};
+        return argument;
+      };
+      BlockArgument lhsRoot = rootArgument(step->getOperand(0));
+      BlockArgument rhsRoot = rootArgument(step->getOperand(1));
+      if (!lhsRoot || !rhsRoot || lhsRoot == rhsRoot) {
+        graph->destroy();
+        return fn.emitError("[TILE_IR_LOWERING] canonical contraction input "
+                            "lineage requires distinct entry tensor arguments");
+      }
+      state.addOperands({entry->getArgument(lhsRoot.getArgNumber()),
+                         entry->getArgument(rhsRoot.getArgNumber())});
+      state.addTypes(fn.getResultTypes());
+      for (NamedAttribute attr : step->getAttrs()) {
+        StringRef name = attr.getName().strref();
+        if (name == "tessera.canonical_k_step" ||
+            name == "tessera.ragged_zero_pad" ||
+            name == "tessera.tile_m" || name == "tessera.tile_n" ||
+            name == "tessera.tile_k" || name == "bias" ||
+            name == "residual" || name == "activation")
+          continue;
+        state.addAttribute(attr.getName(), attr.getValue());
+      }
+      // Reconstruct only the standard bias/activation/residual vocabulary.
+      // Whole-function replay below proves the operands and ordering, and
+      // rejects any extra arithmetic or side effects before mutation.
+      llvm::StringSet<> epilogueRoles;
+      BlockArgument biasArgument, residualArgument;
+      for (unsigned i = 0; i < fn.getNumArguments(); ++i) {
+        if (i == lhsRoot.getArgNumber() || i == rhsRoot.getArgNumber())
+          continue;
+        auto argument = entry->getArgument(i);
+        auto ty = dyn_cast<RankedTensorType>(argument.getType());
+        if (!ty || (ty.getRank() != 1 && ty.getRank() != 2)) {
+          graph->destroy();
+          return fn.emitError("[TILE_IR_LOWERING] canonical epilogue operand "
+                              "is outside the replay contract");
+        }
+        StringRef role = ty.getRank() == 1 ? "bias" : "residual";
+        if (!epilogueRoles.insert(role).second) {
+          graph->destroy();
+          return fn.emitError("[TILE_IR_LOWERING] invalid canonical "
+                              "epilogue operand roles/order");
+        }
+        if (role == "bias") biasArgument = argument;
+        else residualArgument = argument;
+      }
+      // Operand roles follow the op contract, independent of the function ABI.
+      for (auto role : {std::pair<StringRef, BlockArgument>{"bias", biasArgument},
+                        {"residual", residualArgument}}) {
+        if (!role.second) continue;
+        state.addOperands(role.second);
+        state.addAttribute(role.first, builder.getStringAttr(role.first));
+      }
+      bool hasActivation = false;
+      for (Operation &op : fn.getBody().front()) {
+        StringRef name = op.getName().getStringRef();
+        if (name == "tessera.relu" || name == "tessera.gelu" ||
+            name == "tessera.silu") {
+          if (hasActivation) {
+            graph->destroy();
+            return fn.emitError("[TILE_IR_LOWERING] canonical epilogue "
+                                "has multiple activation sites");
+          }
+          hasActivation = true;
+          state.addAttribute("activation",
+                             builder.getStringAttr(name.drop_front(8)));
+        }
+      }
+      auto product = builder.create(state);
+      builder.create<func::ReturnOp>(fn.getLoc(), product->getResults());
+      OwningOpRef<ModuleOp> replay(ModuleOp::create(fn.getLoc()));
+      replay->getOperation()->setAttrs(getOperation()->getAttrs());
+      // Generic replay is target-neutral; the live module remains SM120.
+      replay->getOperation()->removeAttr("tessera.target");
+      replay->push_back(graph->clone());
+      auto tiling = createTilingPass();
+      std::string options;
+      for (StringRef axis : {"m", "n", "k"}) {
+        auto size = step->getAttrOfType<IntegerAttr>(
+            ("tessera.tile_" + axis).str());
+        if (!size || size.getInt() <= 0) {
+          graph->destroy();
+          return fn.emitError("[TILE_IR_LOWERING] invalid canonical tile size");
+        }
+        options += "tile-" + axis.str() + "=" +
+                   std::to_string(size.getInt()) + " ";
+      }
+      if (failed(tiling->initializeOptions(options, [&](const Twine &message) {
+            return fn.emitError(message);
+          }))) {
+        graph->destroy();
+        return failure();
+      }
+      PassManager pipeline(&getContext());
+      pipeline.addPass(std::move(tiling));
+      if (failed(pipeline.run(*replay))) {
+        graph->destroy();
+        return failure();
+      }
+      auto replayFn = *replay->getOps<func::FuncOp>().begin();
+      bool equivalent = OperationEquivalence::isEquivalentTo(
+          fn, replayFn, OperationEquivalence::Flags::IgnoreLocations);
+      if (!equivalent) {
+        graph->destroy();
+        return fn.emitError("[TILE_IR_LOWERING] canonical tensor reduction "
+                            "does not match the complete semantic tiling replay");
+      }
+      // Preserve the symbol and signature while replacing only its proved body.
+      fn.getBody().takeBody(graph.getBody());
+      graph->destroy();
+    }
+    return success();
+  }
+
   void runOnOperation() override {
     MLIRContext *ctx = &getContext();
+    if (smVersion == 120 && failed(recoverCanonicalSM120Matmuls())) {
+      signalPassFailure();
+      return;
+    }
+
+    // Production pipelines recover the whole logical contraction before
+    // Graph optimizations or scheduling can mistake an inner K-step for an
+    // independent kernel. This stage leaves Graph IR for the normal pipeline.
+    if (canonicalRecoveryOnly) {
+      if (smVersion != 120) {
+        getOperation().emitError("[TILE_IR_LOWERING] canonical recovery requires sm=120");
+        signalPassFailure();
+      }
+      return;
+    }
+
+    // The legacy SM120 entry uses the native storage, Schedule hash, typed
+    // fragments, and accumulator lineage of the canonical pipeline.
+    // Delegate retained Graph producers before legacy attention/control
+    // patterns; do not duplicate tensor-to-pointer or fragment construction.
+    // A canonical K-step belongs to its enclosing reduction and cannot be
+    // reinterpreted as an isolated matrix launch.
+    bool hasStandaloneMatmul = false;
+    if (smVersion == 120)
+      getOperation().walk([&](Operation *op) {
+        if (op->getName().getStringRef() == "tessera.matmul" &&
+            !op->hasAttr("tessera.canonical_k_step"))
+          hasStandaloneMatmul = true;
+      });
+    if (hasStandaloneMatmul) {
+      if (failed(normalizeSM120MatmulEntryNames(getOperation()))) {
+        signalPassFailure();
+        return;
+      }
+      bool hasMatmulSchedule = false;
+      getOperation().walk([&](Operation *op) {
+        hasMatmulSchedule |=
+            op->getName().getStringRef() == "schedule.matmul";
+      });
+      OpPassManager scheduled(ModuleOp::getOperationName());
+      if (!hasMatmulSchedule)
+        scheduled.addPass(createGraphToSchedulePass());
+      scheduled.addPass(createScheduleToTilePass());
+      if (failed(runPipeline(scheduled, getOperation()))) {
+        signalPassFailure();
+        return;
+      }
+      // A module consisting only of scheduled native entries is already Tile
+      // IR. Preserve its replay-verified product rather than running the
+      // unrelated legacy tensor folder over native pointer/fragment SSA.
+      if (getOperation().getOps<func::FuncOp>().empty())
+        return;
+    }
 
     // Snapshot the plain-string `layout` values per function, before rewriting.
     llvm::DenseMap<Operation *, llvm::StringSet<>> layoutsBefore;
@@ -1281,8 +1507,16 @@ struct TileIRLoweringPass
     patterns.add<LowerAttentionBackwardToLoops>(ctx);
     patterns.add<DistributeRank4FlashAttn>(ctx);
     patterns.add<LowerFlashAttnToTileIR>(ctx, tileQ, tileKV, smVersion);
-    patterns.add<LowerKReductionAddToTileMMA>(ctx, smVersion);
-    patterns.add<LowerMatmulToTileMMA>(ctx, tileQ, tileKV, smVersion);
+    // SM120 matmul is owned by the registered Graph -> Schedule -> Tile
+    // producer, which materializes pointer-backed tile.view operands and typed
+    // fragments. The legacy tensor-valued rewrite below cannot satisfy that
+    // storage/lifetime contract. Keep it for older targets whose native
+    // consumers still use tile.async_copy + tile.mma; never register it for
+    // targets whose NVIDIA lowering requires typed fragments.
+    if (smVersion < 120) {
+      patterns.add<LowerKReductionAddToTileMMA>(ctx, smVersion);
+      patterns.add<LowerMatmulToTileMMA>(ctx, tileQ, tileKV, smVersion);
+    }
     patterns.add<LowerSchedulePrefetchToTileCopy>(ctx);
     patterns.add<LowerControlToTileIR>(
         ctx, "tessera.control_for", "tile.control_for");
@@ -1319,11 +1553,18 @@ struct TileIRLoweringPass
           name == "tessera.control_for" || name == "tessera.control_if" ||
           name == "tessera.control_while" || name == "tessera.control_scan" ||
           name == "tessera_attn.backward" || name == "schedule.prefetch") {
-        op->emitError() << "[TILE_IR_LOWERING] '" << name
-                        << "' was not lowered to FA-4 Tile IR for sm_"
-                        << static_cast<int>(smVersion)
-                        << " (unsupported operands/shape); refusing to report a "
-                           "partially-lowered module as success";
+        if (smVersion >= 120 && name == "tessera.matmul") {
+          op->emitError() << "[TILE_IR_LOWERING] SM120 matmul must enter the "
+                             "registered Graph-to-Schedule-to-Tile pipeline; "
+                             "the legacy tensor-valued Tile MMA producer is "
+                             "not a native route";
+        } else {
+          op->emitError() << "[TILE_IR_LOWERING] '" << name
+                          << "' was not lowered to FA-4 Tile IR for sm_"
+                          << static_cast<int>(smVersion)
+                          << " (unsupported operands/shape); refusing to report a "
+                             "partially-lowered module as success";
+        }
         return WalkResult::interrupt();
       }
       return WalkResult::advance();
@@ -1335,8 +1576,8 @@ struct TileIRLoweringPass
 
 } // namespace
 
-std::unique_ptr<mlir::Pass> createTileIRLoweringPass(int sm) {
-  return std::make_unique<TileIRLoweringPass>(sm);
+std::unique_ptr<mlir::Pass> createTileIRLoweringPass(int sm, bool canonicalRecoveryOnly) {
+  return std::make_unique<TileIRLoweringPass>(sm, canonicalRecoveryOnly);
 }
 
 } // namespace tessera

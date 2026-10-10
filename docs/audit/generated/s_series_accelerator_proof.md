@@ -5,17 +5,17 @@
 
 Execution-centric lens over the standalone-compiler primitive registry: given the one accelerator this repo can actually prove on — **Apple Silicon GPU (Metal)** — where does each primitive stand? *Accelerator-proven* means a `@jit(target="apple_gpu")` call runs it with `execution_mode == "metal_runtime"` and a numerically-validated result. NVIDIA/ROCm execution is hardware-gated (Phase G/H) and out of scope for this map.
 
-**200/521 primitives are accelerator-proven on Apple GPU today.** Of the 355 accelerator-relevant primitives (proven + eligible + special), **141 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
+**200/524 primitives are accelerator-proven on Apple GPU today.** Of the 357 accelerator-relevant primitives (proven + eligible + special), **143 are *eligible*** — FLOP-bearing numeric ops that a Metal kernel would accelerate but which aren't routed through the envelope yet. That is the actionable accelerator-proof gap; the rest are host-only or hardware-blocked by design.
 
 ## Classes
 
 | Class | Count | Meaning |
 |-------|------:|---------|
 | `proven` | 200 | executes on Apple GPU today (`metal_runtime`) |
-| `eligible` | 141 | numeric — route-able to a Metal kernel (the actionable gap) |
+| `eligible` | 143 | numeric — route-able to a Metal kernel (the actionable gap) |
 | `special` | 14 | needs a dedicated Apple-GPU kernel class (device RNG) |
 | `multi_device` | 10 | needs real multi-accelerator hardware (NVIDIA/AMD) |
-| `host` | 156 | structural / orchestration / shape — accelerator not-applicable |
+| `host` | 157 | structural / orchestration / shape — accelerator not-applicable |
 
 ## By category
 
@@ -40,13 +40,13 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `geometric_algebra` | 17 | 16 | 1 | `eligible` |
 | `grad_transform` | 7 | 0 | 7 | `eligible` |
 | `indexing` | 15 | 5 | 0 | `host` |
-| `layout_transform` | 18 | 1 | 0 | `host` |
+| `layout_transform` | 19 | 1 | 0 | `host` |
 | `linalg_decomposition` | 5 | 1 | 0 | `host` |
 | `linalg_function` | 5 | 0 | 0 | `host` |
 | `linalg_multilinear` | 2 | 0 | 0 | `host` |
 | `linalg_solver` | 3 | 1 | 0 | `host` |
 | `logical` | 8 | 8 | 0 | `eligible` |
-| `loop_nest` | 12 | 6 | 6 | `eligible` |
+| `loop_nest` | 13 | 6 | 7 | `eligible` |
 | `loss` | 29 | 20 | 9 | `eligible` |
 | `memory` | 3 | 0 | 3 | `eligible` |
 | `model_layer` | 4 | 1 | 3 | `eligible` |
@@ -60,7 +60,7 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `position_encoding` | 3 | 0 | 3 | `eligible` |
 | `projection` | 1 | 1 | 0 | `eligible` |
 | `quantization` | 8 | 0 | 8 | `eligible` |
-| `quantize` | 8 | 0 | 8 | `eligible` |
+| `quantize` | 9 | 0 | 9 | `eligible` |
 | `random_mask` | 1 | 0 | 1 | `eligible` |
 | `random_source` | 4 | 0 | 0 | `special` |
 | `recurrent` | 3 | 0 | 3 | `eligible` |
@@ -85,12 +85,12 @@ Execution-centric lens over the standalone-compiler primitive registry: given th
 | `transform` | 11 | 0 | 0 | `host` |
 | `vision` | 4 | 0 | 0 | `host` |
 
-## Eligible worklist (141) — the accelerator-proof gap
+## Eligible worklist (143) — the accelerator-proof gap
 
 FLOP-bearing numeric primitives with no Apple GPU envelope route yet. Routing a category here (an MPSGraph/MSL kernel + envelope entry + dispatcher + a `metal_runtime` test) flips its primitives to `proven`.
 
 <details><summary>names</summary>
 
-  `adadelta`, `adafactor`, `adagrad`, `adaptive_pool`, `add_decoupled_weight_decay`, `alibi`, `attn_with_stats`, `avg_pool`, `bidirectional_scan`, `cache_commit`, `cache_rollback`, `calibration_observer`, `centralize_grad`, `check_cauchy_riemann`, `cispo_policy_loss`, `clifford_integral`, `clip_grad_norm`, `clip_grad_value`, `complex_abs`, `complex_arg`, `complex_conjugate`, `complex_div`, `complex_exp`, `complex_log`, `complex_mul`, `complex_pow`, `complex_sqrt`, `conformal_energy_on_sphere`, `conformal_jacobian`, `contrastive_loss`, `conv1d`, `conv3d`, `conv_transpose`, `cosine_embedding_loss`, `cross_attention`, `cross_ratio`, `ctc_loss`, `dbar`, `depth_attn`, `depthwise_conv1d`, `dequant_grouped_gemm`, `dequant_matmul`, `dequantize_fp4`, `dequantize_fp6`, `dequantize_fp8`, `dequantize_int4`, `dequantize_int8`, `dequantize_nvfp4`, `digamma`, `dropout`, `dz`, `ebm_bivector_langevin_sample`, `ebm_bivector_langevin_step`, `ebm_decode_init`, `ebm_energy`, `ebm_langevin_step`, `ebm_langevin_step_philox`, `ebm_partition_ais`, `ebm_partition_exact`, `ebm_partition_monte_carlo`, `ebm_sphere_langevin_sample`, `ebm_sphere_langevin_step`, `einsum`, `ema_update`, `entmax15`, `es_low_rank_correction`, `factorized_matmul`, `factorized_pos_emb`, `fake_quantize`, `focal_loss`, `fused_epilogue`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `game_subset_mobius`, `game_subset_zeta`, `game_superset_mobius`, `game_superset_zeta`, `grad_scaler_step`, `grpo_policy_loss`, `gru_cell`, `gumbel_softmax`, `info_nce_loss`, `is_concyclic`, `kv_cache_append`, `kv_cache_prune`, `kv_cache_read`, `lamb`, `laplacian_2d`, `latent_kv_compress`, `latent_kv_expand_k`, `latent_kv_expand_v`, `lgamma`, `lora_linear`, `max_pool`, `memory_evict`, `memory_read`, `memory_write`, `midpoint_sgd`, `min_pool`, `mobius`, `mobius_from_three_points`, `moe_combine`, `moe_dispatch`, `mrope_2d`, `muon`, `nesterov`, `normalize_group_advantages`, `nt_xent_loss`, `ntk_rope`, `online_softmax`, `online_softmax_state`, `optax_style_chain`, `perceiver_resampler`, `perturbed_argmax`, `polyak_avg`, `ppo_policy_loss`, `quantize_fp4`, `quantize_fp6`, `quantize_fp8`, `quantize_int4`, `quantize_int8`, `quantize_nvfp4`, `rmsprop`, `segment_reduce`, `seq2seq_loss`, `shampoo`, `simple_rnn_cell`, `soft_top_k`, `softmax_finalize`, `softmax_merge`, `sparsemax`, `spectral_norm`, `stereographic`, `training.loss_adamw`, `training.loss_sgd`, `tridiagonal_solve`, `triplet_loss`, `wasserstein_distance`
+  `adadelta`, `adafactor`, `adagrad`, `adaptive_pool`, `add_decoupled_weight_decay`, `alibi`, `attn_with_stats`, `avg_pool`, `bidirectional_scan`, `cache_commit`, `cache_rollback`, `calibration_observer`, `centralize_grad`, `check_cauchy_riemann`, `cispo_policy_loss`, `clifford_integral`, `clip_grad_norm`, `clip_grad_value`, `complex_abs`, `complex_arg`, `complex_conjugate`, `complex_div`, `complex_exp`, `complex_log`, `complex_mul`, `complex_pow`, `complex_sqrt`, `conformal_energy_on_sphere`, `conformal_jacobian`, `contrastive_loss`, `conv1d`, `conv3d`, `conv_transpose`, `cosine_embedding_loss`, `cross_attention`, `cross_ratio`, `ctc_loss`, `dbar`, `depth_attn`, `depthwise_conv1d`, `dequant_grouped_gemm`, `dequant_matmul`, `dequantize_fp4`, `dequantize_fp6`, `dequantize_fp8`, `dequantize_int4`, `dequantize_int8`, `dequantize_nvfp4`, `digamma`, `dropout`, `dz`, `ebm_bivector_langevin_sample`, `ebm_bivector_langevin_step`, `ebm_decode_init`, `ebm_energy`, `ebm_langevin_step`, `ebm_langevin_step_philox`, `ebm_partition_ais`, `ebm_partition_exact`, `ebm_partition_monte_carlo`, `ebm_sphere_langevin_sample`, `ebm_sphere_langevin_step`, `einsum`, `ema_update`, `entmax15`, `es_low_rank_correction`, `factorized_matmul`, `factorized_pos_emb`, `fake_quantize`, `focal_loss`, `fused_epilogue`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `game_subset_mobius`, `game_subset_zeta`, `game_superset_mobius`, `game_superset_zeta`, `grad_scaler_step`, `grpo_policy_loss`, `gru_cell`, `gumbel_softmax`, `info_nce_loss`, `is_concyclic`, `kv_cache_append`, `kv_cache_prune`, `kv_cache_read`, `lamb`, `laplacian_2d`, `latent_kv_compress`, `latent_kv_expand_k`, `latent_kv_expand_v`, `lgamma`, `lora_linear`, `max_pool`, `memory_evict`, `memory_read`, `memory_write`, `midpoint_sgd`, `min_pool`, `mobius`, `mobius_from_three_points`, `moe_combine`, `moe_dispatch`, `mrope_2d`, `muon`, `nesterov`, `normalize_group_advantages`, `nt_xent_loss`, `ntk_rope`, `nvfp4_requantize`, `online_softmax`, `online_softmax_state`, `optax_style_chain`, `perceiver_resampler`, `perturbed_argmax`, `polyak_avg`, `ppo_policy_loss`, `quantize_fp4`, `quantize_fp6`, `quantize_fp8`, `quantize_int4`, `quantize_int8`, `quantize_nvfp4`, `rmsprop`, `scaled_matmul`, `segment_reduce`, `seq2seq_loss`, `shampoo`, `simple_rnn_cell`, `soft_top_k`, `softmax_finalize`, `softmax_merge`, `sparsemax`, `spectral_norm`, `stereographic`, `training.loss_adamw`, `training.loss_sgd`, `tridiagonal_solve`, `triplet_loss`, `wasserstein_distance`
 
 </details>

@@ -1,0 +1,16 @@
+{
+  "__version__": [
+    23,
+    1,
+    1
+  ],
+  "elapsed": 0.11949753761291504,
+  "tests": [
+    {
+      "code": "PASS",
+      "elapsed": 0.03689169883728027,
+      "name": "tessera-rocm :: rocm/gfx1201_tile_fragment_batch_offset.mlir",
+      "output": "Exit Code: 0\n\nCommand Output (stdout):\n--\n# RUN: at line 2\n/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt --allow-unregistered-dialect --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1201})' /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir | FileCheck /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir\n# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt --allow-unregistered-dialect '--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1201})' /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir\n# executed command: FileCheck /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir\n# RUN: at line 3\n/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt --allow-unregistered-dialect --pass-pipeline='builtin.module(lower-tile-to-rocm{arch=gfx1201},lower-tessera-target-to-rocdl)' /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir | FileCheck /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir --check-prefix=ROCDL\n# executed command: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt --allow-unregistered-dialect '--pass-pipeline=builtin.module(lower-tile-to-rocm{arch=gfx1201},lower-tessera-target-to-rocdl)' /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir\n# executed command: FileCheck /home/angstorms/scratch/next-five-compiler-slices/src/compiler/codegen/Tessera_ROCM_Backend/test/rocm/gfx1201_tile_fragment_batch_offset.mlir --check-prefix=ROCDL\n\n--\n"
+    }
+  ]
+}

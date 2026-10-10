@@ -19,6 +19,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "NativeStorageJVP.h"
+#include "NativeScaledMatmulProgram.h"
 #include "llvm/Support/JSON.h"
 
 namespace tessera {
@@ -516,6 +517,12 @@ class AutodiffForwardPass
   mlir::Pass::Option<bool> exportHVP{*this, "export-hvp", llvm::cl::desc("Export the exact native HVP product and its typed ABI"), llvm::cl::init(false)};
   mlir::Pass::Option<bool> exportAttentionJVP{*this, "export-attention-jvp",
       llvm::cl::desc("Export a verified isolated attention JVP physical binding contract"), llvm::cl::init(false)};
+  mlir::Pass::Option<int64_t> selectScaledMember{*this, "select-scaled-member",
+      llvm::cl::desc("Project an outlined scaled JVP member with its complete native program witness"), llvm::cl::init(-1)};
+  mlir::Pass::Option<bool> exportScaledPrimal{*this, "export-scaled-primal",
+      llvm::cl::desc("Outline an original scaled-product primal SSA program and buffer lifetimes"), llvm::cl::init(false)};
+  mlir::Pass::Option<bool> exportScaledProgram{*this, "export-scaled-program",
+      llvm::cl::desc("Outline the native scaled-product paired SSA program and buffer lifetimes"), llvm::cl::init(false)};
   mlir::Pass::Option<bool> emitStorageChild{*this, "emit-storage-child",
       llvm::cl::desc("Materialize a bounded native child from the paired SSA program"), llvm::cl::init(false)};
 
@@ -543,6 +550,27 @@ class AutodiffForwardPass
         forwards.push_back(func);
     });
 
+    if (selectScaledMember < -1 || (selectScaledMember >= 0 && !exportScaledProgram && !exportScaledPrimal)) {
+      module.emitError("scaled JVP member selection requires native program export");
+      return signalPassFailure();
+    }
+    if (exportScaledPrimal) {
+      if (!forwards.empty() || exportScaledProgram || emitStorageChild ||
+          exportHVP || exportAttentionJVP) {
+        module.emitError("scaled primal export conflicts with differentiation requests or exports");
+        return signalPassFailure();
+      }
+      if (mlir::failed(emitNativeScaledMatmulProgram(module, true)) ||
+          (selectScaledMember >= 0 &&
+           mlir::failed(projectNativeScaledMatmulMember(module, selectScaledMember))))
+        signalPassFailure();
+      return;
+    }
+    if (exportScaledProgram &&
+        (forwards.size() != 1 || emitStorageChild || exportHVP || exportAttentionJVP)) {
+      module.emitError("scaled JVP program export requires one request and no other export mode");
+      return signalPassFailure();
+    }
     if (emitStorageChild && forwards.size() != 1) {
       module.emitError("native storage JVP requires exactly one forward request to generate its child");
       return signalPassFailure();
@@ -555,14 +583,25 @@ class AutodiffForwardPass
         return signalPassFailure();
       }
       auto fn=forwards.front();
-      if (!fn.getBody().hasOneBlock() || fn.getNumArguments()!=3 || fn.getNumResults()!=1 ||
+      if (!fn.getBody().hasOneBlock() || (fn.getNumArguments()!=3 && fn.getNumArguments()!=4) || fn.getNumResults()!=1 ||
           fn.getBody().front().getOperations().size()!=2) {
         fn.emitError("attention JVP export requires one direct attention operation");
         return signalPassFailure();
       }
       auto &op=fn.getBody().front().front();
-      if (op.getName().getStringRef()!="tessera.flash_attn" || op.getNumOperands()!=3 ||
-          op.getOperands()!=fn.getArguments() ||
+      bool directRoles=true;
+      bool seenRoles[4]={false,false,false,false};
+      for (auto operand:op.getOperands()) {
+        auto arg=mlir::dyn_cast<mlir::BlockArgument>(operand);
+        if (!arg || arg.getOwner()!=&fn.getBody().front() ||
+            arg.getArgNumber()>=fn.getNumArguments() || seenRoles[arg.getArgNumber()]) {
+          directRoles=false;
+          break;
+        }
+        seenRoles[arg.getArgNumber()]=true;
+      }
+      if (op.getName().getStringRef()!="tessera.flash_attn" || op.getNumOperands()!=fn.getNumArguments() ||
+          !directRoles ||
           fn.getBody().front().getTerminator()->getOperands()!=op.getResults()) {
         fn.emitError("attention JVP export requires direct Q/K/V and return bindings");
         return signalPassFailure();
@@ -658,6 +697,20 @@ class AutodiffForwardPass
                                              resultTypes);
       auto jvp = mlir::func::FuncOp::create(forward.getLoc(), jvpName, jvpType);
       jvp.setPrivate();
+      // Primal argument contracts survive differentiation. Tangent arguments
+      // share storage/layout/sharding, but are not model-parameter declarations.
+      for (unsigned index = 0; index < forward.getNumArguments(); ++index) {
+        auto attrs = forward.getArgAttrDict(index);
+        if (attrs && !attrs.empty()) jvp.setArgAttrs(index, attrs);
+      }
+      for (auto [position, index] : llvm::enumerate(wrtIndices)) {
+        llvm::SmallVector<mlir::NamedAttribute> attrs;
+        for (auto name : {"tessera.layout", "tessera.shard", "tessera.dim_names"})
+          if (auto value = forward.getArgAttr(index, name))
+            attrs.emplace_back(mlir::StringAttr::get(&getContext(), name), value);
+        if (!attrs.empty())
+          jvp.setArgAttrs(forward.getNumArguments() + position, attrs);
+      }
       jvp->setAttr("tessera.autodiff.role",
                    mlir::StringAttr::get(&getContext(), "jvp"));
       jvp->setAttr("tessera.autodiff.forward",
@@ -823,8 +876,60 @@ class AutodiffForwardPass
       module.walk([&](mlir::Operation *op) {
         if (op->getName().getStringRef()=="tessera_attn.checkpoint_jvp") products.push_back(op);
       });
+      // The general TangentInterface keeps a V-only derivative linear:
+      // checkpoint_forward(Q, K, dV). For a resident saved-LSE export, bind
+      // that product to the primal generation instead of recomputing LSE.
+      if (products.empty()) {
+        llvm::SmallVector<mlir::Operation *> values;
+        module.walk([&](mlir::Operation *candidate) {
+          auto fn=candidate->getParentOfType<mlir::func::FuncOp>();
+          auto role=fn ? fn->getAttrOfType<mlir::StringAttr>("tessera.autodiff.role") : mlir::StringAttr();
+          if (candidate->getName().getStringRef()=="tessera_attn.checkpoint_forward" &&
+              role && role.getValue()=="jvp") values.push_back(candidate);
+        });
+        if (values.size()==1) {
+          auto *value=values.front();
+          auto fn=value->getParentOfType<mlir::func::FuncOp>();
+          mlir::Operation *primal=nullptr;
+          for (auto &body:fn.getBody().front())
+            if (body.getName().getStringRef()=="tessera.flash_attn") primal=&body;
+          if (!primal || (value->getNumOperands()!=3 && value->getNumOperands()!=4) ||
+              value->getNumOperands()!=primal->getNumOperands() ||
+              (value->getNumOperands()==4 && value->getOperand(3)!=primal->getOperand(3)) ||
+              value->getNumResults()!=2 ||
+              !value->getResult(1).use_empty() ||
+              value->getOperand(0)!=primal->getOperand(0) ||
+              value->getOperand(1)!=primal->getOperand(1) ||
+              !mlir::isa<mlir::BlockArgument>(value->getOperand(2))) {
+            value->emitError("attention value JVP export lost its linear argument roles");
+            return signalPassFailure();
+          }
+          mlir::OpBuilder builder(value);
+          mlir::OperationState forward(value->getLoc(),"tessera_attn.checkpoint_forward");
+          forward.addOperands(primal->getOperands());
+          forward.addTypes(value->getResultTypes());
+          forward.addAttributes(value->getAttrs());
+          auto *saved=builder.create(forward);
+          mlir::OperationState tangent(value->getLoc(),"tessera_attn.checkpoint_jvp");
+          tangent.addOperands(primal->getOperands().take_front(3));
+          tangent.addOperands(saved->getResults());
+          for (auto input:primal->getOperands().take_front(2))
+            tangent.addOperands(buildStaticZero(builder,value->getLoc(),input.getType()));
+          tangent.addOperands(value->getOperand(2));
+          if (primal->getNumOperands()==4) {
+            tangent.addOperands(primal->getOperand(3));
+            tangent.addOperands(buildStaticZero(builder,value->getLoc(),primal->getOperand(3).getType()));
+          }
+          tangent.addTypes(value->getResult(0).getType());
+          tangent.addAttributes(value->getAttrs());
+          auto *product=builder.create(tangent);
+          value->getResult(0).replaceAllUsesWith(product->getResult(0));
+          value->erase();
+          products.push_back(product);
+        }
+      }
       if (products.size()!=1) {
-        module.emitError("attention JVP export requires an active Q or K product");
+        module.emitError("attention JVP export requires one paired Q/K/V product");
         return signalPassFailure();
       }
       auto *op=products.front();
@@ -834,14 +939,31 @@ class AutodiffForwardPass
       llvm::json::Array dims;
       for (auto d : {q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),q.getDimSize(2),k.getDimSize(2),q.getDimSize(3),v.getDimSize(3)}) dims.push_back(d);
       llvm::json::Array active;
-      for (auto tangent : op->getOperands().drop_front(5))
+      for (auto tangent : op->getOperands().slice(5,3))
         active.push_back(mlir::isa<mlir::BlockArgument>(tangent));
+      const bool bias=op->getNumOperands()==10;
+      if (bias) active.push_back(mlir::isa<mlir::BlockArgument>(op->getOperand(9)));
       llvm::json::Object contract{{"schema",1},{"dims",std::move(dims)},
         {"active",std::move(active)},
         {"scale",op->getAttrOfType<mlir::FloatAttr>("scale").getValueAsDouble()},
         {"causal",op->getAttrOfType<mlir::BoolAttr>("causal").getValue()}};
+      if (bias) {
+        contract["schema"]=2;
+        llvm::json::Array shape;
+        for (auto dim:mlir::cast<mlir::RankedTensorType>(op->getOperand(8).getType()).getShape()) shape.push_back(dim);
+        contract["bias_shape"]=std::move(shape);
+      }
       std::string text; llvm::raw_string_ostream os(text); os<<llvm::json::Value(std::move(contract)); os.flush();
       module->setAttr("tessera.autodiff.attention_jvp_contract",mlir::StringAttr::get(&getContext(),text));
+    }
+    if (exportScaledProgram && mlir::failed(emitNativeScaledMatmulProgram(module))) {
+      signalPassFailure();
+      return;
+    }
+    if (selectScaledMember >= 0 &&
+        mlir::failed(projectNativeScaledMatmulMember(module, selectScaledMember))) {
+      signalPassFailure();
+      return;
     }
     if (emitStorageChild && mlir::failed(emitNativeStorageJVP(module)))
       signalPassFailure();

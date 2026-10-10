@@ -49,7 +49,7 @@ static Value cst(OpBuilder &b, Location loc, Type f32, float v) {
   return b.create<arith::ConstantOp>(loc, f32, b.getF32FloatAttr(v));
 }
 
-void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
+void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy, Type outTy,
                    Un un) {
   Type f32 = b.getF32Type();
   bool isF32 = storeTy.isF32();
@@ -290,7 +290,7 @@ void emitUnaryBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
     y = b.create<math::TruncOp>(loc, x);
     break;
   }
-  Value sv = isF32 ? y : b.create<arith::TruncFOp>(loc, storeTy, y);
+  Value sv = outTy.isF32() ? y : b.create<arith::TruncFOp>(loc, outTy, y);
   b.create<memref::StoreOp>(loc, sv, O, ValueRange{gid});
 
   b.setInsertionPointToEnd(&f.getBody().front());
@@ -394,13 +394,22 @@ struct GenerateROCMUnaryKernelPass
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type idxTy = b.getIndexType();
+      Type outTy = storeTy;
+      if (auto output = op->getAttrOfType<StringAttr>("output_dtype")) {
+        if (output.getValue() != "f32") {
+          op->emitError("mixed ROCm math output_dtype currently requires f32");
+          return signalPassFailure();
+        }
+        outTy = b.getF32Type();
+      }
+      auto outMemTy = MemRefType::get({ShapedType::kDynamic}, outTy);
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
       // (X, O : memref<?xstore>, N : index)
-      auto fnTy = b.getFunctionType({memTy, memTy, idxTy}, {});
+      auto fnTy = b.getFunctionType({memTy, outMemTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitUnaryBody(body, loc, gpuFunc, storeTy, un);
+      emitUnaryBody(body, loc, gpuFunc, storeTy, outTy, un);
       op->erase();
     }
   }

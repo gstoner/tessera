@@ -1,0 +1,4 @@
+tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir:24:10: error: E2E-REAL-2 Graph->Schedule requires static rank-2 x86 f32/bf16->f32, ROCm f16->f32, NVIDIA f16/bf16->f32 or signed int4->i32, or Apple-GPU f32->f32 matmul with no transpose
+    %y = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
+         ^
+tests/tessera-ir/phase_f4/autodiff_forward_scaled_matmul.mlir:24:10: note: see current operation: %0 = "tessera.scaled_matmul"(%arg0, %arg1, %arg2, %arg3) <{numeric_policy = {accum = "fp32", execution_mode = "exact_per_block"}, scale_layout = {block = [1, 32], format = "e8m0", granularity = "block"}, transposeA = true, transposeB = true}> : (tensor<32x16xf8E4M3FN>, tensor<16x32xf8E4M3FN>, tensor<16x1xi8>, tensor<1x16xi8>) -> tensor<16x16xf32>

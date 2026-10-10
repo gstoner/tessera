@@ -1,0 +1,578 @@
+{
+  "compiler_sha256": "a08f60eb362c492b04f87cfabad73e383488831a048b2e6049f14f6967b16e7f",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "production_package_support": "static unfused SM120 fp16/BF16 with fp32 output",
+  "rows": [
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "checked_host_median_ms": 0.359535,
+      "checked_host_samples_ms": [
+        0.660279,
+        0.341704,
+        0.359535
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "eb7450ba0c640a06e00bfce2488b96e2849f5049aa28eb809a4fbad8a73fa83b",
+      "image_sha256": "f0334f97a138334e9b4a31fb53c1d088f4709fa11b97a26a98471fa8354be689",
+      "max_abs_error": 5.960464477539063e-08,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.009262400679290295,
+      "resident_dispatch_window_samples_ms": [
+        0.009052479639649391,
+        0.009262400679290295,
+        0.009615680202841759
+      ],
+      "schedule_digest": "a2b8fa5d02421545c380915e4d8ac958dd833fc1b44c685a8be30fd22cf8d423",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "tile_sha256": "b51ee8bc80ad72d7c9126a76e753ae8562310bd21f76194c94d6f5b74aedeec0"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+      "checked_host_median_ms": 0.526047,
+      "checked_host_samples_ms": [
+        0.526047,
+        0.580487,
+        0.343735
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "a446d68cf801ed9fe6121f3b7dcecb2db20c77ad721b09b84ba21fcc84d5cec7",
+      "image_sha256": "020b3595334c5d5d699f9fd2db1e5d03445755621d65fdb2f70c16bb3bb1e441",
+      "max_abs_error": 5.960464477539063e-08,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.010753920301795006,
+      "resident_dispatch_window_samples_ms": [
+        0.010753920301795006,
+        0.010764160193502903,
+        0.010450559668242931
+      ],
+      "schedule_digest": "00f569b0e16467fc2e0c10144c3aa104dbf46c5ba010f434d0eed421c7aaa8c9",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "tile_sha256": "0b7d5dfc38ffdb728c53fbec8c28a2e8c14c360227144cb72423910111d9a5c0"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "checked_host_median_ms": 0.408965,
+      "checked_host_samples_ms": [
+        0.408965,
+        0.356784,
+        0.427846
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "4f8504cf40065ed24dc5840179987a67846aaa0428cd8964370e1cfcd0ecb3e1",
+      "image_sha256": "44ced8d33104e04dee6c5ba1a0bd7c7d30113d566aef5d49503c1708195e8b04",
+      "max_abs_error": 1.7881393432617188e-07,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.01470911968499422,
+      "resident_dispatch_window_samples_ms": [
+        0.021507197991013527,
+        0.01416672021150589,
+        0.01470911968499422
+      ],
+      "schedule_digest": "0dadf840dac9c26d496c24f43b3dbc2f6052c1fb6495b1153200550a4db1e367",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "tile_sha256": "9f67ef5a9caeea945e782afaf61a73b5ce27737220b8883c78698553c68619ab"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+      "checked_host_median_ms": 0.325724,
+      "checked_host_samples_ms": [
+        0.576837,
+        0.314814,
+        0.325724
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "baf421aff5ff93a66f4a590d069a4af141258679c71cc1ce62bbd85a59733517",
+      "image_sha256": "7d81d83e13256508db54216add7a46352d0c13a8cb1eaca0d69cb05d13c23003",
+      "max_abs_error": 1.7881393432617188e-07,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.010618560016155243,
+      "resident_dispatch_window_samples_ms": [
+        0.015792319551110268,
+        0.008775999769568443,
+        0.010618560016155243
+      ],
+      "schedule_digest": "c2370ef556dfdc31ebee1b2fad73fb494876e305e392f901500ce344186dc676",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "tile_sha256": "ca67ad564abd41199877252e4dee5fd41b887c3ad48dd05ae5dd90fb34fe1cad"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "checked_host_median_ms": 0.326835,
+      "checked_host_samples_ms": [
+        0.420675,
+        0.313574,
+        0.326835
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "4307b9cd4c3e7050a38eb8c6407a7b58791b3c64d9902bb9e363a7a4c35f82db",
+      "image_sha256": "9c7807d5cde003172e26cd67c389fa2d1b39d82ca70ec6d69050c9f5c6d1a360",
+      "max_abs_error": 1.6689300537109375e-06,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.01004799921065569,
+      "resident_dispatch_window_samples_ms": [
+        0.009332159534096718,
+        0.01004799921065569,
+        0.01051327958703041
+      ],
+      "schedule_digest": "0f8574675b89b70aebd18d84133be243755feca00f29e07b7c0290cbf659720d",
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "tile_sha256": "6a21e8437a0222b0392adf3ff69fd6a2082cf46da2e6c6c1f996cb5598537e59"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+      "checked_host_median_ms": 0.378515,
+      "checked_host_samples_ms": [
+        0.558997,
+        0.378515,
+        0.301684
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "90af0f909ae54c64f25624144016c144c9df54e0e2ba60590a8cbd415c15e43a",
+      "image_sha256": "b0501c01a17bcd009ca48cf1b5369b25bc33e343e1abc39578a1d6713b7c9f41",
+      "max_abs_error": 1.6689300537109375e-06,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.008351359516382217,
+      "resident_dispatch_window_samples_ms": [
+        0.008351359516382217,
+        0.0073472000658512115,
+        0.008842560462653637
+      ],
+      "schedule_digest": "7705d95f714ed4187115d1fc921ccf73adb3f168a5596a6734e5933374accb06",
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "tile_sha256": "450101044aeca3088d5554d38c626cab4e18fe1b1672273b04311b31331fb49d"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "checked_host_median_ms": 0.479566,
+      "checked_host_samples_ms": [
+        0.608417,
+        0.439336,
+        0.479566
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "44ee12fbf4278b872a1dea01e399f2b2414c391dec4fe64ff82f2bd9f813085c",
+      "image_sha256": "e1fbbae7d36989ce276a5bd412dc06f9e6e527004067912bc5705f57bd8f7dab",
+      "max_abs_error": 7.62939453125e-06,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.011780159547924995,
+      "resident_dispatch_window_samples_ms": [
+        0.01248255930840969,
+        0.011776640079915524,
+        0.011780159547924995
+      ],
+      "schedule_digest": "35e107f0b4e511c4ecfcbffe1b866a1c0a4a77ea745d21ba6d3d0caa61d43488",
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "tile_sha256": "598d94e3f1f7587411a899c07b84dc6c9681ab99c176d4822b6c255232fa3893"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+      "checked_host_median_ms": 0.488777,
+      "checked_host_samples_ms": [
+        0.668969,
+        0.453605,
+        0.488777
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "b448569631a6807321f325646c20ec6a9e514de0b1b77eba3b5c8a969b2e24a8",
+      "image_sha256": "18564ba6f0d0deaf9259b0708c0eaf3adbf1abdd7a84fd457fa0bdaeb06a4dfc",
+      "max_abs_error": 7.62939453125e-06,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.011119360104203224,
+      "resident_dispatch_window_samples_ms": [
+        0.011268800124526024,
+        0.010868480429053307,
+        0.011119360104203224
+      ],
+      "schedule_digest": "7c1124d2d8b17d655b9c31bf0d8fc527c20ba7b4e9547f4313d08702f4f90dda",
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "tile_sha256": "d9e97e4aef77217a4adba9a73e3bd04f44815e6f8f7443918587b729272371bb"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "checked_host_median_ms": 0.499966,
+      "checked_host_samples_ms": [
+        0.8004,
+        0.493057,
+        0.499966
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_macro_cta_32x32_mn",
+      "graph_sha256": "d77805f585f34628c7009d8cf1f7d159ad5521712f158e5999ca2409e2b94d24",
+      "image_sha256": "93d88b3d87beab56d35a32f76bc8286d59a28641964088b72030ba5851db1570",
+      "max_abs_error": 9.059906005859375e-06,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.016494400799274445,
+      "resident_dispatch_window_samples_ms": [
+        0.016551680862903595,
+        0.016436800360679626,
+        0.016494400799274445
+      ],
+      "schedule_digest": "498ecad12df54b1dbee55536d88d8c5041d17ae03c4b2afed16fa082d19be747",
+      "shape_mkn": [
+        256,
+        1024,
+        128
+      ],
+      "tile_sha256": "6c6d1c278b05990f9cbff2596a2cd2b6b19fb66f173484f720f890287dce0f10"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1",
+      "checked_host_median_ms": 0.458246,
+      "checked_host_samples_ms": [
+        0.673828,
+        0.458246,
+        0.439956
+      ],
+      "dtype": "fp16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "d200c99ecfefc9ca103dc5c07e5628404d99b1e493b38d6250f622592c5dcbb5",
+      "image_sha256": "d186fa8620113f2262ebde65e2aa21b4f94d17cd5949181b9f0a9b27da412902",
+      "max_abs_error": 9.059906005859375e-06,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.014536000788211823,
+      "resident_dispatch_window_samples_ms": [
+        0.014536000788211823,
+        0.014486720785498619,
+        0.015086719766259193
+      ],
+      "schedule_digest": "ae78ccc3db2e5927843a32f50325dfe3ceb2df8ca2e941d7faa3d2328697a85d",
+      "shape_mkn": [
+        256,
+        1024,
+        128
+      ],
+      "tile_sha256": "57220fa316675cdd2a08743c9bf8be9d822c95ae27de08cbad02f743f73615fa"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.311864,
+      "checked_host_samples_ms": [
+        0.545537,
+        0.311864,
+        0.295344
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "42a889193f593a5b5d04ed9b8fc6e96c32f678d6aa5309853957dc57ed12c874",
+      "image_sha256": "824f12a48aa573692a3a8b9ae3deadfbf8478489f9ee1d760fd5191c691f2a32",
+      "max_abs_error": 2.9802322387695312e-08,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.009009920060634613,
+      "resident_dispatch_window_samples_ms": [
+        0.009009920060634613,
+        0.009241919964551926,
+        0.007960320450365543
+      ],
+      "schedule_digest": "1b1ce0bb0e4208413159a1abf43a9a1bccc6b17a2468f158ca2a2df3a320693e",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "tile_sha256": "1b1d48db62b91ac8a22f7284a1d67c3fb1429f574a612367efd75bb0617f9704"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.363215,
+      "checked_host_samples_ms": [
+        0.581997,
+        0.336444,
+        0.363215
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "b1e8522641220b5ef01f403f2bf7d4e232a1a127e3ba61ad215ce921b2023c83",
+      "image_sha256": "12a35b65d0d8a43e74466a4ee85a39329149459c49fa09b054acc352cc1aa2e5",
+      "max_abs_error": 2.9802322387695312e-08,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.008898880332708359,
+      "resident_dispatch_window_samples_ms": [
+        0.008898880332708359,
+        0.007902720011770725,
+        0.009947840124368668
+      ],
+      "schedule_digest": "018c9e3f5a71d820c8ef2b400c76eb88a807cac4c3294b55c0cc9f651a333f01",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "tile_sha256": "ebd77bfb2349bbe54961316baac7a01c571ee53556d5d98715c0346140405cfe"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.408105,
+      "checked_host_samples_ms": [
+        0.468956,
+        0.408105,
+        0.364535
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "8183ae2da032ebb6f65ed917fac9547d575dd1be23efc163b5c7292c3a0262d9",
+      "image_sha256": "6f3632bcc0ea23e327b8fb32fd885006a08e0749a3de4c2f7a216f751e9660f9",
+      "max_abs_error": 5.960464477539063e-08,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.01868639886379242,
+      "resident_dispatch_window_samples_ms": [
+        0.016665920615196228,
+        0.01868639886379242,
+        0.019225599244236946
+      ],
+      "schedule_digest": "008f8768614b3299d7d1f891616f131006d81c97111ca88a3fe8d1941e090e34",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "tile_sha256": "52152e3b55699443bdff307fcfde4c3af26052a1b2513d748f302821f86156b0"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.378415,
+      "checked_host_samples_ms": [
+        0.567338,
+        0.326254,
+        0.378415
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "d987ead4804f229d965fd0cb4309dbf13c6bf82e23f3c616f46101a6a15c6d8d",
+      "image_sha256": "c77c7e731fa7378bd8a4f47a2d14e42e17a924c38d57d825896f02b4e15871cd",
+      "max_abs_error": 5.960464477539063e-08,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.009095359593629837,
+      "resident_dispatch_window_samples_ms": [
+        0.009095359593629837,
+        0.00963648036122322,
+        0.008956479839980602
+      ],
+      "schedule_digest": "fa709a526e220f707c069e989805d388d6200454b218be41fc4495ee5f95a960",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "tile_sha256": "b0056ff2e3e69ef6e2dd1319ac47e815f09bb81b773a32a28a42f1f649c882b1"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.398435,
+      "checked_host_samples_ms": [
+        0.398435,
+        0.358085,
+        0.482346
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "c10b129d460400d3cf034ad3db14c0338fc171025f929ca82584019952a3eed8",
+      "image_sha256": "8dc8767f3252fdb59f37bf3be3722eeafeb5da141d7d16e56a51ac65e1bb946f",
+      "max_abs_error": 9.5367431640625e-07,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.016327040269970894,
+      "resident_dispatch_window_samples_ms": [
+        0.019294720143079758,
+        0.016327040269970894,
+        0.015916800126433372
+      ],
+      "schedule_digest": "267fde1bbe43d6ca7e35edf4c908d5f4e919893894969a21fa91934bbd7e57c3",
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "tile_sha256": "15d612d6977adacab61143d720def1c20c244689e59e016bda8d4e9fa4f28ef4"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.387275,
+      "checked_host_samples_ms": [
+        0.532417,
+        0.338684,
+        0.387275
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "bba48fbd5574e05f290ca6687386c7c956dec06cf127250a2f94f7fa84a42370",
+      "image_sha256": "35a320dd3e0e14f0b25a11b6ee12a1e2380196d0b8a6ceec0c32b4b57ab20df4",
+      "max_abs_error": 9.5367431640625e-07,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.007999040186405182,
+      "resident_dispatch_window_samples_ms": [
+        0.00796832051128149,
+        0.00827328022569418,
+        0.007999040186405182
+      ],
+      "schedule_digest": "804bd056c1f9122160d80df145cb846e54c878f430ab2ff2f6696588831d59d1",
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "tile_sha256": "d61b65e784761a5cbb67baa0f8487b3611726151fb61827d91d7a0434a13ed81"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.413056,
+      "checked_host_samples_ms": [
+        0.643058,
+        0.413056,
+        0.401965
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "06154d70f7c148b70e4f1390bcefc32dec8183bb63821b1ae9935e3747b39640",
+      "image_sha256": "e2683c8bf243fbd2294fca8afb0332f3e649442be1644b390ff2f51b9578b98a",
+      "max_abs_error": 6.198883056640625e-06,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.012622400186955929,
+      "resident_dispatch_window_samples_ms": [
+        0.01352159958332777,
+        0.012622400186955929,
+        0.012335679493844509
+      ],
+      "schedule_digest": "4e6931fbf8b55a0854b4e6b39a77de27f5f617bee8eb014f211593989a7f1147",
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "tile_sha256": "eab803318be19ea430b6778ebc646c76d3f9fec77879cb17296a843c62542cc6"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.404165,
+      "checked_host_samples_ms": [
+        0.607508,
+        0.404165,
+        0.400575
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "116f8d4060add4ae53d9e59ceb43501cf600e4e890d6435f2c8c3e6fcd5c24ab",
+      "image_sha256": "b5f2a2a93538c29e4453902f64725374a5628354c842d4f9c9e64a9e9e86b23a",
+      "max_abs_error": 6.198883056640625e-06,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.010951999574899673,
+      "resident_dispatch_window_samples_ms": [
+        0.01210528053343296,
+        0.010951999574899673,
+        0.01040608063340187
+      ],
+      "schedule_digest": "acaf795c57fe4ed7920ff41b8e89addc9c51775b1fbe473fac54f174347bc81b",
+      "shape_mkn": [
+        128,
+        1024,
+        64
+      ],
+      "tile_sha256": "8d9b2a7f5b4fc1e4d475ed267da1e1cc71a564e439895c647642311290822829"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.478256,
+      "checked_host_samples_ms": [
+        0.74711,
+        0.478256,
+        0.441676
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_macro_cta_32x32_mn",
+      "graph_sha256": "6b82d97181d1fb60df0ac8732cfa03133bbdabea73c1f4576b29cd8f77d1c7af",
+      "image_sha256": "f82649811d578061faea5224f7ae89f14087a375f69c513897ec66f5dd9fcad7",
+      "max_abs_error": 7.62939453125e-06,
+      "order": "col_major",
+      "resident_dispatch_window_median_ms": 0.016488000750541687,
+      "resident_dispatch_window_samples_ms": [
+        0.016488000750541687,
+        0.016488639637827873,
+        0.016479359939694405
+      ],
+      "schedule_digest": "f5bbc1e21531102046e63f0428887ab169f315a1f1b37e87b660ab65ac41f5b1",
+      "shape_mkn": [
+        256,
+        1024,
+        128
+      ],
+      "tile_sha256": "6681ed31f39b0dff5d39a2ae38700442d6612717ae0146b33da081f041e43ba4"
+    },
+    {
+      "abi": "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1",
+      "checked_host_median_ms": 0.473686,
+      "checked_host_samples_ms": [
+        0.71686,
+        0.473686,
+        0.456236
+      ],
+      "dtype": "bf16",
+      "geometry": "sm120_scheduled_typed_16x8_mn",
+      "graph_sha256": "dabb5a7bff0969f4242770894336a70d6a774f9617c64569f95ba9398b9421b3",
+      "image_sha256": "c4db35764981ca61a3f1bf3efa3ba94264d3cc4705eb552f27551afe7fd20fef",
+      "max_abs_error": 7.62939453125e-06,
+      "order": "row_major",
+      "resident_dispatch_window_median_ms": 0.014455679804086685,
+      "resident_dispatch_window_samples_ms": [
+        0.014455679804086685,
+        0.014447679743170738,
+        0.014462079852819443
+      ],
+      "schedule_digest": "e25a72befd0bf8b251c4425a149cd4e10e3b2cf0108a29448dac3687550fcb19",
+      "shape_mkn": [
+        256,
+        1024,
+        128
+      ],
+      "tile_sha256": "5b60a9fd08d7cedd8da0419972b015f3e85392e8cc8237b35ccd979cb5f603c0"
+    }
+  ],
+  "schema": "tessera.nvidia.row_major_b_schedule.v1",
+  "scope": "native Graph/Schedule/Tile/Target/PTX -> checked host and resident ABI; named RHS tensor producer edge remains open",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_row_major_b_schedule.py": "f7c0fef4a757b715a938241c8a88997f423a5535b0219eb5c6d9ff914f6f0c4e",
+    "python/tessera/compiler/nvidia_native.py": "c55ad6a3564d7fb46ac09eaf279e32e0df16dc710a5913a141647628bf8b8728",
+    "python/tessera/compiler/scheduled_matmul.py": "cc9eeb106e70ab23e3045af7d61eb632f138e410e75d58e53628ec704aec1c6e",
+    "python/tessera/runtime.py": "ee196ba2aba31478700098bc3909a71c5a40ed3b493d8b5518f2467e8c667132",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "3810080e5b6a9874b2d9d720d86c78e5e4d1a6d6231c42479e5686ea59828d0c",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "0bb0d18df3d61f223e88222d0abce0138f5ee2c36db5abfde61ed4975d58d3bb"
+  },
+  "timing_scope": "matched storage values; host staging wall time and resident CUDA-event dispatch windows remain separate; no layout/format default promotion"
+}

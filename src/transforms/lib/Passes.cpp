@@ -1,5 +1,6 @@
 
 #include "Tessera/Transforms/Passes.h"
+#include "tessera/ProgrammingModel/PMPasses.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "mlir/Pass/Pass.h"
@@ -99,6 +100,8 @@ static void addGraphIRPreLoweringPasses(OpPassManager &pm) {
 static void addCUDA13PipelineForSM(
     OpPassManager &pm, const TesseraLoweringPipelineOptions &opts, int sm,
     llvm::StringRef target) {
+  if (sm == 120)
+    pm.addPass(createTileIRLoweringPass(sm, /*canonicalRecoveryOnly=*/true));
   addGraphIRPreLoweringPasses(pm);
   pm.addPass(createLowerControlFlowToSCFPass());
   pm.addPass(createDistributionLoweringPass());
@@ -118,6 +121,18 @@ static void addCUDA13PipelineForSM(
   // hand. The record pass only stamps a module attribute, so the cost is
   // one walk.
   pm.addPass(createRecordMetadataPass());
+  // SM120 matmul producers must enter the typed fragment route before the
+  // generic tensor-valued Tile fallback. The PM passes retain Graph lineage,
+  // select a checked architecture schedule, and materialize pointer-backed
+  // tile.view -> fragment_pack -> tile.mma producers. Unsupported schedules
+  // fail at Graph->Schedule rather than emitting a tensor-valued MMA that the
+  // SM120 backend cannot legally consume.
+  if (sm == 120) {
+    pm.addPass(createPMV11VerifierPass());
+    pm.addPass(createGraphToSchedulePass());
+    pm.addPass(createScheduleToTilePass());
+    pm.addPass(mlir::createCanonicalizerPass());
+  }
   pm.addPass(createTileIRLoweringPass(sm));
   pm.addPass(createVerifyMetadataObligationPass());
   pm.addPass(createControlFlowTargetGuardPass(target));

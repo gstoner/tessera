@@ -1,0 +1,109 @@
+{
+  "schema": "tessera.rocm.e2e_movement_comparison.v1",
+  "work_item": "ROCM-E2E-2",
+  "created_at": "2026-10-07T09:10:09.702935+00:00",
+  "evidence_arch": "gfx1151",
+  "trials": 5,
+  "event_iterations": 100,
+  "policy": "all E2E rows and directly comparable paged-KV device events must be within 10%",
+  "rows": [
+    {
+      "operation": "paged_kv_read",
+      "shape": [
+        4,
+        16,
+        3,
+        8
+      ],
+      "range": [
+        7,
+        48
+      ],
+      "correct": true,
+      "device": {
+        "retained_samples_ms": [
+          0.007290440145879984,
+          0.0025276499800384045,
+          0.00270105991512537,
+          0.002505050040781498,
+          0.002429050160571933
+        ],
+        "compiler_samples_ms": [
+          0.0028868699073791504,
+          0.0031498900055885316,
+          0.0030335798859596253,
+          0.002606549859046936,
+          0.0027499601244926454
+        ],
+        "retained_median_ms": 0.0025276499800384045,
+        "compiler_median_ms": 0.0028868699073791504,
+        "median_speedup": 0.8755676774964674,
+        "non_regression_10pct": false
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          0.88163,
+          0.678708,
+          0.667447,
+          0.606604,
+          0.635196
+        ],
+        "compiler_samples_ms": [
+          14.171856,
+          8.392661,
+          0.627225,
+          0.564532,
+          0.542951
+        ],
+        "retained_median_ms": 0.667447,
+        "compiler_median_ms": 0.627225,
+        "median_speedup": 1.064126908206784,
+        "non_regression_10pct": true
+      }
+    },
+    {
+      "operation": "moe_dispatch",
+      "shape": [
+        17,
+        5,
+        257
+      ],
+      "correct": true,
+      "device": {
+        "compiler_samples_ms": [
+          0.0025651800632476808,
+          0.002396260052919388,
+          0.0027876898646354677,
+          0.0021860499680042265,
+          0.002702690064907074
+        ],
+        "compiler_median_ms": 0.0025651800632476808,
+        "comparison": "retained resident-event evidence is owned by rocm.transport_retune.v1"
+      },
+      "end_to_end": {
+        "retained_samples_ms": [
+          1.930699,
+          2.052906,
+          1.845755,
+          1.894112,
+          1.94348
+        ],
+        "compiler_samples_ms": [
+          2.182519,
+          0.564522,
+          0.679649,
+          0.613854,
+          0.649737
+        ],
+        "retained_median_ms": 1.930699,
+        "compiler_median_ms": 0.649737,
+        "median_speedup": 2.971508471889395,
+        "non_regression_10pct": true
+      }
+    }
+  ],
+  "all_correct": true,
+  "all_non_regression": false,
+  "closure_disposition": "retain production routes; typed paged-KV is not E2E promotion-eligible",
+  "selector_changed": false
+}

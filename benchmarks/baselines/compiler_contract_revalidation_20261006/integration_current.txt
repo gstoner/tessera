@@ -1,0 +1,652 @@
+bringing up nodes...
+bringing up nodes...
+
+..................................................ssssssssssssssssssss.. [  0%]
+..............................................................s......... [  0%]
+........................................................................ [  0%]
+....s...s............................................................... [  1%]
+...........................FF........................................... [  1%]
+...................................ss........ssss..............sss.sss.. [  1%]
+..ssss...ss............ssssssss...........................ssssssssssssss [  1%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [  2%]
+ssssssssssssssssssssssssssss.........ssss.....ss.sss..sss....sssssss..ss [  2%]
+ss..........sssssssssss..sssssssss...sssss.ssssssssssssssssss.s..sssssss [  2%]
+......................ss....................s........................... [  2%]
+.................sssssssssssssssss...........sssssssssssssssssssssssssss [  3%]
+ssssssssssssssssssssssssssssssss........................................ [  3%]
+.....................................sss..............................ss [  3%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [  3%]
+s..............................ss.ssssssssssssssss...................... [  4%]
+..ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [  4%]
+sssssssss.ss.sss.ssssssss.ssss.ssssssssssssssssssssssss................. [  4%]
+........................................................................ [  4%]
+.....sssssssssssssssssssssssss.....................s....sssssss....ssss. [  5%]
+ssss.ss................................................................. [  5%]
+................................sssssssssss....ss....................... [  5%]
+........................................................................ [  6%]
+....s.s.............ssss.s.s.........................................ss. [  6%]
+ss.sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [  6%]
+sssss..ss.................ss...sss.sss...s.............s................ [  6%]
+..............................s.ssss.......................ss.ssss...... [  7%]
+.......sss.........sssssssssss...ssss................................... [  7%]
+................................................ssssss.................. [  7%]
+........................................................................ [  7%]
+........................................................................ [  8%]
+........................................................................ [  8%]
+.......................................................s................ [  8%]
+.................................ss.....................sssss..sssssssss [  8%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [  9%]
+s..................ssss............................ss................... [  9%]
+.....s......ssssss.s..s...sssssssssss.s.........................sssssss. [  9%]
+.................ssssssssssssssssssssss.......ssssssssssssssssss........ [  9%]
+.......sssss..ssssssss.s.ssssssssssssssssssss..s.ss.sssss............... [ 10%]
+.....................................sssssssssss.......................s [ 10%]
+sss...........................................sssssssssssss..sssssssss.s [ 10%]
+ssssssssssssss.............sssssss..............sssssssssssss........... [ 11%]
+...................................................................s.... [ 11%]
+........................................................................ [ 11%]
+........................................................................ [ 11%]
+.....................................................................s.. [ 12%]
+........................................................................ [ 12%]
+........................................................................ [ 12%]
+..........................................s............................. [ 12%]
+........................................................................ [ 13%]
+........................................................................ [ 13%]
+........................................................................ [ 13%]
+....................s........................sssssssssssssssssssssssssss [ 13%]
+sssss................................................................... [ 14%]
+.........sssssssss...................................................... [ 14%]
+...sssssssssssssssssss.ssssssssssssssss.................s.ssssssssssssss [ 14%]
+ssss.................................................................... [ 14%]
+........................................................................ [ 15%]
+.............s..............................................s.ss..s..... [ 15%]
+........................................................................ [ 15%]
+......................................................................ss [ 16%]
+sss...............ssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 16%]
+sss.sssssss.sssssssssssssssssssssssssssssssssssssssssssssssssssssss.s.s. [ 16%]
+ss.s..sssss.ssss.s...................................................... [ 16%]
+......................................ssssssssssssssssssssssssssssssssss [ 17%]
+ssssss....ssssssssssss.....ssssssssssssssssssssss.ssssssssss............ [ 17%]
+...................................................................s.... [ 17%]
+........................................................................ [ 17%]
+ss.ssss.sssss.ssssss.sssss.ssss.ssss.sssss.ssss.................ssssssss [ 18%]
+sssssssssssssssssss.ssssssssssssssssssssssss.........sssssssss.sssssssss [ 18%]
+sssssssssssssssssssss.s...........ssssss............................ssss [ 18%]
+sss..................................................................... [ 18%]
+...............s.sss.......sssss.sssssss................................ [ 19%]
+..ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 19%]
+sssssssssssssssssssss......ssssssssssssss...........s................... [ 19%]
+...................ssssssssss........................................... [ 19%]
+.........................................................ssss........sss [ 20%]
+ssssssssssssssssss...................................................... [ 20%]
+..............................s......................................... [ 20%]
+...........ss........................................................... [ 21%]
+.............................sssss...................................... [ 21%]
+........................................................................ [ 21%]
+.....................................................ssssssssss......... [ 21%]
+................................sss.ss.sssssssssssssssssssssssssssssssss [ 22%]
+ssssssssssssssssssss.................................................... [ 22%]
+..................................................ssss.................. [ 22%]
+.............................sssssssssssss..........ssssssssssssssssssss [ 22%]
+sssssss.........................sssss................................... [ 23%]
+........................................................................ [ 23%]
+........................................................................ [ 23%]
+........................................................................ [ 23%]
+......................ssssss.ss......................................... [ 24%]
+........................................................................ [ 24%]
+........................................................................ [ 24%]
+........................................................................ [ 24%]
+..............................................ssssss......sss.......ssss [ 25%]
+sssssssssssssssssssssssssssssssss................ssss................... [ 25%]
+.......................................sss.sssssssssssssssssssssssssssss [ 25%]
+sssssssssss......ss......ssssssssss..................................... [ 26%]
+...........................ssssssssssssssssssssssssssssss........s.s.... [ 26%]
+...ssssssssssss...............s.s....................................... [ 26%]
+........ss.ssssssssssssss............................................... [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 27%]
+...........................ssss..sssssssss.............................. [ 27%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 28%]
+........................................................................ [ 28%]
+.....................................sss.........................ss.ssss [ 28%]
+ssssssssssssssssss...ss...........ssss...ssss..s...........sss.....sssss [ 29%]
+ssssssssssssssssssssssss..ssssssssssssssss...ss......................... [ 29%]
+........................................................................ [ 29%]
+........................................................................ [ 29%]
+........................................................................ [ 30%]
+........................................................................ [ 30%]
+........................................................................ [ 30%]
+..................ssss......ssssssssssssssssssssssss........ssssssssssss [ 31%]
+ssssssssssssssssssssssssssssssssssss....................sssss........... [ 31%]
+.......................................s.....s.........s.s......s....... [ 31%]
+.........s.............................................................. [ 31%]
+........................................................................ [ 32%]
+.............................ssssssssssssssssssssssssssssssssss.sss..... [ 32%]
+........................................................................ [ 32%]
+........................................................................ [ 32%]
+....................................................sss................. [ 33%]
+................ss...................................................... [ 33%]
+.............................sss........................................ [ 33%]
+.....s.......sssssssssssssssssssssssssssssssss.......................... [ 33%]
+......................................................ss................ [ 34%]
+........................................................................ [ 34%]
+........................................................................ [ 34%]
+.......................................................................s [ 34%]
+ssssssssssssssssssssssssssssss.......sssssssss......sssssssss..s........ [ 35%]
+....................ssssss.............................................. [ 35%]
+........................................................................ [ 35%]
+........................................................................ [ 36%]
+.........................................................sssssssss....F. [ 36%]
+........................................................................ [ 36%]
+........................................................................ [ 36%]
+.................................................s...................... [ 37%]
+........................................................................ [ 37%]
+........................................................................ [ 37%]
+..................................................................s..... [ 37%]
+........................................................................ [ 38%]
+........................................................................ [ 38%]
+........................................................................ [ 38%]
+........................................................................ [ 38%]
+........................................................................ [ 39%]
+........................................................................ [ 39%]
+........................................................................ [ 39%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+........................................................................ [ 40%]
+........................................................ssssssssssssssss [ 40%]
+sssssssssssss.s.......ssss.............................................. [ 41%]
+........................................................................ [ 41%]
+........................................................................ [ 41%]
+........................................................................ [ 41%]
+ssssssssssss............................................................ [ 42%]
+........................................................................ [ 42%]
+..................s.s.s.s..s.ss......................................... [ 42%]
+...............ss.s..................................................... [ 42%]
+........................................................................ [ 43%]
+........................................................................ [ 43%]
+........................................................................ [ 43%]
+........................................................................ [ 43%]
+........................................................................ [ 44%]
+........................................................................ [ 44%]
+........................................................................ [ 44%]
+........................................................................ [ 44%]
+..................................s..................................... [ 45%]
+..ssssssssssssssss..sssssssss........................................... [ 45%]
+.......................................sssssssssssssssssssssssssssssssss [ 45%]
+ssssss.ssssssssssssssss................................................. [ 46%]
+........................................................................ [ 46%]
+....................s........ssssssssssssss..ssss....................... [ 46%]
+........................................................................ [ 46%]
+.......................................s...s.ss.ssss.ssss............... [ 47%]
+..............................................ssssssssss...............s [ 47%]
+ss....s......ssssssss....sssssssss.........................sssssssssssss [ 47%]
+ssssssssssssssssssssssssssssssssssssss.................................. [ 47%]
+........................................................................ [ 48%]
+........................................................................ [ 48%]
+....................................................ssssssssssss........ [ 48%]
+....s...............s................................................... [ 48%]
+........................................................................ [ 49%]
+........................................................................ [ 49%]
+........................................................................ [ 49%]
+........................................................................ [ 49%]
+........................................................................ [ 50%]
+.......s..ss.s..s..........ss....s........sssss......................... [ 50%]
+........................................................................ [ 50%]
+........................................................................ [ 51%]
+........................................................................ [ 51%]
+.................................................ss.ssssss.............. [ 51%]
+.......................................................s................ [ 51%]
+s.....ssssssssssssssssssssssssssssssssssss.sssssssssss....sssssssssss.ss [ 52%]
+s.sssssssssssssssss.s.ssssss..........s.s..s.s.s.s.s.s.s.s.s.s.s.s.s.s.s [ 52%]
+.ssssss.s.s.s.s.s.s.s.s.s.s.s.s...s.s.s.ss.s..ss.s.ss.....s........s.s.s [ 52%]
+.s.s.s..s.s.s.ss.s.s.s.s.s.ss.s.s.s.s.s.sss.ss.s.s..s.s.s.s.s..ss..s.s.s [ 52%]
+.s.s.s.s.s.s.s.s.s...sssssssssssssssssssssssssssssssssssssssssssssssssss [ 53%]
+..s.sssssssssssssss...ssssssssssssssssssssssssssssssss..sssss.......ssss [ 53%]
+sssssssssssssssssssssss.ssssssssss.....................sssssssssssssssss [ 53%]
+ssssssssssssssssssssssssssssss..sssssssss............................sss [ 53%]
+.ss..ss.s.sss.s.s.ssss.s.....................ss.ss.s.ss...s.sss.ss.sssss [ 54%]
+ssssssssssssssssssssssssssssss..s.s.sss.ss.s.s..ssssssssssssssssssssssss [ 54%]
+sssssss.sss.sssssssssssssssssssss.ssssssssss..s.ssssss....ss............ [ 54%]
+...........................................ssss.........ssssss..ssssssss [ 54%]
+sssssssssssssssssssssssssssssssssss..sssss.............................. [ 55%]
+.....................sssssssssssssssssssssssssssssssssssssssssssssssssss [ 55%]
+sssssssssss..s.ssssssssssssss..sssssssssssssssssssssssssssssssssssssssss [ 55%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 56%]
+sssssssssssss............sssssssssssssssssssssssssssssssssssssssssssssss [ 56%]
+sssssssssssssssssssssssssssssssssss..ssssssssssssssssssssssssss..s...... [ 56%]
+.............sssss...............ssss.............................sssss. [ 56%]
+........................sss....sssss.................................... [ 57%]
+........................................................................ [ 57%]
+........................................................................ [ 57%]
+........................................................................ [ 57%]
+...............................................s.ssssssss............... [ 58%]
+...................ssssssssss.sssssssss.........sssssssssssss.....ssssss [ 58%]
+sssssssssssssssssssssssssss.sssssssssssssssssssssssssssssssss.ssssssssss [ 58%]
+ssssssssssssssssssssss.s.sssssssssssssssssssssssssss............ssssssss [ 58%]
+ssssssssssssssssssss.s.s..sssssssssssssssssssssssssss.ssssssssssssssssss [ 59%]
+ssss.ssssssss.............s.....................................ssssssss [ 59%]
+sssss..ssssssssssssssssssssssssssssssssss.sssssssssss..sssss.......sssss [ 59%]
+sssssssssssssssssssssssss....ssss.ssss....sssss......................... [ 59%]
+........................................................................ [ 60%]
+........................................................................ [ 60%]
+........................................................................ [ 60%]
+........................................................................ [ 61%]
+........................................................................ [ 61%]
+........................................................................ [ 61%]
+........................................................................ [ 61%]
+........................................................................ [ 62%]
+...........................................sssssssssss..ssssssssssssssss [ 62%]
+sssssss.sssssssssssss................................................... [ 62%]
+...............................sssssssssssssssssssss...............sssss [ 62%]
+.s..s.sssssssssssssssssssssssssss.ssssssssssssssssssssssssssssss.sssssss [ 63%]
+ssssssssssssssssss..........ssssssssssssssssssss.ssssssss...ssssssssssss [ 63%]
+sss.sssssssssssssssssssssssssssssssssssssss............................. [ 63%]
+.ssssssssssssss....sssssssss..ssssssssssssssss..sssssssssssssssssssss... [ 63%]
+......................................................ssssssssssssssssss [ 64%]
+ssssssssssssssssssssssssssss...............................sssssssssssss [ 64%]
+ss.............ssssssssssssssss.ssssssssssssssssssssssssssssssssssssssss [ 64%]
+sssssssssssssssssssssssssssssssssssssssss................ss.ssssssssssss [ 64%]
+ssssssssssssssssssssssssssssssssssssssssss..ssssssssssssssssssssssssssss [ 65%]
+sssssssssssssssssssssssssssssssssssssssssssssssssssssssss...s.ss..s.ss.. [ 65%]
+sss..ss..ss.s.s..s.s.ssss.s.ssss..s.s.s.s.s..s.ss.s.ss.s.sssssssssssssss [ 65%]
+ssssssssssssssssssssssssssssssssssssssssssssss.s.sssssssssssssssssssssss [ 66%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 66%]
+ssssssssssssssssssssssssssssssssss.sss.................sss.ssssss....... [ 66%]
+.....sssssssssssssssssssssssssssssssssssssssssss.sssssssssssssssssssssss [ 66%]
+sssssssssssssssssssssssssssssssss.ssssssssssssssssssssssssssssssssssssss [ 67%]
+sssssssssssssssssssssssssssssssssss.ssssssssssssssssssssssssssssssssssss [ 67%]
+ssssssssssssssssssssssssssssssssssss..................ssssss..sssss..... [ 67%]
+.......sss.sssssssssssssssssssssssssssssssssssssssss.sssss.............. [ 67%]
+........................................................................ [ 68%]
+.....................ssssssssssss....................................... [ 68%]
+ss.....sssssss.sss.ssss.......ss..s.....ssssssssssssssssssssssssssssssss [ 68%]
+ssss...ssssssssssssssssssssssssssssssssss............ss.s.s.s........sss [ 68%]
+sssssssss.sssssssssssss............sssssssssssssssssssssssssssss........ [ 69%]
+........sssssssssssssssss....ssssssssss......ssssss...................ss [ 69%]
+sssssssssssssssssssssssssssss.sssssssss.ssssssssssss......sssssss..ss.ss [ 69%]
+sssssssssssss.....sssssss............................................... [ 69%]
+........................................................................ [ 70%]
+..s..s.s.s.............................................................. [ 70%]
+........................................................................ [ 70%]
+........................................................................ [ 71%]
+........................................................................ [ 71%]
+...........................................................sssssssssssss [ 71%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 71%]
+sssssssssssssssssssssssssssssssssss..................ssssssssssss.....ss [ 72%]
+s..ssssssssssssssss..........sssss.....sss..sssss.sssssssssss......ssss. [ 72%]
+..sss....ssssssssss..................................................... [ 72%]
+....................................................ssssss.............. [ 72%]
+........................ssssss.......................................... [ 73%]
+........................................................................ [ 73%]
+........................................................................ [ 73%]
+................................ssssssss...........ssssss..............s [ 73%]
+sssssssssss............F...................ss..ssssssssssss.ss.....s.... [ 74%]
+.ssssssssssssssssssssssssssssssssssssssssssssssssssssss.s.sssssssssss... [ 74%]
+.ssssss.sssss........................................................... [ 74%]
+........................................................................ [ 74%]
+ss.ssssssss............................sssssssssssssssssssssssssssssssss [ 75%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 75%]
+ssssssssssssss.......................................................... [ 75%]
+........................................................................ [ 76%]
+sssssss.......................ss..s................F.................... [ 76%]
+.........................................................ssssss.ssss.... [ 76%]
+.......F....................ssss........................................ [ 76%]
+............sssss.sss.sssssssssssssssss................................. [ 77%]
+........................................................................ [ 77%]
+...................................................................sssss [ 77%]
+ssssssssss..............F..............sssss....sssssss....ss.s.s.s.s... [ 77%]
+sss..ss.ssssssssss.sssssssssssssssss.sssssss.s.ss.s.s.s.s.s.s.sss.ss.ss. [ 78%]
+sss.s..ss.s..s.s.ss.s.ss.ss.s.ss..ss.ss.s.ss.ss.ss.s.ss.s.ss.s.s.ss.s.s. [ 78%]
+ss.s.s.s.s..s.ss.ssssssssssss.sssssssss.ss.sssssssss.s.sss..ss.ssssss... [ 78%]
+................................ssss.ssssssssss.sss..ssss.s.ssssssssss.s [ 78%]
+sssss.sssss..ss......................................................... [ 79%]
+...................................................................s.ss. [ 79%]
+s.ss.ss....ss...ss..ss.s.s.sssss..s.s.s.s.s............................. [ 79%]
+........................................................................ [ 79%]
+.....................ss.s.s..ss..ss.s..ss..ss.s.s.s..sss..s.s.ss....sss. [ 80%]
+........................................................................ [ 80%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+...............................................s.......ss............... [ 81%]
+........................................................................ [ 81%]
+........................................................................ [ 81%]
+..................................................................ssssss [ 82%]
+ssssssssssssssss........................................................ [ 82%]
+........................................................................ [ 82%]
+...................................................................sssss [ 82%]
+ssssssssssssssssss.ssssssssss.ssssssssssssss..sssssssssssssss.ssssssssss [ 83%]
+ssssssssssssssssssssssssssssss..ssssssssssssssssssssssssssssssssssssssss [ 83%]
+s.sssssssssssssssssssssss.......s.......ssss.ssss.ssssss.ssssssssssss... [ 83%]
+....s..ssssssssssssssssssssssssssss.ssssssssss..................sss.s... [ 83%]
+.......ssssssssssss...................ssss.sss.sss..ss.s.ss.ss.sss.sssss [ 84%]
+sssssssssss.sssssss.ssssssss.ssss......................sss.ssssss.s.s.ss [ 84%]
+sss.sssss.ssssssssss.................................................... [ 84%]
+........................................................................ [ 84%]
+...ssssss..................................................sssssssssssss [ 85%]
+ssssssssssssss.sssssssssssss...ssssssssssssss.ssssssssssssssss.ssss...ss [ 85%]
+ssssssssssssssssssss..................ssssssssssssssssssssssssssssssssss [ 85%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 86%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 86%]
+sssssssssssssssssssssssssssssss.ssssssssssssssssssssssssssssssssssssssss [ 86%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 86%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 87%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 87%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssss...............s [ 87%]
+...............s...sssssssssssssssssssssssssssssssssssssssssssssssssssss [ 87%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 88%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 88%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 88%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 88%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 89%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 89%]
+ssssssssssssssssssssssssssssssss.........sssssssss.ssssss.ssssssssssssss [ 89%]
+ssssssssssssssssssssss..ssssssssssssssssssssssssssssssssssssssssssssssss [ 89%]
+sssssssssssssssssssssssssssssssssssssss.ssssssssssssssssssssssssssssssss [ 90%]
+sss.ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss.ss...ss [ 90%]
+sssssssssssssssss.ssssssssss...............ssssssssss................... [ 90%]
+....................................sss..ss..........s......s..s.ss..s.s [ 91%]
+.s.s.s.s.s...ssss.sss.sss.sss.ss.ss.s.s.ss.ss.ss..ss..ssssssssssssssssss [ 91%]
+ssssssssss.sssssss.s........sssssss.s.ss.s.s.sss.ss..s.s.s..s.s..s..s... [ 91%]
+s..s..s.s...s.s..s...s..s.s..s....s.s.ss.s.ss..s..s...sss..s.s..s.s.ss.s [ 91%]
+s.s.ssss.ssssssss.sss.sssssss.ssss.ssssssssssssssssssssssss.s.sss.s.s.s. [ 92%]
+s.s.s.s.s.s.s.s.sss.s.ss.s.s.s.s.s..ss..ss.s.s..ss..ss.ss.ssss.ssss.ss.s [ 92%]
+s......s.ss.ss.s..ss.ss.s.ss.s.ss..ss.................ss.s.s.s.....sssss [ 92%]
+.ssss............................sssssssssssss.sssssssssssss...sssssss.s [ 92%]
+ssssssssssssssssssss...ssssssssssssssssssssssssssssssssssss.ssssssssssss [ 93%]
+ssssssssssssssssss.sssssssssssssssssssssssssssssssssssssssssssssssssssss [ 93%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 93%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 93%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 94%]
+ssssssssssssssssssss.............s..ssssssssssssssssssssssssssssssssssss [ 94%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 94%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 94%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 95%]
+ssssss.sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 95%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssss.s............ [ 95%]
+.........................................ss............sss.............. [ 96%]
+........................................................................ [ 96%]
+................................................................ssssssss [ 96%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssss.sssss.............. [ 96%]
+........................................................................ [ 97%]
+........................................................................ [ 97%]
+........................................................................ [ 97%]
+...........................sssss........................................ [ 97%]
+........................................................................ [ 98%]
+........................................................................ [ 98%]
+........................................................................ [ 98%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+.........s..s........................................................... [ 99%]
+............................................................ssssssssssss [ 99%]
+ssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss [ 99%]
+ssss                                                                     [100%]
+=================================== FAILURES ===================================
+_______________________ test_batching_axis_has_zero_open _______________________
+[gw2] linux -- Python 3.14.4 /home/angstorms/scratch/next-five-compiler-slices/.venv/bin/python
+
+    def test_batching_axis_has_zero_open():
+        open_status = {"partial", "planned"}
+        offenders = [
+            n
+            for n, c in _COVS.items()
+            if c.contract_status.get("batching_rule") in open_status
+        ]
+>       assert not offenders, f"batching_rule should be fully closed, open: {offenders}"
+E       AssertionError: batching_rule should be fully closed, open: ['scaled_matmul']
+E       assert not ['scaled_matmul']
+
+tests/unit/test_batching_rule_closure.py:68: AssertionError
+______________________ test_transpose_axis_has_zero_open _______________________
+[gw2] linux -- Python 3.14.4 /home/angstorms/scratch/next-five-compiler-slices/.venv/bin/python
+
+    def test_transpose_axis_has_zero_open():
+        open_status = {"partial", "planned"}
+        offenders = [
+            n
+            for n, c in _COVS.items()
+            if c.contract_status.get("transpose_rule") in open_status
+        ]
+>       assert not offenders, f"transpose_rule should be fully closed, open: {offenders}"
+E       AssertionError: transpose_rule should be fully closed, open: ['scaled_matmul']
+E       assert not ['scaled_matmul']
+
+tests/unit/test_batching_rule_closure.py:78: AssertionError
+________________ test_keyword_declarations_name_real_parameters ________________
+[gw0] linux -- Python 3.14.4 /home/angstorms/scratch/next-five-compiler-slices/.venv/bin/python
+
+    def test_keyword_declarations_name_real_parameters():
+        """A declared keyword name must exist in the reference signature.
+    
+        This is the check `_POSITIONAL_ATTR_PARAMS` deliberately cannot have: there
+        the map is position-to-emitted-name, so the names legitimately differ. Here
+        they cannot differ, because the emitter matches on the keyword itself.
+        """
+        from tessera import ops
+    
+        stale = []
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            for source, mapping in (("attr", _KEYWORD_ATTR_PARAMS),
+                                    ("operand", _KEYWORD_OPERANDS)):
+                for graph_name, names in sorted(mapping.items()):
+                    spec = next((s for s in _SPECS if s.graph_name == graph_name), None)
+                    assert spec is not None, (
+                        f"{graph_name} declares keyword {source}s but is not a catalog op"
+                    )
+                    fn = getattr(ops, spec.public_name, None)
+                    if fn is None:
+                        continue
+                    params = inspect.signature(fn).parameters
+                    for name in names:
+                        if name not in params:
+                            stale.append(f"{spec.public_name}: {source} {name!r}")
+    
+>       assert not stale, (
+            "keyword declarations naming parameters the reference does not have:\n  "
+            + "\n  ".join(stale)
+        )
+E       AssertionError: keyword declarations naming parameters the reference does not have:
+E           scaled_matmul: attr 'transposeA'
+E           scaled_matmul: attr 'transposeB'
+E           scaled_matmul: attr 'batching'
+E       assert not ["scaled_matmul: attr 'transposeA'", "scaled_matmul: attr 'transposeB'", "scaled_matmul: attr 'batching'"]
+
+tests/unit/test_op_arity_contract.py:228: AssertionError
+_____________ test_nvidia_replay_factory_wires_scalar_decode_path ______________
+[gw2] linux -- Python 3.14.4 /home/angstorms/scratch/next-five-compiler-slices/.venv/bin/python
+
+    def test_nvidia_replay_factory_wires_scalar_decode_path():
+        h = rt.nvidia_ssm_replay_state_handle(1, 4, 3, -np.ones(4), capacity=8)
+        assert isinstance(h, SSMStateHandle)
+        assert h.backend == "nvidia_sm120_replay_device"
+        descriptor = h._state_descriptor
+        assert descriptor.workspace.lifetime == "session"
+        assert descriptor.workspace.initialization == "preserve"
+        assert descriptor.ordering.synchronization[-1] == "teardown_drains_pending"
+        assert descriptor.workspace.bytes > descriptor.checkpoint_bytes
+        assert descriptor.pinned_host_bytes > 0
+        # The CUDA device state binds only on a CUDA-ready host; off-device the
+        # factory declines cleanly to the reference mirror (_device is None).
+        if nvidia_cuda_host_ready():
+>           assert getattr(h, "_device") is not None
+E           AssertionError: assert None is not None
+E            +  where None = getattr(nvidia_ssm_replay_state_handle.<locals>._Handle(batch=1, num_channels=4, state_dim=3, a=array([-1., -1., -1., -1.]), c..._replay_device', _count=0, _scalar_a=True, last_decode_execution='reference_cpu', last_block_execution='reference_cpu'), '_device')
+
+tests/unit/test_ssm_nvidia_replay.py:42: AssertionError
+___________ test_cuda_replay_async_submit_wait_matches_ordered_steps ___________
+[gw2] linux -- Python 3.14.4 /home/angstorms/scratch/next-five-compiler-slices/.venv/bin/python
+
+    @pytest.mark.skipif(not nvidia_cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+    def test_cuda_replay_async_submit_wait_matches_ordered_steps():
+        rng = np.random.default_rng(201)
+        T, B, D, N = 4, 1, 3, 2
+        a = -np.abs(rng.standard_normal(D)); d = np.abs(rng.standard_normal((T,B,D))) *.2
+        x, b, c = (rng.standard_normal((T, B, q)) for q in (D, N, N))
+        gpu = rt.nvidia_ssm_replay_state_handle(B,D,N,a,capacity=8)
+        ref = SSMStateHandle(B,D,N,a,capacity=8)
+>       future = gpu.submit_block_async(d,x,b,c)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_ssm_nvidia_replay.py:147: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = nvidia_ssm_replay_state_handle.<locals>._Handle(batch=1, num_channels=3, state_dim=2, a=array([-1.92895719, -0.6076825..._replay_device', _count=0, _scalar_a=True, last_decode_execution='reference_cpu', last_block_execution='reference_cpu')
+deltas = array([[[0.16020194, 0.34538133, 0.05648451]],
+
+       [[0.05632643, 0.03760195, 0.06208478]],
+
+       [[0.20033807, 0.02202034, 0.26313765]],
+
+       [[0.10617247, 0.0105171 , 0.11020128]]])
+xs = array([[[ 0.06492881,  2.06257359, -1.68107788]],
+
+       [[-1.54481347, -0.6812695 ,  1.13131677]],
+
+       [[ 0.26610503, -0.86338548,  0.05655015]],
+
+       [[-1.42318695, -1.21870274, -0.77205586]]])
+bs = array([[[ 0.5176442 , -0.31490671]],
+
+       [[ 0.06816294,  1.30388406]],
+
+       [[-0.41192119,  1.38687487]],
+
+       [[-0.99359636,  2.25605052]]])
+cs = array([[[-1.46437959, -2.14996577]],
+
+       [[ 0.2149899 , -0.21066989]],
+
+       [[ 0.78893794,  0.86303386]],
+
+       [[-1.51801197, -0.02497201]]])
+
+    def submit_block_async(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
+        """Enqueue a nonblocking CUDA replay span; consume with ``wait()``."""
+        import numpy as np
+    
+        ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
+        T = int(ds.shape[0])
+        if self._device is None or T < 1 or self.should_flush(T):
+>           raise RuntimeError("async ReplaySSM span must fit before the flush boundary")
+E           RuntimeError: async ReplaySSM span must fit before the flush boundary
+
+python/tessera/runtime.py:41488: RuntimeError
+________ test_cuda_replay_multi_slot_ring_and_device_consumer_protocol _________
+[gw2] linux -- Python 3.14.4 /home/angstorms/scratch/next-five-compiler-slices/.venv/bin/python
+
+    @pytest.mark.skipif(not nvidia_cuda_host_ready(), reason="CUDA toolkit or GPU unavailable")
+    def test_cuda_replay_multi_slot_ring_and_device_consumer_protocol():
+        rng = np.random.default_rng(1209)
+        B, D, N = 1, 4, 3
+        a = -np.abs(rng.standard_normal(D))
+        gpu = rt.nvidia_ssm_replay_state_handle(
+            B, D, N, a, capacity=12, async_slots=2)
+        ref = SSMStateHandle(B, D, N, a, capacity=12)
+    
+        futures = []
+        expected = []
+        for T in (2, 3):
+            d = np.abs(rng.standard_normal((T, B, D))) * .2
+            x = rng.standard_normal((T, B, D))
+            b = rng.standard_normal((T, B, N))
+            c = rng.standard_normal((T, B, N))
+>           futures.append(gpu.submit_block_async(d, x, b, c))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_ssm_nvidia_replay.py:172: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = nvidia_ssm_replay_state_handle.<locals>._Handle(batch=1, num_channels=4, state_dim=3, a=array([-0.59070405, -1.4365331..._replay_device', _count=0, _scalar_a=True, last_decode_execution='reference_cpu', last_block_execution='reference_cpu')
+deltas = array([[[0.14064716, 0.21962859, 0.4094327 , 0.10129065]],
+
+       [[0.0388197 , 0.23434039, 0.01256409, 0.07127348]]])
+xs = array([[[-0.1847495 , -0.77242085,  0.01945999, -0.77137894]],
+
+       [[-1.79135576,  0.62732858,  0.20579859,  0.13592571]]])
+bs = array([[[ 1.18861685, -1.64613033, -0.76318708]],
+
+       [[-0.61884245, -1.28080182,  0.53941238]]])
+cs = array([[[ 0.2661987 , -0.23256947, -0.02843384]],
+
+       [[ 0.85426214, -0.06455136,  1.91550333]]])
+
+    def submit_block_async(self, deltas: Any, xs: Any, bs: Any, cs: Any) -> Any:
+        """Enqueue a nonblocking CUDA replay span; consume with ``wait()``."""
+        import numpy as np
+    
+        ds, xx, bb, cc = (np.asarray(v) for v in (deltas, xs, bs, cs))
+        T = int(ds.shape[0])
+        if self._device is None or T < 1 or self.should_flush(T):
+>           raise RuntimeError("async ReplaySSM span must fit before the flush boundary")
+E           RuntimeError: async ReplaySSM span must fit before the flush boundary
+
+python/tessera/runtime.py:41488: RuntimeError
+_____ test_standalone_dashboard_generated_summaries_match_live_registries ______
+[gw2] linux -- Python 3.14.4 /home/angstorms/scratch/next-five-compiler-slices/.venv/bin/python
+
+    def test_standalone_dashboard_generated_summaries_match_live_registries():
+        text = DASHBOARD.read_text(encoding="utf-8")
+>       assert standalone_dashboard.render_registry_summary() in text
+E       AssertionError: assert '<!-- BEGIN GENERATED LIVE REGISTRY SUMMARY -->\n| Measure | Live value |\n|---|---:|\n| Tracked primitives | 524 |\n|...n| `backend_kernel` | 0 | 100 | 415 | 9 |\n| `tests` | 524 | 0 | 0 | 0 |\n<!-- END GENERATED LIVE REGISTRY SUMMARY -->' in '---\nstatus: Informative\nclassification: Audit Dashboard\nauthority: Generated primitive-contract and compiler-found...nd\nplans and exact-device packets remain authoritative for architecture-owned\nperformance and promotion decisions.\n'
+E        +  where '<!-- BEGIN GENERATED LIVE REGISTRY SUMMARY -->\n| Measure | Live value |\n|---|---:|\n| Tracked primitives | 524 |\n|...n| `backend_kernel` | 0 | 100 | 415 | 9 |\n| `tests` | 524 | 0 | 0 | 0 |\n<!-- END GENERATED LIVE REGISTRY SUMMARY -->' = <function render_registry_summary at 0x7e6f66f1a980>()
+E        +    where <function render_registry_summary at 0x7e6f66f1a980> = standalone_dashboard.render_registry_summary
+
+tests/unit/test_standalone_compiler_roadmap.py:459: AssertionError
+=============================== warnings summary ===============================
+tests/unit/test_autodiff_review_p1_fixes.py::test_kl_divergence_is_finite_when_p_has_zero_probability_entries
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_autodiff_review_p1_fixes.py:218: RuntimeWarning: invalid value encountered in multiply
+    expected = float(np.sum(np.where(p > 0, p * (p_log - np.log(q)), 0.0)))
+
+tests/unit/test_autodiff_stateful_plugin_binding.py::test_flat_adafactor_full_and_factored_match_tree_reference
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_autodiff_stateful_plugin_binding.py:133: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.
+    expected_p, expected_state = ts.optim.adafactor(
+
+tests/unit/test_autodiff_stateful_plugin_binding.py::test_flat_adafactor_full_and_factored_match_tree_reference
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_autodiff_stateful_plugin_binding.py:149: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.
+    expected_p, expected_state = ts.optim.adafactor(
+
+tests/unit/test_apple_gpu_binary_opcodes.py::TestStubCompiledBehaviour::test_compiled_stub_matches_the_declared_reference[tessera.add]
+  /home/angstorms/scratch/next-five-compiler-slices/.venv/lib/python3.14/site-packages/_pytest/fixtures.py:1313: PytestRemovedIn10Warning: Class-scoped fixture defined as instance method is deprecated.
+  Instance attributes set in this fixture will NOT be visible to test methods,
+  as each test gets a new instance while the fixture runs only once per class.
+  Use @classmethod decorator and set attributes on cls instead.
+  See https://docs.pytest.org/en/stable/deprecations.html#class-scoped-fixture-as-instance-method
+    fixturefunc = resolve_fixture_function(fixturedef, request)
+
+tests/unit/test_native_artifact_contract.py::test_cached_dtype_spelling_does_not_cache_invocation_shape_or_layout
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_native_artifact_contract.py:376: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+  As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+    value.shape = (3, 2)
+
+tests/unit/test_optimizer_mixed_precision_support.py::test_adafactor_vjp_and_jvp_match_finite_difference_for_vector_state
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_optimizer_mixed_precision_support.py:168: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.
+    lambda gg: float(ts.optim.adafactor(params, gg, state, lr=0.01, beta2=0.9, eps=1e-6)[0].sum()),
+
+tests/unit/test_optimizer_mixed_precision_support.py::test_adafactor_vjp_and_jvp_match_finite_difference_for_vector_state
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/../../python/tessera/autodiff/jvp.py:2290: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.
+    return ts_optim.adafactor(p, g, s, lr=lr, beta2=beta2, eps=eps, **kwargs)[0]
+
+tests/unit/test_optimizer_mixed_precision_support.py::test_adafactor_vjp_and_jvp_match_finite_difference_for_vector_state
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_optimizer_mixed_precision_support.py:183: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 2. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.
+    lambda pp: ts.optim.adafactor(pp, grads, state, lr=0.01, beta2=0.9, eps=1e-6)[0],
+
+tests/unit/test_s10_optim.py::test_adafactor_vjp_differentiates_the_corrected_forward
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_s10_optim.py:248: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 1. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.
+    ts.optim.adafactor(p, gradient, state, **kwargs)[0],
+
+tests/unit/test_s10_optim.py::test_adafactor_vjp_differentiates_the_corrected_forward
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_s10_optim.py:248: RuntimeWarning: Adafactor state carries no 'v_representation' marker at step 5. Since the bias correction landed, state['v'] holds the DEBIASED second moment; a checkpoint written before that holds the raw EMA and will be read as if it were already debiased, erasing most of its history. If this state came from an older checkpoint, pass it through optim.migrate_adafactor_state once; if it was built by hand, set state['v_representation'] = optim._ADAFACTOR_V_REPRESENTATION.
+    ts.optim.adafactor(p, gradient, state, **kwargs)[0],
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_batching_rule_closure.py::test_batching_axis_has_zero_open
+FAILED tests/unit/test_batching_rule_closure.py::test_transpose_axis_has_zero_open
+FAILED tests/unit/test_op_arity_contract.py::test_keyword_declarations_name_real_parameters
+FAILED tests/unit/test_ssm_nvidia_replay.py::test_nvidia_replay_factory_wires_scalar_decode_path
+FAILED tests/unit/test_ssm_nvidia_replay.py::test_cuda_replay_async_submit_wait_matches_ordered_steps
+FAILED tests/unit/test_ssm_nvidia_replay.py::test_cuda_replay_multi_slot_ring_and_device_consumer_protocol
+FAILED tests/unit/test_standalone_compiler_roadmap.py::test_standalone_dashboard_generated_summaries_match_live_registries
+7 failed, 18322 passed, 9035 skipped, 10 warnings in 288.00s (0:04:48)

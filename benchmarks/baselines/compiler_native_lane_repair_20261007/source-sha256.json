@@ -1,0 +1,12 @@
+{
+  "tests/tessera-ir/lit.cfg.py": "1c0dce24db31fe2c43acbb2579b581de3f567b0f5668601f79a336afd16cb82f",
+  "tests/tessera-ir/phase2/e2e_matmul_scheduled_nvidia_dynamic_row_rhs.mlir": "be5f8a3c30ab0b7c5adb1634fc8feeec81cedf286c18d67fd98aa6dde04dfc46",
+  "tests/tessera-ir/phase2/e2e_mxfp8_lds_rocm.mlir": "703c5a9973a413892e23fc9808e1f8d515ff65536a00c5db939ea1d843315047",
+  "tests/tessera-ir/phase2/e2e_mxfp8_scale_schedule.mlir": "7253de7b2879768efa176e0957fc0c60dcaef961f8904e76fdafeee606359b6a",
+  "tests/tessera-ir/phase2/e2e_scaled_matmul_schedule_carrier.mlir": "edd983263a72f6e4f882a721e48f2f1f28cb28adf015f44e625c912ae461fcbd",
+  "tests/tessera-ir/phase2/fp8_blockscale_contract_invalid.mlir": "96647015ff0c71a29ba6e668848af30b20f15049238047c3d8dd3e98b46c0aed",
+  "tests/tessera-ir/phase2/layout_target_materializer_nvidia.mlir": "fbaa6b3a260684d2bfe2e98451b615c9d47e2503af2497937989c970fbc297d6",
+  "tests/tessera-ir/phase3/flash_attn_full.mlir": "9a252c1cdd6ba365f8ea98862150a918a51b9f3236feade816c9d4bb61300010",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/test/nvidia/sm120_nvfp4_matmul_kernel.mlir": "ab26d5dc8d0d606755ea013e97ed58fbd8c2be6440d73b15bc6d22d72f084447",
+  "src/compiler/codegen/tessera_gpu_backend_NVIDIA/NVFlashAttnKernelEmitter.cpp": "5292f7fd828a6b0f0f31f310b463ea926d1e1922d6ca6ceeb42425c5ef9a5cec"
+}

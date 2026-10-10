@@ -1,0 +1,14 @@
+{
+  "compiler_sha256": "65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2",
+  "runtime_identities_match": true,
+  "production_source_identities_match": true,
+  "source_differences": {
+    "tests/device/nvidia/test_prepared_dynamic_lhs_owner.py": [
+      "f4e12899edcdb975f82a54e3a4ef109e521515bb24bb9554825db484e2815181",
+      "e85baf2e8ad5487981aac1fdd2b177a400e60ff2288e2c72f18fa5f96757b786"
+    ]
+  },
+  "reason": "Owner refusal fixture repaired between layout runs; numerical/timing production sources unchanged.",
+  "profiles": 96,
+  "final_native_drift_result": "423 passed in 54.75s"
+}

@@ -1,0 +1,9 @@
+{
+  "target": "nvidia_sm120",
+  "device": "RTX 5070",
+  "candidate_runtime_sha256": "1c2750944d92ec0afcfcd34f4e8e24ebddd663baa21e01c6c90476ea155d31fc",
+  "control_runtime_sha256": "f4d094999c0e16e4a1fe406046dd938b2d4411abcc2fd8567845391edf9a906a",
+  "candidate_source_sha256": "3bfdede3d2f21dd2d2fa12772e68114dec5ab0ea3ffe60ed8622f70cd430cfac",
+  "control_source_sha256": "a113cefc6a819d3c4d5a3567355cb5419d5c66f9ec78e9f3c73c437022b6430b",
+  "performance": "not measured; matched A/B pending after full-unit lane"
+}

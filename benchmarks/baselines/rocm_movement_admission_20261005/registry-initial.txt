@@ -1,0 +1,46 @@
+....sss.....s.........................s.........F........F.............. [ 18%]
+........................................................................ [ 36%]
+........................................................................ [ 54%]
+........................................................................ [ 73%]
+........................................................................ [ 91%]
+.................................                                        [100%]
+=================================== FAILURES ===================================
+___________ test_unimplemented_targets_disjoint_from_executable_rows ___________
+
+    def test_unimplemented_targets_disjoint_from_executable_rows():
+        """A target can't be both 'has an executor' and 'on the unimplemented list'."""
+        executable_targets = {r.target for r in EM.all_rows()}
+        unimplemented = set(EM.unimplemented_targets())
+        overlap = executable_targets & unimplemented
+>       assert not overlap, f"targets in both executable rows and unimplemented list: {sorted(overlap)}"
+E       AssertionError: targets in both executable rows and unimplemented list: ['rocm_gfx1151']
+E       assert not {'rocm_gfx1151'}
+
+tests/unit/test_runtime_execution_matrix.py:56: AssertionError
+_______________________ test_dashboard_matches_live_data _______________________
+
+    def test_dashboard_matches_live_data():
+        """The on-disk dashboard must equal what render_dashboard() produces from
+        the current matrix. Any drift means someone changed the matrix without
+        regenerating, or hand-edited the generated file."""
+        live = EM.render_dashboard()
+        disk = DASHBOARD.read_text()
+        if live != disk:
+            # Surface a useful diff hint in the failure message.
+            live_lines = live.splitlines()
+            disk_lines = disk.splitlines()
+            first_diff = next((i for i in range(min(len(live_lines), len(disk_lines)))
+                               if live_lines[i] != disk_lines[i]), min(len(live_lines), len(disk_lines)))
+>           pytest.fail(
+                f"Runtime execution matrix dashboard drift at line {first_diff + 1}: "
+                f"on-disk has {disk_lines[first_diff] if first_diff < len(disk_lines) else '<EOF>'!r}, "
+                f"live has {live_lines[first_diff] if first_diff < len(live_lines) else '<EOF>'!r}. "
+                "Regenerate with `python3 -c 'from tessera.compiler.execution_matrix "
+                "import write_dashboard; write_dashboard()'`.")
+E           Failed: Runtime execution matrix dashboard drift at line 199: on-disk has '| `rocm_gfx1201` | `canonical_rocm_nvfp4_program` | `rocm_nvfp4_program` | `native_gpu` | `hip_runtime` | Named static primal NVFP4 converter/storage/packed matmul through three verified native Graph/Schedule/Tile/LLVM/HSACO packages, private HIP stream and checked five-input frontend ABI; broader AD/layout/quality remain open. |', live has '| `rocm_gfx1151` | `rocm_gfx1151_native_descriptor` | `rocm_native_descriptor` | `native_gpu` | `hip_runtime` | Static f32/i32 paged movement through native Graph/Schedule/Tile/Target/LLVM and checked image/descriptor ABI; MoE token gather proved on gfx1151 only. |'. Regenerate with `python3 -c 'from tessera.compiler.execution_matrix import write_dashboard; write_dashboard()'`.
+
+tests/unit/test_runtime_execution_matrix.py:109: Failed
+=========================== short test summary info ============================
+FAILED tests/unit/test_runtime_execution_matrix.py::test_unimplemented_targets_disjoint_from_executable_rows
+FAILED tests/unit/test_runtime_execution_matrix.py::test_dashboard_matches_live_data
+2 failed, 386 passed, 5 skipped in 8.39s

@@ -1,0 +1,310 @@
+{
+  "schema": "tessera.gfx1201_mxfp8_k64_selection_analysis.v1",
+  "timing_scope": "resident_graph_device_execution_and_dispatch",
+  "rule": "existing_auto_lds_128x64_and_1024_le_K_le_2048_and_K_multiple_64",
+  "observations": {
+    "200,1024,128": {
+      "repeat_forward.json": {
+        "control_device_us": 8.646794433593751,
+        "candidate_device_us": 8.4377734375,
+        "candidate_time_reduction": 0.02417323526065107,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "repeat_reverse.json": {
+        "control_device_us": 8.692160644531251,
+        "candidate_device_us": 8.437163085937499,
+        "candidate_time_reduction": 0.029336498601666428,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      }
+    },
+    "200,8192,1024": {
+      "repeat_forward.json": {
+        "control_device_us": 69.81453125,
+        "candidate_device_us": 69.89609375,
+        "candidate_time_reduction": -0.0011682739759137917,
+        "control_panel": [
+          128,
+          128
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "repeat_reverse.json": {
+        "control_device_us": 70.099609375,
+        "candidate_device_us": 71.522578125,
+        "candidate_time_reduction": -0.020299239363628763,
+        "control_panel": [
+          128,
+          128
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      }
+    },
+    "200,2048,2048": {
+      "repeat_forward.json": {
+        "control_device_us": 49.04609375,
+        "candidate_device_us": 40.354296875,
+        "candidate_time_reduction": 0.17721690374169707,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "repeat_reverse.json": {
+        "control_device_us": 49.211875,
+        "candidate_device_us": 38.989062499999996,
+        "candidate_time_reduction": 0.2077306036398736,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "automatic_route.json": {
+        "control_device_us": 49.494687500000005,
+        "candidate_device_us": 40.485078124999994,
+        "candidate_time_reduction": 0.1820318468522506,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      }
+    },
+    "200,2049,1536": {
+      "repeat_forward.json": {
+        "control_device_us": 42.38828125,
+        "candidate_device_us": 37.994296875,
+        "candidate_time_reduction": 0.10366035718893418,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "repeat_reverse.json": {
+        "control_device_us": 42.434375,
+        "candidate_device_us": 38.029765625,
+        "candidate_time_reduction": 0.10379814419323952,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "automatic_route.json": {
+        "control_device_us": 42.3884375,
+        "candidate_device_us": 37.9173046875,
+        "candidate_time_reduction": 0.10548001002631913,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      }
+    },
+    "256,4096,5120": {
+      "repeat_forward.json": {
+        "control_device_us": 161.47343750000002,
+        "candidate_device_us": 162.318125,
+        "candidate_time_reduction": -0.005231123540055949,
+        "control_panel": [
+          128,
+          128
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "repeat_reverse.json": {
+        "control_device_us": 162.39234375,
+        "candidate_device_us": 165.04375,
+        "candidate_time_reduction": -0.016327162899266945,
+        "control_panel": [
+          128,
+          128
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      }
+    },
+    "128,4096,1024": {
+      "repeat_forward.json": {
+        "control_device_us": 27.109921875,
+        "candidate_device_us": 22.5974609375,
+        "candidate_time_reduction": 0.16645053269818766,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "repeat_reverse.json": {
+        "control_device_us": 27.2363671875,
+        "candidate_device_us": 22.532578125,
+        "candidate_time_reduction": 0.17270251315523388,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "automatic_route.json": {
+        "control_device_us": 27.115820312500002,
+        "candidate_device_us": 22.6357421875,
+        "candidate_time_reduction": 0.16522008456202786,
+        "control_panel": [
+          128,
+          64
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      }
+    },
+    "512,4096,1024": {
+      "repeat_forward.json": {
+        "control_device_us": 66.23562500000001,
+        "candidate_device_us": 67.839921875,
+        "candidate_time_reduction": -0.02422105739924696,
+        "control_panel": [
+          128,
+          128
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      },
+      "repeat_reverse.json": {
+        "control_device_us": 65.6965625,
+        "candidate_device_us": 68.43656250000001,
+        "candidate_time_reduction": -0.04170690057033055,
+        "control_panel": [
+          128,
+          128
+        ],
+        "candidate_panel": [
+          128,
+          64
+        ],
+        "control_scratch_load_instructions": 0,
+        "control_scratch_store_instructions": 0,
+        "candidate_scratch_load_instructions": 0,
+        "candidate_scratch_store_instructions": 0
+      }
+    }
+  }
+}

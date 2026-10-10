@@ -1,0 +1,3 @@
+[  0%] Building CXX object src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/CMakeFiles/tessera_nvidia_ptx_launch.dir/matmul_prepared.cpp.o
+[ 50%] Linking CXX shared library libtessera_nvidia_ptx_launch.so
+[100%] Built target tessera_nvidia_ptx_launch

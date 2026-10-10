@@ -60,6 +60,19 @@ def vmap(
     tape-replay version that reuses the lowered IR with a batched
     leading dim is a Phase G follow-up.
     """
+    from tessera.compiler.jit import JitFn
+    if (isinstance(fn, JitFn) and len(fn.graph_ir.functions) == 1
+            and any(op.kwargs.get("physical_contract") == "nvidia_sm120_nvfp4_blockscale_v1"
+                    for op in fn.graph_ir.functions[0].body)):
+        from tessera.compiler.native_vmap import native_nvfp4_vmap
+        return native_nvfp4_vmap(fn, in_axes, out_axes)
+
+    if isinstance(fn, JitFn):
+        from tessera.compiler.rocm_typed_scaled_native import requests_typed_scaled, requests_composed_typed_scaled
+        if requests_typed_scaled(fn.graph_ir) or requests_composed_typed_scaled(fn.graph_ir):
+            from tessera.compiler.native_vmap import native_typed_scaled_vmap
+            return native_typed_scaled_vmap(fn, in_axes, out_axes)
+
     @functools.wraps(fn)
     def wrapped(*args: Any, **kwargs: Any) -> Any:
         # Normalize in_axes to a per-argument tuple.

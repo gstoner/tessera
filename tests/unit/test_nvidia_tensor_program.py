@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import replace
+import re
+import subprocess
 
 import numpy as np
 import pytest
@@ -16,8 +18,8 @@ pytestmark = pytest.mark.skipif(
 )
 
 
-def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="none", dynamic_m=False, dynamic_k=False):
-    m, k, n = 16, 16, 16 if dynamic_n else 8
+def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="none", dynamic_m=False, dynamic_k=False, producer_kind="rmsnorm", bias=False, residual=False, shape_mkn=None):
+    m, k, n = shape_mkn if shape_mkn is not None else (16, 16, 16 if dynamic_n else 8)
     elem = "f16" if dtype == "fp16" else "bf16"
     a = IRType(f"tensor<{m}x{k}x{elem}>", (str(m), str(k)), dtype)
     consumer_a = (
@@ -40,36 +42,73 @@ def _program(dtype="fp16", dynamic_n=False, output_dtype="fp32", activation="non
         )
     )
     producer_module = GraphIRModule(functions=[GraphIRFunction(
-        name="sm120_rmsnorm_tensor_producer",
+        name=f"sm120_{producer_kind}_tensor_producer",
         args=[IRArg("x", a)],
         result_types=[a],
         body=[IROp(
-            result="normalized", op_name="tessera.rmsnorm",
+            result="normalized", op_name={
+                "rmsnorm": "tessera.rmsnorm",
+                "layernorm": "tessera.layer_norm",
+                "softmax": "tessera.softmax",
+            }[producer_kind],
             operands=["%x"], operand_types=[str(a)], result_type=str(a),
-            kwargs={"eps": 1e-5},
+            kwargs=(
+                {"eps": 1e-5} if producer_kind in {"rmsnorm", "layernorm"}
+                else {"axis": -1}
+            ),
         )],
         return_values=["%normalized"],
     )])
+    bias_type = IRType(f"tensor<{n}xf32>",(str(n),),"fp32")
+    residual_type = IRType(f"tensor<{m}x{n}xf32>",(str(m),str(n)),"fp32")
     consumer_module = GraphIRModule(functions=[GraphIRFunction(
         name="sm120_rmsnorm_matmul_consumer",
-        args=[IRArg("normalized", consumer_a), IRArg("weights", b)],
+        args=[IRArg("normalized", consumer_a), IRArg("weights", b)]
+             + ([IRArg("bias",bias_type)] if bias else [])
+             + ([IRArg("residual",residual_type)] if residual else []),
         result_types=[out],
         body=[IROp(
             result="result", op_name="tessera.matmul",
-            operands=["%normalized", "%weights"],
-            operand_types=[str(consumer_a), str(b)], result_type=str(out),
+            operands=["%normalized", "%weights"]
+                     + (["%bias"] if bias else []) + (["%residual"] if residual else []),
+            operand_types=[str(consumer_a), str(b)]
+                     + ([str(bias_type)] if bias else []) + ([str(residual_type)] if residual else []), result_type=str(out),
             kwargs=({"shape_bounds": [m, n, k]} if dynamic_n or dynamic_k else {}) | {
                 "activation": activation,
+                **({"bias":"%bias"} if bias else {}),
+                **({"residual":"%residual"} if residual else {}),
             },
         )],
         return_values=["%result"],
     )])
-    return nvidia_native.package_scheduled_rmsnorm_matmul(
+    return nvidia_native.package_scheduled_tensor_matmul(
         producer_module, consumer_module,
         pipeline_name="tessera-lower-to-nvidia-sm120",
         dynamic_m_bound=m if dynamic_m else None,
         dynamic_k_bound=k if dynamic_k else None,
     )
+
+
+def test_sm120_softmax_tensor_edge_packages_shape_preserving_producer():
+    program = _program(producer_kind="softmax")
+    program.validate()
+    assert program.producer.descriptor.abi_id == nvidia_native.SM120_SOFTMAX_F16_ABI
+    assert program.producer.descriptor.provenance["kind"] == "softmax"
+    assert program.consumer.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    assert "tile.view" in program.consumer.tile_ir
+    assert "tile.fragment_pack" in program.consumer.tile_ir
+    assert "tile.fragment_unpack" in program.consumer.tile_ir
+
+
+def test_sm120_layernorm_tensor_edge_packages_native_norm_producer():
+    program = _program(producer_kind="layernorm")
+    program.validate()
+    assert program.producer.descriptor.abi_id == nvidia_native.SM120_NORM_F16_ABI
+    assert program.producer.descriptor.provenance["kind"] == "layernorm"
+    assert "tile.norm_kernel" in program.producer.tile_ir
+    assert 'kind = "layernorm"' in program.producer.tile_ir
+    assert "tile.view" in program.consumer.tile_ir
+    assert "tile.fragment_pack" in program.consumer.tile_ir
 
 
 def test_sm120_rmsnorm_tensor_edge_keeps_both_canonical_packages():
@@ -86,9 +125,13 @@ def test_sm120_rmsnorm_tensor_edge_keeps_both_canonical_packages():
     assert program.consumer_input_name == "normalized"
 
 
-def test_sm120_rmsnorm_tensor_package_refuses_fused_consumer_artifact():
-    with pytest.raises(ValueError, match="unfused"):
-        _program(activation="relu")
+def test_sm120_rmsnorm_tensor_package_accepts_fused_consumer_artifact():
+    program = _program(activation="relu",bias=True,residual=True)
+    program.validate()
+    assert program.consumer.descriptor.provenance["epilogue"] == {
+        "bias":True,"residual":True,"activation":"relu","output":"f32",
+        "order":["matmul","bias","activation","residual"]
+    }
 
 
 def test_sm120_rmsnorm_tensor_edge_rejects_fused_consumer_provenance():
@@ -99,7 +142,7 @@ def test_sm120_rmsnorm_tensor_edge_rejects_fused_consumer_provenance():
     }
     descriptor = replace(program.consumer.descriptor, provenance=provenance)
     consumer = replace(program.consumer, descriptor=descriptor)
-    with pytest.raises(ValueError, match="does not support fused"):
+    with pytest.raises(ValueError, match="does not match its native entry"):
         replace(program, consumer=consumer).validate()
 
 
@@ -180,21 +223,27 @@ def test_sm120_rmsnorm_tensor_edge_uses_same_resident_device_buffer(monkeypatch)
     rhs = np.asfortranarray(
         rng.normal(0.0, 0.25, (program.k, program.n)).astype(np.float16)
     )
-    original_launch = rt.launch
-    launch_args = []
+    from tessera.compiler.resident_nvidia_tensor import ResidentTensorCall
+    original_invoke = ResidentTensorCall.invoke
+    calls = []
 
-    def capture_launch(kernel, args, stream=None):
-        launch_args.append((args, stream))
-        return original_launch(kernel, args, stream=stream)
+    def capture_invoke(owner, buffers, edge, *, stream):
+        calls.append((buffers, edge, stream))
+        return original_invoke(owner, buffers, edge, stream=stream)
 
-    monkeypatch.setattr(rt, "launch", capture_launch)
+    def forbidden_launch(*args, **kwargs):
+        raise AssertionError("resident tensor escaped native sequence")
+
+    monkeypatch.setattr(ResidentTensorCall, "invoke", capture_invoke)
+    monkeypatch.setattr(rt, "launch", forbidden_launch)
     with program.execute_resident(source, rhs) as result:
-        producer_args, producer_stream = launch_args[0]
-        consumer_args, consumer_stream = launch_args[1]
-        producer_buffer = producer_args[program.intermediate_name]
-        consumer_buffer = consumer_args[program.consumer_input_name]
-        assert producer_buffer.ptr == consumer_buffer.ptr
-        assert producer_stream == consumer_stream == result.device_session.stream
+        assert len(calls) == 1
+        buffers, edge, stream = calls[0]
+        assert edge.ptr == result.intermediate.ptr
+        assert buffers[-1].ptr == result.output.ptr
+        assert stream == result.device_session.stream
+        assert result.producer_receipt["native_call_binding"] == "prepared_cpp_resident_tensor_matmul"
+        assert result.consumer_receipt["native_call_binding"] == "prepared_cpp_resident_tensor_matmul"
         intermediate = result.intermediate.numpy()
         output = result.output.numpy()
         reference = intermediate.astype(np.float32) @ rhs.astype(np.float32)
@@ -359,6 +408,70 @@ def test_sm120_rmsnorm_tensor_edge_packages_public_frontend_graph_ir():
     assert consumer_result.dtype == np.float16
 
 
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_layernorm_tensor_edge_executes_public_frontend_on_exact_device(dtype):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires exact SM120 device execution")
+    import ml_dtypes
+    from tessera.compiler.from_text import from_text
+
+    storage_dtype = np.float16 if dtype == "fp16" else np.dtype(ml_dtypes.bfloat16)
+    producer_jit = from_text("""
+        def layernorm_frontend(x):
+            return ts.ops.layer_norm(x, eps=1e-5)
+    """)
+    consumer_jit = from_text("""
+        def matmul_frontend(normalized, weights):
+            return ts.ops.matmul(normalized, weights, output_dtype="fp32")
+    """)
+    rng = np.random.default_rng(19016)
+    source = np.ascontiguousarray(
+        rng.normal(0.0, 0.25, (16, 64)).astype(storage_dtype)
+    )
+    source_result = producer_jit(source)
+    weights = np.asfortranarray(
+        rng.normal(0.0, 0.25, (64, 8)).astype(storage_dtype)
+    )
+    consumer_jit(source_result, weights)
+    assert producer_jit.frontend_authority == consumer_jit.frontend_authority == "tracer"
+    program = nvidia_native.package_scheduled_tensor_matmul(
+        producer_jit.graph_ir, consumer_jit.graph_ir,
+        pipeline_name="tessera-lower-to-nvidia-sm120",
+    )
+    assert program.producer.descriptor.provenance["kind"] == "layernorm"
+    assert program.producer.descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    assert program.producer.descriptor.provenance["schedule_digest"]
+    assert 'kind = "layernorm"' in program.producer.tile_ir
+    assert "tile.view" in program.consumer.tile_ir
+    assert "tile.fragment_pack" in program.consumer.tile_ir
+    assert "tile.fragment_zero" in program.consumer.tile_ir
+    assert "tile.mma" in program.consumer.tile_ir
+    assert "tile.fragment_unpack" in program.consumer.tile_ir
+    assert "nvvm.mma.sync" in program.consumer.target_ir
+    ptx_instruction = (
+        "mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32"
+        if dtype == "bf16"
+        else "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"
+    )
+    assert ptx_instruction in program.consumer.backend_ir
+    with program.execute_resident(source, weights) as result:
+        edge = result.intermediate.numpy()
+        output = result.output.numpy()
+        source_f32 = source.astype(np.float32)
+        centered = source_f32 - np.mean(source_f32, axis=-1, keepdims=True)
+        expected_edge = (
+            centered / np.sqrt(np.mean(centered * centered, axis=-1, keepdims=True) + 1e-5)
+        ).astype(storage_dtype)
+        np.testing.assert_allclose(
+            edge.astype(np.float32), expected_edge.astype(np.float32),
+            rtol=0.0, atol=3e-3 if dtype == "fp16" else 3e-2,
+        )
+        expected_output = edge.astype(np.float32) @ weights.astype(np.float32)
+        np.testing.assert_allclose(output, expected_output, rtol=0.0, atol=3e-2)
+        assert result.producer_receipt["execution_kind"] == "native_gpu"
+        assert result.consumer_receipt["execution_kind"] == "native_gpu"
+
+
 def test_sm120_rmsnorm_tensor_edge_executes_public_frontend_on_exact_device():
     if rt._nvidia_device_name() != "sm_120":
         pytest.skip("requires exact SM120 device execution")
@@ -370,16 +483,48 @@ def test_sm120_rmsnorm_tensor_edge_executes_public_frontend_on_exact_device():
     """)
     consumer_jit = from_text("""
         def matmul_frontend(normalized, weights):
-            return ts.ops.matmul(normalized, weights)
+            return ts.ops.matmul(normalized, weights, output_dtype="fp32")
     """)
     rng = np.random.default_rng(18016)
-    source = np.ascontiguousarray(rng.normal(0.0, 0.25, (16, 16)).astype(np.float16))
+    source = np.ascontiguousarray(rng.normal(0.0, 0.25, (16, 64)).astype(np.float16))
     producer_result = producer_jit(source)
-    weights = np.asfortranarray(rng.normal(0.0, 0.25, (16, 8)).astype(np.float16))
+    weights = np.asfortranarray(rng.normal(0.0, 0.25, (64, 8)).astype(np.float16))
     consumer_jit(producer_result, weights)
     program = nvidia_native.package_scheduled_rmsnorm_matmul(
         producer_jit.graph_ir, consumer_jit.graph_ir,
         pipeline_name="tessera-lower-to-nvidia-sm120",
+    )
+    # Pin the actual Graph -> Schedule -> Tile route and native SM120 MMA
+    # emission, so a future generic tensor fallback cannot pass this device
+    # oracle under native_gpu receipts alone.
+    consumer_tile = program.consumer.tile_ir
+    assert "tile.view" in consumer_tile
+    assert "tile.fragment_pack" in consumer_tile
+    assert "tile.fragment_zero" in consumer_tile
+    assert "tile.mma" in consumer_tile
+    assert "tile.fragment_unpack" in consumer_tile
+    assert "tile.store" in consumer_tile
+    assert "scf.for" in consumer_tile
+    assert any(
+        " = scf.for " in line
+        and "iter_args(" in line
+        and ") -> (!tile.fragment<" in line
+        for line in consumer_tile.splitlines()
+    )
+    assert any(
+        " = tile.mma " in line
+        and ": (!tile.fragment<" in line
+        and "-> !tile.fragment<" in line
+        for line in consumer_tile.splitlines()
+    )
+    assert any(
+        line.lstrip().startswith("scf.yield ")
+        and ": !tile.fragment<" in line
+        for line in consumer_tile.splitlines()
+    )
+    assert (
+        "mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32"
+        in program.consumer.backend_ir
     )
     with program.execute_resident(source, weights) as result:
         edge = result.intermediate.numpy()
@@ -389,7 +534,7 @@ def test_sm120_rmsnorm_tensor_edge_executes_public_frontend_on_exact_device():
             x32 / np.sqrt(np.mean(x32 * x32, axis=-1, keepdims=True) + 1e-5)
         ).astype(np.float16)
         np.testing.assert_allclose(edge, expected_norm, rtol=0.0, atol=2e-3)
-        expected = (edge.astype(np.float32) @ weights.astype(np.float32)).astype(np.float16)
+        expected = (edge.astype(np.float32) @ weights.astype(np.float32))
         np.testing.assert_allclose(output, expected, rtol=0.0, atol=2e-3)
         assert result.producer_receipt["execution_kind"] == "native_gpu"
         assert result.consumer_receipt["execution_kind"] == "native_gpu"
@@ -613,3 +758,260 @@ def test_sm120_rmsnorm_tensor_edge_reuses_joint_dynamic_mnk_on_exact_device(dtyp
             assert result.consumer_receipt["execution_kind"] == "native_gpu"
     assert program.producer.image.image_digest == producer_digest
     assert program.consumer.image.image_digest == consumer_digest
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_softmax_tensor_edge_executes_public_frontend_on_exact_device(dtype):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires exact SM120 device execution")
+    from tessera.compiler.from_text import from_text
+
+    producer_jit = from_text("""
+        def softmax_frontend(x):
+            return ts.ops.softmax(x, axis=-1)
+    """)
+    consumer_jit = from_text("""
+        def matmul_frontend(normalized, weights):
+            return ts.ops.matmul(normalized, weights, output_dtype="fp32")
+    """)
+    if dtype == "fp16":
+        storage_dtype = np.dtype(np.float16)
+        expected_abi = nvidia_native.SM120_SOFTMAX_F16_ABI
+        atol = 2e-3
+    else:
+        import ml_dtypes
+        storage_dtype = np.dtype(ml_dtypes.bfloat16)
+        expected_abi = nvidia_native.SM120_SOFTMAX_BF16_ABI
+        atol = 3e-2
+    rng = np.random.default_rng(18017)
+    source = np.ascontiguousarray(rng.normal(0.0, 0.25, (16, 64)).astype(storage_dtype))
+    weights = np.asfortranarray(rng.normal(0.0, 0.25, (64, 8)).astype(storage_dtype))
+    producer_jit(source)
+    consumer_jit(source, weights)
+    program = nvidia_native.package_scheduled_tensor_matmul(
+        producer_jit.graph_ir, consumer_jit.graph_ir,
+        pipeline_name="tessera-lower-to-nvidia-sm120",
+    )
+    program.validate()
+    assert program.dtype == dtype
+    assert program.producer.descriptor.abi_id == expected_abi
+    assert "tile.view" in program.consumer.tile_ir
+    assert "tile.fragment_pack" in program.consumer.tile_ir
+    assert "tile.mma" in program.consumer.tile_ir
+    assert "mma.sync.aligned.m16n8k16" in program.consumer.backend_ir
+    with program.execute_resident(source, weights) as result:
+        edge = result.intermediate.numpy()
+        output = result.output.numpy()
+        source32 = source.astype(np.float32)
+        exp = np.exp(source32 - np.max(source32, axis=-1, keepdims=True))
+        expected_edge = (exp / np.sum(exp, axis=-1, keepdims=True)).astype(storage_dtype)
+        np.testing.assert_allclose(edge, expected_edge, rtol=0.0, atol=atol)
+        expected = expected_edge.astype(np.float32) @ weights.astype(np.float32)
+        np.testing.assert_allclose(output, expected, rtol=0.0, atol=atol)
+        assert result.intermediate.ptr != result.output.ptr
+
+
+@pytest.mark.parametrize("dtype", ["fp16", "bf16"])
+def test_sm120_softmax_tensor_edge_reuses_bounded_dynamic_k(dtype):
+    if rt._nvidia_device_name() != "sm_120":
+        pytest.skip("requires exact SM120 device execution")
+    from tessera.compiler.from_text import from_text
+
+    if dtype == "fp16":
+        storage_dtype = np.dtype(np.float16)
+        atol = 2e-3
+    else:
+        import ml_dtypes
+        storage_dtype = np.dtype(ml_dtypes.bfloat16)
+        atol = 3e-2
+
+    producer_jit = from_text("""
+        def softmax_dynamic_k(x):
+            return ts.ops.softmax(x, axis=-1)
+    """)
+    consumer_jit = from_text("""
+        def matmul_dynamic_k(edge, weights):
+            return ts.ops.matmul(edge, weights, output_dtype="fp32")
+    """)
+    rng = np.random.default_rng(18018)
+    bound_source = np.ascontiguousarray(
+        rng.normal(0.0, 0.25, (16, 16)).astype(storage_dtype)
+    )
+    bound_weights = np.asfortranarray(
+        rng.normal(0.0, 0.25, (16, 8)).astype(storage_dtype)
+    )
+    producer_jit(bound_source)
+    consumer_jit(bound_source, bound_weights)
+    program = nvidia_native.package_scheduled_tensor_matmul(
+        producer_jit.graph_ir, consumer_jit.graph_ir,
+        pipeline_name="tessera-lower-to-nvidia-sm120",
+        dynamic_k_bound=16,
+    )
+    assert program.dynamic_k
+    producer_image = program.producer.image.image_digest
+    consumer_image = program.consumer.image.image_digest
+
+    for active_k in (7, 11, 16):
+        source = np.ascontiguousarray(
+            rng.normal(0.0, 0.25, (16, active_k)).astype(storage_dtype)
+        )
+        weights = np.asfortranarray(
+            rng.normal(0.0, 0.25, (active_k, 8)).astype(storage_dtype)
+        )
+        with program.execute_resident(source, weights) as result:
+            edge = result.intermediate.numpy()
+            output = result.output.numpy()
+            source32 = source.astype(np.float32)
+            exp = np.exp(source32 - np.max(source32, axis=-1, keepdims=True))
+            expected_edge = (exp / np.sum(exp, axis=-1, keepdims=True)).astype(storage_dtype)
+            np.testing.assert_allclose(edge, expected_edge, rtol=0.0, atol=atol)
+            expected_output = expected_edge.astype(np.float32) @ weights.astype(np.float32)
+            np.testing.assert_allclose(output, expected_output, rtol=0.0, atol=atol)
+            assert result.producer_receipt["execution_kind"] == "native_gpu"
+            assert result.consumer_receipt["execution_kind"] == "native_gpu"
+            assert result.intermediate.shape == (16, active_k)
+            assert result.intermediate.ptr != result.output.ptr
+        assert program.producer.image.image_digest == producer_image
+        assert program.consumer.image.image_digest == consumer_image
+
+
+
+def test_sm120_static_ragged_k_uses_bounded_typed_fragment_views() -> None:
+    """Static K tails are masked in Tile views before typed fragment packing."""
+    opt = scheduled_matmul.find_tessera_opt()
+    assert opt is not None
+    source = """module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
+      func.func @sm120_ragged_k(%a: tensor<48x67xf16>, %b: tensor<67x16xf16>) -> tensor<48x16xf32> {
+        %c = "tessera.matmul"(%a, %b) : (tensor<48x67xf16>, tensor<67x16xf16>) -> tensor<48x16xf32>
+        return %c : tensor<48x16xf32>
+      }
+    }
+    """
+    proc = subprocess.run(
+        [str(opt), "--tessera-nvidia-pipeline-sm120", "-"],
+        input=source, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    tile = proc.stdout
+    assert "tile.fragment_pack" in tile and "tile.mma" in tile
+    views = [line for line in tile.splitlines() if " = tile.view " in line]
+    assert len(views) == 2, tile
+    # base, precomputed linear origin, logical origins, and both logical bounds.
+    assert all(
+        len(line.split("tile.view", 1)[1].split("{", 1)[0].split(",")) == 6
+        for line in views
+    ), views
+    assert tile.count("leading_dim = 67") == 2, tile
+
+
+
+@pytest.mark.parametrize("shape", [(1, 1, 1), (17, 19, 23), (31, 33, 9), (48, 67, 17), (257, 513, 257)])
+def test_sm120_static_mnk_tails_bound_fragment_views_and_output_store(shape) -> None:
+    """Static tails remain bounded all the way through output fragment storage."""
+    m, k, n = shape
+    opt = scheduled_matmul.find_tessera_opt()
+    assert opt is not None
+    source = f"""module attributes {{tessera.target = "nvidia_sm120", tessera.arch = "sm_120"}} {{
+      func.func @sm120_ragged_mnk(%a: tensor<{m}x{k}xf16>, %b: tensor<{k}x{n}xf16>) -> tensor<{m}x{n}xf32> {{
+        %c = "tessera.matmul"(%a, %b) : (tensor<{m}x{k}xf16>, tensor<{k}x{n}xf16>) -> tensor<{m}x{n}xf32>
+        return %c : tensor<{m}x{n}xf32>
+      }}
+    }}
+    """
+    proc = subprocess.run(
+        [str(opt), "--tessera-nvidia-pipeline-sm120", "-"],
+        input=source, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    tile = proc.stdout
+    assert "tile.matmul_kernel" not in tile
+    assert "tile.fragment_pack" in tile and "tile.mma" in tile
+    views = [line for line in tile.splitlines() if " = tile.view " in line]
+    stores = [line for line in tile.splitlines() if "tile.store " in line]
+    assert len(views) == 2 and len(stores) == 1, tile
+    assert all(
+        len(line.split("tile.view", 1)[1].split("{", 1)[0].split(",")) == 6
+        for line in views
+    ), views
+    assert len(stores[0].split("tile.store", 1)[1].split("{", 1)[0].split(",")) == 6, stores
+    assert f"leading_dim = {n}" in stores[0], stores
+
+
+def test_sm120_graph_matmul_k_loop_carries_typed_fragment_accumulator():
+    """The production Graph->Schedule->Tile path owns every SM120 K panel."""
+    opt = scheduled_matmul.find_tessera_opt()
+    assert opt is not None
+    source = """module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
+      func.func @sm120_four_k_panel(%a: tensor<64x64xbf16>, %b: tensor<64x256xbf16>) -> tensor<64x256xf32> {
+        %c = "tessera.matmul"(%a, %b) : (tensor<64x64xbf16>, tensor<64x256xbf16>) -> tensor<64x256xf32>
+        return %c : tensor<64x256xf32>
+      }
+    }
+    """
+    proc = subprocess.run(
+        [str(opt), "--tessera-nvidia-pipeline-sm120", "-"],
+        input=source, capture_output=True, text=True,
+    )
+    assert proc.returncode == 0, proc.stderr
+    tile = proc.stdout
+    assert tile.count("tile.view ") == 2, tile
+    assert tile.count("tile.fragment_pack ") == 2, tile
+    assert tile.count("tile.fragment_zero ") == 1, tile
+    assert tile.count("tile.fragment_unpack ") == 1, tile
+    assert "tile.async_copy" not in tile
+    assert "tile.tma.copy_async" not in tile
+
+    loop = next(line for line in tile.splitlines() if " = scf.for " in line)
+    assert "iter_args(" in loop and "-> (!tile.fragment<" in loop, loop
+    carry = re.search(r"iter_args\((%[A-Za-z0-9_]+)\s*=", loop)
+    assert carry, loop
+    mma = next(line for line in tile.splitlines() if " = tile.mma " in line)
+    assert re.search(
+        rf"tile\.mma\s+%[A-Za-z0-9_]+,\s*%[A-Za-z0-9_]+,\s*{re.escape(carry.group(1))}\b",
+        mma,
+    ), mma
+    assert " : (!tile.fragment<" in mma and mma.count("!tile.fragment<") == 4, mma
+    assert any("scf.yield" in line and "!tile.fragment<" in line for line in tile.splitlines())
+
+
+
+
+def test_resident_epilogue_inputs_are_required_and_shape_checked():
+    program=_program(bias=True,residual=True,activation="relu")
+    with pytest.raises(ValueError,match="requires its bias"):
+        program.execute_resident(np.ones((16,16),np.float16),
+                                 np.ones((16,8),np.float16,order="F"))
+    with pytest.raises(ValueError,match="bias must be fp32"):
+        program.execute_resident(np.ones((16,16),np.float16),
+                                 np.ones((16,8),np.float16,order="F"),
+                                 bias=np.ones(8,np.float16),residual=np.ones((16,8),np.float32))
+
+
+
+
+def test_fused_tensor_consumer_has_explicit_fragments_and_checked_epilogue_store():
+    program=_program(output_dtype="fp16",bias=True,residual=True,activation="relu")
+    tile=program.consumer.tile_ir
+    for operation in ("tile.view","tile.fragment_pack","tile.fragment_zero",
+                      "tile.mma","tile.fragment_unpack","tile.store"):
+        assert operation in tile
+    assert "tile.matmul_kernel" not in tile
+    assert "tile.residual = true" in tile
+    assert 'tile.epilogue_order = "matmul_bias_activation_residual"' in tile
+    assert 'output = "f16"' in tile
+    assert "scf.for" in tile
+
+
+@pytest.mark.parametrize("edit,message", [
+    ("order","residual store requires"),
+    ("residual_flag","TILE_STORE_POINTER_ARITY"),
+])
+def test_typed_epilogue_store_rejects_incomplete_contract(edit,message):
+    tile=_program(bias=True,residual=True,activation="relu").consumer.tile_ir
+    if edit=="order":
+        tile=tile.replace('tile.epilogue_order = "matmul_bias_activation_residual", ', "")
+    else:
+        tile=tile.replace("tile.residual = true","tile.residual = false")
+    with pytest.raises(RuntimeError,match=message):
+        scheduled_matmul.run_tessera_opt(scheduled_matmul.find_tessera_opt(),tile,
+                                        "--canonicalize")

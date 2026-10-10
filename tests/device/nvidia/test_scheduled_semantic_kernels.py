@@ -142,3 +142,54 @@ def test_reduction_breadth_native_parity(dtype, kind, axis, keepdims, mode, shap
 @pytest.mark.parametrize("shape,axis", [((2, 257), 1), ((2, 257, 3), 1)])
 def test_cooperative_reduction_multi_iteration_parity(dtype, kind, shape, axis):
     test_reduction_breadth_native_parity(dtype, kind, axis, True, "cooperative_128", shape)
+
+
+import tessera as ts
+
+@ts.jit(target="nvidia_sm120")
+def public_softmax_safe(x):
+    return ts.ops.softmax_safe(x, axis=-1)
+
+
+@ts.jit(target="nvidia_sm120")
+def public_softmax(x):
+    return ts.ops.softmax(x, axis=-1)
+
+
+@pytest.mark.parametrize("safe", [False, True])
+@pytest.mark.parametrize("dtype", ["fp32", "fp16", "bf16"])
+@pytest.mark.parametrize("shape", [(3, 1), (3, 17), (2, 3, 257)])
+def test_public_row_softmax_native_warm_replay(safe, dtype, shape, monkeypatch):
+    import subprocess
+    function = public_softmax_safe if safe else public_softmax
+    storage = {"fp32": np.float32, "fp16": np.float16}.get(dtype)
+    if storage is None:
+        storage = pytest.importorskip("ml_dtypes").bfloat16
+    x = np.random.default_rng(731).uniform(-20, 20, shape).astype(storage)
+    x.reshape(-1, shape[-1])[0] = storage(1000)
+    xf = x.astype(np.float64)
+    ex = np.exp(xf - xf.max(axis=-1, keepdims=True))
+    expected = ex / ex.sum(axis=-1, keepdims=True)
+    actual = function(x)
+    assert function.execution_kind == "native_gpu"
+    np.testing.assert_allclose(actual.astype(np.float64), expected, rtol=.01, atol=2e-4)
+    artifact = rt.RuntimeArtifact.from_json(function.runtime_artifact().to_json())
+    assert artifact.native_image is not None and artifact.launch_descriptor is not None
+    assert artifact.launch_descriptor.provenance["route"] == "canonical_scheduled_tile_consumer"
+    def forbidden(*args, **kwargs):
+        raise AssertionError("warm native alias called compiler or eager frontend")
+    monkeypatch.setattr(function, "_fn", forbidden)
+    monkeypatch.setattr(subprocess, "run", forbidden)
+    np.testing.assert_array_equal(function(x), actual)
+    bindings = sorted(artifact.launch_descriptor.buffers, key=lambda item: item.ordinal)
+    output = np.empty_like(x)
+    receipt = rt.launch(artifact, {
+        "buffers": {bindings[0].name: x, bindings[1].name: output},
+        "scalars": {"Rows": int(np.prod(shape[:-1])), "K": shape[-1]},
+    })
+    assert receipt["ok"] and receipt["execution_kind"] == "native_gpu", receipt
+    np.testing.assert_array_equal(output, actual)
+    changed = -x
+    ex = np.exp(changed.astype(np.float64) - changed.astype(np.float64).max(axis=-1, keepdims=True))
+    wanted = ex / ex.sum(axis=-1, keepdims=True)
+    np.testing.assert_allclose(function(changed).astype(np.float64), wanted, rtol=.01, atol=2e-4)

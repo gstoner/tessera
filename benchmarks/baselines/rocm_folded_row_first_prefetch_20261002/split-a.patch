@@ -1,0 +1,28 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2221,10 +2221,24 @@
+       return compute(kb, l, Value(), std::move(partial));
+     }
+     Value kn = nextK(kb, l, k0);
+-    SmallVector<Value> nextA = issue(kb, l, planA, kn);
++    const bool splitA = foldedFullK && prefetch == 1;
++    CopyPlan earlyA = planA, lateA = planA;
++    if (splitA) {
++      const size_t half = planA.rowBase.size() / 2;
++      earlyA.rowBase.resize(half);
++      lateA.rowBase.erase(lateA.rowBase.begin(), lateA.rowBase.begin() + half);
++    }
++    SmallVector<Value> nextA = issue(kb, l, earlyA, kn);
+     SmallVector<Value> nextB = issue(kb, l, planB, kn);
+     if (prefetch == 1) {
+       partial = compute(kb, l, Value(), std::move(partial));
++      if (splitA) {
++        // Preserve early B and half-A latency hiding while limiting
++        // the next-slab global vectors live across row-first WMMA.
++        kb.create<ROCDL::SchedBarrier>(l, ROCDL::SchedGroupMask::none);
++        auto tail = issue(kb, l, lateA, kn);
++        nextA.append(tail.begin(), tail.end());
++      }
+       barrier(kb, l);
+       drain(kb, l, planA, nextA, Value());
+       drain(kb, l, planB, nextB, Value());

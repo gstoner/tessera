@@ -2,7 +2,7 @@
 status: Normative
 classification: Normative
 authority: Tile IR op set and dialect semantics; defers Schedule IR and Target IR details to docs/spec/TARGET_IR_SPEC.md
-last_updated: 2026-08-10
+last_updated: 2026-10-02
 ---
 
 # Tessera Tile IR Specification (Normative)
@@ -491,3 +491,28 @@ metadata cannot represent the same information.
 | What Python ops trigger `tessera_attn.*` emission? | `PYTHON_API_SPEC.md §15` (`flash_attn`) |
 | What are the FlashAttention tile size defaults? | `PYTHON_API_SPEC.md §14` (`FlashAttnLoweringConfig`) |
 | What are warp role counts per SM target? | `TARGET_IR_SPEC.md §2.2` |
+
+
+## 11. Pointer-backed fragment store epilogue
+
+A pointer-backed tile.store takes the logical tile, destination, row origin and
+column origin. Optional row/column bounds follow those inputs; a final SSA
+leading dimension follows the bounds when tile.memory leading_dim is zero.
+Epilogue buffers follow the address operands, in bias then residual order.
+
+The optional tile.epilogue attribute uses the existing TileEpilogueAttr contract:
+per-column fp32 bias is added to the fp32 accumulator, then the declared
+none/relu/gelu/silu activation applies. When tile.residual=true, one additional
+fp32 residual buffer is required, addressed with the output row-major leading
+dimension. This form requires
+tile.epilogue_order="matmul_bias_activation_residual". Output conversion occurs
+after residual addition. Bias/residual loads and the output store are guarded
+by the same logical M/N bounds; padding lanes perform no auxiliary loads.
+
+SM120 implements this contract for typed 16x8 f32 accumulator fragments from
+f16/bf16 MMA, with f32/f16 output. The K loop carries the unmodified fp32
+accumulator; the epilogue runs once after that loop. ROCm retains its existing
+bias/activation store consumer and explicitly gates the residual extension
+pending its own implementation and exact-device proof. Apple and x86 have no
+consumer for this typed pointer-backed store form. Dialect verification alone
+does not establish backend execution support.

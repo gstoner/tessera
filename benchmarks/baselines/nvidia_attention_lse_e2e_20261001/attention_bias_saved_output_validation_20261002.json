@@ -1,0 +1,31 @@
+{
+  "compiler_sha256": "a1003e21e46834b88949363dc43aac1959f3bb437e5270467cf0d78c560cbe05",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "missing_proof": [
+    "bias JVP/automatic bias AD",
+    "sibling architecture execution",
+    "broader storage/layout/score policies"
+  ],
+  "native_launch_library_sha256": "0f16a5a904b6613ae4df6f9345eedf942c31c90db55ec90d55d3de2f33e23e93",
+  "packet_sha256": "1e1dad4b096a7eed11289af7bde51c688c47ac1b4f5acb39d6f42117fd1bc703",
+  "schema": "tessera.nvidia.bias_checkpoint.validation.v1",
+  "selector_changed": false,
+  "source_sha256": {
+    "benchmarks/nvidia/record_lse_checkpoint.py": "723e7ef28a38923039c41aeb4cdacc31e178c522f624b67780dae543d2a78473",
+    "python/tessera/compiler/driver.py": "d7b763d18616b30a2f7f2836c9977397ae0d6efba78217e2cb2706ef70bb31e8",
+    "python/tessera/compiler/nvidia_native.py": "1ffd9b8054887c3d8ce7b5822d1fad3eaeb337ba44fd2323f09d1362ba66c560",
+    "python/tessera/compiler/resident_attention.py": "9ce67663740cdcc1cb36ee7cf1a1604e7cb4a6786352b5d955e32102de2133b9",
+    "python/tessera/compiler/scheduled_checkpoint.py": "7a8291b9274df5f5b27a73b98882d95396d86f1c0d405bc04dd037288c00b728",
+    "python/tessera/runtime.py": "56ed5efd9cfb5be9020a55a5da37c8aeb277d6dd4f27d6664bf2f03b72d3a124",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "323525a40bb8c7ae41daddfe630cca563d1e71edbeb0bee4c9f936a6235e2ec7",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "b829a0eafd5d3ff38af30bbe542e66972234ccff316e0071e9d4a030ef938c73",
+    "src/compiler/tile_opt_fa4/include/tessera/Dialect/Attn/Attn.td": "d59139a4be4e3abfd12c7921d10aebe58dbb18b82b03a13a6ed961d472fc7e0d",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "9a0184d09e5f623ef4f7091d74d32c46c6088ac5fa59a3a006fe484e055d9b4b",
+    "tests/device/nvidia/test_lse_checkpoint_native.py": "1836dea9d82a17a13c9f0d4bcbf6a9e361358caed8239a95f2c0c06e18809e91"
+  },
+  "sync_key": "NVIDIA-BIAS-SAVED-CHECKPOINT-2026-10-02",
+  "target": "nvidia_sm120",
+  "test_result": "473 passed, 3 skipped",
+  "test_transcript_sha256": "043efcf7d519014e41d73d546259a1d94fcb2d0efbff4d1cc780b11f4f1e7c07",
+  "work_item": "E2E-REAL-6"
+}

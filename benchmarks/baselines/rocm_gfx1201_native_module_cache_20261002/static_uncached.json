@@ -1,0 +1,607 @@
+{
+  "architecture": "gfx1201",
+  "bias_relu_epilogue": false,
+  "compiler_path": "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "8936631e8589e8a8e216c238d045fbf0dd237a8c733d3b4e4070ead00d335548",
+  "configured_architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "dynamic_mnk": false,
+  "host": "tajasarus",
+  "host_uncached_module_load_calls": 96,
+  "kernel_identity_projection": "native_mlir_v2",
+  "native_module_cache": false,
+  "native_module_cache_delta": null,
+  "native_module_library_sha256": null,
+  "num_shapes": 6,
+  "per_kernel_launch_hip_event_median_ms": 0.016299999319016933,
+  "per_kernel_launch_hip_event_samples_ms": [
+    0.00863999966531992,
+    0.008799999952316284,
+    0.008919999934732914,
+    0.00872000027447939,
+    0.008679999969899654,
+    0.008840000256896019,
+    0.00872000027447939,
+    0.008799999952316284,
+    0.008840999566018581,
+    0.008921000175178051,
+    0.008720999583601952,
+    0.016638999804854393,
+    0.016999999061226845,
+    0.016720000654459,
+    0.016919000074267387,
+    0.016679000109434128,
+    0.016959000378847122,
+    0.01655999943614006,
+    0.016920000314712524,
+    0.016638999804854393,
+    0.016919000074267387,
+    0.016599999740719795,
+    0.01624000072479248,
+    0.01655999943614006,
+    0.016119999811053276,
+    0.01648000068962574,
+    0.01616000011563301,
+    0.016359999775886536,
+    0.01624000072479248,
+    0.0163199994713068,
+    0.0163199994713068,
+    0.0163199994713068,
+    0.016279999166727066,
+    0.016519999131560326,
+    0.017079999670386314,
+    0.012520000338554382,
+    0.01720000058412552,
+    0.012400000356137753,
+    0.01696000061929226,
+    0.012559999711811543,
+    0.012640000320971012,
+    0.012439999729394913,
+    0.016839999705553055,
+    0.012559999711811543,
+    0.01576000079512596,
+    0.016158999875187874,
+    0.015918999910354614,
+    0.015999000519514084,
+    0.015838999301195145,
+    0.016078999266028404,
+    0.015759000554680824,
+    0.015639999881386757,
+    0.015960000455379486,
+    0.01600000075995922,
+    0.01592000015079975,
+    0.023917000740766525,
+    0.023756999522447586,
+    0.024159999564290047,
+    0.02428000047802925,
+    0.024639999493956566,
+    0.0246799997985363,
+    0.02443999983370304,
+    0.02459999918937683,
+    0.02452000044286251,
+    0.024800000712275505,
+    0.02452000044286251
+  ],
+  "physical_envelope": "register_k_unroll_1_split_k_1",
+  "promotion_eligible": false,
+  "rows": [
+    {
+      "compile_state": "cold",
+      "correctness": "passed_before_timing_during_warmup_and_after_each_e2e_sample",
+      "end_to_end_ms_median": 2.156313,
+      "end_to_end_ms_samples": [
+        2.174187,
+        2.11747,
+        2.214644,
+        2.077833,
+        2.140784,
+        2.226306,
+        2.162154,
+        2.147717,
+        2.167676,
+        2.156313,
+        2.112649
+      ],
+      "entry_symbol": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "kernel_event_ms_median": 0.008799999952316284,
+      "kernel_event_ms_samples": [
+        0.00863999966531992,
+        0.008799999952316284,
+        0.008919999934732914,
+        0.00872000027447939,
+        0.008679999969899654,
+        0.008840000256896019,
+        0.00872000027447939,
+        0.008799999952316284,
+        0.008840999566018581,
+        0.008921000175178051,
+        0.008720999583601952
+      ],
+      "max_abs_error": 1.1920928955078125e-07,
+      "package_ms": 241.930162,
+      "schedule_digest": "c3587fc26a2530d7a03841f0a09c7c8f3d8a1e600a0b4152e5711beba8a7e671",
+      "schedule_ms": 28.435421,
+      "shape_guards": [
+        {
+          "binding": "a",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 16
+        },
+        {
+          "binding": "a",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 16
+        },
+        {
+          "binding": "b",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 16
+        },
+        {
+          "binding": "b",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 16
+        },
+        {
+          "binding": "o",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 16
+        },
+        {
+          "binding": "o",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 16
+        }
+      ],
+      "shape_mnk": [
+        16,
+        16,
+        16
+      ],
+      "tile_ir_digest": "9ef65e16770cac0e598dc321f4aa15f2bc0513e1c773ac1e24efb224974429ca",
+      "warmup_samples": 5
+    },
+    {
+      "compile_state": "warm_cache",
+      "correctness": "passed_before_timing_during_warmup_and_after_each_e2e_sample",
+      "end_to_end_ms_median": 2.656588,
+      "end_to_end_ms_samples": [
+        2.656588,
+        2.508856,
+        2.785373,
+        2.62638,
+        2.619587,
+        2.598447,
+        2.702866,
+        2.724457,
+        2.508124,
+        2.776266,
+        2.699389
+      ],
+      "entry_symbol": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "kernel_event_ms_median": 0.016720000654459,
+      "kernel_event_ms_samples": [
+        0.016638999804854393,
+        0.016999999061226845,
+        0.016720000654459,
+        0.016919000074267387,
+        0.016679000109434128,
+        0.016959000378847122,
+        0.01655999943614006,
+        0.016920000314712524,
+        0.016638999804854393,
+        0.016919000074267387,
+        0.016599999740719795
+      ],
+      "max_abs_error": 3.5762786865234375e-07,
+      "package_ms": 64.059444,
+      "schedule_digest": "56f7ee30f1423ce8e28b78b37e9c0c923222cd27ef2b70da1e9f580a67c92fb6",
+      "schedule_ms": 25.055734,
+      "shape_guards": [
+        {
+          "binding": "a",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "a",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "b",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "b",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "o",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "o",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 32
+        }
+      ],
+      "shape_mnk": [
+        32,
+        32,
+        32
+      ],
+      "tile_ir_digest": "88e1ece1844eb0f2468ea3bff1fc59a6c12fc0821fb2340054a3e495b4741f06",
+      "warmup_samples": 5
+    },
+    {
+      "compile_state": "warm_cache",
+      "correctness": "passed_before_timing_during_warmup_and_after_each_e2e_sample",
+      "end_to_end_ms_median": 2.654784,
+      "end_to_end_ms_samples": [
+        2.794571,
+        2.790041,
+        2.654784,
+        2.566044,
+        2.690281,
+        2.698989,
+        2.61054,
+        2.588166,
+        2.67349,
+        2.645175,
+        2.524005
+      ],
+      "entry_symbol": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "kernel_event_ms_median": 0.0163199994713068,
+      "kernel_event_ms_samples": [
+        0.01624000072479248,
+        0.01655999943614006,
+        0.016119999811053276,
+        0.01648000068962574,
+        0.01616000011563301,
+        0.016359999775886536,
+        0.01624000072479248,
+        0.0163199994713068,
+        0.0163199994713068,
+        0.0163199994713068,
+        0.016279999166727066
+      ],
+      "max_abs_error": 1.7881393432617188e-07,
+      "package_ms": 62.039912,
+      "schedule_digest": "910b26470b7f6d99bf133f3d22f7d5b8fae2bb6a08cbda1f2aeaa03a1959eb5c",
+      "schedule_ms": 23.628792,
+      "shape_guards": [
+        {
+          "binding": "a",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 48
+        },
+        {
+          "binding": "a",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 16
+        },
+        {
+          "binding": "b",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 16
+        },
+        {
+          "binding": "b",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 32
+        },
+        {
+          "binding": "o",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 48
+        },
+        {
+          "binding": "o",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 32
+        }
+      ],
+      "shape_mnk": [
+        48,
+        32,
+        16
+      ],
+      "tile_ir_digest": "a84287c4ffc1840e02f5d64c6694bf114b72d95efee6d412735aab5518b737fd",
+      "warmup_samples": 5
+    },
+    {
+      "compile_state": "warm_cache",
+      "correctness": "passed_before_timing_during_warmup_and_after_each_e2e_sample",
+      "end_to_end_ms_median": 2.900964,
+      "end_to_end_ms_samples": [
+        2.881877,
+        3.034419,
+        3.143145,
+        2.900964,
+        2.827554,
+        2.917195,
+        2.881437,
+        2.876818,
+        3.049237,
+        2.900123,
+        3.039206
+      ],
+      "entry_symbol": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "kernel_event_ms_median": 0.012640000320971012,
+      "kernel_event_ms_samples": [
+        0.016519999131560326,
+        0.017079999670386314,
+        0.012520000338554382,
+        0.01720000058412552,
+        0.012400000356137753,
+        0.01696000061929226,
+        0.012559999711811543,
+        0.012640000320971012,
+        0.012439999729394913,
+        0.016839999705553055,
+        0.012559999711811543
+      ],
+      "max_abs_error": 1.5497207641601562e-06,
+      "package_ms": 61.424407,
+      "schedule_digest": "37c0cd520a7cbc12ad13059da3b7d74d41dac5ff3fa6fb1e17679944b05fd238",
+      "schedule_ms": 23.79564,
+      "shape_guards": [
+        {
+          "binding": "a",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 128
+        },
+        {
+          "binding": "a",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 128
+        },
+        {
+          "binding": "b",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 128
+        },
+        {
+          "binding": "b",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 128
+        },
+        {
+          "binding": "o",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 128
+        },
+        {
+          "binding": "o",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 128
+        }
+      ],
+      "shape_mnk": [
+        128,
+        128,
+        128
+      ],
+      "tile_ir_digest": "f34d3bff1555775eb3734e0d9de04d2d56947b16b22ff55bcb7e40fe780658bb",
+      "warmup_samples": 5
+    },
+    {
+      "compile_state": "warm_cache",
+      "correctness": "passed_before_timing_during_warmup_and_after_each_e2e_sample",
+      "end_to_end_ms_median": 5.202684,
+      "end_to_end_ms_samples": [
+        4.834913,
+        5.333634,
+        5.023242,
+        5.202684,
+        5.27343,
+        5.180641,
+        5.419497,
+        5.152829,
+        5.434843,
+        5.175292,
+        5.427468
+      ],
+      "entry_symbol": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "kernel_event_ms_median": 0.01592000015079975,
+      "kernel_event_ms_samples": [
+        0.01576000079512596,
+        0.016158999875187874,
+        0.015918999910354614,
+        0.015999000519514084,
+        0.015838999301195145,
+        0.016078999266028404,
+        0.015759000554680824,
+        0.015639999881386757,
+        0.015960000455379486,
+        0.01600000075995922,
+        0.01592000015079975
+      ],
+      "max_abs_error": 4.0531158447265625e-06,
+      "package_ms": 64.171418,
+      "schedule_digest": "3a154b948ce93daf6e6820100582a87210db57b4bb79bd7872227dd8071eb05a",
+      "schedule_ms": 24.895127,
+      "shape_guards": [
+        {
+          "binding": "a",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 256
+        },
+        {
+          "binding": "a",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 256
+        },
+        {
+          "binding": "b",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 256
+        },
+        {
+          "binding": "b",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 256
+        },
+        {
+          "binding": "o",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 256
+        },
+        {
+          "binding": "o",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 256
+        }
+      ],
+      "shape_mnk": [
+        256,
+        256,
+        256
+      ],
+      "tile_ir_digest": "a392af8f8794a8659928fd39bf9030e790ae9940bc6ee490994438e8724e7bcb",
+      "warmup_samples": 5
+    },
+    {
+      "compile_state": "warm_cache",
+      "correctness": "passed_before_timing_during_warmup_and_after_each_e2e_sample",
+      "end_to_end_ms_median": 5.635169,
+      "end_to_end_ms_samples": [
+        6.000185,
+        5.635169,
+        6.866979,
+        5.800525,
+        5.678652,
+        5.582207,
+        5.479232,
+        5.54654,
+        5.528275,
+        5.615621,
+        5.697918
+      ],
+      "entry_symbol": "tessera_rocm_matmul_f2c991a6f364bce5",
+      "image_digest": "293c2a9d84049be526e2c775ca1aed8f784f22f55472a51770e42043808137b2",
+      "kernel_event_ms_median": 0.02452000044286251,
+      "kernel_event_ms_samples": [
+        0.023917000740766525,
+        0.023756999522447586,
+        0.024159999564290047,
+        0.02428000047802925,
+        0.024639999493956566,
+        0.0246799997985363,
+        0.02443999983370304,
+        0.02459999918937683,
+        0.02452000044286251,
+        0.024800000712275505,
+        0.02452000044286251
+      ],
+      "max_abs_error": 1.0967254638671875e-05,
+      "package_ms": 62.873411,
+      "schedule_digest": "40eac533e9811b33f092e85487d9fb96e9c5329910d3a4501f34cf7c130e8403",
+      "schedule_ms": 24.266047,
+      "shape_guards": [
+        {
+          "binding": "a",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 512
+        },
+        {
+          "binding": "a",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 512
+        },
+        {
+          "binding": "b",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 512
+        },
+        {
+          "binding": "b",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 512
+        },
+        {
+          "binding": "o",
+          "dimension": 0,
+          "predicate": "eq",
+          "value": 512
+        },
+        {
+          "binding": "o",
+          "dimension": 1,
+          "predicate": "eq",
+          "value": 512
+        }
+      ],
+      "shape_mnk": [
+        512,
+        512,
+        512
+      ],
+      "tile_ir_digest": "6b78b22c7112da71644cd0c73b121b2a8b45fe55260da7c60ea2e2852274c42f",
+      "warmup_samples": 5
+    }
+  ],
+  "schema": "tessera.rocm_gfx1201_scheduled_matmul_shape_key.v2",
+  "shapes_share_one_image": true,
+  "source_commit": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "source_dirty": true,
+  "source_sha256": {
+    "benchmarks/rocm/record_gfx1201_matmul_shape_key.py": "28311c5d7ac165c31a16f55c7fb4ad0a40490fac9101666c377753e30b8668f4",
+    "python/tessera/compiler/native_artifact.py": "9ea3f6a4deea0b2d66047bf6f682394cbaff9520352cab6686b5614731892921",
+    "python/tessera/compiler/rocm_native.py": "624a2ec94ca2851cbac1289dcc78bc231878d649ed0e45bf94e4c6622903e59c",
+    "python/tessera/compiler/scheduled_matmul.py": "7916e5adb76d0fc4374cb1f16fa5bc8819965d8c1077262e220cacc6a3f648e7",
+    "python/tessera/runtime.py": "1c01721ab21ed50f7de5bdcf02cf95fa045c68f7306e2cdf009f6e301e458508",
+    "src/compiler/codegen/Tessera_ROCM_Backend/include/TesseraROCM/IR/TesseraROCMOps.td": "b308e13c572ffbc0563a5cda47d3e9d13c05369e2a55cb6a1e56b0a593baa3e7",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "125e0a1ab843e20ba1d34426dbad0054d99f6760e5a8755923f2002c718e10c0",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/Passes.cpp": "bd3c03355489ec8cd409e6ef176b1142a63c8452d40ae88738acbf3ad5e64080",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "be84a6d46e8eeea5915c32984ab34cc440a5c7b00500cf5437b7dd81d49a4e1e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "779b2f4f5dd678aa1a540e38ecac40c899ddb86fb11174f8da704c20fc86f0bd",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860"
+  },
+  "timing_note": "Each shape receives five correctness-checked warmup launches before sampling. HIP events bracket only the native matmul kernel launch on the default stream. End-to-end samples use runtime.launch and include cold module acquisition or native cached lease acquisition, host/device allocation, transfers, synchronization, descriptor validation, and Python dispatch. Schedule lowering and package construction are timed separately.",
+  "work_item": "E2E-REAL-6-ROCM-MATMUL-CACHE"
+}

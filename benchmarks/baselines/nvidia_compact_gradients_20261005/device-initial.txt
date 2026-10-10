@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "<stdin>", line 11, in <module>
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py", line 1938, in compile_native_attention_vjp
+    return compile_attention_vjp_program(source, request.wrt_indices, compiler=compiler, compact_gradients=compact_gradients)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_program.py", line 150, in compile_attention_vjp_program
+    pair = package_generated_attention_checkpoint_pair(
+        source, pipeline_name="tessera-nvidia-pipeline-sm120", **options)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/nvidia_native.py", line 4786, in package_generated_attention_checkpoint_pair
+    backward = lower_generated_checkpoint(source, **options)
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/scheduled_checkpoint.py", line 246, in lower_generated_checkpoint
+    artifact.validate()
+    ~~~~~~~~~~~~~~~~~^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/scheduled_checkpoint.py", line 47, in validate
+    raise ValueError("checkpoint metadata binding count disagrees with gradient contract")
+ValueError: checkpoint metadata binding count disagrees with gradient contract

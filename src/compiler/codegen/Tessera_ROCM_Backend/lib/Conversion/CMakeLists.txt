@@ -1,5 +1,6 @@
 add_mlir_library(TesseraROCMConversion
   TileToROCM.cpp
+  ROCMKernelIdentity.cpp
   ROCMDirectAttention.cpp
   ROCMWaveLdsPipeline.cpp
   ROCMDynamicLDS.cpp

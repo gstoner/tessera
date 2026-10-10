@@ -1,0 +1,46 @@
+{
+  "schema": "tessera.gfx1201.mxfp8_lds_validation.v1",
+  "timestamp_utc": "2026-10-03T09:40:17.879973+00:00",
+  "sync": "ROCM-MXFP8-LDS-2026-10-03",
+  "source_sha256": {
+    "src/compiler/programming_model/lib/PMPasses.cpp": "c85188fbf1e6c93fe4d0bc984762d867af176e7e6864b7a18fc57e6da22aa413",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "8ccace8d9f764854c858c5805a4893445dc46f17796da1d36361d73f556bc3de",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "f7d12a7cac451fe20cdce836877f6f634f00cccf8416422d0f87f490023a2b0b",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "28cf53e6b5689356625cd6e1857e7e86971106bd1b0896a4c63ad307689e6629",
+    "python/tessera/compiler/rocm_mxfp8_blockscale.py": "4f59a34e3128675ed1e3117275d609f2155459c892874dce15373e9612ef0f61",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "65cdf592b1133497bffad680e2e18db66153480221e1ff776bfad8c92a3b00be",
+    "python/tessera/runtime.py": "ef44e6ba13f477e5dbe176030bef5718ad13f4a136c4f3b1302e9b866a5fdd00",
+    "python/tessera/compiler/pass_metadata.py": "b2f0beb3823d5bdd3c69551cbca701af5b3be3ff6a491e7236956d26ed252a08",
+    "tests/device/rocm/test_mxfp8_lds_package.py": "dbbd0299a2c53bf83c8a6536872f8bde28d85d18aa32be3beba907367b5fef9e",
+    "tests/unit/test_rocm_mxfp8_package_contract.py": "912ae1b7196f1a13d72fb03aae46feeae8d374446da4936e4ff80604ae319853",
+    "tests/unit/test_rocm_kernel_identity_native.py": "140ef095c0e307ce2b6bddbdfb593ecb441d219dfa2e332cad3d6cfdcfd10ef8",
+    "tests/tessera-ir/phase2/e2e_mxfp8_lds_rocm.mlir": "b1de9e26e65fb0ed5ade69324a4443e540fd7d1d893c302bf49e975d6217e2b4",
+    "benchmarks/rocm/benchmark_gfx1201_three_formats.py": "79c2e04ac3fc51e2f7a27c0bf2a8edb482dfb9fe7b1641ac8e88ce6fdcb22848"
+  },
+  "nvidia_compiler_sha256": "68aa095a3cc550c9ae86701206f8e35cb0f7b0c63609f779ba17b35c81c22682",
+  "gfx1201_compiler_sha256": "fd8acb4877bc5e2cea58f280d8f31d882f6ff3618e16e7e10bb283fb17675640",
+  "tests": {
+    "gfx1201_final_regression": 496,
+    "gfx1201_existing_mxfp8": 28,
+    "gfx1201_existing_fp8": 99,
+    "nvidia_host_gates": 345,
+    "nvidia_device_parity": 86,
+    "audit_docs": 11
+  },
+  "filecheck": [
+    "SCHED",
+    "GEN",
+    "LOWER"
+  ],
+  "generated_docs": 32,
+  "compiler_plan": "passed",
+  "ruff": "passed",
+  "diff_check": "passed",
+  "graphify_update": "unavailable: command not found",
+  "promotion": {
+    "bounded_gfx1201_mxfp8_schedule": true,
+    "global_format": false,
+    "canonical_dtype": false
+  },
+  "historical_unguarded_isa": "superseded; excluded from admitted comparison"
+}

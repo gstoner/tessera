@@ -1,0 +1,772 @@
+{
+  "architecture": "sm_120",
+  "compiler_sha256": "ae70d583adb6efb0a24fe130644f2d0e45d01f6988c3976672b3787f6b561833",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "active": [
+        3
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "aeb9d391a4206f598aaa55f5e1857b557941fc2010c30e7960b6bab117c359a4",
+      "backward_wall_median_ms": 0.231292,
+      "backward_wall_samples_ms": [
+        0.340184,
+        0.231292,
+        0.170832
+      ],
+      "capture_wall_median_ms": 2.463563,
+      "capture_wall_samples_ms": [
+        6.496832,
+        2.463563,
+        1.900108
+      ],
+      "causal": false,
+      "checkpoint_identity": "895cba6e65fb08130656437aba02a5e6d296650732477b02783b6bb37076418d",
+      "compile_ms": 842.390155,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "98f561b589c18fc11055418df75dc6ccf14350c2d08a2b42ca45bedfd1d9135f",
+      "max_abs_gradient_error": 5.016909165878047e-09,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias"
+      ]
+    },
+    {
+      "active": [
+        3,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "aeb9d391a4206f598aaa55f5e1857b557941fc2010c30e7960b6bab117c359a4",
+      "backward_wall_median_ms": 0.221732,
+      "backward_wall_samples_ms": [
+        0.243552,
+        0.221732,
+        0.191861
+      ],
+      "capture_wall_median_ms": 2.411603,
+      "capture_wall_samples_ms": [
+        2.411603,
+        2.415243,
+        2.010199
+      ],
+      "causal": false,
+      "checkpoint_identity": "895cba6e65fb08130656437aba02a5e6d296650732477b02783b6bb37076418d",
+      "compile_ms": 817.873976,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "98f561b589c18fc11055418df75dc6ccf14350c2d08a2b42ca45bedfd1d9135f",
+      "max_abs_gradient_error": 5.016909165878047e-09,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "aeb9d391a4206f598aaa55f5e1857b557941fc2010c30e7960b6bab117c359a4",
+      "backward_wall_median_ms": 0.216742,
+      "backward_wall_samples_ms": [
+        0.226152,
+        0.216742,
+        0.206562
+      ],
+      "capture_wall_median_ms": 2.189611,
+      "capture_wall_samples_ms": [
+        2.572039,
+        2.189611,
+        2.045459
+      ],
+      "causal": false,
+      "checkpoint_identity": "895cba6e65fb08130656437aba02a5e6d296650732477b02783b6bb37076418d",
+      "compile_ms": 840.811666,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "98f561b589c18fc11055418df75dc6ccf14350c2d08a2b42ca45bedfd1d9135f",
+      "max_abs_gradient_error": 4.082798771287699e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        3
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "7cba65f661a1880b5cf6d038d2345034bd97eb2d9134e6ec05dbfbe9ad003e83",
+      "backward_wall_median_ms": 0.177032,
+      "backward_wall_samples_ms": [
+        0.209592,
+        0.171642,
+        0.177032
+      ],
+      "capture_wall_median_ms": 2.17274,
+      "capture_wall_samples_ms": [
+        2.549064,
+        1.979038,
+        2.17274
+      ],
+      "causal": true,
+      "checkpoint_identity": "0e0e3a6bbd3a6361919f976cd0bb983f47c2574f3c626513e1381f0eb44bd846",
+      "compile_ms": 821.216205,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "8bbb1f85a7fa888dc7e57b2baf42220cd2e451140509e295de0acb181545659a",
+      "max_abs_gradient_error": 7.967709186873506e-09,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias"
+      ]
+    },
+    {
+      "active": [
+        3,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "7cba65f661a1880b5cf6d038d2345034bd97eb2d9134e6ec05dbfbe9ad003e83",
+      "backward_wall_median_ms": 0.205352,
+      "backward_wall_samples_ms": [
+        0.315363,
+        0.205352,
+        0.194182
+      ],
+      "capture_wall_median_ms": 2.12182,
+      "capture_wall_samples_ms": [
+        2.497754,
+        2.12182,
+        2.08245
+      ],
+      "causal": true,
+      "checkpoint_identity": "0e0e3a6bbd3a6361919f976cd0bb983f47c2574f3c626513e1381f0eb44bd846",
+      "compile_ms": 828.388843,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "8bbb1f85a7fa888dc7e57b2baf42220cd2e451140509e295de0acb181545659a",
+      "max_abs_gradient_error": 7.967709186873506e-09,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "7cba65f661a1880b5cf6d038d2345034bd97eb2d9134e6ec05dbfbe9ad003e83",
+      "backward_wall_median_ms": 0.178362,
+      "backward_wall_samples_ms": [
+        0.178362,
+        0.293403,
+        0.174082
+      ],
+      "capture_wall_median_ms": 2.078299,
+      "capture_wall_samples_ms": [
+        2.375852,
+        1.980369,
+        2.078299
+      ],
+      "causal": true,
+      "checkpoint_identity": "0e0e3a6bbd3a6361919f976cd0bb983f47c2574f3c626513e1381f0eb44bd846",
+      "compile_ms": 816.767837,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "8bbb1f85a7fa888dc7e57b2baf42220cd2e451140509e295de0acb181545659a",
+      "max_abs_gradient_error": 4.629257854826818e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        3
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "e556449af03aa5a137ef8cb9e5e0ce3123b357ba81adfc1d6c1f58ca0d9d2965",
+      "backward_wall_median_ms": 0.193872,
+      "backward_wall_samples_ms": [
+        0.193872,
+        0.173522,
+        0.235132
+      ],
+      "capture_wall_median_ms": 2.313692,
+      "capture_wall_samples_ms": [
+        3.834136,
+        2.313692,
+        2.163151
+      ],
+      "causal": false,
+      "checkpoint_identity": "42d040589f8ca4d2a8336d6b8de8a2ba530fb654b6ab8f7993a6f81eb5df1054",
+      "compile_ms": 828.679989,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "21493126e2211f6bf9435f09d6164ef2783a571b1b2f4e89fd2e8ebff0c47467",
+      "max_abs_gradient_error": 2.530517313747982e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias"
+      ]
+    },
+    {
+      "active": [
+        3,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "e556449af03aa5a137ef8cb9e5e0ce3123b357ba81adfc1d6c1f58ca0d9d2965",
+      "backward_wall_median_ms": 0.200722,
+      "backward_wall_samples_ms": [
+        0.199772,
+        0.237063,
+        0.200722
+      ],
+      "capture_wall_median_ms": 2.168501,
+      "capture_wall_samples_ms": [
+        2.421828,
+        2.168501,
+        2.07817
+      ],
+      "causal": false,
+      "checkpoint_identity": "42d040589f8ca4d2a8336d6b8de8a2ba530fb654b6ab8f7993a6f81eb5df1054",
+      "compile_ms": 810.960143,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "21493126e2211f6bf9435f09d6164ef2783a571b1b2f4e89fd2e8ebff0c47467",
+      "max_abs_gradient_error": 2.530517313747982e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "e556449af03aa5a137ef8cb9e5e0ce3123b357ba81adfc1d6c1f58ca0d9d2965",
+      "backward_wall_median_ms": 0.211962,
+      "backward_wall_samples_ms": [
+        0.211962,
+        0.230192,
+        0.204782
+      ],
+      "capture_wall_median_ms": 2.07139,
+      "capture_wall_samples_ms": [
+        2.518678,
+        2.07139,
+        2.027509
+      ],
+      "causal": false,
+      "checkpoint_identity": "42d040589f8ca4d2a8336d6b8de8a2ba530fb654b6ab8f7993a6f81eb5df1054",
+      "compile_ms": 873.621586,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "21493126e2211f6bf9435f09d6164ef2783a571b1b2f4e89fd2e8ebff0c47467",
+      "max_abs_gradient_error": 1.2549621042357018e-07,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        3
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "400a65df3350df2ec17dd9af46552f0e477b5dda18231accf0985147d5d6ed4d",
+      "backward_wall_median_ms": 0.204182,
+      "backward_wall_samples_ms": [
+        0.216772,
+        0.204182,
+        0.175922
+      ],
+      "capture_wall_median_ms": 2.09523,
+      "capture_wall_samples_ms": [
+        4.512424,
+        2.09523,
+        2.04349
+      ],
+      "causal": true,
+      "checkpoint_identity": "59fcd35340f5853bf47948504e39bbbb708bccae26414bb184f820bdc3e31c81",
+      "compile_ms": 819.824574,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "911decffc97eae6e0d0085cb46faa6403f3f12abe45725ca073f794a4ab4a818",
+      "max_abs_gradient_error": 2.530517313747982e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias"
+      ]
+    },
+    {
+      "active": [
+        3,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "400a65df3350df2ec17dd9af46552f0e477b5dda18231accf0985147d5d6ed4d",
+      "backward_wall_median_ms": 0.178822,
+      "backward_wall_samples_ms": [
+        0.177242,
+        0.178822,
+        0.356244
+      ],
+      "capture_wall_median_ms": 2.071451,
+      "capture_wall_samples_ms": [
+        2.465465,
+        2.071451,
+        2.06328
+      ],
+      "causal": true,
+      "checkpoint_identity": "59fcd35340f5853bf47948504e39bbbb708bccae26414bb184f820bdc3e31c81",
+      "compile_ms": 832.676568,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "911decffc97eae6e0d0085cb46faa6403f3f12abe45725ca073f794a4ab4a818",
+      "max_abs_gradient_error": 2.530517313747982e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "400a65df3350df2ec17dd9af46552f0e477b5dda18231accf0985147d5d6ed4d",
+      "backward_wall_median_ms": 0.338623,
+      "backward_wall_samples_ms": [
+        0.185752,
+        0.450675,
+        0.338623
+      ],
+      "capture_wall_median_ms": 2.287272,
+      "capture_wall_samples_ms": [
+        2.669456,
+        2.287272,
+        2.0217
+      ],
+      "causal": true,
+      "checkpoint_identity": "59fcd35340f5853bf47948504e39bbbb708bccae26414bb184f820bdc3e31c81",
+      "compile_ms": 818.168144,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "911decffc97eae6e0d0085cb46faa6403f3f12abe45725ca073f794a4ab4a818",
+      "max_abs_gradient_error": 1.2319573272634443e-07,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        1,
+        2,
+        1,
+        5,
+        3,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        3
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "e965624d038fb2da030343a64a7c37c0cf2096acb44dd82c52079cc5f8ab8791",
+      "backward_wall_median_ms": 0.218722,
+      "backward_wall_samples_ms": [
+        0.218722,
+        0.190162,
+        0.223173
+      ],
+      "capture_wall_median_ms": 2.286882,
+      "capture_wall_samples_ms": [
+        4.418463,
+        2.224522,
+        2.286882
+      ],
+      "causal": false,
+      "checkpoint_identity": "74f5f18cb5090b4071eeb43e25da754b81d6a8e4b5986c5f2f5f8c711ea9b37e",
+      "compile_ms": 881.108529,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "e8fab693758d5d4927a820e5c30f85eff95c578505c6e165cefb3e3d77f52bd2",
+      "max_abs_gradient_error": 2.640368014505956e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias"
+      ]
+    },
+    {
+      "active": [
+        3,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "e965624d038fb2da030343a64a7c37c0cf2096acb44dd82c52079cc5f8ab8791",
+      "backward_wall_median_ms": 0.247662,
+      "backward_wall_samples_ms": [
+        0.255362,
+        0.196702,
+        0.247662
+      ],
+      "capture_wall_median_ms": 2.247702,
+      "capture_wall_samples_ms": [
+        2.738602,
+        2.233701,
+        2.247702
+      ],
+      "causal": false,
+      "checkpoint_identity": "74f5f18cb5090b4071eeb43e25da754b81d6a8e4b5986c5f2f5f8c711ea9b37e",
+      "compile_ms": 867.601594,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "e8fab693758d5d4927a820e5c30f85eff95c578505c6e165cefb3e3d77f52bd2",
+      "max_abs_gradient_error": 2.640368014505956e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "e965624d038fb2da030343a64a7c37c0cf2096acb44dd82c52079cc5f8ab8791",
+      "backward_wall_median_ms": 0.266123,
+      "backward_wall_samples_ms": [
+        0.196212,
+        0.266123,
+        0.347083
+      ],
+      "capture_wall_median_ms": 2.289862,
+      "capture_wall_samples_ms": [
+        2.410763,
+        2.289862,
+        2.268302
+      ],
+      "causal": false,
+      "checkpoint_identity": "74f5f18cb5090b4071eeb43e25da754b81d6a8e4b5986c5f2f5f8c711ea9b37e",
+      "compile_ms": 812.878561,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "e8fab693758d5d4927a820e5c30f85eff95c578505c6e165cefb3e3d77f52bd2",
+      "max_abs_gradient_error": 1.1641483177449174e-07,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "q",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        3
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "8e85184bd16cca844d17ffd78879299faead380ec2fcaa1c91558e5a042914d0",
+      "backward_wall_median_ms": 0.201052,
+      "backward_wall_samples_ms": [
+        0.234832,
+        0.201052,
+        0.194232
+      ],
+      "capture_wall_median_ms": 2.618315,
+      "capture_wall_samples_ms": [
+        4.336741,
+        2.618315,
+        2.260102
+      ],
+      "causal": true,
+      "checkpoint_identity": "7172369427c20071cc09c52faf44af778b5bad35c49a65360e861423a156b069",
+      "compile_ms": 822.132752,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "be983e5c215f427efaf388db96bc7cb62d9fcc8d50149800ba302f5d0b057dc2",
+      "max_abs_gradient_error": 2.6163390426381383e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias"
+      ]
+    },
+    {
+      "active": [
+        3,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "8e85184bd16cca844d17ffd78879299faead380ec2fcaa1c91558e5a042914d0",
+      "backward_wall_median_ms": 0.230033,
+      "backward_wall_samples_ms": [
+        0.191082,
+        0.288792,
+        0.230033
+      ],
+      "capture_wall_median_ms": 2.496514,
+      "capture_wall_samples_ms": [
+        2.577815,
+        2.496514,
+        2.027149
+      ],
+      "causal": true,
+      "checkpoint_identity": "7172369427c20071cc09c52faf44af778b5bad35c49a65360e861423a156b069",
+      "compile_ms": 812.81638,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "be983e5c215f427efaf388db96bc7cb62d9fcc8d50149800ba302f5d0b057dc2",
+      "max_abs_gradient_error": 2.6163390426381383e-08,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "k"
+      ]
+    },
+    {
+      "active": [
+        2,
+        3,
+        0,
+        1
+      ],
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "8e85184bd16cca844d17ffd78879299faead380ec2fcaa1c91558e5a042914d0",
+      "backward_wall_median_ms": 0.206322,
+      "backward_wall_samples_ms": [
+        0.292733,
+        0.195182,
+        0.206322
+      ],
+      "capture_wall_median_ms": 2.430304,
+      "capture_wall_samples_ms": [
+        2.594719,
+        2.430304,
+        2.184771
+      ],
+      "causal": true,
+      "checkpoint_identity": "7172369427c20071cc09c52faf44af778b5bad35c49a65360e861423a156b069",
+      "compile_ms": 810.464811,
+      "forward_abi": "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1",
+      "forward_image_sha256": "be983e5c215f427efaf388db96bc7cb62d9fcc8d50149800ba302f5d0b057dc2",
+      "max_abs_gradient_error": 1.6236043443029757e-07,
+      "ownership": "private Q/K/V/bias/O/LSE generation survives caller mutation, repeated and changed cotangents; closed frame rejects backward",
+      "route": "public JIT trace -> paired native AD -> checkpoint Graph/Schedule/Tile -> NVIDIA Target/NVVM/PTX -> checked resident tape ABI",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        19,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "q",
+        "k"
+      ]
+    }
+  ],
+  "samples": 3,
+  "schema": "tessera.nvidia.jit_attention_bias_vjp.v1",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_checkpoint_bias_gradient.py": "1504c9b06ca9664e10ca46b3de70b9fa2ddb4820f5a238d8cd75cc0e66128de2",
+    "benchmarks/nvidia/benchmark_jit_attention_bias_vjp.py": "5431fa245a05fafe73b7589ce51f4105c9f1d51f4bd09e1dc106d1470ce519b0",
+    "python/tessera/compiler/graph_ir.py": "f406d7076013c3b35a667eb168c55bccd1e77d01af81de23c69394163dc05dba",
+    "python/tessera/compiler/native_attention_program.py": "e4075d4453ac1bd8a8f4e080d9b62fa02f88fc18977c65ff5525172941c85a35",
+    "python/tessera/compiler/nvidia_native.py": "0e0187c291c9962fb13ea5dcca2280db765fa9f7dedcf1effee9d4c60f5a0d91",
+    "python/tessera/compiler/resident_attention.py": "6fbb74a5279b17b80b2d05e6749516b6914b1043ca6c7ab22676f9623e759dfe",
+    "python/tessera/compiler/scheduled_checkpoint.py": "be41dd0eccba266c76b35fd532ed4ef6f94f41a789c3aed1c49da919794e47ae",
+    "src/compiler/ir/AdjointInterface.cpp": "aee51c8ecbe6be44140838324ee46b126b8ecbd91a8bee6dced4deced7176aff",
+    "src/compiler/ir/AttentionADContract.h": "ddbcd6c7aa51b783af5621e0788d7f037eec73175210702ce5207cb02e93cd67",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "92375efaaa34823b267db80a3d56e91decea3d96efd045fd9fd0f985ab7f04c8"
+  },
+  "timing_scope": "capture wall includes private copies, module loading, forward and synchronization; backward wall includes gradient allocation and synchronization; selected wrt computes all four native gradients; device windows remain in the explicit checkpoint packet; no speedup claim"
+}

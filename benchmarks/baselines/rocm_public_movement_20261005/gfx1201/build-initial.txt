@@ -1,0 +1,13 @@
+[  0%] Building TesseraLinalgSolverOps.h.inc...
+[  0%] Building Tessera/AdjointInterface.h.inc...
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/bin/mlir-tblgen: error while loading shared libraries: libz3.so.4: cannot open shared object file: No such file or directory
+/home/angstorms/scratch/gfx1201-scheduled-norm-edge/.toolchain/llvm-23/bin/mlir-tblgen: error while loading shared libraries: libz3.so.4: cannot open shared object file: No such file or directory
+gmake[3]: *** [src/compiler/ir/CMakeFiles/TesseraAdjointInterfaceTableGen.dir/build.make:84: src/compiler/ir/Tessera/AdjointInterface.h.inc] Error 127
+gmake[3]: *** [src/solvers/linalg/CMakeFiles/TesseraLinalgSolverTableGen.dir/build.make:110: src/solvers/linalg/TesseraLinalgSolverOps.h.inc] Error 127
+[  1%] Built target tessera_layout_algebra
+gmake[2]: *** [CMakeFiles/Makefile2:1849: src/compiler/ir/CMakeFiles/TesseraAdjointInterfaceTableGen.dir/all] Error 2
+gmake[2]: *** Waiting for unfinished jobs....
+gmake[2]: *** [CMakeFiles/Makefile2:4763: src/solvers/linalg/CMakeFiles/TesseraLinalgSolverTableGen.dir/all] Error 2
+[  5%] Built target tessera_solvers_passes
+gmake[1]: *** [CMakeFiles/Makefile2:4852: tools/tessera-opt/CMakeFiles/tessera-opt.dir/rule] Error 2
+gmake: *** [Makefile:1469: tessera-opt] Error 2

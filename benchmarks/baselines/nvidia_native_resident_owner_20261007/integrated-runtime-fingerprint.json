@@ -1,0 +1,8 @@
+{
+  "runtime_path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so",
+  "sha256": "3b95f5004f676d07568144fd75cb8f56179360fc9451b9f66c6200e0547b2845",
+  "compiler_path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "b1c5a5f51ff7554d448a304fd468f0c0e266f38592c87aefc4dbc81580f5cbfe",
+  "state": "matching_native_runtime_built; 711_focused_pass; 48_timing_rows_pass; generated_graphify_pending",
+  "timing_packet_sha256": "d74c951260108d958e327320902399f4abb0b0fffd61cf1ef031b77f9c00fd0f"
+}

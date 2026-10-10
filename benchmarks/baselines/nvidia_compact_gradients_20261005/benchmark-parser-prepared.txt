@@ -1,0 +1,15 @@
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 354, in <module>
+    main()
+    ~~~~^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 325, in main
+    rows.append(run_case(device,shape,causal,wrt,repetitions=args.repetitions,directory=directory))
+                ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 273, in run_case
+    prepared_samples[name].append(rt._nvidia_native_descriptor_device_latency(
+                                  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^
+        pkg.image,pkg.descriptor,args,warmup=4,reps=max(256,repetitions)))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py", line 7817, in _nvidia_native_descriptor_device_latency
+    raise RuntimeError(f"canonical NVIDIA descriptor benchmark rc={rc}")
+RuntimeError: canonical NVIDIA descriptor benchmark rc=5

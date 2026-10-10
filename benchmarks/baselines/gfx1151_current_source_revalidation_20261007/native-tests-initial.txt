@@ -1,0 +1,18 @@
+........................................................................ [ 30%]
+..............................................................sss....... [ 60%]
+........................................................................ [ 90%]
+......................                                                   [100%]============================== hollow device lane ==============================
+DEVICE LANES SKIPPED ON A HOST THAT HAS THE DEVICE.
+
+Every test below declined to run, and nothing in the same lane ran at
+all -- so this session proves nothing about that hardware. Treating it
+as evidence would assert a result that was never produced.
+
+  rocm: 0 executed, 3 tests skipped
+    fix: source scripts/_rocm_env.sh (ROCM_PATH and LD_LIBRARY_PATH are exported only from an interactive .bashrc)
+
+If this host genuinely lacks the hardware, the probe in
+tests/_support/environment.py is wrong and should be corrected --
+do not silence this by deselecting the lane.
+
+235 passed, 3 skipped in 69.40s (0:01:09)

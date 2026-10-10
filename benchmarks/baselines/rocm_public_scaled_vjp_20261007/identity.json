@@ -1,0 +1,16 @@
+{
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "682189e441e5bb4c15bc5204f6e9ff7eeceda1056fccd68d380b87179c2d5544",
+    "python/tessera/compiler/native_vmap.py": "e24f0e3ac459fed5e4ee2df57d56761a56708e8001c1f7a95ea1dd322dcfc2a4",
+    "python/tessera/compiler/native_vjp_plugins.py": "b3f82acb5a2d4458de8fd6fe9b59ca655a48b8558ef9e635ac03c6be2608bb05",
+    "python/tessera/compiler/native_scaled_program.py": "b7d8f4c2c5141d33129cc58320a720c1637ec5c01850507ac96664b1064339d9",
+    "python/tessera/runtime.py": "9c7939bf8daff8ef04d493e76d6b26a10459b078b8a96341b58712fd3c951dc9",
+    "tests/device/rocm/test_public_scaled_vjp.py": "1f854125df00f3d281d61d63675db8f2c0f59a4a468f3c329d2b46493f12b915",
+    "benchmarks/rocm/benchmark_native_scaled_vjp.py": "7468c790142cd7d4c5b1c620024091189f3361e6ed6cd56acab040df40802f0f"
+  },
+  "compiler_sha256": "654f54378a7f5ebc0c16c9e3dc76b78b3536e5e4c52481d44152a41ff80d5a4e",
+  "layout_library_sha256": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "execution_host": "Tajasaurus gfx1201",
+  "compiler_delivery": "matching Super-Bear executable and linked layout library in isolated Tajasaurus scratch",
+  "runtime_identity": "../rocm_native_scaled_vjp_20261007/scaled-vjp-gfx1201-runtime-20261007.sha256"
+}

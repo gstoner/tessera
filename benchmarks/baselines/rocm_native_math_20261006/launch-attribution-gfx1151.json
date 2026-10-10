@@ -1,0 +1,1456 @@
+{
+  "schema": "tessera.rocm.math-launch-attribution.v1",
+  "architecture": "gfx1151",
+  "device": "AMD Radeon(TM) 8060S Graphics",
+  "device_ordinal": 0,
+  "compiler_binary_sha256": "14a91080ec75736ff2e6f7b2b44f74752fbce23d7527bb66cca02b4ef748c0e1",
+  "source_sha256": {
+    "python/tessera/runtime.py": "525a5ceea019374aa5827fc396399f72036b52a6c030c340535dc2a59f8649a1",
+    "python/tessera/compiler/rocm_math_native.py": "b567ea22f72d7845b7b29b99824712de80a3b82f587336bb565824c317bd2a2a",
+    "benchmarks/rocm/benchmark_math_launch_attribution.py": "5234710ae8c1922e30f9d787f0475c45e4638a868c43bcb657dfde2c0b85e3f8"
+  },
+  "scope": "static compact unary/binary/scan packages; all inputs updated every call",
+  "timing_policy": "wrapper durations include Python instrumentation overhead; diagnostic attribution only, no kernel or speedup claim",
+  "rows": [
+    {
+      "kind": "sqrt",
+      "storage": "f32",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "9f8155afa8690fdb1a3e69a484aaf3bfae88e21a8f0b8d898ae0a0bb7e0c53e6",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        1.129835,
+        0.787045,
+        0.615855,
+        0.677238,
+        0.671658,
+        0.602814,
+        0.610285,
+        0.586213,
+        0.590823
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.615855,
+      "instrumented_wall_samples_ms": [
+        0.70635,
+        0.728722,
+        0.610835,
+        0.602954,
+        0.609275,
+        0.595584,
+        0.596084,
+        0.632886,
+        0.622185
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 18690
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2540
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 10500
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 52862
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 1521268
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 255734
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 513888
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 681938
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 39262
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 33802
+        }
+      }
+    },
+    {
+      "kind": "add",
+      "storage": "f32",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "9b3ea023e0f8c353b663d85fe6306f7b636358b2c2d15ca1f0395f1de4667d7b",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        0.941974,
+        0.776864,
+        0.732932,
+        0.723251,
+        0.69753,
+        0.719121,
+        0.726561,
+        0.718101,
+        0.744322
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.726561,
+      "instrumented_wall_samples_ms": [
+        0.743493,
+        0.799655,
+        0.710831,
+        0.692099,
+        0.70752,
+        0.693409,
+        0.745203,
+        0.70288,
+        0.692159
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 17281
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2030
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 10400
+        },
+        "hipMalloc": {
+          "count": 27,
+          "elapsed_ns": 60644
+        },
+        "hipMemcpy": {
+          "count": 27,
+          "elapsed_ns": 2160670
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 248492
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 539302
+        },
+        "hipFree": {
+          "count": 27,
+          "elapsed_ns": 713660
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 38174
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 33391
+        }
+      }
+    },
+    {
+      "kind": "cumsum",
+      "storage": "f32",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "90289999156de0583cfb55f38cc155a679a2972f64aad84f0fa8402112c9ba2a",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        0.742772,
+        0.833227,
+        0.617475,
+        0.613345,
+        0.618555,
+        0.611445,
+        0.641296,
+        0.615955,
+        0.661648
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.618555,
+      "instrumented_wall_samples_ms": [
+        0.631476,
+        0.613695,
+        0.616085,
+        0.634917,
+        0.603574,
+        0.603864,
+        0.628555,
+        0.628606,
+        0.640457
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 17311
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2470
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 10181
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 71883
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 1487394
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 252162
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 527373
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 721152
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 39512
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 35642
+        }
+      }
+    },
+    {
+      "kind": "sqrt",
+      "storage": "f32",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "9f8155afa8690fdb1a3e69a484aaf3bfae88e21a8f0b8d898ae0a0bb7e0c53e6",
+      "abi_id": "tessera.rocm.math.x_o_n.f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        4.056045,
+        2.988755,
+        3.147834,
+        3.159324,
+        3.114871,
+        2.986615,
+        2.966073,
+        2.827215,
+        2.955703
+      ],
+      "uninstrumented_portable_wall_median_ms": 2.988755,
+      "instrumented_wall_samples_ms": [
+        2.676088,
+        3.319264,
+        3.052938,
+        3.068669,
+        2.707269,
+        3.222318,
+        2.8224,
+        3.375287,
+        2.72609
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 35304
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2690
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 13721
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 119247
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 21926296
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 341038
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 1149965
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 101055
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 62686
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 46013
+        }
+      }
+    },
+    {
+      "kind": "add",
+      "storage": "f32",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "9b3ea023e0f8c353b663d85fe6306f7b636358b2c2d15ca1f0395f1de4667d7b",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        4.938835,
+        4.522057,
+        4.434162,
+        4.497185,
+        4.146586,
+        4.194689,
+        4.397849,
+        4.695167,
+        4.445452
+      ],
+      "uninstrumented_portable_wall_median_ms": 4.445452,
+      "instrumented_wall_samples_ms": [
+        4.651369,
+        4.387884,
+        4.436132,
+        4.486555,
+        4.335637,
+        4.790492,
+        4.503095,
+        4.629503,
+        4.602261
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 36862
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2940
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 14601
+        },
+        "hipMalloc": {
+          "count": 27,
+          "elapsed_ns": 8015202
+        },
+        "hipMemcpy": {
+          "count": 27,
+          "elapsed_ns": 26399109
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 296007
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 1059502
+        },
+        "hipFree": {
+          "count": 27,
+          "elapsed_ns": 944851
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 81363
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 65085
+        }
+      }
+    },
+    {
+      "kind": "cumsum",
+      "storage": "f32",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "90289999156de0583cfb55f38cc155a679a2972f64aad84f0fa8402112c9ba2a",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        3.883736,
+        3.126313,
+        3.045448,
+        3.243259,
+        3.123683,
+        2.841746,
+        2.885189,
+        3.276291,
+        3.119412
+      ],
+      "uninstrumented_portable_wall_median_ms": 3.123683,
+      "instrumented_wall_samples_ms": [
+        3.278101,
+        3.128393,
+        2.971034,
+        3.160475,
+        3.022556,
+        3.044998,
+        3.050019,
+        3.096251,
+        3.123593
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 34211
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2761
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 13080
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 64782
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 23055471
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 346769
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 1040047
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 97627
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 57505
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 43081
+        }
+      }
+    },
+    {
+      "kind": "sqrt",
+      "storage": "f16",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "dfc53449bd5f9e044e12620fa4d620f63c9015741da3d918228aa8d1f096b250",
+      "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        0.793435,
+        0.769254,
+        0.654968,
+        0.684989,
+        0.595454,
+        0.589694,
+        0.667238,
+        0.596934,
+        0.598664
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.654968,
+      "instrumented_wall_samples_ms": [
+        0.645907,
+        0.613635,
+        0.620285,
+        0.609775,
+        0.593814,
+        0.604674,
+        0.589504,
+        0.601624,
+        0.599624
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 16292
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 1830
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 9780
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 49943
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 1471852
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 246893
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 551760
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 695180
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 36303
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 34004
+        }
+      }
+    },
+    {
+      "kind": "add",
+      "storage": "f16",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "24f130b543606657b31db555d0a3ecb7354290328dcd6d9511ae38ff14d5f9a1",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        1.217499,
+        0.887281,
+        0.772774,
+        0.71154,
+        0.70113,
+        0.740562,
+        0.686659,
+        0.70799,
+        0.738232
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.738232,
+      "instrumented_wall_samples_ms": [
+        0.742242,
+        0.741493,
+        0.70332,
+        0.735192,
+        0.70683,
+        0.701899,
+        0.760483,
+        0.7065,
+        0.744252
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 18410
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 1880
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 27011
+        },
+        "hipMalloc": {
+          "count": 27,
+          "elapsed_ns": 61182
+        },
+        "hipMemcpy": {
+          "count": 27,
+          "elapsed_ns": 2167481
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 247196
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 506669
+        },
+        "hipFree": {
+          "count": 27,
+          "elapsed_ns": 725774
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 43272
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 33442
+        }
+      }
+    },
+    {
+      "kind": "cumsum",
+      "storage": "f16",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "a46e496d37892859ee4f4ccff0d1917207f176fe409a222b218a89945333b5d6",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        0.972805,
+        0.807176,
+        0.606694,
+        0.596254,
+        0.610674,
+        0.677568,
+        0.598834,
+        0.589363,
+        0.609395
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.609395,
+      "instrumented_wall_samples_ms": [
+        0.623945,
+        0.613935,
+        0.644017,
+        0.600714,
+        0.642627,
+        0.599644,
+        0.594803,
+        0.648877,
+        0.624146
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 19640
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 1890
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 10600
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 51734
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 1469983
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 253033
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 528188
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 686209
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 42032
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 33981
+        }
+      }
+    },
+    {
+      "kind": "sqrt",
+      "storage": "f16",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "dfc53449bd5f9e044e12620fa4d620f63c9015741da3d918228aa8d1f096b250",
+      "abi_id": "tessera.rocm.math.x_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        3.684455,
+        3.231588,
+        2.806015,
+        3.154504,
+        2.818995,
+        2.798844,
+        2.785474,
+        3.149934,
+        2.951492
+      ],
+      "uninstrumented_portable_wall_median_ms": 2.951492,
+      "instrumented_wall_samples_ms": [
+        2.926491,
+        2.73861,
+        3.117262,
+        2.996926,
+        3.010346,
+        3.069029,
+        2.938232,
+        3.088501,
+        3.050458
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 34191
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2700
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 13250
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 65583
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 21761691
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 384762
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 1276042
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 97726
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 62005
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 43902
+        }
+      }
+    },
+    {
+      "kind": "add",
+      "storage": "f16",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "24f130b543606657b31db555d0a3ecb7354290328dcd6d9511ae38ff14d5f9a1",
+      "abi_id": "tessera.rocm.math.a_b_o_n.f16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        4.653889,
+        3.994672,
+        3.792701,
+        3.907026,
+        3.668244,
+        4.074496,
+        4.008553,
+        3.985561,
+        4.033364
+      ],
+      "uninstrumented_portable_wall_median_ms": 3.994672,
+      "instrumented_wall_samples_ms": [
+        3.697976,
+        4.039895,
+        3.562312,
+        4.002533,
+        3.743708,
+        3.823547,
+        3.802331,
+        3.78702,
+        3.757769
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 34661
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2770
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 12383
+        },
+        "hipMalloc": {
+          "count": 27,
+          "elapsed_ns": 78158
+        },
+        "hipMemcpy": {
+          "count": 27,
+          "elapsed_ns": 29243789
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 291498
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 986416
+        },
+        "hipFree": {
+          "count": 27,
+          "elapsed_ns": 109774
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 64421
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 43752
+        }
+      }
+    },
+    {
+      "kind": "cumsum",
+      "storage": "f16",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "a46e496d37892859ee4f4ccff0d1917207f176fe409a222b218a89945333b5d6",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.f16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        3.77416,
+        3.267511,
+        3.069969,
+        3.012581,
+        3.414754,
+        3.09184,
+        3.25617,
+        2.983224,
+        2.960853
+      ],
+      "uninstrumented_portable_wall_median_ms": 3.09184,
+      "instrumented_wall_samples_ms": [
+        2.976744,
+        3.360016,
+        3.040817,
+        3.271501,
+        3.240529,
+        2.838406,
+        3.049638,
+        3.095601,
+        3.187261
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 35421
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2660
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 13090
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 69932
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 22278595
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 348920
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 1651944
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 126825
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 64913
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 43912
+        }
+      }
+    },
+    {
+      "kind": "sqrt",
+      "storage": "bf16",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "cc1c0828708efe0e06878fce76a649282fdc803402b4c926b3ce458cf67aab13",
+      "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        0.784954,
+        0.640376,
+        0.626145,
+        0.631226,
+        0.638706,
+        0.986917,
+        0.618605,
+        0.901201,
+        0.79481
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.640376,
+      "instrumented_wall_samples_ms": [
+        0.690409,
+        0.655277,
+        0.631766,
+        0.610525,
+        0.677898,
+        0.656388,
+        0.622005,
+        0.612165,
+        0.622195
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 19420
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2090
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 11050
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 58283
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 1490344
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 253994
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 531250
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 700601
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 43872
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 35951
+        }
+      }
+    },
+    {
+      "kind": "add",
+      "storage": "bf16",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "d646cc70b318cbb013727a4b0dbbc66eb830fc60b89a608941128f795631f9eb",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        1.223809,
+        0.70378,
+        0.71401,
+        0.691819,
+        0.71536,
+        0.709441,
+        0.710131,
+        0.69543,
+        0.687449
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.709441,
+      "instrumented_wall_samples_ms": [
+        0.742872,
+        0.751262,
+        0.715621,
+        0.70898,
+        0.690329,
+        0.725891,
+        0.740142,
+        0.688979,
+        0.689849
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 19160
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 1920
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 10500
+        },
+        "hipMalloc": {
+          "count": 27,
+          "elapsed_ns": 60872
+        },
+        "hipMemcpy": {
+          "count": 27,
+          "elapsed_ns": 2080936
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 249442
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 484938
+        },
+        "hipFree": {
+          "count": 27,
+          "elapsed_ns": 669968
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 41475
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 34262
+        }
+      }
+    },
+    {
+      "kind": "cumsum",
+      "storage": "bf16",
+      "output_storage": "f32",
+      "shape": [
+        3,
+        17
+      ],
+      "image_sha256": "fd9fbcacfa3b57e37f83750b317fd1b5d83a58739954031971b9a2aa7acff383",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        0.928682,
+        0.70192,
+        0.619635,
+        0.596134,
+        0.595694,
+        0.584153,
+        0.588623,
+        0.644096,
+        0.588673
+      ],
+      "uninstrumented_portable_wall_median_ms": 0.596134,
+      "instrumented_wall_samples_ms": [
+        0.634306,
+        0.651947,
+        0.614485,
+        0.598384,
+        0.674508,
+        0.601724,
+        0.625955,
+        0.616575,
+        0.596924
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 20491
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 1990
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 10692
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 52535
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 1448350
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 249634
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 522760
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 678069
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 44021
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 34001
+        }
+      }
+    },
+    {
+      "kind": "sqrt",
+      "storage": "bf16",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "cc1c0828708efe0e06878fce76a649282fdc803402b4c926b3ce458cf67aab13",
+      "abi_id": "tessera.rocm.math.x_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        3.332524,
+        3.25428,
+        3.166645,
+        3.173035,
+        3.142724,
+        3.010186,
+        2.756562,
+        2.797484,
+        3.490634
+      ],
+      "uninstrumented_portable_wall_median_ms": 3.166645,
+      "instrumented_wall_samples_ms": [
+        2.612263,
+        3.369136,
+        3.032498,
+        3.08203,
+        3.086121,
+        2.983645,
+        3.065379,
+        3.130993,
+        3.104662
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 34301
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2810
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 13101
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 81988
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 22972473
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 303269
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 853330
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 98388
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 67393
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 43071
+        }
+      }
+    },
+    {
+      "kind": "add",
+      "storage": "bf16",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "d646cc70b318cbb013727a4b0dbbc66eb830fc60b89a608941128f795631f9eb",
+      "abi_id": "tessera.rocm.math.a_b_o_n.bf16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        4.554754,
+        3.920187,
+        3.940269,
+        3.540636,
+        3.761258,
+        3.707316,
+        4.068706,
+        3.457201,
+        3.891156
+      ],
+      "uninstrumented_portable_wall_median_ms": 3.891156,
+      "instrumented_wall_samples_ms": [
+        3.920358,
+        3.861954,
+        3.948289,
+        4.945136,
+        3.726076,
+        3.540516,
+        4.284929,
+        4.128509,
+        4.158401
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 38842
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2640
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 15840
+        },
+        "hipMalloc": {
+          "count": 27,
+          "elapsed_ns": 94665
+        },
+        "hipMemcpy": {
+          "count": 27,
+          "elapsed_ns": 30947862
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 312369
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 1052480
+        },
+        "hipFree": {
+          "count": 27,
+          "elapsed_ns": 112275
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 87192
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 46982
+        }
+      }
+    },
+    {
+      "kind": "cumsum",
+      "storage": "bf16",
+      "output_storage": "f32",
+      "shape": [
+        256,
+        1024
+      ],
+      "image_sha256": "fd9fbcacfa3b57e37f83750b317fd1b5d83a58739954031971b9a2aa7acff383",
+      "abi_id": "tessera.rocm.math.x_o_rows_columns.bf16_f32.v1",
+      "correctness": "independent f32 oracle before and after every changed-input launch",
+      "repetitions": 9,
+      "uninstrumented_portable_wall_samples_ms": [
+        3.477862,
+        3.193737,
+        3.183906,
+        3.143204,
+        2.799284,
+        2.892399,
+        2.72589,
+        3.147814,
+        2.72181
+      ],
+      "uninstrumented_portable_wall_median_ms": 3.143204,
+      "instrumented_wall_samples_ms": [
+        3.317223,
+        2.795314,
+        3.169765,
+        3.054148,
+        3.07295,
+        3.140343,
+        3.107382,
+        3.001816,
+        2.920661
+      ],
+      "hip_calls": {
+        "hipGetDevice": {
+          "count": 9,
+          "elapsed_ns": 33692
+        },
+        "hipGetDevicePropertiesR0600": {
+          "count": 1,
+          "elapsed_ns": 2760
+        },
+        "hipInit": {
+          "count": 9,
+          "elapsed_ns": 13551
+        },
+        "hipMalloc": {
+          "count": 18,
+          "elapsed_ns": 67865
+        },
+        "hipMemcpy": {
+          "count": 18,
+          "elapsed_ns": 22607500
+        },
+        "hipModuleLaunchKernel": {
+          "count": 9,
+          "elapsed_ns": 343339
+        },
+        "hipDeviceSynchronize": {
+          "count": 9,
+          "elapsed_ns": 1258383
+        },
+        "hipFree": {
+          "count": 18,
+          "elapsed_ns": 98018
+        }
+      },
+      "native_image_calls": {
+        "tessera_rocm_image_acquire": {
+          "count": 9,
+          "elapsed_ns": 63703
+        },
+        "tessera_rocm_image_release": {
+          "count": 9,
+          "elapsed_ns": 43881
+        }
+      }
+    }
+  ]
+}

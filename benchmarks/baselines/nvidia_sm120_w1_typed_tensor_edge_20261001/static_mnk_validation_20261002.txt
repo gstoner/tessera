@@ -1,0 +1,36 @@
+shared_contract_gates
+
+........................................................................ [ 14%]
+........................................................................ [ 29%]
+........................................................................ [ 44%]
+........................................................................ [ 59%]
+........................................................................ [ 73%]
+........................................................................ [ 88%]
+........................................................                 [100%]
+=============================== warnings summary ===============================
+tests/unit/test_native_artifact_contract.py::test_cached_dtype_spelling_does_not_cache_invocation_shape_or_layout
+  /home/angstorms/scratch/next-five-compiler-slices/tests/unit/test_native_artifact_contract.py:376: DeprecationWarning: Setting the shape on a NumPy array has been deprecated in NumPy 2.5.
+  As an alternative, you can create a new view using np.reshape (with copy=False if needed).
+    value.shape = (3, 2)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+488 passed, 1 warning in 2.61s
+
+
+native_admission_and_entry_projection
+
+................                                                         [100%]
+16 passed, 154 deselected in 2.32s
+
+
+tensor_program_and_public_frontend
+
+................................................                         [100%]
+48 passed in 20.21s
+
+
+scheduled_matmul_exact_device
+
+................................                                         [100%]
+32 passed in 19.04s
+

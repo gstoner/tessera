@@ -1,0 +1,22 @@
+{
+  "compiler_sha256": "65126f8c651e5ecc0473239e311e9e1e81a812b5a59b348b0b75d1c9d982e4b2",
+  "source_hashes_verified": true,
+  "profiles": 16,
+  "max_abs_error": 1.0195906896548479e-07,
+  "public_wall_median_ranges_ms": {
+    "primal": [
+      0.840314,
+      1.003015
+    ],
+    "jvp": [
+      1.508841,
+      1.802832
+    ],
+    "vjp": [
+      1.977155,
+      2.031439
+    ]
+  },
+  "device_tests": "16 passed; one timeout-plugin configuration warning",
+  "focused_drift_tests": "988 passed in 112.52s"
+}

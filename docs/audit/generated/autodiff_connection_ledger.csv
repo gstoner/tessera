@@ -253,6 +253,7 @@ rope,rotary_embedding,yes,none,none,,,,,,,,python_reference=python-unit-registry
 rope_merge,layout_transform,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 rope_split,layout_transform,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 rsqrt,elementwise,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
+scaled_matmul,loop_nest,no,native,native,,,,,,,,ir_adjoint=llvm23-core;ir_tangent=llvm23-core,native compiler adjoint,,
 scatter,indexing,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 scatter_add,indexing,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,
 scatter_reduce,indexing,yes,none,none,,,,,,,,python_reference=python-unit-registry,,,

@@ -1,0 +1,12 @@
+{
+  "baseline": {
+    "compiler_sha256": "7d064f19ce0478bc713f1eeb6887e5f586a9c4bef876a8046fdf93354f74f159",
+    "arith_divf": 289,
+    "arith_mulf": 838
+  },
+  "reciprocal": {
+    "compiler_sha256": "f5dd9037f1b70cf4407274faf2a05546d1d9c8c7efad836671f52177e45220b9",
+    "arith_divf": 1,
+    "arith_mulf": 1126
+  }
+}

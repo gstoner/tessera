@@ -56,3 +56,14 @@ def test_dtype_matrix_records_one_explicit_non_promoting_tf32_terminal() -> None
     assert len(unstable) == 1
     assert unstable[0]["storage"] == "tf32"
     assert unstable[0]["shape"] == [256, 256, 256]
+
+def test_attention_benchmark_oracle_uses_bottom_right_causal_alignment() -> None:
+    import numpy as np
+
+    from benchmarks.nvidia.record_e2e_spine_attention import _attention_reference
+
+    q = np.zeros((1, 1, 2, 1), dtype=np.float32)
+    k = np.zeros((1, 1, 3, 1), dtype=np.float32)
+    v = np.asarray([1.0, 2.0, 4.0], dtype=np.float32).reshape(1, 1, 3, 1)
+    got = _attention_reference(q, k, v, scale=1.0, causal=True)
+    np.testing.assert_allclose(got.reshape(-1), [1.5, 7.0 / 3.0], rtol=0, atol=1e-7)

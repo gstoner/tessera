@@ -1,0 +1,20 @@
+{
+  "schema": "tessera.nvidia.broadcast_checkpoint_core_validation.v1",
+  "timestamp_utc": "2026-10-03T10:39:09.632861+00:00",
+  "source_sha256": {
+    "python/tessera/compiler/nvidia_native.py": "501eef0a51226bdc352f7932ba79197f325aef3c92f9115e283bec2a4213756c",
+    "tests/unit/test_checkpoint_broadcast_contract.py": "0c527fce85deb4297f1e8520e48fefa0a62981c362fe86b8cb7eefd0dbd918a3"
+  },
+  "tests": {
+    "contracts": 376,
+    "existing_exact_device_routes": 86,
+    "pair_identity": 51,
+    "registry_and_audit": 303,
+    "final_audit": 11
+  },
+  "generated_docs": "32 regenerated",
+  "compiler_plan": "passed",
+  "production_package_support": false,
+  "graphify": "unavailable in WSL",
+  "scope": "raw native broadcast arithmetic and saved-state pairing identity; checked package/tape remains open"
+}

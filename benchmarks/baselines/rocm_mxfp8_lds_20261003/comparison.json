@@ -1,0 +1,689 @@
+{
+  "schema": "tessera.gfx1201.mxfp8_lds_comparison.v1",
+  "pairs": [
+    {
+      "reference": "reference.json",
+      "candidate": "candidate.json",
+      "rows": [
+        {
+          "shape_mnk": [
+            200,
+            256,
+            128
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 17.50390625,
+              "candidate_device_us": 17.490624999999998,
+              "device_speedup": 1.0007593353582276,
+              "end_to_end_speedup": 2.063997008044544,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 18.908789062500002,
+              "candidate_device_us": 18.9063671875,
+              "device_speedup": 1.0001280983795555,
+              "end_to_end_speedup": 2.136424456110595,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 8.493398437500002,
+              "candidate_device_us": 8.490810546875,
+              "device_speedup": 1.0003047872297601,
+              "end_to_end_speedup": 2.1816860851380695,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 16.94068359375,
+              "candidate_device_us": 16.9508203125,
+              "device_speedup": 0.9994019924367598,
+              "end_to_end_speedup": 1.008298091101184,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            256,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 346.24625,
+              "candidate_device_us": 350.14374999999995,
+              "device_speedup": 0.9888688574335541,
+              "end_to_end_speedup": 1.4345366205986612,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 441.53312500000004,
+              "candidate_device_us": 439.443125,
+              "device_speedup": 1.0047560193369733,
+              "end_to_end_speedup": 1.4077617446874133,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 32.796640624999995,
+              "candidate_device_us": 33.1217578125,
+              "device_speedup": 0.9901841807629755,
+              "end_to_end_speedup": 1.5703809021229473,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 25.3777734375,
+              "candidate_device_us": 25.3655859375,
+              "device_speedup": 1.0004804738211066,
+              "end_to_end_speedup": 0.9658698127238751,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            4096,
+            1536
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 29.194648437500003,
+              "candidate_device_us": 29.2484765625,
+              "device_speedup": 0.998159626369429,
+              "end_to_end_speedup": 1.4185423368687164,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 42.742890625,
+              "candidate_device_us": 42.736171875,
+              "device_speedup": 1.0001572145960957,
+              "end_to_end_speedup": 1.3212353758853679,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 119.19875,
+              "candidate_device_us": 52.809296875,
+              "device_speedup": 2.257154649912199,
+              "end_to_end_speedup": 1.2973314222889538,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 32.9921875,
+              "candidate_device_us": 32.96951171875,
+              "device_speedup": 1.0006877803178718,
+              "end_to_end_speedup": 1.0937989992889843,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            2048,
+            2048
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 25.065,
+              "candidate_device_us": 25.2167578125,
+              "device_speedup": 0.9939818665972684,
+              "end_to_end_speedup": 1.437391285732635,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 41.390625,
+              "candidate_device_us": 41.469921875000004,
+              "device_speedup": 0.9980878460480581,
+              "end_to_end_speedup": 1.2367130193814775,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 100.4,
+              "candidate_device_us": 49.81125,
+              "device_speedup": 2.015608923686918,
+              "end_to_end_speedup": 1.126036833210201,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 32.201640625,
+              "candidate_device_us": 32.5112890625,
+              "device_speedup": 0.9904756641022531,
+              "end_to_end_speedup": 0.9880104782505627,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            8192,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 40.886171875,
+              "candidate_device_us": 40.897734375,
+              "device_speedup": 0.9997172826275905,
+              "end_to_end_speedup": 1.1623757092168168,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 67.93804687500001,
+              "candidate_device_us": 67.18609375,
+              "device_speedup": 1.0111920947182618,
+              "end_to_end_speedup": 1.2608273718984224,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 137.48625,
+              "candidate_device_us": 71.01828125,
+              "device_speedup": 1.9359275890670757,
+              "end_to_end_speedup": 1.3918607053286265,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 39.6121875,
+              "candidate_device_us": 39.2783203125,
+              "device_speedup": 1.008500037293951,
+              "end_to_end_speedup": 1.0052793721547286,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            256,
+            1024,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 19.291171875,
+              "candidate_device_us": 20.269101562499998,
+              "device_speedup": 0.9517526869908594,
+              "end_to_end_speedup": 1.495121675131083,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 24.9879296875,
+              "candidate_device_us": 26.894921875,
+              "device_speedup": 0.9290947117688922,
+              "end_to_end_speedup": 1.3559943726779644,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 19.26048828125,
+              "candidate_device_us": 19.9233984375,
+              "device_speedup": 0.9667270542056589,
+              "end_to_end_speedup": 1.3380471764431716,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 19.04283203125,
+              "candidate_device_us": 21.153671874999997,
+              "device_speedup": 0.9002140216496103,
+              "end_to_end_speedup": 0.943508042635582,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 77.90203125000001,
+              "candidate_device_us": 79.781328125,
+              "device_speedup": 0.9764444022283567,
+              "end_to_end_speedup": 1.137231999769272,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 135.30875,
+              "candidate_device_us": 136.3453125,
+              "device_speedup": 0.9923975200834279,
+              "end_to_end_speedup": 1.0762142160488894,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 489.97562500000004,
+              "candidate_device_us": 163.5184375,
+              "device_speedup": 2.996454910474545,
+              "end_to_end_speedup": 1.4260244816223013,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 77.380234375,
+              "candidate_device_us": 77.836796875,
+              "device_speedup": 0.9941343616601642,
+              "end_to_end_speedup": 0.9627303874732821,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            128,
+            4096,
+            128
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 5.405751953125001,
+              "candidate_device_us": 5.390903320312501,
+              "device_speedup": 1.0027543867753204,
+              "end_to_end_speedup": 1.7090405688521364,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 7.395234375,
+              "candidate_device_us": 7.409482421875,
+              "device_speedup": 0.9980770523413436,
+              "end_to_end_speedup": 1.7682522095067368,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 7.193681640625,
+              "candidate_device_us": 7.23216796875,
+              "device_speedup": 0.9946784521195721,
+              "end_to_end_speedup": 1.5952635015845813,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 14.1819140625,
+              "candidate_device_us": 14.1890771484375,
+              "device_speedup": 0.9994951690048223,
+              "end_to_end_speedup": 0.8697188066454564,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            512,
+            4096,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 38.590625,
+              "candidate_device_us": 38.64875,
+              "device_speedup": 0.9984960703774378,
+              "end_to_end_speedup": 1.1739392161900175,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 58.32328125,
+              "candidate_device_us": 58.452265625,
+              "device_speedup": 0.9977933383142494,
+              "end_to_end_speedup": 1.294164764930017,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 129.42999999999998,
+              "candidate_device_us": 66.402265625,
+              "device_speedup": 1.949180480240579,
+              "end_to_end_speedup": 1.384145748719325,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 36.4351171875,
+              "candidate_device_us": 35.775546875,
+              "device_speedup": 1.0184363446575544,
+              "end_to_end_speedup": 1.082285434418037,
+              "payload_unchanged": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "reference": "reference-repeat.json",
+      "candidate": "candidate-repeat.json",
+      "rows": [
+        {
+          "shape_mnk": [
+            200,
+            256,
+            128
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 17.501796875,
+              "candidate_device_us": 17.46171875,
+              "device_speedup": 1.002295199319941,
+              "end_to_end_speedup": 2.159106582809942,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 18.4209375,
+              "candidate_device_us": 18.912578125,
+              "device_speedup": 0.9740045687187348,
+              "end_to_end_speedup": 2.093317054863956,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 7.9939160156249995,
+              "candidate_device_us": 8.48966796875,
+              "device_speedup": 0.94160526007026,
+              "end_to_end_speedup": 2.0941880858496558,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 16.94708984375,
+              "candidate_device_us": 16.9769140625,
+              "device_speedup": 0.9982432485291376,
+              "end_to_end_speedup": 1.006529555585173,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            256,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 351.05875,
+              "candidate_device_us": 350.23375,
+              "device_speedup": 1.002355569673111,
+              "end_to_end_speedup": 1.6449878749982474,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 438.11375000000004,
+              "candidate_device_us": 442.25874999999996,
+              "device_speedup": 0.9906276585822215,
+              "end_to_end_speedup": 1.5150418477900136,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 32.833828125,
+              "candidate_device_us": 33.144414062500005,
+              "device_speedup": 0.9906293127730562,
+              "end_to_end_speedup": 1.4523655181735007,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 25.379218750000003,
+              "candidate_device_us": 25.389843749999997,
+              "device_speedup": 0.9995815255854028,
+              "end_to_end_speedup": 0.9891968655054898,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            4096,
+            1536
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 29.31734375,
+              "candidate_device_us": 29.202343749999997,
+              "device_speedup": 1.0039380400759785,
+              "end_to_end_speedup": 1.4853621878062784,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 43.21578125,
+              "candidate_device_us": 42.8784375,
+              "device_speedup": 1.0078674450299174,
+              "end_to_end_speedup": 1.3706438965770569,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 120.8625,
+              "candidate_device_us": 53.0153125,
+              "device_speedup": 2.279765869530619,
+              "end_to_end_speedup": 1.3660161634391088,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 33.2507421875,
+              "candidate_device_us": 33.112431640625005,
+              "device_speedup": 1.0041769975813346,
+              "end_to_end_speedup": 1.0094595454198927,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            2048,
+            2048
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 24.9887890625,
+              "candidate_device_us": 25.2558203125,
+              "device_speedup": 0.9894269421188494,
+              "end_to_end_speedup": 1.322493095070425,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 41.815859375,
+              "candidate_device_us": 41.589296875,
+              "device_speedup": 1.0054476155411078,
+              "end_to_end_speedup": 1.3044116375516595,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 104.1365625,
+              "candidate_device_us": 49.5996875,
+              "device_speedup": 2.099540697711049,
+              "end_to_end_speedup": 1.4276142217388776,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 32.2877734375,
+              "candidate_device_us": 32.2112890625,
+              "device_speedup": 1.0023744586828423,
+              "end_to_end_speedup": 0.905518899661252,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            200,
+            8192,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 41.12703125,
+              "candidate_device_us": 40.993515625,
+              "device_speedup": 1.0032569937699751,
+              "end_to_end_speedup": 1.4415647662241413,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 68.87593749999999,
+              "candidate_device_us": 68.183125,
+              "device_speedup": 1.010161055246441,
+              "end_to_end_speedup": 1.4926969622119084,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 139.06328125000002,
+              "candidate_device_us": 71.2565625,
+              "device_speedup": 1.9515855995719695,
+              "end_to_end_speedup": 1.453053922320275,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 39.695117187499996,
+              "candidate_device_us": 39.491171875,
+              "device_speedup": 1.0051643266790242,
+              "end_to_end_speedup": 0.9993565044792595,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            256,
+            1024,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 20.299062499999998,
+              "candidate_device_us": 20.267656249999998,
+              "device_speedup": 1.0015495748305876,
+              "end_to_end_speedup": 1.5629978198893177,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 27.057890625000002,
+              "candidate_device_us": 26.9474609375,
+              "device_speedup": 1.0040979626153321,
+              "end_to_end_speedup": 1.5120525729912344,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 19.930429687500002,
+              "candidate_device_us": 19.9401953125,
+              "device_speedup": 0.9995102542955596,
+              "end_to_end_speedup": 1.617072109775836,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 21.210664062499998,
+              "candidate_device_us": 21.1866796875,
+              "device_speedup": 1.0011320497290639,
+              "end_to_end_speedup": 0.9953549134641109,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            256,
+            4096,
+            5120
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 79.02874999999999,
+              "candidate_device_us": 78.67890625,
+              "device_speedup": 1.0044464744958246,
+              "end_to_end_speedup": 1.1448928587792793,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 137.1171875,
+              "candidate_device_us": 136.24296875,
+              "device_speedup": 1.006416615536352,
+              "end_to_end_speedup": 1.185186453071356,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 490.60875,
+              "candidate_device_us": 164.098125,
+              "device_speedup": 2.989727944789131,
+              "end_to_end_speedup": 1.5377956651421754,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 77.67046875,
+              "candidate_device_us": 77.649375,
+              "device_speedup": 1.000271653828508,
+              "end_to_end_speedup": 1.003372316688421,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            128,
+            4096,
+            128
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 5.408740234375,
+              "candidate_device_us": 5.4014794921875,
+              "device_speedup": 1.0013442135988857,
+              "end_to_end_speedup": 1.937210789204183,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 7.394990234375,
+              "candidate_device_us": 7.42626953125,
+              "device_speedup": 0.9957880202511671,
+              "end_to_end_speedup": 1.7768821152861038,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 7.230126953125,
+              "candidate_device_us": 7.2477587890625,
+              "device_speedup": 0.9975672705934822,
+              "end_to_end_speedup": 1.7608741783029265,
+              "payload_unchanged": true
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 14.19251953125,
+              "candidate_device_us": 14.162739257812499,
+              "device_speedup": 1.0021027198831662,
+              "end_to_end_speedup": 1.0935762993250204,
+              "payload_unchanged": true
+            }
+          }
+        },
+        {
+          "shape_mnk": [
+            512,
+            4096,
+            1024
+          ],
+          "arms": {
+            "fp8_k128_n128": {
+              "reference_device_us": 39.0685546875,
+              "candidate_device_us": 38.897890625,
+              "device_speedup": 1.0043874888781323,
+              "end_to_end_speedup": 1.3915509341952597,
+              "payload_unchanged": true
+            },
+            "fp8_k32_n1_control": {
+              "reference_device_us": 59.934453125000005,
+              "candidate_device_us": 58.972578125,
+              "device_speedup": 1.0163105468775875,
+              "end_to_end_speedup": 1.290186155191858,
+              "payload_unchanged": true
+            },
+            "mxfp8_k32_n1": {
+              "reference_device_us": 131.24921875,
+              "candidate_device_us": 66.484296875,
+              "device_speedup": 1.9741386300101411,
+              "end_to_end_speedup": 1.4682043237730051,
+              "payload_unchanged": false
+            },
+            "mxfp4_folded": {
+              "reference_device_us": 36.7544140625,
+              "candidate_device_us": 35.8820703125,
+              "device_speedup": 1.0243114107520186,
+              "end_to_end_speedup": 0.9557143488685247,
+              "payload_unchanged": true
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "checks": [
+    "matched input digests and exact device",
+    "all numerical gates passed",
+    "all referenced raw ISA digests verified",
+    "FP8/control/folded and seed MXFP8 native payloads unchanged"
+  ]
+}

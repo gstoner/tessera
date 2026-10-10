@@ -1277,12 +1277,12 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
     # ── ROCM-FP8-BLOCKSCALE-1 — logical W8A8 block scaling on gfx1201 ────────
     DiagnosticCode(
         code="ROCM_FP8_BLOCKSCALE_CONTRACT",
-        pass_origin="GraphToSchedule / LowerTileToROCM / GenerateWMMAGemmKernel",
+        pass_origin="GraphToSchedule / LowerTileToROCM / ProjectROCMKernelIdentity / GenerateWMMAGemmKernel",
         severity="error",
         summary=(
-            "a tessera.scaled_matmul with fp32 block scales does not conform "
-            "to the gfx1201 W8A8 block-scale contract (e4m3 x e4m3, f32 "
-            "output, static M/N/K with K a whole number of scale groups, "
+            "a tessera.scaled_matmul with fp32 block scales or raw E8M0 K32 "
+            "scales does not conform to its gfx1201 block-scale contract (e4m3 x e4m3, f32 or bf16 "
+            "output, static Graph M/N/K with K a whole number of scale groups, "
             "lhs_scale fp32 [M, K/scale_k], rhs_scale fp32 [K/scale_k, "
             "ceil(N/scale_n)], exact_per_block), or a consumer received a "
             "carrier it cannot emit exactly."
@@ -1292,10 +1292,39 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
             "fix the operand shapes/types to the named contract rather than "
             "expecting a default. scale_layout.block is [scale_n, scale_k] -- "
             "the weight block -- and the activation scale is per token per K "
-            "group. A weight stored [N, K] states transposeB = true."
+            "group. MXFP8 uses signless i8 E8M0 [M,K/32] / [K/32,N] "
+            "scales and block [1,32], with native wide scale evaluation. "
+            "A weight stored [N, K] states transposeB = true."
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1",
         sprint="ROCM-FP8-BLOCKSCALE-1",
+    ),
+    DiagnosticCode(
+        code="ROCM_FOLDED_NATIVE_CONTRACT",
+        pass_origin="GenerateWMMAGemmKernelPass / ProjectROCMKernelIdentityPass",
+        severity="error",
+        summary="Native folded Target requires its explicit gfx1201 full-K policy, ABI and physical schedule.",
+        fix_hint="Preserve the folded Graph/Schedule/Tile numerical and scheduling attributes; do not substitute exact K32 or packed storage.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1",
+        sprint="ROCM-MXFP4-W4A8-1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_FOLDED_SCALE_TYPE",
+        pass_origin="FragmentFoldedScaleOp::verify",
+        severity="error",
+        summary="Full-K folded scaling requires a stated f32 accumulator fragment.",
+        fix_hint="Use a typed fragment with role acc and acc f32.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1",
+        sprint="ROCM-MXFP4-W4A8-1",
+    ),
+    DiagnosticCode(
+        code="TILE_FRAGMENT_FOLDED_SCALE_BUFFERS",
+        pass_origin="FragmentFoldedScaleOp::verify",
+        severity="error",
+        summary="Folded scaling requires rank-1 f32 token scales and raw i8 E8M0 column references.",
+        fix_hint="Flatten token f32 scales and E8M0 byte references; preserve checked payload admission.",
+        spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#rocm-mxfp4-w4a8-1",
+        sprint="ROCM-MXFP4-W4A8-1",
     ),
     DiagnosticCode(
         code="TILE_FRAGMENT_SCALED_ACCUMULATE_TYPE",
@@ -1314,12 +1343,13 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="FragmentScaledAccumulateOp::verify",
         severity="error",
         summary=(
-            "tile.fragment_scaled_accumulate's scales must be rank-1 f32 "
-            "memrefs and its scale_n positive."
+            "tile.fragment_scaled_accumulate requires rank-1 f32 scales for "
+            "fp32 or signless i8 scales for e8m0, and positive scale_n."
         ),
         fix_hint=(
             "Pass the row-major [rows, groups] and [groups, ceil(cols/scale_n)] "
-            "fp32 scale buffers flattened to rank 1, with scale_n >= 1."
+            "scale buffers flattened to rank 1, with scale_n >= 1 and the "
+            "matching explicit scale_format (fp32 or e8m0)."
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md#rocm-fp8-blockscale-1",
         sprint="ROCM-FP8-BLOCKSCALE-1",
@@ -1330,12 +1360,14 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         severity="error",
         summary=(
             "tessera_rocm.wmma_gemm states split_k without the 'ordered' "
-            "reduction, a reduction without a split, or split_k < 1."
+            "reduction, a reduction without a split, split_k < 1, nonpositive "
+            "k_blocks, or a split without positive problem_k."
         ),
         fix_hint=(
             "split_k and split_k_reduction are a semantic pair (Decision "
             "#21a): state both or neither. 'ordered' (fixed slice order, "
-            "deterministic) is the only admitted reduction."
+            "deterministic) is the only admitted reduction. Preserve positive "
+            "k_blocks and static problem_k for split partitions."
         ),
         spec="docs/audit/compiler/INTEGRATED_COMPILER_PLAN.md",
         sprint="ROCM-SPLIT-K-1",
@@ -1655,7 +1687,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         pass_origin="StoreOp::verify",
         severity="error",
         summary="A tile.store carrying a tile.epilogue with bias=true has no trailing bias operand to add.",
-        fix_hint="Pass the rank-1 bias memref as the store's last operand (after the leading dims) when the epilogue declares a bias; the verifier discounts it from the arity check.",
+        fix_hint="Pass the rank-1 f32 bias memref or opaque pointer after address/bounds operands and before an optional residual operand; the verifier discounts epilogue buffers from the address arity check.",
         spec="docs/audit/backend/rocm/todo.md §GFX1201-PARITY-2026-09-17", sprint="GFX1201-PARITY-1",
     ),
     DiagnosticCode(

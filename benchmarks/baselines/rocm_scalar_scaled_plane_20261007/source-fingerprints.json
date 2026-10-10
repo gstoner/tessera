@@ -1,0 +1,12 @@
+{
+  "src/compiler/ir/include/Tessera/IR/ScaledBatchContract.h": "adacc9988726dc7f722b888233342b0c8b9e285adbdfc5441a464531fc44793e",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "de4dfd45373f3117748859faf17c80ce907a55efe8fca8130d10bb5fc438f802",
+  "src/transforms/lib/NativeScaledMatmulProgram.h": "43c0571d6ddcc34f43ff4227fae1392f734b94e19623195f169a89732e97af2a",
+  "python/tessera/compiler/rocm_typed_scaled_native.py": "d6910d66ede18c5b31deeb74ec4a57674ba54b3929320a8c8352c1a5dda82b7e",
+  "python/tessera/compiler/native_scaled_program.py": "f21f04c9bbe3d29a79c1cc638861d566a9d2201524da893f2a6e72908b30e87d",
+  "tests/unit/test_scalar_scaled_plane.py": "58321baea7aab69c30f82f74db417bd16f3ad62af9ab8ee0c65476856e427f9b",
+  "tests/device/rocm/test_scalar_scaled_plane.py": "bc56fb62b96700ed598141d2cd7a5d42d4bb044dec9adddb82f07ac5f24873a8",
+  "benchmarks/rocm/record_scalar_scaled_plane.py": "b4263bf7e2013fc2db03de40a2545f355f6c291f7140ae70dcc6356d1a13bef3",
+  "tests/device/rocm/test_scalar_scale_reverse.py": "3486fe20eace550c0ff6b777b90e1232908dd93de4dd92e36f7e04cb0df7d674",
+  "benchmarks/rocm/record_scalar_scale_reverse.py": "1dbd1b1ead6541bb8859dd25851327e699aac2736c8caa9966caee08c3d1efc0"
+}

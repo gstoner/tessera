@@ -1,0 +1,7 @@
+5 split 946.7893870023545
+5 native_cold 811.8402879990754
+5 native 728.9671969992924
+129 split 890.6918650027364
+129 native_cold 787.3148939979728
+129 native 683.9648910026881
+largest stage events [{'kind': 'tool', 'tool': '/usr/lib/llvm-23/bin/mlir-opt', 'options': ['--pass-pipeline=builtin.module(gpu.module(convert-nvgpu-to-nvvm,convert-scf-to-cf,convert-gpu-to-nvvm,convert-math-to-llvm,reconcile-unrealized-casts),nvvm-attach-target{chip=sm_120},gpu-module-to-binary)'], 'wall_ms': 83.342680001806}, {'kind': 'tool', 'tool': '/usr/lib/llvm-23/bin/clang', 'options': ['-shared', '-fPIC', '-O2', '/tmp/tessera-native-sizer-9fo9wpkl/sizer.ll', '-o', '/tmp/tessera-native-sizer-9fo9wpkl/sizer.so'], 'wall_ms': 55.33794200164266}, {'kind': 'tool', 'tool': '/usr/lib/llvm-23/bin/mlir-translate', 'options': ['--mlir-to-llvmir'], 'wall_ms': 36.95770100603113}, {'kind': 'tool', 'tool': '/usr/lib/llvm-23/bin/mlir-opt', 'options': ['--convert-to-llvm', '--reconcile-unrealized-casts'], 'wall_ms': 34.602038002049085}]

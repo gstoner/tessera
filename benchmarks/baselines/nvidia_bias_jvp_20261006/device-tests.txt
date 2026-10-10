@@ -1,0 +1,15 @@
+......................................                                   [100%]
+=============================== warnings summary ===============================
+tests/device/nvidia/test_prepared_attention_jvp.py::test_native_fork_refuses_inherited_handle_before_driver_access[qkv_q_5_0]
+tests/device/nvidia/test_prepared_attention_jvp.py::test_native_fork_refuses_inherited_handle_before_driver_access[k5_c0_1x4x1x5_bias_v_k_q]
+tests/device/nvidia/test_prepared_attention_jvp.py::test_native_fork_refuses_inherited_handle_before_driver_access[k129_c1_2x4x3x129_bias]
+tests/device/nvidia/test_prepared_attention_jvp.py::test_native_fork_refuses_inherited_handle_before_driver_access[k129_c1_1x4x1x129_v]
+  /home/angstorms/scratch/next-five-compiler-slices/tests/device/nvidia/test_prepared_attention_jvp.py:84: DeprecationWarning: This process (pid=276475) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    read,write=os.pipe();pid=os.fork()
+
+tests/device/nvidia/test_prepared_attention_vjp.py::test_fork_rejects_before_inherited_lock_or_cuda
+  /home/angstorms/scratch/next-five-compiler-slices/tests/device/nvidia/test_prepared_attention_vjp.py:72: DeprecationWarning: This process (pid=276475) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    read,write=os.pipe();pid=os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+38 passed, 5 warnings in 8.27s

@@ -44,7 +44,7 @@ static constexpr int64_t NGROUPS = BD / SG;
 
 enum class Scan { Sum, Prod, Max, Min };
 
-void emitScanBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
+void emitScanBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy, Type outTy,
                   Scan scan) {
   MLIRContext *ctx = b.getContext();
   Type f32 = b.getF32Type();
@@ -167,7 +167,7 @@ void emitScanBody(OpBuilder &b, Location loc, gpu::GPUFuncOp f, Type storeTy,
       OpBuilder::InsertionGuard g2(b);
       b.setInsertionPointToStart(stIf.thenBlock());
       Value sv =
-          isF32 ? scanned : b.create<arith::TruncFOp>(loc, storeTy, scanned);
+          outTy.isF32() ? scanned : b.create<arith::TruncFOp>(loc, outTy, scanned);
       b.create<memref::StoreOp>(loc, sv, O,
                                 ValueRange{b.create<arith::AddIOp>(loc, base, c)});
     }
@@ -239,13 +239,22 @@ struct GenerateROCMScanKernelPass
       auto gpuMod = b.create<gpu::GPUModuleOp>(loc, kname + "_mod");
       b.setInsertionPointToStart(&gpuMod.getBodyRegion().front());
       Type idxTy = b.getIndexType();
+      Type outTy = storeTy;
+      if (auto output = op->getAttrOfType<StringAttr>("output_dtype")) {
+        if (output.getValue() != "f32") {
+          op->emitError("mixed ROCm math output_dtype currently requires f32");
+          return signalPassFailure();
+        }
+        outTy = b.getF32Type();
+      }
+      auto outMemTy = MemRefType::get({ShapedType::kDynamic}, outTy);
       auto memTy = MemRefType::get({ShapedType::kDynamic}, storeTy);
       // (X, O : memref<?xstore>, M, K : index)
-      auto fnTy = b.getFunctionType({memTy, memTy, idxTy, idxTy}, {});
+      auto fnTy = b.getFunctionType({memTy, outMemTy, idxTy, idxTy}, {});
       auto gpuFunc = b.create<gpu::GPUFuncOp>(loc, kname, fnTy);
       gpuFunc.setKernelAttr(b.getUnitAttr());
       OpBuilder body(gpuFunc.getContext());
-      emitScanBody(body, loc, gpuFunc, storeTy, scan);
+      emitScanBody(body, loc, gpuFunc, storeTy, outTy, scan);
       op->erase();
     }
   }

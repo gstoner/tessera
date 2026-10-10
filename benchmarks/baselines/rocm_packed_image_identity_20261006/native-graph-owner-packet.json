@@ -1,0 +1,1533 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "source_sha256": {
+    "python/tessera/compiler/native_resident_nvfp4.py": "d369abb13ee71f770e14b4a693d21285bbf2824fd7f83c48a44bfb6f282862d1",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "6b21eb41deba75790bd18d6504ce625b53656b2b7e4cec0c20fafeb099497881",
+    "benchmarks/rocm/benchmark_native_nvfp4_owner.py": "378d192af19ad44451ea0090bfb1c5874090119a7a89c0172709c0098fc48959"
+  },
+  "native_library_sha256": "639347bfd01c23296f24615131a8145ff364f6967232f21178a0df28187e0d3d",
+  "ownership": "native private stream, 11 allocations, three image leases, native argument binding/copy/readiness/events/close",
+  "scope": "matched explicit resident ownership/graph APIs; ordinary JIT separately measured; no default promotion",
+  "rows": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "component_image_digests": [
+        "f0ccb4bc8b203eee5296c4183927b7ae864fca9eeacb76e18a7273aac6233a15",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "33f2acfb97d84b059903cc3d97786b5697587c0b8202cbdc773cf05afd4c8ccc"
+      ],
+      "correctness": "independent conversion, lossless storage and folded output before/after timing",
+      "timing_scope": "same compiler images; resident/reuse walls include output readback; allocating walls also own images, storage and upload; stage events include dispatch gaps",
+      "arms": {
+        "python": {
+          "warm_combined_wall_ms": [
+            0.428037,
+            0.293961,
+            0.365417,
+            0.294692,
+            0.31975,
+            0.338496,
+            0.317756
+          ],
+          "weight_reuse_wall_ms": [
+            0.191536,
+            0.177288,
+            0.243675,
+            0.166467,
+            0.1834,
+            0.195583,
+            0.194101
+          ],
+          "allocating_combined_wall_ms": [
+            12.198431,
+            11.741719,
+            11.151604,
+            11.363062,
+            10.757662,
+            10.868919,
+            10.624037
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.1072959378361702,
+              0.10598968714475632,
+              0.10546218603849411
+            ],
+            "storage": [
+              0.0040693748742341995,
+              0.0025025000795722008,
+              0.0031412499956786633
+            ],
+            "consumer": [
+              0.023984936997294426,
+              0.02425556257367134,
+              0.024177374318242073
+            ],
+            "combined": [
+              0.14835894107818604,
+              0.14547768235206604,
+              0.16100268065929413
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.0195939540863037,
+                "per_iteration_ms": 0.12622462213039398
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.009152889251709,
+                "per_iteration_ms": 0.1255720555782318
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.0153539180755615,
+                "per_iteration_ms": 0.1259596198797226
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.04495999962091446,
+                "per_iteration_ms": 0.0028099999763071537
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.045878998935222626,
+                "per_iteration_ms": 0.002867437433451414
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.04520000144839287,
+                "per_iteration_ms": 0.0028250000905245543
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.3687579929828644,
+                "per_iteration_ms": 0.023047374561429024
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.3696790039539337,
+                "per_iteration_ms": 0.023104937747120857
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.36691901087760925,
+                "per_iteration_ms": 0.02293243817985058
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.719731092453003,
+                "per_iteration_ms": 0.16998319327831268
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.7194910049438477,
+                "per_iteration_ms": 0.16996818780899048
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.7334508895874023,
+                "per_iteration_ms": 0.17084068059921265
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.31975,
+          "weight_reuse_wall_median_ms": 0.191536,
+          "allocating_combined_wall_median_ms": 11.151604
+        },
+        "native": {
+          "warm_combined_wall_ms": [
+            0.34056,
+            0.328046,
+            0.317546,
+            0.300628,
+            0.340179,
+            0.366459,
+            0.338737
+          ],
+          "weight_reuse_wall_ms": [
+            0.157591,
+            0.160957,
+            0.228817,
+            0.212184,
+            0.155957,
+            0.247552,
+            0.155486
+          ],
+          "allocating_combined_wall_ms": [
+            6.673881,
+            6.23787,
+            6.314827,
+            6.484189,
+            6.25382,
+            6.053818,
+            6.281699
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.14501912891864777,
+              0.14375600218772888,
+              0.1430109441280365
+            ],
+            "storage": [
+              0.004316187463700771,
+              0.00259750010445714,
+              0.0026149374898523092
+            ],
+            "consumer": [
+              0.025031624361872673,
+              0.023164749145507812,
+              0.02310975082218647
+            ],
+            "combined": [
+              0.1704794317483902,
+              0.16850075125694275,
+              0.16866318881511688
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.35432505607605,
+                "per_iteration_ms": 0.1471453160047531
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3582940101623535,
+                "per_iteration_ms": 0.1473933756351471
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.4318039417266846,
+                "per_iteration_ms": 0.15198774635791779
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.06861899793148041,
+                "per_iteration_ms": 0.0042886873707175255
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.07176999747753143,
+                "per_iteration_ms": 0.004485624842345715
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.07006999850273132,
+                "per_iteration_ms": 0.004379374906420708
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.4240359961986542,
+                "per_iteration_ms": 0.026502249762415886
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.42324501276016235,
+                "per_iteration_ms": 0.026452813297510147
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.42372599244117737,
+                "per_iteration_ms": 0.026482874527573586
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.7535810470581055,
+                "per_iteration_ms": 0.1720988154411316
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.758538007736206,
+                "per_iteration_ms": 0.17240862548351288
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.7504189014434814,
+                "per_iteration_ms": 0.1719011813402176
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.338737,
+          "weight_reuse_wall_median_ms": 0.160957,
+          "allocating_combined_wall_median_ms": 6.281699
+        },
+        "native_graph": {
+          "warm_combined_wall_ms": [
+            0.360868,
+            0.376107,
+            0.375607,
+            0.369985,
+            0.354908,
+            0.351861,
+            0.368703
+          ],
+          "weight_reuse_wall_ms": [
+            0.816347,
+            0.205111,
+            0.271969,
+            0.254286,
+            0.258794,
+            0.259816,
+            0.239697
+          ],
+          "allocating_combined_wall_ms": [
+            7.893209,
+            7.135252,
+            5.47761,
+            7.20805,
+            6.978903,
+            7.034976,
+            6.978723
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.1322588175535202,
+              0.12082450091838837,
+              0.12023449689149857
+            ],
+            "storage": [
+              0.006260000169277191,
+              0.002365000080317259,
+              0.002432500012218952
+            ],
+            "consumer": [
+              0.023781124502420425,
+              0.044632937759160995,
+              0.023287374526262283
+            ],
+            "combined": [
+              0.17465369403362274,
+              0.1684543788433075,
+              0.16855181753635406
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 1.9852620363235474,
+                "per_iteration_ms": 0.12407887727022171
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 1.9802329540252686,
+                "per_iteration_ms": 0.12376455962657928
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 1.9796619415283203,
+                "per_iteration_ms": 0.12372887134552002
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.05606900155544281,
+                "per_iteration_ms": 0.0035043125972151756
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.06502000242471695,
+                "per_iteration_ms": 0.004063750151544809
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.06367000192403793,
+                "per_iteration_ms": 0.003979375120252371
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.4248180091381073,
+                "per_iteration_ms": 0.026551125571131706
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.4738079905509949,
+                "per_iteration_ms": 0.02961299940943718
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.42385798692703247,
+                "per_iteration_ms": 0.02649112418293953
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.749000072479248,
+                "per_iteration_ms": 0.171812504529953
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.749969005584717,
+                "per_iteration_ms": 0.1718730628490448
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.7512450218200684,
+                "per_iteration_ms": 0.17195281386375427
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.368703,
+          "weight_reuse_wall_median_ms": 0.258794,
+          "allocating_combined_wall_median_ms": 7.034976
+        }
+      },
+      "native_over_python": {
+        "warm_combined_wall_median_ms": 1.0593807662236123,
+        "weight_reuse_wall_median_ms": 0.8403485506641049,
+        "allocating_combined_wall_median_ms": 0.563300041859449
+      },
+      "native_graph_over_native": {
+        "warm_combined_wall_median_ms": 1.0884639115301842,
+        "weight_reuse_wall_median_ms": 1.6078455736625312,
+        "allocating_combined_wall_median_ms": 1.1199161246025957
+      }
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "component_image_digests": [
+        "5beb1458e38ddee1de15014ef995013ad33885087d7b787cb3fb64e0eea03ce8",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "e5696fb748f98b681e9749f738bd29f38df1f40fa622dd430027014854efc5e5"
+      ],
+      "correctness": "independent conversion, lossless storage and folded output before/after timing",
+      "timing_scope": "same compiler images; resident/reuse walls include output readback; allocating walls also own images, storage and upload; stage events include dispatch gaps",
+      "arms": {
+        "python": {
+          "warm_combined_wall_ms": [
+            0.498922,
+            0.549909,
+            0.571601,
+            0.514101,
+            0.578664,
+            0.650151,
+            0.740503
+          ],
+          "weight_reuse_wall_ms": [
+            0.313869,
+            0.303679,
+            0.34059,
+            0.311394,
+            0.332184,
+            0.317275,
+            0.341772
+          ],
+          "allocating_combined_wall_ms": [
+            12.787908,
+            12.380831,
+            12.581444,
+            13.333148,
+            14.284293,
+            14.280114,
+            14.160757
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.21037612855434418,
+              0.21035362780094147,
+              0.21032612025737762
+            ],
+            "storage": [
+              0.004942500032484531,
+              0.00494999997317791,
+              0.0049649374559521675
+            ],
+            "consumer": [
+              0.08052949607372284,
+              0.07366950064897537,
+              0.029994811862707138
+            ],
+            "combined": [
+              0.14831343293190002,
+              0.14964275062084198,
+              0.1507665067911148
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 3.37969708442688,
+                "per_iteration_ms": 0.21123106777668
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 3.3782169818878174,
+                "per_iteration_ms": 0.2111385613679886
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 3.3781368732452393,
+                "per_iteration_ms": 0.21113355457782745
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.08779999613761902,
+                "per_iteration_ms": 0.005487499758601189
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.08752000331878662,
+                "per_iteration_ms": 0.005470000207424164
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.08807999640703201,
+                "per_iteration_ms": 0.005504999775439501
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.43947699666023254,
+                "per_iteration_ms": 0.027467312291264534
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.43311700224876404,
+                "per_iteration_ms": 0.027069812640547752
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.42831701040267944,
+                "per_iteration_ms": 0.026769813150167465
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.362823963165283,
+                "per_iteration_ms": 0.1476764976978302
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.6615819931030273,
+                "per_iteration_ms": 0.1663488745689392
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.785223960876465,
+                "per_iteration_ms": 0.17407649755477905
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.571601,
+          "weight_reuse_wall_median_ms": 0.317275,
+          "allocating_combined_wall_median_ms": 13.333148
+        },
+        "native": {
+          "warm_combined_wall_ms": [
+            0.55544,
+            0.548907,
+            0.584836,
+            0.559488,
+            0.561772,
+            0.657845,
+            0.662865
+          ],
+          "weight_reuse_wall_ms": [
+            0.326413,
+            0.32516,
+            0.334238,
+            0.311625,
+            0.336893,
+            0.447614,
+            0.402869
+          ],
+          "allocating_combined_wall_ms": [
+            7.44267,
+            7.293714,
+            7.2122,
+            7.697365,
+            7.896024,
+            7.854985,
+            8.080747
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.14591605961322784,
+              0.14428918063640594,
+              0.14370661973953247
+            ],
+            "storage": [
+              0.003874999936670065,
+              0.0028899998869746923,
+              0.002885000081732869
+            ],
+            "consumer": [
+              0.02828293666243553,
+              0.02599237486720085,
+              0.025984812527894974
+            ],
+            "combined": [
+              0.14961037039756775,
+              0.14874662458896637,
+              0.14779162406921387
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.4395461082458496,
+                "per_iteration_ms": 0.1524716317653656
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.4485859870910645,
+                "per_iteration_ms": 0.15303662419319153
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.4421849250793457,
+                "per_iteration_ms": 0.1526365578174591
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.09908899664878845,
+                "per_iteration_ms": 0.006193062290549278
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.07587900012731552,
+                "per_iteration_ms": 0.00474243750795722
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.0762299969792366,
+                "per_iteration_ms": 0.004764374811202288
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.4681670069694519,
+                "per_iteration_ms": 0.029260437935590744
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.46954700350761414,
+                "per_iteration_ms": 0.029346687719225883
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.46933799982070923,
+                "per_iteration_ms": 0.029333624988794327
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.424906015396118,
+                "per_iteration_ms": 0.15155662596225739
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.8430540561676025,
+                "per_iteration_ms": 0.17769087851047516
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.8469040393829346,
+                "per_iteration_ms": 0.1779315024614334
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.561772,
+          "weight_reuse_wall_median_ms": 0.334238,
+          "allocating_combined_wall_median_ms": 7.697365
+        },
+        "native_graph": {
+          "warm_combined_wall_ms": [
+            0.561591,
+            0.572643,
+            0.565088,
+            0.550039,
+            0.655831,
+            0.679897,
+            0.640342
+          ],
+          "weight_reuse_wall_ms": [
+            0.872364,
+            0.386318,
+            0.375646,
+            0.38256,
+            0.377019,
+            0.401276,
+            0.396597
+          ],
+          "allocating_combined_wall_ms": [
+            8.95772,
+            8.251914,
+            8.067703,
+            8.081268,
+            8.921521,
+            9.019709,
+            8.96772
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.14498600363731384,
+              0.14296162128448486,
+              0.1431441307067871
+            ],
+            "storage": [
+              0.004610000178217888,
+              0.0028899998869746923,
+              0.002867500064894557
+            ],
+            "consumer": [
+              0.02904481254518032,
+              0.028072312474250793,
+              0.03979725018143654
+            ],
+            "combined": [
+              0.14865094423294067,
+              0.1469041258096695,
+              0.14754162728786469
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3477048873901367,
+                "per_iteration_ms": 0.14673155546188354
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3447859287261963,
+                "per_iteration_ms": 0.14654912054538727
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3469059467315674,
+                "per_iteration_ms": 0.14668162167072296
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.07681000232696533,
+                "per_iteration_ms": 0.004800625145435333
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.0967089980840683,
+                "per_iteration_ms": 0.006044312380254269
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.09630999714136124,
+                "per_iteration_ms": 0.006019374821335077
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.4704670011997223,
+                "per_iteration_ms": 0.029404187574982643
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.4687269926071167,
+                "per_iteration_ms": 0.029295437037944794
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.4686470031738281,
+                "per_iteration_ms": 0.029290437698364258
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.43184494972229,
+                "per_iteration_ms": 0.15199030935764313
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 3.0057408809661865,
+                "per_iteration_ms": 0.18785880506038666
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.8218328952789307,
+                "per_iteration_ms": 0.17636455595493317
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.572643,
+          "weight_reuse_wall_median_ms": 0.386318,
+          "allocating_combined_wall_median_ms": 8.921521
+        }
+      },
+      "native_over_python": {
+        "warm_combined_wall_median_ms": 0.9828044387606041,
+        "weight_reuse_wall_median_ms": 1.0534646599952722,
+        "allocating_combined_wall_median_ms": 0.5773103996145547
+      },
+      "native_graph_over_native": {
+        "warm_combined_wall_median_ms": 1.0193512670620821,
+        "weight_reuse_wall_median_ms": 1.155817112357063,
+        "allocating_combined_wall_median_ms": 1.1590357219645944
+      }
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "component_image_digests": [
+        "025492857bf2cca4f126e7f10ff5e96e2a116365d7e881140ba7108bf7bbc97d",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "da2b532373cdc4f1d65ba88f73633a457a0758719cbe041d2537cf628dda2084"
+      ],
+      "correctness": "independent conversion, lossless storage and folded output before/after timing",
+      "timing_scope": "same compiler images; resident/reuse walls include output readback; allocating walls also own images, storage and upload; stage events include dispatch gaps",
+      "arms": {
+        "python": {
+          "warm_combined_wall_ms": [
+            0.507393,
+            0.537165,
+            0.586999,
+            0.601427,
+            0.553997,
+            0.605715,
+            0.614242
+          ],
+          "weight_reuse_wall_ms": [
+            0.26714,
+            0.295083,
+            0.284452,
+            0.360759,
+            0.283912,
+            0.276628,
+            0.379574
+          ],
+          "allocating_combined_wall_ms": [
+            13.475449,
+            13.21932,
+            12.949726,
+            13.26099,
+            13.129969,
+            13.022645,
+            13.016063
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.20223137736320496,
+              0.20299138128757477,
+              0.20074380934238434
+            ],
+            "storage": [
+              0.005607437342405319,
+              0.004350000061094761,
+              0.0043649375438690186
+            ],
+            "consumer": [
+              0.032244812697172165,
+              0.031992312520742416,
+              0.031067311763763428
+            ],
+            "combined": [
+              0.17133399844169617,
+              0.16279281675815582,
+              0.16102218627929688
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 3.2515010833740234,
+                "per_iteration_ms": 0.20321881771087646
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 3.234981060028076,
+                "per_iteration_ms": 0.20218631625175476
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 3.252100944519043,
+                "per_iteration_ms": 0.20325630903244019
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.0822800025343895,
+                "per_iteration_ms": 0.0051425001583993435
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.0825200006365776,
+                "per_iteration_ms": 0.0051575000397861
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.08240000158548355,
+                "per_iteration_ms": 0.005150000099092722
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.5106769800186157,
+                "per_iteration_ms": 0.03191731125116348
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.5101969838142395,
+                "per_iteration_ms": 0.03188731148838997
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.5100769996643066,
+                "per_iteration_ms": 0.031879812479019165
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.540225028991699,
+                "per_iteration_ms": 0.1587640643119812
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.5494658946990967,
+                "per_iteration_ms": 0.15934161841869354
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.5545051097869873,
+                "per_iteration_ms": 0.1596565693616867
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.586999,
+          "weight_reuse_wall_median_ms": 0.284452,
+          "allocating_combined_wall_median_ms": 13.129969
+        },
+        "native": {
+          "warm_combined_wall_ms": [
+            0.613581,
+            0.603191,
+            0.618911,
+            0.525512,
+            0.532355,
+            0.589755,
+            0.595676
+          ],
+          "weight_reuse_wall_ms": [
+            0.280084,
+            0.354837,
+            0.272219,
+            0.274183,
+            0.292377,
+            0.294071,
+            0.269273
+          ],
+          "allocating_combined_wall_ms": [
+            6.793862,
+            6.768825,
+            6.691758,
+            6.697398,
+            6.632875,
+            6.693991,
+            6.622695
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.1436898112297058,
+              0.1415666937828064,
+              0.14058668911457062
+            ],
+            "storage": [
+              0.010934312827885151,
+              0.003471875097602606,
+              0.0026400000788271427
+            ],
+            "consumer": [
+              0.0174130629748106,
+              0.014374937862157822,
+              0.014407374896109104
+            ],
+            "combined": [
+              0.1605415642261505,
+              0.15758906304836273,
+              0.15774905681610107
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3165969848632812,
+                "per_iteration_ms": 0.14478731155395508
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3157570362091064,
+                "per_iteration_ms": 0.14473481476306915
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.318506956100464,
+                "per_iteration_ms": 0.144906684756279
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.06503999978303909,
+                "per_iteration_ms": 0.004064999986439943
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.06273999810218811,
+                "per_iteration_ms": 0.003921249881386757
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.0917700007557869,
+                "per_iteration_ms": 0.005735625047236681
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.2877179980278015,
+                "per_iteration_ms": 0.017982374876737595
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.2818390130996704,
+                "per_iteration_ms": 0.0176149383187294
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.28221800923347473,
+                "per_iteration_ms": 0.01763862557709217
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.577575922012329,
+                "per_iteration_ms": 0.16109849512577057
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.5780251026153564,
+                "per_iteration_ms": 0.16112656891345978
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.5737950801849365,
+                "per_iteration_ms": 0.16086219251155853
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.595676,
+          "weight_reuse_wall_median_ms": 0.280084,
+          "allocating_combined_wall_median_ms": 6.693991
+        },
+        "native_graph": {
+          "warm_combined_wall_ms": [
+            0.654519,
+            0.664648,
+            0.640402,
+            0.722398,
+            0.627437,
+            0.652565,
+            0.635623
+          ],
+          "weight_reuse_wall_ms": [
+            0.948971,
+            0.426223,
+            0.450048,
+            0.34041,
+            0.374505,
+            0.352513,
+            0.36161
+          ],
+          "allocating_combined_wall_ms": [
+            7.659062,
+            7.67864,
+            7.8098,
+            7.739996,
+            7.975105,
+            7.902697,
+            7.671015
+          ],
+          "stage_event_samples_ms": {
+            "converter": [
+              0.14440475404262543,
+              0.14168356359004974,
+              0.1411541849374771
+            ],
+            "storage": [
+              0.005634937435388565,
+              0.0025625000707805157,
+              0.002647500019520521
+            ],
+            "consumer": [
+              0.01736181229352951,
+              0.014404937624931335,
+              0.014327437616884708
+            ],
+            "combined": [
+              0.16045330464839935,
+              0.1576295644044876,
+              0.15743206441402435
+            ]
+          },
+          "stage_graph_windows": {
+            "converter": [
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3202919960021973,
+                "per_iteration_ms": 0.14501824975013733
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3175039291381836,
+                "per_iteration_ms": 0.14484399557113647
+              },
+              {
+                "stage": "converter",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 2.3160240650177,
+                "per_iteration_ms": 0.14475150406360626
+              }
+            ],
+            "storage": [
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.0696600005030632,
+                "per_iteration_ms": 0.00435375003144145
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.06224000081419945,
+                "per_iteration_ms": 0.0038900000508874655
+              },
+              {
+                "stage": "storage",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.06809999793767929,
+                "per_iteration_ms": 0.004256249871104956
+              }
+            ],
+            "consumer": [
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.2827700078487396,
+                "per_iteration_ms": 0.017673125490546227
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.36611899733543396,
+                "per_iteration_ms": 0.022882437333464622
+              },
+              {
+                "stage": "consumer",
+                "repeats": 16,
+                "graph_nodes": 16,
+                "host_graph_submissions": 1,
+                "window_ms": 0.28290900588035583,
+                "per_iteration_ms": 0.01768181286752224
+              }
+            ],
+            "combined": [
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.571103096008301,
+                "per_iteration_ms": 0.1606939435005188
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.573612928390503,
+                "per_iteration_ms": 0.16085080802440643
+              },
+              {
+                "stage": "combined",
+                "repeats": 16,
+                "graph_nodes": 48,
+                "host_graph_submissions": 1,
+                "window_ms": 2.5771729946136475,
+                "per_iteration_ms": 0.16107331216335297
+              }
+            ]
+          },
+          "warm_combined_wall_median_ms": 0.652565,
+          "weight_reuse_wall_median_ms": 0.374505,
+          "allocating_combined_wall_median_ms": 7.739996
+        }
+      },
+      "native_over_python": {
+        "warm_combined_wall_median_ms": 1.0147819672605916,
+        "weight_reuse_wall_median_ms": 0.9846441578895562,
+        "allocating_combined_wall_median_ms": 0.5098253468839111
+      },
+      "native_graph_over_native": {
+        "warm_combined_wall_median_ms": 1.0955032601615642,
+        "weight_reuse_wall_median_ms": 1.3371167221262192,
+        "allocating_combined_wall_median_ms": 1.1562602937470337
+      }
+    }
+  ]
+}

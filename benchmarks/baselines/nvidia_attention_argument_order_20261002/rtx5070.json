@@ -1,0 +1,1516 @@
+{
+  "architecture": "sm_120",
+  "compiler_sha256": "76843e5f51a928c0c26575d49d2928fbac64f1efea8fc7a5e26c29c467eaf511",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "1f177254ac450f85590c8ac232e38206d7ca6f7799c282563709b1f5027bb5ee",
+      "backward_schedule": "fd91757b97db2bec56826f2305b9edb317eace1d96c761cc22feb035cbb2b288",
+      "backward_wall_median_ms": 0.236173,
+      "backward_wall_samples_ms": [
+        0.300423,
+        0.236173,
+        0.198672
+      ],
+      "capture_wall_median_ms": 2.279793,
+      "capture_wall_samples_ms": [
+        5.606009,
+        2.279793,
+        2.02299
+      ],
+      "causal": false,
+      "compile_ms": 825.045893,
+      "forward_image_sha256": "184de729592e710834fe596b1ea185e3d6603da335796f8477721c9d5ada6ed3",
+      "forward_schedule": "1b3850943269c87db7b7a2da87df8302a73536062a23ae12d05daf346952dd2f",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 8.665899487586559e-09,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "1f177254ac450f85590c8ac232e38206d7ca6f7799c282563709b1f5027bb5ee",
+      "backward_schedule": "fd91757b97db2bec56826f2305b9edb317eace1d96c761cc22feb035cbb2b288",
+      "backward_wall_median_ms": 0.183122,
+      "backward_wall_samples_ms": [
+        0.187662,
+        0.177632,
+        0.183122
+      ],
+      "capture_wall_median_ms": 2.192891,
+      "capture_wall_samples_ms": [
+        2.496044,
+        2.116451,
+        2.192891
+      ],
+      "causal": false,
+      "compile_ms": 814.251591,
+      "forward_image_sha256": "184de729592e710834fe596b1ea185e3d6603da335796f8477721c9d5ada6ed3",
+      "forward_schedule": "1b3850943269c87db7b7a2da87df8302a73536062a23ae12d05daf346952dd2f",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 2.7103987887411307e-08,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "b26bcf39f2888ae0da6bc29d5a20ee643343e140f9ac2b5a97b17526661affbe",
+      "backward_schedule": "98a6e52a99d0c041e602c6abe6c7380a3b10834df9b750505546af10b1b33eae",
+      "backward_wall_median_ms": 0.188772,
+      "backward_wall_samples_ms": [
+        0.200362,
+        0.188772,
+        0.172472
+      ],
+      "capture_wall_median_ms": 2.10443,
+      "capture_wall_samples_ms": [
+        2.473704,
+        2.10443,
+        2.01653
+      ],
+      "causal": false,
+      "compile_ms": 830.482428,
+      "forward_image_sha256": "644f2ccfefa0d06e918276f40728402c8a317d1f25a2ac11c18ba5cddee4ac51",
+      "forward_schedule": "af93a16eb858baab8a7b65ea905f3b44c80936f3bd5340c4d6d5e14b99492a32",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 8.665899487586559e-09,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "b26bcf39f2888ae0da6bc29d5a20ee643343e140f9ac2b5a97b17526661affbe",
+      "backward_schedule": "98a6e52a99d0c041e602c6abe6c7380a3b10834df9b750505546af10b1b33eae",
+      "backward_wall_median_ms": 0.218862,
+      "backward_wall_samples_ms": [
+        0.218862,
+        0.197312,
+        0.225932
+      ],
+      "capture_wall_median_ms": 2.150851,
+      "capture_wall_samples_ms": [
+        2.63315,
+        2.150851,
+        2.068159
+      ],
+      "causal": false,
+      "compile_ms": 810.389924,
+      "forward_image_sha256": "644f2ccfefa0d06e918276f40728402c8a317d1f25a2ac11c18ba5cddee4ac51",
+      "forward_schedule": "af93a16eb858baab8a7b65ea905f3b44c80936f3bd5340c4d6d5e14b99492a32",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 2.7103987887411307e-08,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "070f317f5c8ae0c2945f48a6a087cb275c7da845cc8cefd01aef7dfcf71e627e",
+      "backward_schedule": "86bcf033ade46009e55d47e324e32404724c51618005aa9c6ee358edfb66ef12",
+      "backward_wall_median_ms": 0.196732,
+      "backward_wall_samples_ms": [
+        0.251022,
+        0.196732,
+        0.175802
+      ],
+      "capture_wall_median_ms": 2.0994,
+      "capture_wall_samples_ms": [
+        2.544559,
+        2.088471,
+        2.0994
+      ],
+      "causal": false,
+      "compile_ms": 816.095294,
+      "forward_image_sha256": "df72cd820dfbd603a5f2966743711281181c6a84cb81a2953542ea03f8634e33",
+      "forward_schedule": "41a32b9ff5e435cb9fc2a2d3b88b31aa4c8e42a7a816cdd91d01aeabe0a7846a",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 8.665899487586559e-09,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "070f317f5c8ae0c2945f48a6a087cb275c7da845cc8cefd01aef7dfcf71e627e",
+      "backward_schedule": "86bcf033ade46009e55d47e324e32404724c51618005aa9c6ee358edfb66ef12",
+      "backward_wall_median_ms": 0.219393,
+      "backward_wall_samples_ms": [
+        0.238322,
+        0.185442,
+        0.219393
+      ],
+      "capture_wall_median_ms": 2.16212,
+      "capture_wall_samples_ms": [
+        2.68999,
+        2.16212,
+        2.04344
+      ],
+      "causal": false,
+      "compile_ms": 810.412103,
+      "forward_image_sha256": "df72cd820dfbd603a5f2966743711281181c6a84cb81a2953542ea03f8634e33",
+      "forward_schedule": "41a32b9ff5e435cb9fc2a2d3b88b31aa4c8e42a7a816cdd91d01aeabe0a7846a",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 2.7103987887411307e-08,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_image_sha256": "0308e9031ccc55dca5d7a0cead777c82a15775ddc06b14592fc66f0454bfd6fb",
+      "backward_schedule": "b96e876c394cc845dc7a36d8c739f3d3d7ff29953f74cd166fa6af581596530e",
+      "backward_wall_median_ms": 0.199962,
+      "backward_wall_samples_ms": [
+        0.191351,
+        0.265812,
+        0.199962
+      ],
+      "capture_wall_median_ms": 2.00754,
+      "capture_wall_samples_ms": [
+        2.275317,
+        2.00754,
+        1.858608
+      ],
+      "causal": false,
+      "compile_ms": 761.993783,
+      "forward_image_sha256": "102ff0c466c23c6a440a8ab65e386875b09d8922b269b54810667be145617b45",
+      "forward_schedule": "c7f911d8bb948aba083d0add687a5bd0234505c0f15af2c93d7ae001d0b1c2a9",
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 2.1809191341759515e-08,
+      "native_frontend_argument_indices": [
+        1,
+        2,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "02fef010ba8877225ae962b20607cdc1cfc3cba4cfa2f72b5a8cdb268b65317b",
+      "backward_schedule": "668188e5974f8ed5341d2a6e3cdb135c2c0849fe6b2980be7ce4a7125421f8ed",
+      "backward_wall_median_ms": 0.225362,
+      "backward_wall_samples_ms": [
+        0.225362,
+        0.183402,
+        0.231083
+      ],
+      "capture_wall_median_ms": 2.138072,
+      "capture_wall_samples_ms": [
+        2.59429,
+        2.086001,
+        2.138072
+      ],
+      "causal": true,
+      "compile_ms": 834.696054,
+      "forward_image_sha256": "95ecb79e3f60d11244e587193f486d88134383ffc95c073a9ad20e1dc45a3c57",
+      "forward_schedule": "18a65dfdebd621fc4b2c949d140532e033d305e6a1cb81dadaaded410a6e7ae9",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 4.041530079351707e-09,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "02fef010ba8877225ae962b20607cdc1cfc3cba4cfa2f72b5a8cdb268b65317b",
+      "backward_schedule": "668188e5974f8ed5341d2a6e3cdb135c2c0849fe6b2980be7ce4a7125421f8ed",
+      "backward_wall_median_ms": 0.188562,
+      "backward_wall_samples_ms": [
+        0.225152,
+        0.175262,
+        0.188562
+      ],
+      "capture_wall_median_ms": 2.189251,
+      "capture_wall_samples_ms": [
+        2.385804,
+        2.09029,
+        2.189251
+      ],
+      "causal": true,
+      "compile_ms": 821.030336,
+      "forward_image_sha256": "95ecb79e3f60d11244e587193f486d88134383ffc95c073a9ad20e1dc45a3c57",
+      "forward_schedule": "18a65dfdebd621fc4b2c949d140532e033d305e6a1cb81dadaaded410a6e7ae9",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 3.6061882778548604e-08,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "8dc54afd56d9a920e0df0a293137a167e0c878c65b0383254ef3d8f1ff0d0a8c",
+      "backward_schedule": "e2ffad26a95b24153a6f5d336bf21aeb5514fa52f7a6d66d3fec4626ac5db58c",
+      "backward_wall_median_ms": 0.176042,
+      "backward_wall_samples_ms": [
+        0.190182,
+        0.173281,
+        0.176042
+      ],
+      "capture_wall_median_ms": 2.13431,
+      "capture_wall_samples_ms": [
+        2.787387,
+        2.07582,
+        2.13431
+      ],
+      "causal": true,
+      "compile_ms": 814.338372,
+      "forward_image_sha256": "b406a60d368a689564d91ae691fc1a2ed1e7a70ebe61a319f8a097584c218e8c",
+      "forward_schedule": "ede24497aa5e845ef3608a0f42ee13ee5f9dd67af4218959e71757338605fda7",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 4.041530079351707e-09,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "8dc54afd56d9a920e0df0a293137a167e0c878c65b0383254ef3d8f1ff0d0a8c",
+      "backward_schedule": "e2ffad26a95b24153a6f5d336bf21aeb5514fa52f7a6d66d3fec4626ac5db58c",
+      "backward_wall_median_ms": 0.196412,
+      "backward_wall_samples_ms": [
+        0.196412,
+        0.192211,
+        0.223582
+      ],
+      "capture_wall_median_ms": 2.345208,
+      "capture_wall_samples_ms": [
+        2.641526,
+        2.259162,
+        2.345208
+      ],
+      "causal": true,
+      "compile_ms": 823.134808,
+      "forward_image_sha256": "b406a60d368a689564d91ae691fc1a2ed1e7a70ebe61a319f8a097584c218e8c",
+      "forward_schedule": "ede24497aa5e845ef3608a0f42ee13ee5f9dd67af4218959e71757338605fda7",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 3.6061882778548604e-08,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "627e04f27ae727ca56c14cc266e894a6737dd9168e55e24456d33deae607e03c",
+      "backward_schedule": "f63c384a4c8b5acd46f9a665feac2f3a5cefd3aa77c1666a9a5f8a32dcb1f4a6",
+      "backward_wall_median_ms": 0.188742,
+      "backward_wall_samples_ms": [
+        0.195902,
+        0.175801,
+        0.188742
+      ],
+      "capture_wall_median_ms": 2.406484,
+      "capture_wall_samples_ms": [
+        2.824081,
+        2.406484,
+        2.370034
+      ],
+      "causal": true,
+      "compile_ms": 812.547876,
+      "forward_image_sha256": "08b7ce6a9ee8f8073efab3236e59d8381076f465fd7896a1e250a592a4d2fd22",
+      "forward_schedule": "7ba0349c3dbc0d6e86f20ecf9d26a78d9d2cdc520ea838509b19eb2d81dd45cc",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 4.041530079351707e-09,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "627e04f27ae727ca56c14cc266e894a6737dd9168e55e24456d33deae607e03c",
+      "backward_schedule": "f63c384a4c8b5acd46f9a665feac2f3a5cefd3aa77c1666a9a5f8a32dcb1f4a6",
+      "backward_wall_median_ms": 0.211352,
+      "backward_wall_samples_ms": [
+        0.211352,
+        0.191732,
+        0.227592
+      ],
+      "capture_wall_median_ms": 2.516804,
+      "capture_wall_samples_ms": [
+        2.782321,
+        2.366844,
+        2.516804
+      ],
+      "causal": true,
+      "compile_ms": 830.864013,
+      "forward_image_sha256": "08b7ce6a9ee8f8073efab3236e59d8381076f465fd7896a1e250a592a4d2fd22",
+      "forward_schedule": "7ba0349c3dbc0d6e86f20ecf9d26a78d9d2cdc520ea838509b19eb2d81dd45cc",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 3.6061882778548604e-08,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_image_sha256": "0720be1530f7708c1cce5bc8bfb14ff293619b08cddd369bf840b56cb6ab4e97",
+      "backward_schedule": "204b7986f37035a1215f09d975f4045287fc4aa000931d24540873fcac338a6c",
+      "backward_wall_median_ms": 0.181041,
+      "backward_wall_samples_ms": [
+        0.269662,
+        0.181041,
+        0.173022
+      ],
+      "capture_wall_median_ms": 2.345873,
+      "capture_wall_samples_ms": [
+        2.522524,
+        2.345873,
+        1.895768
+      ],
+      "causal": true,
+      "compile_ms": 792.666202,
+      "forward_image_sha256": "e791b8344d9d05ddde11853124bfd80747dac56aad143a07b415200f7eef3bed",
+      "forward_schedule": "132742ab417c521bce0014b1a9ebe9cb6a07ed735290e41a50d1651ba2929bc6",
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 1.8701093250361733e-08,
+      "native_frontend_argument_indices": [
+        1,
+        2,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "bb57e516eb7b6034d3f77687be4f86f72ac43b709e231163e5f3f0e604d0fa6e",
+      "backward_schedule": "2579c760d260c3b17c853096a3985161fc42fd2258b555c52d775bc7496316ea",
+      "backward_wall_median_ms": 0.269503,
+      "backward_wall_samples_ms": [
+        0.269503,
+        0.214952,
+        0.347644
+      ],
+      "capture_wall_median_ms": 2.413194,
+      "capture_wall_samples_ms": [
+        3.091131,
+        2.408253,
+        2.413194
+      ],
+      "causal": false,
+      "compile_ms": 818.13327,
+      "forward_image_sha256": "2958c4f021422fffb7ec93739304dd955f38928fe74d1cc9d1aef2f2492dbadc",
+      "forward_schedule": "1beb71c593119865b5cb1d27b79b8a023f2001b01f0286ca908d7f6f8bec9114",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 3.360142332431426e-08,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "bb57e516eb7b6034d3f77687be4f86f72ac43b709e231163e5f3f0e604d0fa6e",
+      "backward_schedule": "2579c760d260c3b17c853096a3985161fc42fd2258b555c52d775bc7496316ea",
+      "backward_wall_median_ms": 0.199932,
+      "backward_wall_samples_ms": [
+        0.199932,
+        0.224172,
+        0.194222
+      ],
+      "capture_wall_median_ms": 2.567715,
+      "capture_wall_samples_ms": [
+        2.567715,
+        2.896757,
+        2.552454
+      ],
+      "causal": false,
+      "compile_ms": 808.456524,
+      "forward_image_sha256": "2958c4f021422fffb7ec93739304dd955f38928fe74d1cc9d1aef2f2492dbadc",
+      "forward_schedule": "1beb71c593119865b5cb1d27b79b8a023f2001b01f0286ca908d7f6f8bec9114",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 9.143762538799116e-08,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "538d7cda6826f9f5d2f0134e9526cb3d7d27e092b3f558f50bcdb171bb059249",
+      "backward_schedule": "b0522d49976c36ddb40087d3cab23fa78198336641f24c88b41b88117bd88ceb",
+      "backward_wall_median_ms": 0.233552,
+      "backward_wall_samples_ms": [
+        0.233552,
+        0.257193,
+        0.224892
+      ],
+      "capture_wall_median_ms": 2.498164,
+      "capture_wall_samples_ms": [
+        2.581634,
+        2.217032,
+        2.498164
+      ],
+      "causal": false,
+      "compile_ms": 806.440857,
+      "forward_image_sha256": "b4c676f3caaeaa94f60b94e6591ad20ac838bae7431147b9be2654083b28ca46",
+      "forward_schedule": "c6b571a8238df6549c4123b9604d959ad89a18312252c0fbb0cbb756e050275d",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 3.360142332431426e-08,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "538d7cda6826f9f5d2f0134e9526cb3d7d27e092b3f558f50bcdb171bb059249",
+      "backward_schedule": "b0522d49976c36ddb40087d3cab23fa78198336641f24c88b41b88117bd88ceb",
+      "backward_wall_median_ms": 0.229592,
+      "backward_wall_samples_ms": [
+        0.229592,
+        0.239432,
+        0.205682
+      ],
+      "capture_wall_median_ms": 2.705117,
+      "capture_wall_samples_ms": [
+        2.705117,
+        2.898297,
+        2.192601
+      ],
+      "causal": false,
+      "compile_ms": 831.337946,
+      "forward_image_sha256": "b4c676f3caaeaa94f60b94e6591ad20ac838bae7431147b9be2654083b28ca46",
+      "forward_schedule": "c6b571a8238df6549c4123b9604d959ad89a18312252c0fbb0cbb756e050275d",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 9.143762538799116e-08,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "7f7acb669ea6056eadb8adb374f2af4cd775c26c0d44899a39660f067218f147",
+      "backward_schedule": "2ff09a6f922260c67c41fc2af133a10f85e1d4e30ae80e06631949930dbfcc6b",
+      "backward_wall_median_ms": 0.221842,
+      "backward_wall_samples_ms": [
+        0.317243,
+        0.221842,
+        0.201782
+      ],
+      "capture_wall_median_ms": 2.733457,
+      "capture_wall_samples_ms": [
+        3.174581,
+        2.733457,
+        2.186331
+      ],
+      "causal": false,
+      "compile_ms": 816.940132,
+      "forward_image_sha256": "973cbc18fcef927442557b7f3af5b9a7290f2fe94aa815e95e048671778d40c9",
+      "forward_schedule": "ba7c3b46815cbb0bb8a8ce7dc29289f625e262a323c814f1be9b0255de564b9b",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 3.360142332431426e-08,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "7f7acb669ea6056eadb8adb374f2af4cd775c26c0d44899a39660f067218f147",
+      "backward_schedule": "2ff09a6f922260c67c41fc2af133a10f85e1d4e30ae80e06631949930dbfcc6b",
+      "backward_wall_median_ms": 0.247583,
+      "backward_wall_samples_ms": [
+        15.236297,
+        0.227752,
+        0.247583
+      ],
+      "capture_wall_median_ms": 3.266491,
+      "capture_wall_samples_ms": [
+        3.318143,
+        3.266491,
+        2.727847
+      ],
+      "causal": false,
+      "compile_ms": 819.96115,
+      "forward_image_sha256": "973cbc18fcef927442557b7f3af5b9a7290f2fe94aa815e95e048671778d40c9",
+      "forward_schedule": "ba7c3b46815cbb0bb8a8ce7dc29289f625e262a323c814f1be9b0255de564b9b",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 9.143762538799116e-08,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_image_sha256": "9dc9e740db733e675f261b437c91cbe4de7ac4b1fd2008c21eb9629e153b8135",
+      "backward_schedule": "b0ae064c47da4f96c382284bbdf8ac2a4e4f3d1f844ed2dc3a2b3b5c616d7b8a",
+      "backward_wall_median_ms": 0.220882,
+      "backward_wall_samples_ms": [
+        0.302523,
+        0.220882,
+        0.208912
+      ],
+      "capture_wall_median_ms": 2.722542,
+      "capture_wall_samples_ms": [
+        2.722542,
+        3.060499,
+        2.078861
+      ],
+      "causal": false,
+      "compile_ms": 791.39355,
+      "forward_image_sha256": "8f0160ca7680681e1e34ad36e8909889ff31019e97a211a2d69554cf9cf37933",
+      "forward_schedule": "7e6d0176161cb0d38b7924f415394d7634bf23b134c177a520f3e67297f12a5d",
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 8.359539693802986e-08,
+      "native_frontend_argument_indices": [
+        1,
+        2,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "11714ba1f183911a0779863ace8f9c6ce5deca4f29be339a11e1ab3108b90871",
+      "backward_schedule": "1ed23a8f4a7744155a1b5006a79fb627676aefbeb2ffc490474030c6aa89ab17",
+      "backward_wall_median_ms": 0.280183,
+      "backward_wall_samples_ms": [
+        0.261033,
+        0.280183,
+        0.538946
+      ],
+      "capture_wall_median_ms": 2.759847,
+      "capture_wall_samples_ms": [
+        2.759847,
+        2.988909,
+        2.351933
+      ],
+      "causal": true,
+      "compile_ms": 816.701608,
+      "forward_image_sha256": "35c322c6155dcb418ae1ecce226cce9b0f8bda5c7a109021d7d24ea5aa294a02",
+      "forward_schedule": "4bfcaa55b2d5015fb97a7c892f22fe92d9ff5069b3c15fa0aca5f7f7d2a868d9",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 3.558995945868171e-08,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "11714ba1f183911a0779863ace8f9c6ce5deca4f29be339a11e1ab3108b90871",
+      "backward_schedule": "1ed23a8f4a7744155a1b5006a79fb627676aefbeb2ffc490474030c6aa89ab17",
+      "backward_wall_median_ms": 0.229232,
+      "backward_wall_samples_ms": [
+        0.381204,
+        0.229232,
+        0.219512
+      ],
+      "capture_wall_median_ms": 2.475554,
+      "capture_wall_samples_ms": [
+        2.891253,
+        2.475554,
+        2.290033
+      ],
+      "causal": true,
+      "compile_ms": 828.213031,
+      "forward_image_sha256": "35c322c6155dcb418ae1ecce226cce9b0f8bda5c7a109021d7d24ea5aa294a02",
+      "forward_schedule": "4bfcaa55b2d5015fb97a7c892f22fe92d9ff5069b3c15fa0aca5f7f7d2a868d9",
+      "frontend_order": [
+        "q",
+        "k",
+        "v",
+        "bias"
+      ],
+      "max_abs_gradient_error": 2.556806318887439e-07,
+      "native_frontend_argument_indices": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "ee8a901f59f869b2ee3453a3ec9a019fb87a5df255bdcdc635c252fde66e77d8",
+      "backward_schedule": "6887b9fe042b316a53277570d47a7aefe3c6642841b741e76f4c170318827354",
+      "backward_wall_median_ms": 0.244843,
+      "backward_wall_samples_ms": [
+        0.488515,
+        0.244843,
+        0.241012
+      ],
+      "capture_wall_median_ms": 2.896069,
+      "capture_wall_samples_ms": [
+        3.004219,
+        2.626475,
+        2.896069
+      ],
+      "causal": true,
+      "compile_ms": 859.252331,
+      "forward_image_sha256": "d0e1517bc4b7c0d18d9a193756467b33b4c1d60a99f2578cc8a4dc0c09c9c556",
+      "forward_schedule": "2678dade16d432f85ee9a251f2b7cb514a0a170974a5b28c9ea34d60f06cb333",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 3.558995945868171e-08,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "ee8a901f59f869b2ee3453a3ec9a019fb87a5df255bdcdc635c252fde66e77d8",
+      "backward_schedule": "6887b9fe042b316a53277570d47a7aefe3c6642841b741e76f4c170318827354",
+      "backward_wall_median_ms": 0.221812,
+      "backward_wall_samples_ms": [
+        0.254223,
+        0.221812,
+        0.214162
+      ],
+      "capture_wall_median_ms": 2.653925,
+      "capture_wall_samples_ms": [
+        3.077405,
+        2.557916,
+        2.653925
+      ],
+      "causal": true,
+      "compile_ms": 826.479543,
+      "forward_image_sha256": "d0e1517bc4b7c0d18d9a193756467b33b4c1d60a99f2578cc8a4dc0c09c9c556",
+      "forward_schedule": "2678dade16d432f85ee9a251f2b7cb514a0a170974a5b28c9ea34d60f06cb333",
+      "frontend_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "max_abs_gradient_error": 2.556806318887439e-07,
+      "native_frontend_argument_indices": [
+        3,
+        0,
+        2,
+        1
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "9efb1afcb169ca1dd0d5cef98ff74ab77f45a15fc41780b3e1d3ea1a61e00a85",
+      "backward_schedule": "b1f1d71035f62649188299948f4aebe9e1f0a98d216b76f88c0d2c4b60e36f50",
+      "backward_wall_median_ms": 0.201972,
+      "backward_wall_samples_ms": [
+        0.244592,
+        0.201972,
+        0.195482
+      ],
+      "capture_wall_median_ms": 2.420123,
+      "capture_wall_samples_ms": [
+        2.797032,
+        2.396553,
+        2.420123
+      ],
+      "causal": true,
+      "compile_ms": 816.048825,
+      "forward_image_sha256": "8a1c2f80e264df92e6f9f2187508122bd73a3d85758bbc8ed9bd6e6e50aa28a5",
+      "forward_schedule": "9167f01fb7333784123503ddba85d3c46dfbb5fdf0a590edc24615e26b33b408",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 3.558995945868171e-08,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        3,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "bias",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1",
+      "backward_image_sha256": "9efb1afcb169ca1dd0d5cef98ff74ab77f45a15fc41780b3e1d3ea1a61e00a85",
+      "backward_schedule": "b1f1d71035f62649188299948f4aebe9e1f0a98d216b76f88c0d2c4b60e36f50",
+      "backward_wall_median_ms": 0.360734,
+      "backward_wall_samples_ms": [
+        0.252983,
+        0.487594,
+        0.360734
+      ],
+      "capture_wall_median_ms": 2.498325,
+      "capture_wall_samples_ms": [
+        2.702641,
+        2.498325,
+        2.256002
+      ],
+      "causal": true,
+      "compile_ms": 818.885885,
+      "forward_image_sha256": "8a1c2f80e264df92e6f9f2187508122bd73a3d85758bbc8ed9bd6e6e50aa28a5",
+      "forward_schedule": "9167f01fb7333784123503ddba85d3c46dfbb5fdf0a590edc24615e26b33b408",
+      "frontend_order": [
+        "bias",
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 2.556806318887439e-07,
+      "native_frontend_argument_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        3,
+        1,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "bias",
+        "k",
+        "q"
+      ]
+    },
+    {
+      "backward_abi": "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2",
+      "backward_image_sha256": "75eccf1d4087b70da806d5a26078b6b392015101a7a73b3b40eada5e7d7e4e02",
+      "backward_schedule": "54860d4e25ec82111803ac2d8ce0fd96e466e5166a447bbaf69b44abe66724bb",
+      "backward_wall_median_ms": 0.205012,
+      "backward_wall_samples_ms": [
+        0.283863,
+        0.198742,
+        0.205012
+      ],
+      "capture_wall_median_ms": 2.156971,
+      "capture_wall_samples_ms": [
+        3.15713,
+        2.029399,
+        2.156971
+      ],
+      "causal": true,
+      "compile_ms": 802.765339,
+      "forward_image_sha256": "aaa3c3c1d18cc7e35c4eeee1f6f9a1ae61ac691b131458e025cac067e498c10b",
+      "forward_schedule": "a4008dab7ffaee5b4599902018fdc6388585418278d50d34469be75732f0fe76",
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "max_abs_gradient_error": 1.8181402905437238e-07,
+      "native_frontend_argument_indices": [
+        1,
+        2,
+        0
+      ],
+      "native_gradient_result_indices": [
+        2,
+        0
+      ],
+      "route": "public frontend -> native paired AD argument role map -> replay-bound Schedule/Tile -> NVIDIA Target/PTX -> checked resident capture",
+      "shape": [
+        2,
+        4,
+        2,
+        16,
+        11,
+        8,
+        6
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ]
+    }
+  ],
+  "samples": 3,
+  "schema": "tessera.nvidia.attention_argument_order.v1",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_attention_argument_order.py": "2b88fb0c955147c498eaf230da7b5903cd5636fabb365d58c8acd2fcea2bd63e",
+    "benchmarks/nvidia/benchmark_checkpoint_bias_gradient.py": "1504c9b06ca9664e10ca46b3de70b9fa2ddb4820f5a238d8cd75cc0e66128de2",
+    "python/tessera/compiler/native_attention_program.py": "3b4184070ef00a650ef2ca7793a97dad8a3ad0657725117d6b3f549978d2574d",
+    "python/tessera/compiler/nvidia_native.py": "c3b5ceb1578234d133368cb0dfef7025ca2d9124fc61d467c6c7c646cbd36175",
+    "python/tessera/compiler/resident_attention.py": "6fbb74a5279b17b80b2d05e6749516b6914b1043ca6c7ab22676f9623e759dfe",
+    "python/tessera/compiler/scheduled_checkpoint.py": "c68653bb23ebcc1a2908dc22fde2d26c3514c7e59947c9f72297f8f354427f3a",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "26ecee5fd6539afb4ec59d812b2766eec64d0dc5bac7b1602c9a924f0070dcf3",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "9b8ab15c451f173f86d5bd47a3ea327d339279f90fa0d253245cdc3038188d4e"
+  },
+  "timing_scope": "capture/backward wall includes allocation, module loading/copies and synchronization; no device-time or speedup claim; separate device windows remain in the checkpoint packet"
+}

@@ -1,0 +1,7 @@
+loading pinned tensor model.layers.0.mlp.gate_proj.weight
+loaded model.layers.0.mlp.gate_proj.weight (12288, 2048)
+loading pinned tensor model.layers.0.mlp.up_proj.weight
+loaded model.layers.0.mlp.up_proj.weight (12288, 2048)
+resident checkpoint proof 256 24576 4096
+verified checkpoint [256, 24576, 4096] {'converter': 18.836732864379883, 'storage': 0.3410038650035858, 'consumer': 0.34044399857521057, 'combined': 19.53742027282715}
+verified FP8/MXFP8/MXFP4 controls 256

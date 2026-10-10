@@ -1,0 +1,9 @@
+Traceback (most recent call last):
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/benchmarks/rocm/benchmark_gfx1201_checkpoint_formats.py", line 108, in <module>
+    measure(parser.parse_args())
+    ~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/benchmarks/rocm/benchmark_gfx1201_checkpoint_formats.py", line 85, in measure
+    row=formats.run_operands(a,base.T,args,hip,clock,packed_weights=packed)
+  File "/home/angstorms/scratch/next-five-compiler-slices-rocm/benchmarks/rocm/benchmark_gfx1201_three_formats.py", line 220, in run_operands
+    raise RuntimeError(receipt)
+RuntimeError: {'ok': False, 'runtime_status': 'invalid_artifact', 'compiler_path': 'canonical_native_descriptor', 'execution_kind': 'artifact_only', 'artifact_hash': '611ddb0f57cdc5976a2593a27e3d99750c1e5d8d495d9d9538da45a0c1015dfb', 'diagnostic_code': 'E_LAUNCH_BINDING_MISMATCH', 'reason': "E_LAUNCH_BINDING_MISMATCH: buffer 'b_scale' layout mismatch"}

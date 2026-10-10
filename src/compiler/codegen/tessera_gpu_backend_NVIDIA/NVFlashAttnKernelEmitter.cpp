@@ -92,8 +92,10 @@ static void attachLaunchBounds(func::FuncOp funcOp, int warpsPerCTA, int sm) {
                   b.getI32IntegerAttr(threadsPerCTA));
   funcOp->setAttr("nvvm.minctasm",
                   b.getI32IntegerAttr(1));
-  // Annotate as a kernel.
-  funcOp->setAttr("nvvm.kernel", b.getUnitAttr());
+  // This is still a tensor-valued func.func. NVVM kernel annotations are
+  // valid only on LLVM functions after executable ABI materialization.
+  // Preserve kernel intent in the high-level namespace at this boundary.
+  funcOp->setAttr("tessera.nvidia.kernel", b.getUnitAttr());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

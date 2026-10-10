@@ -1,0 +1,24 @@
+{
+  "device": "AMD Radeon RX 9070 XT",
+  "hip_uuid_hex": "32386439653765666266326566373136",
+  "architecture": "gfx1201",
+  "architecture_evidence": "runtime _rocm_live_arch and rocminfo owning gate before testing",
+  "source_snapshot": "pre-publication source bytes; final commit only normalized trailing blank lines in 23 files",
+  "source_files_matched": 4931,
+  "tools": {
+    "tools/tessera-opt/tessera-opt": "76d1d508bd01cb171d31ed6c375de9fc7380dcd716e7cae7150b272ba075c285",
+    "src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "3c12754092fba53b8e545fe2e8f841c570fbfb2245ef34b25c4e39c75ae9d25c",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_image.so": "55122befeb059b988ed9aae4ce8228fa227be06b2c8cd8cc818bbe95d44365bf",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "61f6c2c8a522e2de870e3f96e03019cbabe9622e551112c7b5f58ce00e6a18f8"
+  },
+  "corrected_device_result": {
+    "passed": 113,
+    "failed": 0
+  },
+  "first_device_result": {
+    "passed": 72,
+    "failed": 41,
+    "cause": "timestamp-preserving tar transfer left newer Make objects for five synchronized AD sources; forced recompilation repaired pass options and native NVFP4 projection"
+  },
+  "timeout_enforced": false
+}

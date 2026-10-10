@@ -14,7 +14,7 @@ boundary; unsupported target pairs fail closed before package construction.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 import hashlib
 import json
 from threading import Lock
@@ -51,6 +51,16 @@ class NativeVJPPluginDeclaration:
     target_consumers: Mapping[str, str]
     migration_state: str = "canonical_composite"
     differential_policy: str = "pure_only"
+    target_schedule_consumers: Mapping[str,str] = field(default_factory=dict)
+    target_graph_consumers: Mapping[str,tuple[str,...]] = field(default_factory=dict)
+
+    def owns(self,op_name,target):
+        return (target in self.target_consumers and "tessera."+op_name.removeprefix("tessera.") in
+                self.target_graph_consumers.get(target,self.graph_consumers))
+
+    def for_target(self,target):
+        return replace(self,schedule_consumer=self.target_schedule_consumers.get(target,self.schedule_consumer),
+                       graph_consumers=self.target_graph_consumers.get(target,self.graph_consumers))
 
     def validate(self) -> None:
         if not self.family or not self.graph_consumers:
@@ -69,12 +79,20 @@ class NativeVJPPluginDeclaration:
             raise ValueError("native VJP declaration has an invalid differential policy")
         if not self.target_consumers or any(not value for value in self.target_consumers.values()):
             raise ValueError("native VJP declaration requires concrete Target consumers")
+        if (set(self.target_schedule_consumers)-set(self.target_consumers)
+                or any(not value.startswith("schedule.") for value in self.target_schedule_consumers.values())
+                or set(self.target_graph_consumers)-set(self.target_consumers)
+                or any(not names or not set(names)<=set(self.graph_consumers)
+                       for names in self.target_graph_consumers.values())):
+            raise ValueError("native VJP target-specific consumers disagree")
+
 
 
 @dataclass(frozen=True)
 class NativeVJPResult:
     gradients: tuple[Any, ...]
     execution: Mapping[str, Any]
+    runtime_artifact: Any | None = None
 
 
 _EXECUTION_SCHEMA = "tessera.native_vjp_execution.v1"
@@ -167,6 +185,7 @@ def validate_native_vjp_execution_certificate(
     expected_arch = {
         "x86": "x86_avx512",
         "rocm": "gfx1151",
+        "rocm_gfx1201": "gfx1201",
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(str(body.get("target", "")))
@@ -209,6 +228,7 @@ def _record_execution_certificate(
     expected_arch = {
         "x86": "x86_avx512",
         "rocm": "gfx1151",
+        "rocm_gfx1201": "gfx1201",
         "nvidia_sm120": "sm_120",
         "apple_gpu": "apple7",
     }.get(target)
@@ -272,7 +292,7 @@ def _record_execution_certificate(
     execution["execution_certificate_schema"] = _EXECUTION_SCHEMA
     execution["execution_certificate_digest"] = digest
     execution["execution_certificate"] = certificate
-    return NativeVJPResult(result.gradients, execution)
+    return NativeVJPResult(result.gradients, execution, result.runtime_artifact)
 
 
 Executor = Callable[..., NativeVJPResult]
@@ -286,6 +306,8 @@ def register_native_vjp_plugin(
     tile_consumer: str,
     target_consumers: Mapping[str, str],
     differential_policy: str = "pure_only",
+    target_schedule_consumers: Mapping[str,str] | None = None,
+    target_graph_consumers: Mapping[str,tuple[str,...]] | None = None,
 ) -> Callable[[Executor], Executor]:
     """Register one explicit Graph-op owner; duplicate ownership is invalid."""
     declaration = NativeVJPPluginDeclaration(
@@ -295,6 +317,8 @@ def register_native_vjp_plugin(
         tile_consumer=tile_consumer,
         target_consumers=dict(target_consumers),
         differential_policy=differential_policy,
+        target_schedule_consumers=dict(target_schedule_consumers or {}),
+        target_graph_consumers=dict(target_graph_consumers or {}),
     )
     declaration.validate()
 
@@ -307,6 +331,103 @@ def register_native_vjp_plugin(
 
     return decorate
 
+
+
+@register_native_vjp_plugin(
+    "scaled_matmul", family="scaled_product_transpose",
+    schedule_consumer="schedule.artifact",
+    tile_consumer="tile.structured_reduction_kernel",
+    target_consumers={"rocm": "rocm.gfx1201_native_scaled_program",
+                      "rocm_gfx1201": "rocm.gfx1201_native_scaled_program"},
+)
+def _execute_scaled_product_transpose(
+    *, source, target, ordered_inputs, arg_names, source_arg_names,
+    out_cotangents, wrt_names, declaration, source_graph_ir,
+    frontend_certificate,
+):
+    """Execute compiler-owned scale adjoints; no Python numerical lowering."""
+    import numpy as np
+    from tessera import runtime
+    from .native_scaled_program import PreparedScaledProgram
+    schedule = _scaled_transpose_schedule()
+    if runtime._rocm_live_arch() != "gfx1201":
+        raise TesseraJitError("native scale VJP requires the owning gfx1201 device")
+    if (not source_graph_ir or not 4 <= len(ordered_inputs) < 128
+            or len(source_arg_names) != len(ordered_inputs)):
+        raise TesseraJitError("native scale VJP requires a traced scale-product input frame")
+    cotangents = tuple(out_cotangents) if isinstance(out_cotangents, (tuple, list)) else (out_cotangents,)
+    if len(cotangents) != 1:
+        raise TesseraJitError("native scale VJP requires one output cotangent")
+    # Tracer SSA names can differ from Python parameter names. Function
+    # arguments preserve call-binding order; native export checks captures.
+    roles = tuple(arg_names.index(name) for name in wrt_names)
+    inputs = tuple(ordered_inputs)
+    try:
+        from pathlib import Path
+        import os
+        import shutil
+        opt = os.environ.get("TESSERA_OPT") or shutil.which("tessera-opt")
+        if not opt:
+            raise ValueError("native scale VJP requires the matching compiler")
+        stamp = Path(opt).stat()
+        package = _cached_scaled_transpose_package(
+            source_graph_ir, str(Path(opt).resolve()), stamp.st_mtime_ns, stamp.st_size, schedule)
+        program = json.loads(package.program_json)
+        if tuple(program["gradient_roles"]) != roles:
+            raise ValueError("native scale VJP requested gradient order differs from Graph")
+        dy = np.asarray(cotangents[0])
+        contract = program["buffers"][len(inputs)]
+        if program["argument_count"] != len(inputs) + 1:
+            raise ValueError("native scale VJP input frame differs from Graph")
+        if dy.dtype != np.float32 or list(dy.shape) != contract["shape"]:
+            raise ValueError("native scale VJP cotangent storage/shape differs")
+        lib = runtime._load_rocm_native_movement_runtime()
+        if lib is None:
+            raise ValueError("native scale VJP requires the checked HIP owner")
+        with PreparedScaledProgram(package, [*inputs, dy], runtime_library=lib._name) as owner:
+            generation, _ = owner.invoke()
+            gradients = owner.read(generation)
+    except (RuntimeError, TypeError, ValueError) as exc:
+        raise TesseraJitError(str(exc)) from exc
+    digest = hashlib.sha256(
+        package.program_json.encode() + b"".join(package.images)).hexdigest()
+    attestation = runtime._physical_execution_attestation(
+        target=target, execution_kind="native_gpu", execution_mode="hip_runtime",
+        artifact_hash=digest, expected_device_arch="gfx1201")
+    if attestation is None:
+        raise TesseraJitError("native scale VJP completed without gfx1201 attestation")
+    return NativeVJPResult(gradients, {
+        "compiler_path": "rocm_scaled_vjp_program_compiled",
+        "scale_adjoint_schedule": schedule,
+        "execution_kind": "native_gpu", "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201", "implementation": "family_plugin",
+        "family": declaration.family, "frontend_authority": "tracer",
+        "graph_consumer": source.op_name,
+        "schedule_consumer": declaration.schedule_consumer,
+        "tile_consumer": declaration.tile_consumer,
+        "target_consumer": declaration.target_consumers[target],
+        "source_graph_ir_digest": hashlib.sha256(source_graph_ir.encode()).hexdigest(),
+        "artifact_hash": digest, "physical_attestation": attestation,
+    }, package)
+
+
+
+def _scaled_transpose_schedule():
+    """Explicit experimental native Schedule option; serial remains default."""
+    import os
+    schedule = os.environ.get(
+        "TESSERA_ROCM_SCALE_VJP_SCHEDULE", "serial_per_scale_element")
+    if schedule not in {"serial_per_scale_element", "wave_per_scale_element"}:
+        raise TesseraJitError("unsupported native scale-VJP schedule: " + schedule)
+    return schedule
+
+from functools import lru_cache as _lru_cache
+
+@_lru_cache(maxsize=16)
+def _cached_scaled_transpose_package(source_graph_ir, compiler, modified_ns, size, schedule):
+    # Compiler identity invalidates immutable packages; no device owner is cached.
+    from .native_scaled_program import package_native_scaled_vjp
+    return package_native_scaled_vjp(source_graph_ir, schedule=schedule)
 
 @register_native_vjp_plugin(
     "rmsnorm",
@@ -1088,7 +1209,10 @@ def _execute_sequence_mixer(
     target_consumers={
         "x86": "x86.avx512_attention_backward",
         "rocm": _rocm_consumer("attention_backward_program"),
+        "nvidia_sm120": "nvidia.sm120_saved_lse_vjp",
     },
+    target_schedule_consumers={"nvidia_sm120":"schedule.artifact"},
+    target_graph_consumers={"nvidia_sm120":("tessera.flash_attn",)},
     differential_policy="zero_dropout_attention",
 )
 def _execute_attention(
@@ -1105,6 +1229,14 @@ def _execute_attention(
     frontend_certificate: Any | None,
 ) -> NativeVJPResult:
     """Build and execute one traced canonical attention reverse package."""
+    if target=="nvidia_sm120":
+        from .native_attention_vjp_runtime import execute_family
+        try:
+            return execute_family(source=source,target=target,ordered_inputs=ordered_inputs,
+                arg_names=arg_names,source_arg_names=source_arg_names,out_cotangents=out_cotangents,
+                wrt_names=wrt_names,declaration=declaration,source_graph_ir=source_graph_ir)
+        except (RuntimeError, TypeError, ValueError) as exc:
+            raise TesseraJitError(str(exc)) from exc
     from .native_attention_vjp import (
         build_native_attention_vjp_package,
         execute_native_attention_vjp_package,
@@ -1592,8 +1724,9 @@ def execute_native_vjp_family(
     if entry is None:
         return None
     declaration, executor = entry
-    if target not in declaration.target_consumers:
+    if not declaration.owns(source.op_name,target):
         return None
+    declaration=declaration.for_target(target)
     result = executor(
         source=source,
         target=target,
@@ -1655,14 +1788,14 @@ def native_vjp_plugin_available(op_name: str, target: str) -> bool:
     """Whether one exact Graph op/Target pair has migrated plugin authority."""
     bare = op_name.removeprefix("tessera.")
     entry = _PLUGINS.get(bare)
-    return entry is not None and target in entry[0].target_consumers
+    return entry is not None and entry[0].owns(op_name,target)
 
 
 def native_vjp_frontend_proof_policy(op_name: str, target: str) -> str | None:
     """Return the declared frontend proof policy for one owned target pair."""
     bare = op_name.removeprefix("tessera.")
     entry = _PLUGINS.get(bare)
-    if entry is None or target not in entry[0].target_consumers:
+    if entry is None or not entry[0].owns(op_name,target):
         return None
     return entry[0].differential_policy
 
@@ -1671,7 +1804,7 @@ def native_vjp_differential_safe(source: Any, target: str, effect: str) -> bool:
     """Whether the plugin permits the concrete call to run in a parity gate."""
     bare = source.op_name.removeprefix("tessera.")
     entry = _PLUGINS.get(bare)
-    if entry is None or target not in entry[0].target_consumers:
+    if entry is None or not entry[0].owns(source.op_name,target):
         return False
     policy = entry[0].differential_policy
     if policy == "non_reexecuting_state_lineage":
@@ -1690,7 +1823,7 @@ def native_vjp_differential_effect_exemptions(
     """Return exact Graph ops admitted by a validated plugin effect policy."""
     bare = source.op_name.removeprefix("tessera.")
     entry = _PLUGINS.get(bare)
-    if entry is None or target not in entry[0].target_consumers:
+    if entry is None or not entry[0].owns(source.op_name,target):
         return ()
     if (
         entry[0].differential_policy == "zero_dropout_attention"

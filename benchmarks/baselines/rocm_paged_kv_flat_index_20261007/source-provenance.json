@@ -1,0 +1,12 @@
+{
+  "candidate_lowering_path": "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateROCMPagedKVReadKernel.cpp",
+  "candidate_lowering_sha256": "260536cba56e8451efd132e28e33b3489e35ef7ccd18b5bba6041b407965ff92",
+  "reference_lowering_sha256": "7a54781652eb43a4ca88cfc005670673b0c4b5017e6e6127779ae726d397be50",
+  "owning_hosts": [
+    "Princess-Luna gfx1151",
+    "Tajasaurus gfx1201"
+  ],
+  "coordinated_build": "coordinated-build.txt",
+  "coordinated_tests": "coordinated-tests.txt",
+  "candidate_source_snapshot": "GenerateROCMPagedKVReadKernel.candidate.cpp"
+}

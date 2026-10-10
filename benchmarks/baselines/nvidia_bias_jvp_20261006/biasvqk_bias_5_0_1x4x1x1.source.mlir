@@ -1,0 +1,6 @@
+module attributes {tessera.ir.version = "1.0", tessera.frontend.authority = "tracer", tessera.autodiff = "forward", tessera.autodiff.wrt = ["bias"], tessera.autodiff.wrt_indices = [0], tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
+  func.func @biased(%a0: tensor<1x4x1x1xf32>, %a1: tensor<2x2x5x3xf32>, %a2: tensor<2x4x3x4xf32>, %a3: tensor<2x2x5x4xf32>) -> (tensor<2x4x3x3xf32>) attributes {tessera.frontend.authority = "tracer", tessera.structured_cfg.schema = "tessera.structured_cfg.v1", tessera.structured_cfg.digest = "606737fb2ad71eadfbde2eb009f066a72a3b7038152075d98c467f2aa600e791", tessera.structured_cfg.blocks = 2, tessera.autodiff = "forward", tessera.autodiff.wrt = ["bias"], tessera.autodiff.wrt_indices = [0]} {
+    %v0 = tessera.flash_attn %a2, %a3, %a1, %a0 {causal = false, head_dim = 4 : i64, tessera.effect_kind = "pure", operandSegmentSizes = array<i32: 1, 1, 1, 1>} : (tensor<2x4x3x4xf32>, tensor<2x2x5x4xf32>, tensor<2x2x5x3xf32>, tensor<1x4x1x1xf32>) -> tensor<2x4x3x3xf32> loc("benchmarks/nvidia/benchmark_public_attention_vjp.py":17:12)
+    return %v0 : tensor<2x4x3x3xf32>
+  }
+}

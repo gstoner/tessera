@@ -2064,3 +2064,249 @@ Quick-lookup table of all public symbols and their canonical module paths.
 | `load_dflash_weights` / `save_dflash_weights` / `load_safetensors` / `dflash_weights_from_state_dict` | `tessera.dflash_io` |
 | `dflash_generate_text` / `DFlashScheduler` | `tessera.dflash_serve` |
 | `DiffusionGemmaConfig` / `build_text_block` / `verify_text_block` / `route_top_k` / `moe_forward` / `entropy_bound_sample` / `BlockDiffusionDecoder` / `plan_quantization` (full surface — §19) | `tessera.models` |
+
+
+## Explicit packed storage and scaled matmul contracts
+
+### scaled_matmul
+
+The public scaled_matmul(A, B, scale_a, scale_b, *, scale_layout,
+numeric_policy, physical_contract, ...) call binds four tensor operands.
+Scale layout, numerical policy and the named physical contract are static
+Graph attributes, not tensor operands. The Graph result describes logical
+M-by-N dimensions; physical packed K dimensions and scale shapes are checked
+against the selected contract. A conflicting authored policy must be rejected,
+not normalized to a different execution mode. Native availability is bounded
+by the owning architecture, layout and storage envelope; registration alone
+does not establish execution or batching/AD support.
+
+The named SM120 NVFP4 Graph profile additionally admits static
+`batching="shared_rhs_rows"`: logical A[B,M,K], shared B[K,N], A scales
+[B,M,ceil(K/16)], B scales [ceil(K/16),N], result [B,M,N]. Native Schedule
+flattens batch and row axes without copying, while Graph and checked ABI
+retain their separate dimensions. The numerical policy remains exact per K16
+block, FP32 accumulation/output, and UE4M3 scales. This named Graph/package
+route also admits `batching="independent_rhs"` with B[B,K,N] and B scales
+[B,ceil(K/16),N]. Its separate ten-argument ABI carries five buffers and
+M/N/K/BatchRows/BatchCount. Rank-three guards and exact compiled batch scalar
+checks precede native allocation; each batch owns whole M16 row tiles,
+including ragged tails. Neither named route establishes generic Python vmap,
+dynamic batching, transpose, or AD support. The named NVFP4 profile requires
+exactly `accum` and `execution_mode` in `numeric_policy`, and exactly
+`granularity`, `block`, and `format` in `scale_layout`. Directly authored MLIR
+and Python packaging use the same contract; additional policy fields require
+an explicit native profile instead of being dropped during scheduling.
+
+### Typed FP8 shared-RHS batches
+
+With physical_contract omitted, the typed E4M3 exact block-scale form admits
+static batching="shared_rhs_rows": A[B,M,K], shared RHS B[K,N] (or physical
+B[N,K] with transposeB=True), A scales [B,M,G], shared B scales [G,C], and
+f32 result [B,M,N]. For fp32 scales, G=K/scale_k and C=ceil(N/scale_n).
+E8M0 byte scales require block=[1,32], G=K/32, C=N and explicit gated byte
+Tensor annotations. Native gfx1201 admission requires whole positive scale
+groups, no transposeA and compact row-major storage for each physical operand.
+The scale shapes describe logical group/column axes even with transposeB.
+
+The original Graph retains all three logical dimensions. Native Schedule
+flattens B*M rows, and Tile binds the original buffers without A/RHS replication
+or a Python batch launch loop. The compiler-owned program manifest carries
+the batch policy and checks logical output/scale prefixes against the physical
+M/N/K ABI. A single native owner retains allocations and completes before
+readback. Public native f32 scale JVP preserves batch ranks and executes actual
+product/sum SSA members; encoded scales have no implicit straight-through
+derivative. These gfx1201 receipts do not establish general batching, linear
+transpose, dynamic/nested composition or sibling-target execution.
+
+### Native NVFP4 operand orientation
+
+The named SM120 `scaled_matmul` profile supports static rank-two
+`transposeA`/`transposeB` and independent-RHS batch orientations. Transposition
+applies to both the logical matrix and its associated K16 scale matrix.
+For A storage `[K,M]`, packed bytes have shape `[ceil(K/2),M]` and scales
+`[ceil(K/16),M]`; for B storage `[N,K]`, bytes are `[N,ceil(K/2)]` and scales
+`[N,ceil(K/16)]`. Independent batches prepend the batch dimension.
+`NVFP4Tensor.packed_axis` identifies the contraction axis in the declared
+logical storage orientation. Outputs retain `[M,N]` or `[B,M,N]`.
+
+The native Tile loads orient codes and scales directly. Graph validation,
+Schedule hashing and checked descriptor shapes preserve that intent; the
+production route performs no Python transpose or numerical unpacking.
+Shared-RHS row batching admits both A/B orientations. Transposed batched A
+uses the batch-aware ABI, preserving each batch's A/scale offsets while B and
+its scales remain shared. These
+physical storage profiles do not close general linear-transpose AD products.
+
+### Native NVFP4 batch transformation
+
+`from tessera.autodiff import vmap` can transform a primal SM120 `JitFn`
+whose body is a direct, unbatched named NVFP4 `scaled_matmul`. Leading axes
+`(0, None, 0, None)` map A and its scales with a shared RHS;
+`(0, 0, 0, 0)` maps both matrices and both scales independently. Leading axes
+(None, 0, None, 0) map RHS matrices/scales with a shared LHS using
+batching="shared_lhs". A/its scales retain rank two, B/its scales
+have rank three, and output is [B,M,N]. The checked rows/batches ABI carries
+one native launch; A is reused without replication or per-member Python
+launches. Both operand orientations and odd/ragged K retain their scale
+semantics. out_axes=0 is required. Inputs use explicit `NVFP4Tensor` logical metadata
+and compact physical byte storage; all mapped extents must agree.
+
+The transform owns a separate JIT specialization/cache and leaves the scalar
+owner intact. Scalar symbolic dimension constraints remain bound to the
+original logical axes after adding a fresh leading batch symbol. Unmapped
+`in_axes=None` (or all-None axes) retains ordinary no-map semantics. It traces scalar logical types, projects batch intent into Graph,
+and executes the existing native Schedule/Tile/Target package with one launch.
+It performs no per-member buffer slicing, numerical conversion or Python
+launch loop. Native verification and checked descriptors retain scale, ragged
+K, capacity and batch geometry validation. Other axis arrangements, composed
+producers, dynamic batches and transformed AD still require native integration;
+this profile does not close general batching or transpose coverage.
+
+### Nested leading NVFP4 maps on SM120
+
+Repeated public `vmap` with the same coupled leading policy supports static
+logical batch prefixes for the named SM120 NVFP4 profile. The three policies
+above retain every logical prefix extent in Graph MLIR and scale types;
+Schedule MLIR flattens their checked product into the existing rows/batches
+geometry. Transpose flags apply only to the final two matrix axes. The output
+is `[*batch_prefix, M, N]`; a shared operand remains rank two.
+
+The descriptor records `logical_batch_shape` and guards the full output tuple,
+so prefixes `[2,3]` and `[3,2]` cannot be rebound despite equal products.
+Packing remains on the final matrix axes. The execution performs one native
+launch without per-member Python slicing or replication. Mixed nested
+policies, dynamic prefixes, nonleading axes and transformed NVFP4 AD require
+further integration. This named route does not close generic scaled-matmul
+batching or transpose AD.
+
+### Explicit logical NVFP4 host bindings
+
+Ordinary SM120 JIT calls use
+tessera.compiler.nvfp4_tensor.NVFP4Tensor(storage, shape, packed_axis) for A
+and B. storage is a caller-owned compact uint8 ndarray, and shape gives
+the logical NVFP4 dimensions. Two low-nibble-first E2M1 values occupy each
+byte along the declared packing axis. A packs its last axis; B packs its
+contracting axis (axis zero for shared/rank-two B, axis one for independent
+batched B). Odd K uses ceil(K/2) bytes along that axis. Scale operands remain
+ordinary uint8 arrays under the existing UE4M3 K16 Graph contract.
+
+The tracer retains logical types and shapes without decoding the matrices.
+The native compiler emits the existing eight- or ten-argument descriptor.
+The synchronous JIT call validates logical metadata, packing axes and physical
+storage, then launches the compiler image with those physical buffers.
+Changing the caller's buffer shape requires revalidation. Implicit ndarray
+conversion is unavailable because packed bytes are not logical values.
+Named rank-two/shared-RHS/independent-RHS profiles return an f32 ndarray;
+general vmap, dynamic batches, transpose, AD and sibling physical bindings
+remain separate work.
+
+### nvfp4_requantize
+
+nvfp4_requantize(codes, block_scales, global_scales, *, row_offsets,
+numeric_policy) is the explicit checkpoint conversion Graph operation.
+Three tensor operands carry checkpoint storage; row_offsets and numeric_policy
+are static attributes. The operation has three results (converted packed
+codes, block exponents, and row-group normalization). The gfx1201 native
+ingest package preserves the declared row-group and numerical contract through
+Schedule, Tile, Target and a checked six-buffer ABI. Conversion is lossy under
+the named policy; it must not be described as a bitwise storage transformation.
+Unsupported policies/layouts/targets require their own native admission.
+
+### mxfp4_folded_storage
+
+mxfp4_folded_storage(codes, exponents, *, storage_contract) is a lossless
+two-input/two-output storage Graph operation. Packed uint8 codes have shape
+[N,K/2], block exponents [K/32,N], and the folded results have shapes [N,K/2]
+and [K/32+1,N]. The named gfx1201 envelope requires positive static N aligned
+to 16 and K aligned to 64. storage_contract is a static attribute. The native
+bridge preserves code and exponent bit patterns, including reserved exponent
+bytes; numerical requantization belongs to nvfp4_requantize. Broader shapes,
+layouts, targets and differentiation require separate contracts.
+
+### Typed FP8 independent and shared-LHS batches
+
+The named batching="independent_rhs" contract admits E4M3 A[B,M,K],
+B[B,K,N] (or B[B,N,K] with transposeB), SA[B,M,G] and SB[B,G,C].
+batching="shared_lhs" reuses rank-two A[M,K] and SA[M,G], with the same
+batched B/SB. Both return f32 [B,M,N]; no transposeA is admitted here.
+Static matching extents, exact fp32 block scaling or explicit E8M0 [1,32]
+storage and whole K scale groups retain the scalar contract.
+
+On gfx1201 the native Schedule retains per-batch M, Tile/Target carry the
+operand batch policy and count, and GPU grid z selects matrix, scale and
+output memref views. No Python batch launch or shared operand replication is
+used. The checked native program validates logical capacities and z geometry.
+Projected runtime image dimensions do not admit dynamic frontend shapes.
+FP32 scale-JVP executes through the same native product/sum owner. Encoded
+scale derivatives, dynamic/nested batches and general transpose AD remain open.
+Evidence: benchmarks/baselines/rocm_independent_scaled_batch_20261007/README.md.
+
+### Native scaled-program binding reuse
+
+The gfx1201 typed FP8/MXFP8 native program boundary validates complete immutable
+packages before reusing readonly host ABI bindings. The checked decode and ABI
+caches each admit at most sixteen entries with a 1 MiB per-entry admission
+limit. Larger packages retain uncached marshaling. The runtime switch
+TESSERA_ROCM_PROGRAM_BINDING_CACHE defaults to 1; 0 bypasses both caches.
+Mutable manifests are keyed by their current complete contents. Native C++
+capacity, lifetime, context and completion checks still run for every owner.
+Host binding reuse changes no Graph/Schedule/Tile arithmetic or native image.
+Evidence: benchmarks/baselines/rocm_native_plan_binding_20261007/README.md.
+
+### Public typed scaled vmap
+
+A direct scalar typed E4M3 scaled-matmul JIT on rocm_gfx1201 supports public
+vmap with leading output axis zero. Map axes (0,None,0,None),
+(0,0,0,0), and (None,0,None,0) project shared-RHS, independent-RHS,
+and shared-LHS Graph batch intent respectively. FP32 block scales and
+explicit planned-gated E8M0 byte scales are admitted with KN/NK RHS.
+The mapped JIT has independent caches and constraints; scalar owners remain
+unchanged. Native Schedule/Tile/Target lowering owns batch execution.
+
+This static leading-axis route does not establish dynamic or nested maps,
+arbitrary axes, general composed differentiation, or sibling physical consumers.
+Evidence: benchmarks/baselines/rocm_public_typed_vmap_20261007/README.md.
+
+### Mapped typed scale JVP
+
+For the static leading typed FP8 map above, an exact rocm_gfx1201 JIT with
+autodiff=forward and wrt selecting sa, sb or both retains its native JVP
+request through vmap. native_jvp accepts tangent arrays matching each
+selected mapped/shared scale operand. The package returns primal and tangent
+with the same leading batch shape. Only floating FP32 scale roles are admitted;
+encoded E8M0 scales are discrete storage and do not receive implicit gradients.
+
+The frontend certificate may evaluate an eager scalar-map oracle once per
+signature. Production differentiation and batch arithmetic are native.
+Evidence: benchmarks/baselines/rocm_public_mapped_jvp_20261007/README.md.
+
+Native JVP calls enforce the JIT owner's source shape constraints before capture
+or compilation, including the scalar bounds retained by a mapped owner.
+
+### Static two-axis typed scaled batches
+
+On rocm_gfx1201, explicit typed scaled_matmul batching also admits two leading
+static dimensions. Independent matrices/scales use [B0,B1,M,K],
+[B0,B1,K,N] (or NK), [B0,B1,M,G], [B0,B1,G,C] and produce [B0,B1,M,N].
+Shared-RHS/shared-LHS policies keep the corresponding matrices/scales rank two.
+Graph retains both leading axes; native Schedule flattens their product for
+geometry and Target addresses each contiguous physical plane. Exact dimension
+tuples must agree even when their products are equal. FP8/MXFP8 primal and
+FP32 scale-JVP execute with native ownership; E8M0 storage derivatives remain
+gated. This is explicit batch intent, not nested public vmap transformation.
+Generic dynamic/nonleading maps and linear-transpose AD remain open.
+Evidence: benchmarks/baselines/rocm_multidimensional_scaled_batch_20261007/README.md.
+
+### Two public leading typed maps
+
+On rocm_gfx1201, vmap(vmap(jit_fn, in_axes=axes), in_axes=axes) executes
+two leading dimensions natively for axes (0,None,0,None), (0,0,0,0), or
+(None,0,None,0), with out_axes=0 at both levels. Both policies must match.
+The scalar Graph capture remains rank two; frontend projection restores the
+logical [B0,B1,M,N] output and native Schedule owns physical flattening.
+FP8/MXFP8 primal and FP32 scale-JVP retain independent scalar/inner/outer
+owners and original scalar source bounds. Reference-only differential
+certification compares the scalar-map oracle and projected Graph.
+Mixed policies, nonleading/deeper maps, E8M0 storage AD and generic linear
+transpose remain open. Evidence:
+benchmarks/baselines/rocm_nested_typed_vmap_20261007/README.md.

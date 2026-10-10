@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-10-02
 audit_role: reference
 owning_plan_item: W1.1
 ---
@@ -810,6 +810,36 @@ migration is never a partial production lane. A partial migration **within one
 (`TILE_MMA_MIXED_FRAGMENT_FORMS`) — so the unit of migration is a whole MMA, not
 an operand.
 
+### 4.9 SM120 canonical static K-tail extension — 2026-10-02
+
+The production Schedule-to-Tile path now emits the full typed-fragment producer
+for static K tails when M is 16-aligned and N is 8-aligned. Both pointer-backed
+views carry logical bounds; the NVIDIA fragment materializer masks and zero-fills
+out-of-range lanes in the final K panel. Exact RTX 5070 numerical checks pass for
+fp16 and bf16 at 48x67x16 (M/K/N), and a host-free structural test confirms six
+view operands and leading dimension 67. A seven-row exact-device packet records
+separate CUDA-event and end-to-end timings; the current ragged row's CUDA-event
+CV is 33.6% and end-to-end CV is 3.8%. Repeated packets varied materially,
+so the timing remains diagnostic. This widens the canonical typed producer but
+does not migrate arbitrary tensor-valued direct-Tile inputs, fused epilogues, or
+ragged M/N. Those W1.1 obligations remain open.
+
+
+### 4.10 SM120 canonical static M/N/K tails — 2026-10-02
+
+Sync `NVIDIA-W1.1-STATIC-MNK-TAILS-2026-10-02`. The canonical typed producer now covers
+positive static M/N/K tails for fp16/bf16 with unfused fp32 accumulation/output.
+Logical input bounds zero-fill fragment tails, and the existing static
+six-operand output-store form masks M/N writes while preserving exact physical
+leading dimensions. RTX 5070 proof includes 17 numerical shape/dtype cases (through 257/513/257) and
+six resident guarded-allocation cases with input/guard preservation and
+synchronized cleanup. Shared singleton-layout and owned CUDA bf16 metadata
+regressions pass. Native Tile now owns the entry symbol and CTA geometry; Python's duplicate entry-name/macro policy is retired. The full scheduled device module passed 32 cases, and the resident-program/frontend suite passed 48. The timing packet remains diagnostic because event and
+end-to-end variation are high; WSL debugger initialization prevented memcheck.
+This supersedes the aligned-M/N limit of section 4.9. Generic direct-Tile
+constructor migration and fused/tensor-lifetime envelopes remain open.
+[Packet](../../../benchmarks/baselines/nvidia_sm120_w1_typed_tensor_edge_20261001/typed_matmul_static_mnk_tails_20261002.json).
+
 ## 5. Interaction with W1.3 (Decision #32)
 
 W1.3 landed the boundary verifier and, in doing so, fixed
@@ -866,3 +896,67 @@ W1.1 shared-contract completion ledger:
 The shared contract is therefore closed; W1.1 remains `landing` only for the
 NVIDIA producer/Target proof and eventual removal of the separately checked
 tensor-value migration lane.
+
+## 2026-10-06 named portable replay increment
+
+Static FP16/BF16 RMSNorm/LayerNorm/softmax -> matmul portable replay now owns
+its two native packages through bounded process/context caches, typed admission
+witnesses and synchronous retirement. 498 focused checks pass, including 142
+RTX5070 device cases. This closes common portable native ownership only for
+the named static host-array envelope. Generic producer/Target migration,
+dynamic/composed AD and asynchronous/resident ownership remain open.
+
+[Evidence](../../../benchmarks/baselines/nvidia_portable_lhs_owner_20261006/README.md).
+
+## 2026-10-06 bounded frontend tensor increment
+
+Explicit frontend compilation now admits independently bounded M/N/K axes for
+named normalization/softmax -> matmul programs. The full semantic Graph and
+portable certificate retain dynamic types and capacities, while native
+Schedule/Tile owns the strided consumer and capacity-specialized producer.
+This does not close general producer/AD migration, ordinary JIT bounded-shape
+selection, dynamic prepared owners or asynchronous ownership.
+
+[Evidence](../../../benchmarks/baselines/nvidia_dynamic_lhs_frontend_20261006/README.md).
+
+## 2026-10-06 bounded native ownership increment
+
+Native C++ two-module owners now execute checked bounded M/N/K frames while
+retaining capacities, context identity and private intermediate lifetime.
+688 focused checks pass, including 332 RTX5070 device cases. Dynamic parameter
+reflection prevents static ABI reinterpretation. Ordinary JIT bounded selection,
+dynamic row-RHS and general producer/AD/asynchronous migration remain open.
+
+[Evidence](../../../benchmarks/baselines/nvidia_dynamic_lhs_owner_20261006/README.md).
+
+
+## 2026-10-06 ordinary bounded SM120 tensor JIT
+
+Ordinary straight-line normalization/softmax -> matmul now reuses verified
+bounded programs and native ownership across active shapes. 547 checks pass,
+including 211 RTX5070 device cases. Four matched 48-case packets retain
+identical images and warm wall ratios 0.0765821/0.0761356. See
+benchmarks/baselines/nvidia_bounded_lhs_jit_20261006/README.md.
+General composition/control-flow/AD, dynamic row-RHS, resident/asynchronous
+execution and sibling physical consumers remain open. Full five-slice closure
+remains unproven; the objective stays active.
+
+
+## 2026-10-06 bounded SM120 row-major RHS integration
+
+Native dynamic composed row indices, typed B gathers and explicit strided
+row ABI now execute through ordinary bounded JIT/prepared/portable routes.
+781 expanded checks pass (406 device cases, four unrelated skips); 28
+frontend checks pass. Eight matched 48-case packets pass. Row consumer
+event time is 9–15% higher than column storage in this envelope; column
+packing remains the bounded default. See
+benchmarks/baselines/nvidia_dynamic_row_lhs_20261006/README.md.
+General composition/bufferization/control-flow/AD/resident/async, quantized
+strategy gates and sibling physical consumers remain open. Full five-slice
+completion remains unproven; the objective remains active.
+
+## NVFP4 shared-RHS transposed-A batch contract — 2026-10-06
+
+Static Graph A=[B,K,M], SFa=[B,ceil(K/16),M] with transposeA=true and shared rank-two B/SFb lowers without flattening physical A storage across batch boundaries. The physical Schedule records shared_rhs_rows and batch count/rows in its semantic digest. Tile's batch-aware ten-argument NVFP4 ABI supplies flattened M plus BatchRows/BatchCount. The native target computes batch and local row tile from blockY; A/SFa/output pointers receive per-batch offsets, B/SFb retain their shared base. Orientation-aware code/scale loads use local M. Independent-RHS batches retain B/SFb offsets. Untransposed shared batches retain their existing compact route.
+
+The runtime validates batch policy, integer scalar equality, grid capacity, logical orientation and physical packed/scale buffer shapes before launch. This is a static primal product contract; it does not declare general batching, linear-transpose differentiation or asynchronous lifetime closure.

@@ -1,0 +1,652 @@
+{
+  "rows": [
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.0522999338700174e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        7.756880009424094e-06
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.001192263412349348
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 1 / 24 (4.17%)\nMismatch at index:\n [5, 0]: -2.993410587310791 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00032112\nMax relative difference among violations: 0.00010726\n ACTUAL: array([[318.3618  , -19.044655],\n       [208.94481 , -10.862114],\n       [137.52415 ,  -0.661256],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        0.00045984153734934807
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 2 / 24 (8.33%)\nMismatch at indices:\n [4, 0]: 1.1658191680908203 (ACTUAL), 1.166111095637425 (DESIRED)\n [5, 0]: -2.9941558837890625 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00042418\nMax relative difference among violations: 0.00025034\n ACTUAL: array([[318.3625  , -19.044651],\n       [208.94492 , -10.862112],\n       [137.52403 ,  -0.661255],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.0522999338700174e-05,
+        0.001192263412349348
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 1 / 24 (4.17%)\nMismatch at index:\n [5, 0]: -2.993410587310791 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00032112\nMax relative difference among violations: 0.00010726\n ACTUAL: array([[318.3618  , -19.044655],\n       [208.94481 , -10.862114],\n       [137.52415 ,  -0.661256],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        7.756880009424094e-06,
+        0.00045984153734934807
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 2 / 24 (8.33%)\nMismatch at indices:\n [4, 0]: 1.1658191680908203 (ACTUAL), 1.166111095637425 (DESIRED)\n [5, 0]: -2.9941558837890625 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00042418\nMax relative difference among violations: 0.00025034\n ACTUAL: array([[318.3625  , -19.044651],\n       [208.94492 , -10.862112],\n       [137.52403 ,  -0.661255],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.001192263412349348,
+        3.0522999338700174e-05
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 1 / 24 (4.17%)\nMismatch at index:\n [5, 0]: -2.993410587310791 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00032112\nMax relative difference among violations: 0.00010726\n ACTUAL: array([[318.3618  , -19.044655],\n       [208.94481 , -10.862114],\n       [137.52415 ,  -0.661256],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": false,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        0.00045984153734934807,
+        7.756880009424094e-06
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 2 / 24 (8.33%)\nMismatch at indices:\n [4, 0]: 1.1658191680908203 (ACTUAL), 1.166111095637425 (DESIRED)\n [5, 0]: -2.9941558837890625 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00042418\nMax relative difference among violations: 0.00025034\n ACTUAL: array([[318.3625  , -19.044651],\n       [208.94492 , -10.862112],\n       [137.52403 ,  -0.661255],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.0522999338700174e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        7.756880009424094e-06
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.001192263412349348
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 1 / 24 (4.17%)\nMismatch at index:\n [5, 0]: -2.993410587310791 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00032112\nMax relative difference among violations: 0.00010726\n ACTUAL: array([[318.3618  , -19.044655],\n       [208.94481 , -10.862114],\n       [137.52415 ,  -0.661256],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        0.00045984153734934807
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 2 / 24 (8.33%)\nMismatch at indices:\n [4, 0]: 1.1658191680908203 (ACTUAL), 1.166111095637425 (DESIRED)\n [5, 0]: -2.9941558837890625 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00042418\nMax relative difference among violations: 0.00025034\n ACTUAL: array([[318.3625  , -19.044651],\n       [208.94492 , -10.862112],\n       [137.52403 ,  -0.661255],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.0522999338700174e-05,
+        0.001192263412349348
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 1 / 24 (4.17%)\nMismatch at index:\n [5, 0]: -2.993410587310791 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00032112\nMax relative difference among violations: 0.00010726\n ACTUAL: array([[318.3618  , -19.044655],\n       [208.94481 , -10.862114],\n       [137.52415 ,  -0.661256],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        7.756880009424094e-06,
+        0.00045984153734934807
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 2 / 24 (8.33%)\nMismatch at indices:\n [4, 0]: 1.1658191680908203 (ACTUAL), 1.166111095637425 (DESIRED)\n [5, 0]: -2.9941558837890625 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00042418\nMax relative difference among violations: 0.00025034\n ACTUAL: array([[318.3625  , -19.044651],\n       [208.94492 , -10.862112],\n       [137.52403 ,  -0.661255],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.001192263412349348,
+        3.0522999338700174e-05
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 1 / 24 (4.17%)\nMismatch at index:\n [5, 0]: -2.993410587310791 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00032112\nMax relative difference among violations: 0.00010726\n ACTUAL: array([[318.3618  , -19.044655],\n       [208.94481 , -10.862114],\n       [137.52415 ,  -0.661256],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "shared_rhs_rows",
+      "rhs_nk": true,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        0.00045984153734934807,
+        7.756880009424094e-06
+      ],
+      "failures": [
+        "\nNot equal to tolerance rtol=4e-05, atol=0.0002\n\nMismatched elements: 2 / 24 (8.33%)\nMismatch at indices:\n [4, 0]: 1.1658191680908203 (ACTUAL), 1.166111095637425 (DESIRED)\n [5, 0]: -2.9941558837890625 (ACTUAL), -2.993731707000814 (DESIRED)\nMax absolute difference among violations: 0.00042418\nMax relative difference among violations: 0.00025034\n ACTUAL: array([[318.3625  , -19.044651],\n       [208.94492 , -10.862112],\n       [137.52403 ,  -0.661255],...\n DESIRED: array([[318.362159, -19.04465 ],\n       [208.945001, -10.862112],\n       [137.523822,  -0.661255],..."
+      ]
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.296378601191918e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        1.1301638451755025e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.0002568954830621806
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.309295436959019e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.296378601191918e-05,
+        0.0002568954830621806
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        1.1301638451755025e-05,
+        8.309295436959019e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.0002568954830621806,
+        3.296378601191918e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": false,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.309295436959019e-05,
+        1.1301638451755025e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.296378601191918e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        1.1301638451755025e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.0002568954830621806
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.309295436959019e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        3.296378601191918e-05,
+        0.0002568954830621806
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        1.1301638451755025e-05,
+        8.309295436959019e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.0002568954830621806,
+        3.296378601191918e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "independent_rhs",
+      "rhs_nk": true,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.309295436959019e-05,
+        1.1301638451755025e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        8.878026133629646e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.286148565161966e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.00025744956575124434
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        6.437948544402161e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        8.878026133629646e-05,
+        0.00025744956575124434
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.286148565161966e-05,
+        6.437948544402161e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.00025744956575124434,
+        8.878026133629646e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": false,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        6.437948544402161e-05,
+        8.286148565161966e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        8.878026133629646e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.286148565161966e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.00025744956575124434
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        6.437948544402161e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        8.878026133629646e-05,
+        0.00025744956575124434
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        2,
+        3
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        8.286148565161966e-05,
+        6.437948544402161e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "serial",
+      "max_abs_error": [
+        0.00025744956575124434,
+        8.878026133629646e-05
+      ],
+      "failures": []
+    },
+    {
+      "policy": "shared_lhs",
+      "rhs_nk": true,
+      "roles": [
+        3,
+        2
+      ],
+      "arm": "wave",
+      "max_abs_error": [
+        6.437948544402161e-05,
+        8.286148565161966e-05
+      ],
+      "failures": []
+    }
+  ]
+}

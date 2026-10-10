@@ -2690,6 +2690,16 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
             "image/descriptor seam with f32/f16/bf16 storage and f32 max/sum."
         ),
     },
+    "softmax_safe": {
+        "dtypes": ("fp32", "fp16", "bf16"),
+        "feature_flags": ("reduction", "compiler_owned_ptx", "cuda"),
+        "shape_envelope": "static rank >= 1, positive last axis; max-subtracted row softmax",
+        "notes": (
+            "Stable softmax alias through native Graph/Schedule/Tile and checked "
+            "SM120 PTX image/descriptor; owning singleton, ragged and rank-three "
+            "f32/f16/bf16 numerical fixtures. No dynamic or non-last-axis claim."
+        ),
+    },
     **{
         op: {
             "dtypes": ("fp32", "fp16", "bf16"),
@@ -2789,6 +2799,20 @@ _NVIDIA_DEVICE_VERIFIED_JIT: dict[str, dict[str, Any]] = {
 # ─────────────────────────────────────────────────────────────────────────────
 
 _NUMERICAL_FIXTURES: dict[tuple[str, str], str] = {
+    ("softmax_safe", "nvidia_sm120"): "tests/device/nvidia/test_scheduled_semantic_kernels.py",
+    ("scaled_matmul", "nvidia_sm120"): "tests/device/nvidia/test_nvfp4_transpose_jit.py",
+    **{("cast",target): "tests/device/rocm/test_native_math_widening.py"
+       for target in ("rocm_gfx1151","rocm_gfx1201")},
+    **{(kind,target): "tests/device/rocm/test_native_math_package_jit.py"
+       for target in ("rocm_gfx1151","rocm_gfx1201")
+       for kind in ("sqrt","exp","add","div","cumsum","cummax")},
+    ("kv_cache_read", "rocm_gfx1151"): "tests/unit/test_public_movement_frontend.py",
+    ("moe_dispatch", "rocm_gfx1151"): "tests/unit/test_public_movement_frontend.py",
+
+    ("kv_cache_read", "rocm_gfx1201"): "tests/unit/test_public_movement_frontend.py",
+
+    ("mxfp4_folded_storage", "rocm_gfx1201"): "tests/unit/test_rocm_mxfp4_storage_native.py",
+    ("nvfp4_requantize", "rocm_gfx1201"): "tests/unit/test_rocm_nvfp4_ingest_package.py",
     # The Philox Langevin MSL kernel vs the numpy Philox reference on Metal
     # (hardware_apple_gpu; surfaced when the op entered the catalog, ODS
     # triage WIRE slice 4, 2026-09-27).
@@ -6579,6 +6603,55 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
         return _attach_numerical_fixtures(op_name, _single_gpu_compute_reference_manifest_for(op_name))
     entries: list[BackendKernelEntry] = []
 
+    # ROCM-NVFP4-INGEST-1: the six-buffer descriptor converter is proved
+    # specifically on gfx1201. A family row would transfer that proof to
+    # gfx1151/CDNA. This does not promote general uint8 or other NVFP4 policies.
+    if op_name == "nvfp4_requantize":
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201",
+            status=_DEVICE_VERIFIED_JIT_STATUS,
+            # Logical numerical payloads are canonical; packed byte container
+            # types belong to the descriptor, just as for NVFP4 matmul.
+            dtypes=("nvfp4", "fp8_e4m3", "fp64"),
+            feature_flags=("compiler_owned_hsaco", "explicit_lossy_requantization"),
+            shape_envelope="isolated static N x K32 checkpoint; ordered projection boundaries; "
+                "NVFP4 K16 E4M3/global scales to legacy MXFP4 K32 E8M0",
+            execute_compare_fixture="tests/unit/test_rocm_nvfp4_ingest_package.py",
+            benchmark_json="benchmarks/baselines/rocm_checkpoint_native_ingest_20261005/gfx1201.json",
+            notes="Graph/Schedule/Tile/ROCm Target/LLVM/HSACO with checked six-memref ABI; "
+                "private outputs and finite nonnegative scales; exact gfx1201 numerical proof. "
+                "Ordinary static JIT and serialized descriptor replay are device-proved; no sibling or generic dtype promotion.",
+        ))
+
+    if op_name == "scaled_matmul":
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201",status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=("fp8_e4m3","fp4_e2m1","bf16"),
+            feature_flags=("compiler_owned_hsaco","explicit_folded_policy",
+                           "typed_fp8_exact_blockscale","native_shared_rhs_batch","native_independent_rhs_batch",
+                           "native_shared_lhs_batch","native_scale_jvp"),
+            shape_envelope="named resident packed checkpoint chain M>64/N16/K64; "
+                "typed static E4M3 rank-two or named shared-RHS/independent-RHS/shared-LHS batches with fp32/E8M0 scales, "
+                "no transposeA, KN/NK RHS, whole K scale groups and f32 output",
+            execute_compare_fixture="tests/device/rocm/test_public_typed_scaled_primal.py",
+            benchmark_json="benchmarks/baselines/rocm_independent_scaled_batch_20261007/timings.json",
+            notes="Graph/Schedule/Tile/Target/LLVM packed folded checkpoint consumer retains "
+                  "its separate resident ingest proof. Typed FP8/MXFP8 public primal and "
+                  "f32 scale-JVP programs execute through native ownership; shared RHS "
+                  "batch*row flattening and independent/shared-LHS z-plane offsets are compiler-owned "
+                  "with logical rank-three capacity guards. Dynamic/nested/composed batching "
+                  "and transpose AD remain open."))
+    if op_name == "mxfp4_folded_storage":
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201",status=_DEVICE_VERIFIED_JIT_STATUS,dtypes=("fp4_e2m1",),
+            feature_flags=("lossless_storage_layout",),
+            shape_envelope="static packed bytes N16/K64 and K32 group-major exponents",
+            execute_compare_fixture="tests/unit/test_rocm_mxfp4_storage_native.py",
+            notes="Lossless native storage permutation and unsigned row maximum; "
+                  "bitwise device execution proved on gfx1201; resident lifetime follow-up open; "
+                  "no general uint8 promotion",
+        ))
+
     # x86 AMX / AVX-512
     x86 = _X86_KERNELS.get(op_name)
     if x86 is not None:
@@ -6794,6 +6867,29 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # symbol + execute-compare fixture are ``device_verified_abi`` (RDNA WMMA);
     # all others ride the generic MFMA artifact row (Sprint H-3, 2026-05-11:
     # MFMA shape + hipcc version pin per kernel, HIP execution gated on Phase H).
+    if op_name in {"moe_dispatch", "kv_cache_read"}:
+        movement_shape = (
+            "static f32[T,H] plus i32[S] token-of-slot -> f32[S,H]"
+            if op_name == "moe_dispatch" else
+            "static PLHD f32 pages plus i32 logical-page table; explicit valid contiguous start/end"
+        )
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1151", status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=("fp32",), feature_flags=("native_schedule", "movement", "hip"),
+            notes="Checked Graph/Schedule/Tile/ROCm Target/LLVM movement descriptor with "
+                  "native host staging; exact gfx1151 oracle. General layouts and transport remain gated.",
+            execute_compare_fixture="tests/unit/test_public_movement_frontend.py",
+            shape_envelope=movement_shape,
+        ))
+    if op_name == "kv_cache_read":
+        entries.append(BackendKernelEntry(
+            target="rocm_gfx1201", status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=("fp32",), feature_flags=("native_schedule", "movement", "hip"),
+            notes="Checked static physical-page Graph/Schedule/Tile package and native host staging; "
+                  "exact gfx1201 bitwise oracle. General layouts remain gated.",
+            execute_compare_fixture="tests/unit/test_public_movement_frontend.py",
+            shape_envelope="static PLHD f32 pages plus i32 logical-page table; explicit valid contiguous start/end",
+        ))
     rocm_hv = _ROCM_HARDWARE_VERIFIED.get(op_name)
     if rocm_hv is not None:
         # Both halves of the device_verified_abi contract are pulled in BEFORE
@@ -6897,6 +6993,45 @@ def manifest_for(op_name: str) -> list[BackendKernelEntry]:
     # filename/content heuristic with first-class manifest data.
     entries = _overlay_structured_compute_entries(op_name, entries)
     entries = _attach_shared_mma_selections(op_name, entries)
+    if op_name in {"sqrt","exp","add","div","cumsum","cummax"}:
+        for target in ("rocm_gfx1151","rocm_gfx1201"):
+            entries = [entry for entry in entries if entry.target != target]
+            entries.append(BackendKernelEntry(
+                target=target, status=_DEVICE_VERIFIED_JIT_STATUS,
+                dtypes=("fp32",), feature_flags=("native_schedule","checked_descriptor"),
+                notes="Original isolated static Graph math -> native Schedule/Tile/Target/LLVM "
+                      "with exact-device ordinary JIT and portable replay. "
+                      "Narrow storage/composition/dynamic routes remain open.",
+                execute_compare_fixture=_NUMERICAL_FIXTURES[(op_name,target)],
+                shape_envelope="static compact row-major rank 2/3; inclusive last-axis scans",
+                benchmark_json="benchmarks/baselines/rocm_native_math_20261006/package-"
+                               +target.removeprefix("rocm_")+".json",
+            ))
+    if op_name == "cast":
+        for target in ("rocm_gfx1151","rocm_gfx1201"):
+            entries=[entry for entry in entries if entry.target!=target]
+            entries.append(BackendKernelEntry(
+                target=target,status=_DEVICE_VERIFIED_JIT_STATUS,dtypes=("fp16","bf16"),
+                feature_flags=("native_schedule","checked_descriptor"),
+                notes="Exact f16/bf16 widening to f32 feeding one native math consumer. "
+                      "General standalone cast/layout/AD remains outside this proof.",
+                execute_compare_fixture="tests/device/rocm/test_native_math_widening.py",
+                shape_envelope="static compact row-major rank 2/3; same-storage operands",
+                benchmark_json="benchmarks/baselines/rocm_native_math_20261006/widen-"
+                               +target.removeprefix("rocm_")+".json"))
+    if op_name == "scaled_matmul":
+        entries = [entry for entry in entries if entry.target != "nvidia_sm120"]
+        entries.append(BackendKernelEntry(
+            target="nvidia_sm120", status=_DEVICE_VERIFIED_JIT_STATUS,
+            dtypes=("nvfp4",),
+            feature_flags=("native_schedule", "nvfp4_k16_blockscale", "native_shared_rhs_batch", "native_independent_rhs_batch", "native_shared_lhs_batch", "native_operand_orientation", "logical_host_jit"),
+            shape_envelope="named static rank-two NVFP4 or rank-three output batches with shared A[M,K], shared B[K,N], or independent A/B; matching UE4M3 K16 scale orientation; fp32 output; ragged M/N/K",
+            execute_compare_fixture="tests/device/nvidia/test_nvfp4_transpose_jit.py",
+            benchmark_json="benchmarks/baselines/nvidia_shared_lhs_batch_20261007/orientation.json",
+            notes="Verified Graph/Schedule/Tile/NVIDIA Target/PTX descriptor route on RTX 5070. "
+                  "Scale policy is exact_per_block; named static shared LHS, shared RHS and independent batching executes without a Python launch loop. "
+                  "Ordinary JIT accepts explicit logical NVFP4 host bindings; packing axis and physical shape are checked. "
+                  "Native A/B and scale orientation is checked. No dynamic/generic batching, other physical profiles or AD promotion."))
     entries = _attach_numerical_fixtures(op_name, entries)
 
     return entries

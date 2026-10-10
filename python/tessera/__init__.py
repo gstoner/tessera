@@ -1508,7 +1508,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         seed: int | None = None,
         attn_bias=None,
         kv_state=None,
+        lse_checkpoint: str | None = None,
     ):
+        if lse_checkpoint not in (None, "saved"):
+            raise ValueError("flash_attn lse_checkpoint must be None or saved")
+        if kv_state is not None and lse_checkpoint is not None:
+            raise ValueError("saved row LSE requires dense K/V attention")
         # PagedKVState consumer alias: flash_attn(Q, kv_state=state) routes to
         # the unifying KV ABI instead of dense K/V (Workstream A).
         if kv_state is not None:
@@ -1530,6 +1535,15 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         d = Q.shape[-1]
         if scale is None:
             scale = 1.0 / np.sqrt(d)
+        # Rank-4 dense attention maps each contiguous query-head group to
+        # its KV head, matching the semantic Graph/native checkpoint contract.
+        if Q.ndim == K.ndim == V.ndim == 4:
+            hq, hk, hv = Q.shape[1], K.shape[1], V.shape[1]
+            if hk <= 0 or hq <= 0 or hk != hv or hq % hk:
+                raise ValueError("flash_attn requires query heads divisible by matching K/V heads")
+            if hq != hk:
+                K = np.repeat(K, hq // hk, axis=1)
+                V = np.repeat(V, hq // hk, axis=1)
         scores = np.matmul(Q, K.swapaxes(-1, -2)) * scale
         # attn_bias substrate: additive (B, Sq, Sk) score bias (DFlash sliding-
         # layer / general structured mask), applied pre-softmax and pre-causal.
@@ -1547,7 +1561,13 @@ def _make_ops_namespace() -> types.SimpleNamespace:
             rng = np.random.default_rng(seed)
             keep = rng.binomial(1, 1.0 - dropout_p, weights.shape)
             weights = weights * keep / (1.0 - dropout_p)
-        return np.matmul(weights, V)
+        output = np.matmul(weights, V)
+        if lse_checkpoint == "saved":
+            row_max = np.max(scores.astype(np.float32), axis=-1, keepdims=True)
+            row_lse = row_max[..., 0] + np.log(np.sum(
+                np.exp(scores.astype(np.float32) - row_max), axis=-1))
+            return output, row_lse.astype(np.float32)
+        return output
 
     # ── attention_variants_plan, LA-1 — Linear / kernel-feature attention ──
     # Linear attention recurrence:
@@ -2765,9 +2785,23 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         return out.reshape(x_arr.shape[:-1] + (experts_arr.shape[2],))
 
     def moe_dispatch(x, route, transport=None):
-        if hasattr(x, "_data"):
-            x = x._data
-        return x
+        """Gather token rows for explicit i32 slot indices, or a DispatchPlan.
+
+        The tensor form is local movement: x[T,H], route[S] -> [S,H].
+        Repeated token indices produce repeated output rows.
+        """
+        from .stdlib.moe import DispatchPlan, dispatch as _dispatch
+        if transport is not None:
+            raise ValueError("moe_dispatch local tensor/plan form requires transport=None")
+        if isinstance(route, DispatchPlan):
+            return _dispatch(x, route)
+        xa = np.asarray(x._data if hasattr(x, "_data") else x)
+        token = np.asarray(route._data if hasattr(route, "_data") else route)
+        if xa.ndim != 2 or token.ndim != 1 or token.dtype != np.int32:
+            raise ValueError("moe_dispatch requires x[T,H] and explicit int32 token-of-slot[S]")
+        if np.any(token < 0) or np.any(token >= xa.shape[0]):
+            raise ValueError("moe_dispatch token-of-slot is outside the input token range")
+        return xa[token]
 
     def moe_combine(partials, inverse_route, reduce: str = "sum"):
         if hasattr(partials, "_data"):
@@ -3387,8 +3421,12 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         """
         return kv_cache_append(cache, key, value)
 
-    def kv_cache_read(cache, start, end=None):
-        """Read a slice of the cache as (K, V).
+    def kv_cache_read(cache, start, end=None, *, page_table=None):
+        """Read a cache-handle (K, V) pair or an explicit physical-page tensor.
+
+        With page_table=i32[LP], f32 pages[P,PS,H,D] produce one tensor
+        [end-start,H,D]. Logical pages may repeat or reorder physical pages.
+        Bounds are static nonempty integers; end defaults to start+1.
 
         For Phase B2 ``KVCacheHandle``, returns numpy views of the trailing
         time axis. ``start`` is required; ``end`` defaults to ``start+1`` for
@@ -3397,6 +3435,27 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         For the legacy ``ReferenceKVCache`` (a list-of-tensors), returns
         stacked arrays across the requested entries.
         """
+        # Explicit physical-page tensor form. Cache handles keep their
+        # separate two-result API below.
+        if page_table is not None:
+            pages = np.asarray(cache._data if hasattr(cache, "_data") else cache)
+            table = np.asarray(page_table._data if hasattr(page_table, "_data") else page_table)
+            if pages.ndim != 4 or pages.dtype != np.float32 or table.ndim != 1 or table.dtype != np.int32:
+                raise ValueError("paged kv_cache_read requires f32 pages[P,PS,H,D] and int32 page_table[LP]")
+            if any(d <= 0 for d in pages.shape) or table.size == 0:
+                raise ValueError("paged kv_cache_read requires positive page dimensions and a nonempty table")
+            if (not isinstance(start, (int, np.integer)) or isinstance(start, (bool, np.bool_))
+                    or (end is not None and (not isinstance(end, (int, np.integer))
+                                            or isinstance(end, (bool, np.bool_))))):
+                raise ValueError("paged kv_cache_read bounds must be integers")
+            start = int(start)
+            stop = start + 1 if end is None else int(end)
+            if start < 0 or stop <= start or stop > table.size * pages.shape[1]:
+                raise ValueError("paged kv_cache_read interval exceeds logical page capacity")
+            if np.any(table < 0) or np.any(table >= pages.shape[0]):
+                raise ValueError("paged kv_cache_read page_table references an invalid physical page")
+            logical = np.arange(start, stop, dtype=np.int64)
+            return pages[table[logical // pages.shape[1]], logical % pages.shape[1]]
         from .cache import KVCacheHandle as _KVCacheHandle
         if isinstance(cache, _KVCacheHandle):
             return cache.read(int(start), None if end is None else int(end))
@@ -3733,6 +3792,32 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         q = _ms.quantize(x, fmt)
         dq = _ms.dequantize(q).astype(np.float32)
         return dq, np.asarray(q.scales, np.float32)
+
+    def nvfp4_requantize(codes, scales, projection_globals, *, row_offsets, numeric_policy):
+        """Explicit joint-SSE checkpoint conversion, returning codes/scales/loss."""
+        from .compiler.rocm_nvfp4_ingest import reference_nvfp4_requantize
+        return reference_nvfp4_requantize(codes, scales, projection_globals,
+            row_offsets=row_offsets, numeric_policy=numeric_policy)
+
+    def mxfp4_folded_storage(codes, exponents, *, storage_contract):
+        """Lossless storage preparation for the explicit gfx1201 folded consumer."""
+        from .compiler.rocm_mxfp4_storage import reference_mxfp4_folded_storage
+        return reference_mxfp4_folded_storage(codes,exponents,storage_contract=storage_contract)
+
+
+    def scaled_matmul(a, b, scale_a, scale_b, *, physical_contract=None, numeric_policy, scale_layout,
+                      transposeA=False, transposeB=False, batching=None):
+        """Explicit physical scaled product; native JIT support is profile-specific."""
+        if physical_contract is None:
+            from .compiler.reference_typed_scaled_matmul import reference_typed_scaled_matmul
+            return reference_typed_scaled_matmul(a,b,scale_a,scale_b,
+                numeric_policy=numeric_policy,scale_layout=scale_layout,
+                transposeA=transposeA,transposeB=transposeB,batching=batching)
+        from .compiler.rocm_nvfp4_program import reference_scaled_matmul
+        return reference_scaled_matmul(a,b,scale_a,scale_b,
+            physical_contract=physical_contract,numeric_policy=numeric_policy,scale_layout=scale_layout,
+            transposeA=transposeA,transposeB=transposeB,batching=batching)
+
 
     def dequantize_nvfp4(x_q, scales, *, block_size: int = 16):
         """Inverse of :func:`quantize_nvfp4`."""
@@ -5053,6 +5138,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "quantize_fp4": quantize_fp4,
         "dequantize_fp4": dequantize_fp4,
         "quantize_nvfp4": quantize_nvfp4,
+        "nvfp4_requantize": nvfp4_requantize,
+        "mxfp4_folded_storage": mxfp4_folded_storage,
+        "scaled_matmul": scaled_matmul,
         "dequantize_nvfp4": dequantize_nvfp4,
         "latent_kv_compress": latent_kv_compress,
         "latent_kv_expand_k": latent_kv_expand_k,
@@ -5695,6 +5783,9 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         quantize_fp4=quantize_fp4,
         dequantize_fp4=dequantize_fp4,
         quantize_nvfp4=quantize_nvfp4,
+        nvfp4_requantize=nvfp4_requantize,
+        mxfp4_folded_storage=mxfp4_folded_storage,
+        scaled_matmul=scaled_matmul,
         dequantize_nvfp4=dequantize_nvfp4,
         latent_kv_compress=latent_kv_compress,
         latent_kv_expand_k=latent_kv_expand_k,
@@ -5946,6 +6037,7 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
     # `dtype_source_index`; assuming operand 0 silently converted a bf16
     # candidate tensor to f32 for ebm_self_verify.
     preserving = {
+        "attention_value_width",
         "same_as_first",
         "reduce_all",
         "reduce_trailing",
@@ -5971,6 +6063,7 @@ def _enforce_storage_dtype_preservation(namespace) -> None:
         "qkv_projection",
         "top_k",
         "state_matrix",
+        "moe_dispatch",
     }
     targets = {
         spec.public_name: dtype_source_index(spec.graph_name)

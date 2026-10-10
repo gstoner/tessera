@@ -1,0 +1,17 @@
+[
+  {
+    "path": "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp",
+    "before": "d34fa5aeffcbe7219587d311836de87b1ac5058b8110e10620665440af02619e",
+    "after": "c0758845535dc38cec20ff641e73f3844018e47bf4f11414347a7c3074424324"
+  },
+  {
+    "path": "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp",
+    "before": "06dbbebfc6a67355dd528f3b4b9c447b6834a5e8b3ccfb36c89d7ffc9d9bdc1b",
+    "after": "804872425d2f7a262c253c03e758a534f140376303954d4f02cea13a8acfe306"
+  },
+  {
+    "path": "python/tessera/compiler/prepared_nvidia_lhs.py",
+    "before": "23885c582202ed405d7afec7458e13bf295412cfd4a4b623bdbb4872f3a4fb68",
+    "after": "9197c74ebdc0a9b424627b48b974988e21e55a699975495223461d4166d2c8f5"
+  }
+]

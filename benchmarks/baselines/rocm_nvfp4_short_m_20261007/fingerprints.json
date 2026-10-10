@@ -1,0 +1,15 @@
+{
+  "python/tessera/compiler/graph_ir.py": "93233d5d14182930547030039658532d7da9591ddf9b0119bc0a0edf8e132e4f",
+  "python/tessera/compiler/rocm_mxfp4_packed_folded.py": "701d71b7dbfa0a42bb1e55e87f4924f8c06610d69426e66e3a31d5cb32db8d40",
+  "python/tessera/runtime.py": "d8b57debe1eff8b13efe3d6e4f816e93117c7e6e6c49323eef2f54b3f66b6837",
+  "src/compiler/ir/TesseraOps.cpp": "f3cd3da8a43499c73bfa5de1a4c8024e37cfcbc90a88769ec46e6c4b51ba84db",
+  "src/compiler/ir/TileDialect.cpp": "d1a46182de025cd160273ff3d710af2c0ed417298ac79af367db619e070921d6",
+  "src/compiler/programming_model/lib/PMPasses.cpp": "feec78d760041fea3730a68f4d8b01b50f25253cdb190e163cd753fb2ea7e657",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "b5de37bbdbf564b99c4d975741c5ef9fc339aabd2377d81609cdba6dbb7c5bd5",
+  "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMFoldedW4A8Contract.h": "317b36d0c4c5871424abf8d9a48e6891f799481e3be50bf2fcf7859de9918d7b",
+  "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "e77d9e19742f78da1f05cb23f766032827bd51b58b60f178161c7139698ef425",
+  "tests/unit/test_rocm_packed_short_m.py": "f3b4c200cd16e004ea36819436f5abe959d2939568a7ea23f71ab40c56c51b28",
+  "compiler": "56b70ab262c49b38f42020a74476e26d29c424c847c6de395c14142c591624c8",
+  "layout_library": "4523ff130f1ac60f7c55b9d8eb3c997f1eb541ba9785f6d0a6096bc9c57008c8",
+  "native_owner": "f328ab1b65729ade80684227b3b31f6be5f2cf3e108969a53b70d22e8e48e391"
+}

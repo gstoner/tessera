@@ -1,0 +1,7 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "artifact_hash": "19ce3bce0f59d984860bbb47033957fa56e7f4e33cfc1cb60b9a1a281389c29e",
+  "correctness": "passed",
+  "compiler_subprocesses": "forbidden",
+  "max_abs_error": 7.658955414324708e-10
+}

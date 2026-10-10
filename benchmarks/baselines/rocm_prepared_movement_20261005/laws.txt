@@ -1,0 +1,2 @@
+LawResult(op='moe_dispatch', registry='tensor', law='adjoint', status='pass', probes=4, max_rel_residual=1.0807898145722595e-16, detail='')
+LawResult(op='moe_dispatch', registry='tensor', law='chain', status='pass', probes=2, max_rel_residual=7.0174335506485415e-12, detail='')

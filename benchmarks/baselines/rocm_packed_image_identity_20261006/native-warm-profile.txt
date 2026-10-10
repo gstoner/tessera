@@ -1,0 +1,40 @@
+         622345 function calls (499285 primitive calls) in 0.308 seconds
+
+   Ordered by: cumulative time
+   List reduced from 404 to 32 due to restriction <32>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+       12    0.000    0.000    0.315    0.026 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/jit.py:939(__call__)
+       12    0.000    0.000    0.314    0.026 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/jit.py:1776(_try_rocm_nvfp4_program_call)
+       12    0.000    0.000    0.222    0.019 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:35517(launch)
+       12    0.000    0.000    0.216    0.018 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:148(_execute_rocm_nvfp4_program_artifact)
+       12    0.000    0.000    0.145    0.012 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_program.py:182(execute)
+       84    0.001    0.000    0.097    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_resident.py:230(validate)
+       12    0.000    0.000    0.096    0.008 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_resident.py:349(native_session)
+       12    0.070    0.006    0.096    0.008 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_resident_nvfp4.py:15(__init__)
+       48    0.001    0.000    0.094    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_program.py:166(validate)
+       12    0.000    0.000    0.085    0.007 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_program.py:225(runtime_artifact)
+       12    0.000    0.000    0.071    0.006 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_program.py:206(program_from_manifest)
+       12    0.000    0.000    0.060    0.005 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_program.py:198(manifest)
+98436/228    0.019    0.000    0.052    0.000 /usr/lib/python3.14/copy.py:110(deepcopy)
+ 7560/228    0.011    0.000    0.050    0.000 /usr/lib/python3.14/copy.py:198(_deepcopy_dict)
+       84    0.002    0.000    0.048    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_resident.py:141(validate)
+       12    0.000    0.000    0.038    0.003 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_resident.py:288(from_dict)
+2928/1272    0.002    0.000    0.035    0.000 /usr/lib/python3.14/copy.py:172(_deepcopy_list)
+      312    0.001    0.000    0.033    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/graph_ir.py:1329(to_mlir)
+ 2844/156    0.004    0.000    0.032    0.000 /usr/lib/python3.14/copy.py:228(_reconstruct)
+       48    0.001    0.000    0.029    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_program.py:43(_full_graph)
+       12    0.000    0.000    0.028    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_resident.py:271(to_dict)
+     3444    0.001    0.000    0.024    0.000 /usr/lib/python3.14/json/__init__.py:185(dumps)
+     3444    0.001    0.000    0.022    0.000 /usr/lib/python3.14/json/encoder.py:185(encode)
+      648    0.020    0.000    0.020    0.000 /usr/lib/python3.14/json/encoder.py:207(iterencode)
+       48    0.000    0.000    0.018    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_resident.py:61(_program_digest)
+       12    0.000    0.000    0.017    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_resident_nvfp4.py:161(__exit__)
+       12    0.017    0.001    0.017    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_resident_nvfp4.py:153(close)
+       84    0.001    0.000    0.017    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_nvfp4_ingest_native.py:28(validate)
+      312    0.001    0.000    0.016    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/graph_ir.py:1408(to_mlir)
+      312    0.000    0.000    0.015    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/graph_ir.py:1326(verify)
+      312    0.001    0.000    0.015    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/graph_ir.py:1443(verify_module)
+     2604    0.001    0.000    0.014    0.000 /usr/lib/python3.14/re/__init__.py:174(search)
+
+

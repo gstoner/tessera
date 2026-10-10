@@ -1,0 +1,7 @@
+{
+  "build": "cmake --build .build-sm120-w1-1 --target tessera-opt tessera-nvidia-opt -j 8",
+  "native": "python /home/angstorms/toolchains/llvm-project-23.1.1-assertions/llvm/utils/lit/lit.py -v tests/tessera-ir .build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/test .build-sm120-w1-1/src/compiler/codegen/Tessera_ROCM_Backend/test",
+  "unit": "python -m pytest -q tests/unit/test_native_jvp_artifact.py tests/unit/test_native_jvp_compiled.py tests/unit/test_native_attention_jvp_artifact.py tests/unit/test_native_attention_jvp.py tests/unit/test_diagnostic_code_registry.py tests/unit/test_pass_metadata.py",
+  "device": "python -m pytest -q tests/device/nvidia/test_nvfp4_transpose_jit.py tests/device/nvidia/test_jit_multiresult_attention_vjp.py tests/device/nvidia/test_public_attention_forward.py",
+  "enumerated_source_files": 1261
+}

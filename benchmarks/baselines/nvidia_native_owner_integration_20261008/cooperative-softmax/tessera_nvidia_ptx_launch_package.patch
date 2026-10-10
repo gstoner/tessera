@@ -1,0 +1,75 @@
+--- src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp
++++ candidate/tessera_nvidia_ptx_launch.cpp
+@@ -84,6 +84,16 @@
+ constexpr const char* kTileSoftmaxF16 = "tessera_tile_softmax_f16";
+ constexpr const char* kTileSoftmaxBf16 = "tessera_tile_softmax_bf16";
+ constexpr const char* kTileSoftmaxF32 = "tessera_tile_softmax_f32";
++// Exact compiler-owned symbols; argument ABI is identical for both schedules.
++size_t softmaxElementBytes(const char* name) {
++    if (std::strcmp(name, kTileSoftmaxF16) == 0 ||
++        std::strcmp(name, kTileSoftmaxBf16) == 0 ||
++        std::strcmp(name, "tessera_tile_softmax_f16_cooperative_128") == 0 ||
++        std::strcmp(name, "tessera_tile_softmax_bf16_cooperative_128") == 0) return 2;
++    if (std::strcmp(name, kTileSoftmaxF32) == 0 ||
++        std::strcmp(name, "tessera_tile_softmax_f32_cooperative_128") == 0) return 4;
++    return 0;
++}
+ constexpr const char* kTileReducePrefix = "tessera_tile_reduce_";
+ constexpr const char* kTileNormPrefix = "tessera_tile_norm_";
+ constexpr const char* kTileAttentionPrefix = "tessera_tile_attention_";
+@@ -1666,9 +1676,7 @@
+                    int warmup, int repetitions, float* latencyMs) {
+     if (nbuf != 2 || !latencyMs || warmup < 0 || repetitions <= 0)
+         return 5;
+-    const bool softmax = std::strcmp(name, kTileSoftmaxF16) == 0 ||
+-        std::strcmp(name, kTileSoftmaxBf16) == 0 ||
+-        std::strcmp(name, kTileSoftmaxF32) == 0;
++    const bool softmax = softmaxElementBytes(name) != 0;
+     const bool norm =
+         std::strncmp(name, kTileNormPrefix, std::strlen(kTileNormPrefix)) == 0;
+     const bool rowwise = softmax || norm;
+@@ -1700,7 +1708,7 @@
+         void* softmaxArgs[]={&dx,&dout,&outerArg,&axisArg};
+         void* reduceArgs[]={&dx,&dout,&outerArg,&axisArg,&innerArg};
+         void** args=rowwise?softmaxArgs:reduceArgs;
+-        const bool cooperative=(!rowwise || norm)&&std::strstr(name,"_cooperative_128")!=nullptr;
++        const bool cooperative=std::strstr(name,"_cooperative_128")!=nullptr;
+         const unsigned grid=cooperative?(unsigned)outputs:(unsigned)((outputs+127)/128);
+         auto launch = [&]() {
+             return cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0, 0, args, 0);
+@@ -2614,12 +2622,9 @@
+         return invokeMx(fn, buffers, nbuf, dims, ndim, false);
+     if (std::strcmp(kernel_name, kTileMxFp4) == 0)
+         return invokeMx(fn, buffers, nbuf, dims, ndim, true);
+-    if (std::strcmp(kernel_name, kTileSoftmaxF16) == 0)
+-        return invokeSoftmax(fn, buffers, nbuf, dims, ndim, 2);
+-    if (std::strcmp(kernel_name, kTileSoftmaxBf16) == 0)
+-        return invokeSoftmax(fn, buffers, nbuf, dims, ndim, 2);
+-    if (std::strcmp(kernel_name, kTileSoftmaxF32) == 0)
+-        return invokeSoftmax(fn, buffers, nbuf, dims, ndim, 4);
++    if (size_t width = softmaxElementBytes(kernel_name))
++        return invokeSoftmax(fn, buffers, nbuf, dims, ndim, width,
++            std::strstr(kernel_name, "_cooperative_128") != nullptr);
+     if (std::strncmp(kernel_name, kTileReducePrefix,
+                      std::strlen(kTileReducePrefix)) == 0) {
+         const bool narrow = std::strstr(kernel_name, "_f16_") != nullptr ||
+@@ -2689,9 +2694,7 @@
+                                    static_cast<CUstream>(stream), args, 0),
+                     "cuLaunchKernel(resident rmsnorm)") ? 0 : 3;
+     }
+-    if (std::strcmp(name, kTileSoftmaxF16) == 0 ||
+-        std::strcmp(name, kTileSoftmaxBf16) == 0 ||
+-        std::strcmp(name, kTileSoftmaxF32) == 0) {
++    if (softmaxElementBytes(name)) {
+         if (nbuf != 2 || ndim != 2 || dims[0] <= 0 || dims[1] <= 0 ||
+             dims[0] >= (1LL << 31) || dims[1] >= (1LL << 31) ||
+             dims[0] > (1LL << 31) / dims[1]) return 5;
+@@ -2699,7 +2702,7 @@
+         CUdeviceptr y = reinterpret_cast<CUdeviceptr>(buffers[1]);
+         long long rows = dims[0], columns = dims[1];
+         void* args[] = {&x, &y, &rows, &columns};
+-        const unsigned grid = static_cast<unsigned>((rows + 127) / 128);
++        const unsigned grid = static_cast<unsigned>(std::strstr(name, "_cooperative_128") ? rows : (rows + 127) / 128);
+         return cuOk(cuLaunchKernel(fn, grid, 1, 1, 128, 1, 1, 0,
+                                    static_cast<CUstream>(stream), args, 0),
+                     "cuLaunchKernel(resident softmax)") ? 0 : 3;

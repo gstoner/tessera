@@ -1,0 +1,377 @@
+{
+  "schema": "tessera.rocm.nvfp4.native-allocation-reuse.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "device_uuid": "32386439653765666266326566373136",
+  "work_item": "ROCM-NVFP4-INGEST-1",
+  "rows": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "component_image_digests": [
+        "f0ccb4bc8b203eee5296c4183927b7ae864fca9eeacb76e18a7273aac6233a15",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "33f2acfb97d84b059903cc3d97786b5697587c0b8202cbdc773cf05afd4c8ccc"
+      ],
+      "wall_samples_ms": {
+        "uncached": [
+          6.671431,
+          6.231769,
+          6.008102,
+          6.061094,
+          6.0909,
+          6.074069,
+          6.060101,
+          6.145645,
+          6.139904,
+          6.120342,
+          5.990834
+        ],
+        "cached": [
+          1.663094,
+          1.605092,
+          1.608659,
+          1.550819,
+          1.701877,
+          1.638196,
+          1.711735,
+          1.579874,
+          1.765197,
+          1.574484,
+          1.720843
+        ]
+      },
+      "wall_medians_ms": {
+        "uncached": 6.0909,
+        "cached": 1.638196
+      },
+      "cached_over_uncached_wall": 0.26895795366858755,
+      "resident_combined_event_samples_ms": {
+        "uncached": [
+          0.13084274530410767,
+          0.12561778724193573,
+          0.12036873400211334
+        ],
+        "cached": [
+          0.12051701545715332,
+          0.12027951329946518,
+          0.1204456090927124
+        ]
+      },
+      "timed_cached_hits": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "correctness": "independent conversion/folded storage/matmul oracle after every call; same input pointers rebound to alternating full-input values"
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "component_image_digests": [
+        "5beb1458e38ddee1de15014ef995013ad33885087d7b787cb3fb64e0eea03ce8",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "e5696fb748f98b681e9749f738bd29f38df1f40fa622dd430027014854efc5e5"
+      ],
+      "wall_samples_ms": {
+        "uncached": [
+          7.180219,
+          7.267727,
+          7.147326,
+          7.265822,
+          7.171583,
+          7.811874,
+          7.145192,
+          7.359892,
+          7.492013,
+          7.379359,
+          7.674441
+        ],
+        "cached": [
+          2.9668,
+          2.837614,
+          2.793129,
+          2.908048,
+          2.752481,
+          2.785183,
+          2.920762,
+          2.866088,
+          2.950104,
+          2.860763,
+          2.932956
+        ]
+      },
+      "wall_medians_ms": {
+        "uncached": 7.267727,
+        "cached": 2.866088
+      },
+      "cached_over_uncached_wall": 0.39435823607573595,
+      "resident_combined_event_samples_ms": {
+        "uncached": [
+          0.2911330759525299,
+          0.2314452826976776,
+          0.17469044029712677
+        ],
+        "cached": [
+          0.17335888743400574,
+          0.17305061221122742,
+          0.17351530492305756
+        ]
+      },
+      "timed_cached_hits": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "correctness": "independent conversion/folded storage/matmul oracle after every call; same input pointers rebound to alternating full-input values"
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "component_image_digests": [
+        "025492857bf2cca4f126e7f10ff5e96e2a116365d7e881140ba7108bf7bbc97d",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "da2b532373cdc4f1d65ba88f73633a457a0758719cbe041d2537cf628dda2084"
+      ],
+      "wall_samples_ms": {
+        "uncached": [
+          6.862223,
+          6.657201,
+          6.557271,
+          6.800309,
+          6.553173,
+          6.863124,
+          6.606224,
+          6.80297,
+          6.560346,
+          6.730797,
+          6.587107
+        ],
+        "cached": [
+          1.937025,
+          1.699562,
+          1.716574,
+          1.648936,
+          1.738967,
+          1.656951,
+          1.826234,
+          1.711927,
+          1.854609,
+          1.694554,
+          1.995768
+        ]
+      },
+      "wall_medians_ms": {
+        "uncached": 6.657201,
+        "cached": 1.716574
+      },
+      "cached_over_uncached_wall": 0.25785221146244497,
+      "resident_combined_event_samples_ms": {
+        "uncached": [
+          0.23924171924591064,
+          0.23021471500396729,
+          0.1574518233537674
+        ],
+        "cached": [
+          0.156238853931427,
+          0.15714089572429657,
+          0.1571705937385559
+        ]
+      },
+      "timed_cached_hits": [
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true,
+        true
+      ],
+      "correctness": "independent conversion/folded storage/matmul oracle after every call; same input pointers rebound to alternating full-input values"
+    }
+  ],
+  "source_sha256": {
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "7cd2ea92b264690c9e4c2239e7cd2913cbf477f83f35e0a81714e34f9e8ade02",
+    "python/tessera/compiler/native_resident_nvfp4.py": "43625a18d8c4ab34e455ea56b60a372f259fe8b3d32e09f3498dd38fb6e51f17",
+    "python/tessera/compiler/rocm_nvfp4_program.py": "5f0570b3aa6c5bfbf3aac0da4811bfaa155fb73732cdd843f368c7d746a3f236",
+    "benchmarks/rocm/benchmark_native_nvfp4_allocation_reuse.py": "6bd3bfa2ee6dd288e6e1b7fce1c61b5f9fc85206b2a16c6e2771f172b6920aa8"
+  },
+  "runtime_sha256": "d150b7d25b87a9aa0df2e5de953e75c82cff605003dfdd158f9785201aafd60f",
+  "wall_domain": "native_session construction, full input upload, three kernel launches, readback and close/release; oracle outside window",
+  "event_domain": "native HIP event windows around combined kernels on resident buffers; dispatch gaps included, transfers excluded",
+  "cache_policy": "four idle owners; 64 MiB accounted device/staging/image/readback bytes; complete image/entry/shape/geometry/context keys; fresh tokens; full rebinding",
+  "ordinary_jit_promoted": true,
+  "ordinary_jit_rows": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "component_image_digests": [
+        "f0ccb4bc8b203eee5296c4183927b7ae864fca9eeacb76e18a7273aac6233a15",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "fb5cf1ae08bb92f1b60f77ab0d296d452517f25d8686c5ca8521b4eb570a1fa7"
+      ],
+      "wall_samples_ms": {
+        "uncached": [
+          12.22314,
+          11.145338,
+          12.156823,
+          11.564444,
+          11.197528,
+          11.027354,
+          10.951153,
+          11.102517,
+          11.569493,
+          11.270217,
+          11.624268
+        ],
+        "cached": [
+          7.293509,
+          6.349544,
+          6.993388,
+          6.450987,
+          6.373384,
+          6.452792,
+          6.52309,
+          6.507937,
+          6.495608,
+          6.50509,
+          6.904547
+        ]
+      },
+      "wall_medians_ms": {
+        "uncached": 11.270217,
+        "cached": 6.50509
+      },
+      "cached_over_uncached_wall": 0.5771929679792324,
+      "correctness": "ordinary reordered @jit, identical images, same addresses with alternating full-input values; independent oracle after each call",
+      "control": "same public JIT and checked artifact path; only native_session reuse flag is changed"
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "component_image_digests": [
+        "5beb1458e38ddee1de15014ef995013ad33885087d7b787cb3fb64e0eea03ce8",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "89ad4fd5a1feeaecb5a68817034fcef3ac749ea710aaadf438f74116c2067db1"
+      ],
+      "wall_samples_ms": {
+        "uncached": [
+          13.484105,
+          12.926045,
+          12.333145,
+          12.900833,
+          12.634905,
+          12.880088,
+          12.441676,
+          12.443856,
+          12.111511,
+          12.937078,
+          12.853593
+        ],
+        "cached": [
+          7.827128,
+          8.174635,
+          7.18611,
+          7.299967,
+          7.249501,
+          7.310758,
+          7.381739,
+          7.559281,
+          7.40052,
+          7.33301,
+          7.407176
+        ]
+      },
+      "wall_medians_ms": {
+        "uncached": 12.853593,
+        "cached": 7.381739
+      },
+      "cached_over_uncached_wall": 0.574293818078727,
+      "correctness": "ordinary reordered @jit, identical images, same addresses with alternating full-input values; independent oracle after each call",
+      "control": "same public JIT and checked artifact path; only native_session reuse flag is changed"
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "component_image_digests": [
+        "025492857bf2cca4f126e7f10ff5e96e2a116365d7e881140ba7108bf7bbc97d",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "78dee9efa9c19beeb657d7158547b3bdbb6b45bce215ae4cfa801eb66b7792d4"
+      ],
+      "wall_samples_ms": {
+        "uncached": [
+          11.630249,
+          10.885673,
+          11.132289,
+          10.912675,
+          11.480432,
+          11.82228,
+          11.439856,
+          10.773048,
+          11.737974,
+          10.731069,
+          11.740219
+        ],
+        "cached": [
+          6.682323,
+          6.301814,
+          6.975564,
+          6.152337,
+          6.305034,
+          6.325768,
+          7.005781,
+          6.290091,
+          6.741577,
+          6.402945,
+          6.80676
+        ]
+      },
+      "wall_medians_ms": {
+        "uncached": 11.439856,
+        "cached": 6.402945
+      },
+      "cached_over_uncached_wall": 0.559705034748689,
+      "correctness": "ordinary reordered @jit, identical images, same addresses with alternating full-input values; independent oracle after each call",
+      "control": "same public JIT and checked artifact path; only native_session reuse flag is changed"
+    }
+  ]
+}

@@ -273,6 +273,10 @@ class CompileResult:
                 "rocm_gfx1151": "rocm_gfx1151_native_descriptor",
                 "x86": "x86_native_descriptor",
             }.get(self.target, f"{self.target}_native_descriptor")
+            if self.target in {"rocm_gfx1151","rocm_gfx1201"}:
+                from .rocm_math_native import MATH_ABIS
+                if self.launch_descriptor.abi_id in MATH_ABIS.values():
+                    meta["compiler_path"] = "rocm_math_native_descriptor"
             if self.target in ("apple_cpu", "apple_gpu"):
                 meta["apple_target_ir_kind"] = "native_descriptor"
         elif self.target in ("apple_cpu", "apple_gpu"):
@@ -417,10 +421,9 @@ def _extract_primary_op(module: GraphIRModule) -> Optional[str]:
     fn = module.functions[0]
     if not fn.body:
         return None
-    op_name = fn.body[0].op_name or ""
-    if op_name.startswith("tessera."):
-        op_name = op_name[len("tessera."):]
-    return op_name or None
+    from .op_catalog import normalize_op_name
+
+    return normalize_op_name(fn.body[0].op_name or "") or None
 
 
 def _extract_component_ops(module: GraphIRModule) -> tuple[str, ...]:
@@ -438,12 +441,12 @@ def _extract_component_ops(module: GraphIRModule) -> tuple[str, ...]:
     1-tuple equal to ``(primary_op,)``, so existing single-op behavior is
     unchanged.
     """
+    from .op_catalog import normalize_op_name
+
     seen: dict[str, None] = {}
     for fn in module.functions:
         for node in fn.body:
-            name = node.op_name or ""
-            if name.startswith("tessera."):
-                name = name[len("tessera."):]
+            name = normalize_op_name(node.op_name or "")
             if name:
                 seen.setdefault(name, None)
     return tuple(seen)

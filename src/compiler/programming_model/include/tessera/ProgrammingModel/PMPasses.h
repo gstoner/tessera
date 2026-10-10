@@ -34,9 +34,11 @@
 #define TESSERA_PROGRAMMING_MODEL_PMPASSES_H
 
 #include <memory>
+#include "mlir/Support/LogicalResult.h"
 
 namespace mlir {
 class Pass;
+class ModuleOp;
 class OpPassManager;
 class DialectRegistry;
 }  // namespace mlir
@@ -45,6 +47,9 @@ namespace tessera {
 
 /// Verifies all Programming Model v1.1 ops. This is a real verifier.
 std::unique_ptr<mlir::Pass> createPMV11VerifierPass();
+
+/// Normalize explicit SM120 matmul entry symbols before Schedule hashing.
+mlir::LogicalResult normalizeSM120MatmulEntryNames(mlir::ModuleOp module);
 
 /// Build registered content-addressed Graph-to-Schedule SSA contracts.
 std::unique_ptr<mlir::Pass> createGraphToSchedulePass();

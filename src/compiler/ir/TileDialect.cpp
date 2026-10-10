@@ -653,9 +653,12 @@ LogicalResult ScaledMatmulKernelOp::verify() {
         "scheduling boundary");
   auto scaleBlockN =
       (*this)->getAttrOfType<IntegerAttr>("tessera.scale_block_n");
+  const bool mxfp8 = physical &&
+      (physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_v1" ||
+       physical.getValue() == "rocm_mxfp8_e4m3_e8m0_k32_nk_v1");
   const bool fp8W8A8 =
-      physical && (physical.getValue() == "rocm_fp8_w8a8_blockscale_v1" ||
-                   physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1");
+      mxfp8 || (physical && (physical.getValue() == "rocm_fp8_w8a8_blockscale_v1" ||
+                   physical.getValue() == "rocm_fp8_w8a8_blockscale_nk_v1"));
   if (scaleBlockN && !fp8W8A8)
     return emitOpError("tessera.scale_block_n is stated only by the W8A8 "
                        "block-scale contract");
@@ -667,7 +670,10 @@ LogicalResult ScaledMatmulKernelOp::verify() {
     auto epilogue = (*this)->getAttrOfType<TileEpilogueAttr>("epilogue");
     auto problemK = (*this)->getAttrOfType<IntegerAttr>("tessera.problem_k");
     if (mma.getAType() != "e4m3" || mma.getBType() != "e4m3" ||
-        mma.getAccType() != "f32" || mma.getScaleFormat() != "fp32" ||
+        mma.getAccType() != "f32" ||
+        mma.getScaleFormat() != (mxfp8 ? "e8m0" : "fp32") ||
+        (mxfp8 && (mma.getScaleBlockK() != 32 ||
+                    !scaleBlockN || scaleBlockN.getInt() != 1)) ||
         // Positivity first: every `%` below divides by these.
         mma.getK() <= 0 || mma.getScaleBlockK() <= 0 ||
         mma.getScaleBlockK() % mma.getK() != 0 ||
@@ -678,7 +684,12 @@ LogicalResult ScaledMatmulKernelOp::verify() {
         epilogue.getBias() ||
         epilogue.getActivation() != "none" || !problemK ||
         problemK.getInt() <= 0 ||
-        problemK.getInt() % mma.getScaleBlockK() != 0)
+        (problemK.getInt() % mma.getScaleBlockK() != 0 &&
+         (!(*this)->getAttrOfType<StringAttr>("batching") ||
+          (*this)->getAttrOfType<StringAttr>("batching").getValue() != "broadcast" ||
+          !(*this)->getAttrOfType<StringAttr>("staging") ||
+          (*this)->getAttrOfType<StringAttr>("staging").getValue() != "global" ||
+          problemK.getInt() > INT64_MAX - mma.getScaleBlockK() + 1)))
       return emitOpError(
           "gfx1201 FP8 W8A8 block-scale contract requires e4m3 x e4m3 with "
           "f32 accumulation, fp32 scales, scale_k dividing the macro K and "
@@ -710,7 +721,7 @@ LogicalResult ScaledMatmulKernelOp::verify() {
         !problemK || problemM.getInt() <= 0 || problemN.getInt() <= 0 ||
         problemK.getInt() <= 0 ||
         problemK.getInt() % (foldedFamily ? 64 : 32) != 0 ||
-        (foldedFamily && (problemM.getInt() <= 64 || !macroM || !macroN || !warps ||
+        (foldedFamily && ((!packedFolded && problemM.getInt() <= 64) || !macroM || !macroN || !warps ||
                     macroM.getInt() != 256 || macroN.getInt() != 64 ||
                     warps.getInt() != 8)))
       return emitOpError(

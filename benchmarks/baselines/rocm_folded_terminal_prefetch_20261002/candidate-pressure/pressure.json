@@ -1,0 +1,877 @@
+{
+  "architecture": "gfx1201",
+  "compiler_sha256": "a26151f9b3b7f381cb83c2a4d23d0563c8ef1c2e43f331d31bd0c5e0c81d825b",
+  "diagnostic_isa": {
+    "entry_symbol": "tessera_rocm_folded_matmul_708d500594ff51c6",
+    "instruction_count": 3940,
+    "instruction_stream_sha256": "ed188dcdf4fc5689bdb6a4b031e965ed6c886c72cf2a0b075cb094da4c3ad6b0",
+    "mnemonics": {
+      "ds_load_2addr_b64": 11,
+      "ds_load_b64": 26,
+      "ds_store_b128": 10,
+      "global_load_b128": 26,
+      "global_load_b32": 64,
+      "global_load_u8": 8,
+      "s_barrier_signal": 3,
+      "s_barrier_wait": 3,
+      "s_wait_loadcnt": 42,
+      "v_wmma_f32_16x16x16_fp8_fp8": 64
+    },
+    "payload_sha256": "4025345db2508158e896809a6454826867ba8a596e5db97d66618c4d8ff0bff4"
+  },
+  "diagnostic_resources": {
+    "lds_bytes": 25600,
+    "scratch_bytes": 0,
+    "sgpr_count": 29,
+    "sgpr_spill_count": 0,
+    "spills": false,
+    "vgpr_count": 180,
+    "vgpr_spill_count": 0
+  },
+  "llc_flags": [
+    "-mtriple=amdgcn-amd-amdhsa",
+    "-mcpu=gfx1201",
+    "-mattr=+wavefrontsize32,-wavefrontsize64",
+    "-O2"
+  ],
+  "llvm_version": "Ubuntu LLVM version 23.1.1",
+  "native_isa": {
+    "entry_symbol": "tessera_rocm_folded_matmul_708d500594ff51c6",
+    "instruction_count": 3940,
+    "instruction_stream_sha256": "ed188dcdf4fc5689bdb6a4b031e965ed6c886c72cf2a0b075cb094da4c3ad6b0",
+    "mnemonics": {
+      "ds_load_2addr_b64": 11,
+      "ds_load_b64": 26,
+      "ds_store_b128": 10,
+      "global_load_b128": 26,
+      "global_load_b32": 64,
+      "global_load_u8": 8,
+      "s_barrier_signal": 3,
+      "s_barrier_wait": 3,
+      "s_wait_loadcnt": 42,
+      "v_wmma_f32_16x16x16_fp8_fp8": 64
+    },
+    "payload_sha256": "be45e2222a835933adf07a8fd903a192566fb5d4bf69d9168cf5525b3db6b569"
+  },
+  "native_resources": {
+    "lds_bytes": 25600,
+    "scratch_bytes": 0,
+    "sgpr_count": 29,
+    "sgpr_spill_count": 0,
+    "spills": false,
+    "vgpr_count": 180,
+    "vgpr_spill_count": 0
+  },
+  "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+  "pressure": {
+    "categories": {
+      "global_prefetch_vectors": 20,
+      "lds_fragment_vectors": 48,
+      "other_address_or_state": 47,
+      "wmma_accumulator": 64
+    },
+    "listed_live_vgprs": 179,
+    "location": "19280e:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1747:vreg_64, %5796.sub0_sub1:vreg_128, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+    "max_vgprs": 187,
+    "registers": [
+      {
+        "category": "global_prefetch_vectors",
+        "definitions": [
+          "def 16516r:%bb.16 (LoopHdr %bb.16, Depth 1): %1744:vreg_128 = GLOBAL_LOAD_DWORDX4 %1743:vreg_64, 0, 0, implicit $exec :: (load (s128) from %ir.450, addrspace 1)"
+        ],
+        "header": "%1744:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "global_prefetch_vectors",
+        "definitions": [
+          "def 16500r:%bb.16 (LoopHdr %bb.16, Depth 1): %1740:vreg_128 = GLOBAL_LOAD_DWORDX4 %1739:vreg_64, 0, 0, implicit $exec :: (load (s128) from %ir.446, addrspace 1)"
+        ],
+        "header": "%1740:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "global_prefetch_vectors",
+        "definitions": [
+          "def 16540r:%bb.16 (LoopHdr %bb.16, Depth 1): %1746:vreg_128 = GLOBAL_LOAD_DWORDX4 %1745:vreg_64, 0, 0, implicit $exec :: (load (s128) from %ir.452, addrspace 1)"
+        ],
+        "header": "%1746:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "global_prefetch_vectors",
+        "definitions": [
+          "def 16508r:%bb.16 (LoopHdr %bb.16, Depth 1): %1742:vreg_128 = GLOBAL_LOAD_DWORDX4 %1741:vreg_64, 0, 0, implicit $exec :: (load (s128) from %ir.448, addrspace 1)"
+        ],
+        "header": "%1742:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "global_prefetch_vectors",
+        "definitions": [
+          "def 16492r:%bb.16 (LoopHdr %bb.16, Depth 1): %1738:vreg_128 = GLOBAL_LOAD_DWORDX4 %1737:vreg_64, 0, 0, implicit $exec :: (load (s128) from %ir.444, addrspace 1)"
+        ],
+        "header": "%1738:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 9168r:%bb.13: %38:vgpr_32 = V_OR_B32_e64 %6206:vgpr_32, %6312:vgpr_32, implicit $exec"
+        ],
+        "header": "%38:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16548r:%bb.16 (LoopHdr %bb.16, Depth 1): %1747:vreg_64 = DS_READ_B64_gfx9 %38:vgpr_32, 0, 0, implicit $exec :: (load (s64) from %ir.sunkaddr, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%1747:VReg_64, LiveMask 000000000000000F (2 VGPRs)",
+        "vgprs": 2
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 11408r:%bb.14: %5798:vgpr_32 = V_ADD_U32_e64 20480, %5943:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5798:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7128r:%bb.10: %1525:vgpr_32 = V_AND_B32_e64 32, %1075:vgpr_32(s32), implicit $exec"
+        ],
+        "header": "%1525:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 11072r:%bb.14: %96:vgpr_32 = V_ADD_U32_e64 %6206:vgpr_32, %6312:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%96:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7328r:%bb.10: %1535:vgpr_32 = V_OR_B32_e64 16, %6205:vgpr_32, implicit $exec"
+        ],
+        "header": "%1535:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16864r:%bb.16 (LoopHdr %bb.16, Depth 1): %1763:vreg_64 = DS_READ_B64_gfx9 %96:vgpr_32, 48, 0, implicit $exec :: (load (s64) from %ir.sunkaddr540, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%1763:VReg_64, LiveMask 000000000000000F (2 VGPRs)",
+        "vgprs": 2
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7336r:%bb.10: %1537:vgpr_32 = V_OR_B32_e64 32, %6205:vgpr_32, implicit $exec"
+        ],
+        "header": "%1537:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 11392r:%bb.14: %5792:vgpr_32 = V_ADD_U32_e64 20480, %5941:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5792:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7344r:%bb.10: %1540:vgpr_32 = V_OR_B32_e64 48, %6205:vgpr_32, implicit $exec"
+        ],
+        "header": "%1540:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7016r:%bb.10: undef %35.sub0:vreg_64, %4478:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 %1598.sub0:vreg_64, %1548:vgpr_32, 0, implicit $exec",
+          "def 7024r:%bb.10: %35.sub1:vreg_64, dead $sgpr_null = V_ADDC_U32_e64 0, %1602:vgpr_32, %4478:sreg_32_xm0_xexec, 0, implicit $exec"
+        ],
+        "header": "%35:VReg_64, LiveMask 000000000000000F (2 VGPRs)",
+        "vgprs": 2
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 6960r:%bb.10: undef %33.sub0:vreg_64, %4462:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 %1582.sub0:vreg_64, %1548:vgpr_32, 0, implicit $exec",
+          "def 6968r:%bb.10: %33.sub1:vreg_64, dead $sgpr_null = V_ADDC_U32_e64 0, %1585:vgpr_32, %4462:sreg_32_xm0_xexec, 0, implicit $exec"
+        ],
+        "header": "%33:VReg_64, LiveMask 000000000000000F (2 VGPRs)",
+        "vgprs": 2
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 6928r:%bb.10: undef %31.sub0:vreg_64, %4446:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 %1565.sub0:vreg_64, %1548:vgpr_32, 0, implicit $exec",
+          "def 6936r:%bb.10: %31.sub1:vreg_64, dead $sgpr_null = V_ADDC_U32_e64 0, %1569:vgpr_32, %4446:sreg_32_xm0_xexec, 0, implicit $exec"
+        ],
+        "header": "%31:VReg_64, LiveMask 000000000000000F (2 VGPRs)",
+        "vgprs": 2
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7000r:%bb.10: undef %34.sub0:vreg_64, %4470:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 %1590.sub0:vreg_64, %1548:vgpr_32, 0, implicit $exec",
+          "def 7008r:%bb.10: %34.sub1:vreg_64, dead $sgpr_null = V_ADDC_U32_e64 0, %1593:vgpr_32, %4470:sreg_32_xm0_xexec, 0, implicit $exec"
+        ],
+        "header": "%34:VReg_64, LiveMask 000000000000000F (2 VGPRs)",
+        "vgprs": 2
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 6944r:%bb.10: undef %32.sub0:vreg_64, %4454:sreg_32_xm0_xexec = V_ADD_CO_U32_e64 %1574.sub0:vreg_64, %1548:vgpr_32, 0, implicit $exec",
+          "def 6952r:%bb.10: %32.sub1:vreg_64, dead $sgpr_null = V_ADDC_U32_e64 0, %1577:vgpr_32, %4454:sreg_32_xm0_xexec, 0, implicit $exec"
+        ],
+        "header": "%32:VReg_64, LiveMask 000000000000000F (2 VGPRs)",
+        "vgprs": 2
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16612r:%bb.16 (LoopHdr %bb.16, Depth 1): %5788:vreg_128 = DS_READ2_B64_gfx9 %5940:vgpr_32, 0, 2, 0, implicit $exec :: (load (s64) from %ir.sunkaddr510, !alias.scope !4, !noalias !7, addrspace 3), (load (s64) from %ir.sunkaddr522, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%5788:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 17136r:%bb.16 (LoopHdr %bb.16, Depth 1): %5789:vreg_128 = DS_READ2_B64_gfx9 %5940:vgpr_32, 4, 6, 0, implicit $exec :: (load (s64) from %ir.sunkaddr534, !alias.scope !4, !noalias !7, addrspace 3), (load (s64) from %ir.sunkaddr546, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%5789:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16848r:%bb.16 (LoopHdr %bb.16, Depth 1): %5802:vreg_128 = DS_READ2_B64_gfx9 %96:vgpr_32, 2, 4, 0, implicit $exec :: (load (s64) from %ir.sunkaddr516, !alias.scope !4, !noalias !7, addrspace 3), (load (s64) from %ir.sunkaddr528, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%5802:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16596r:%bb.16 (LoopHdr %bb.16, Depth 1): %5784:vreg_128 = DS_READ2_B64_gfx9 %5938:vgpr_32, 0, 2, 0, implicit $exec :: (load (s64) from %ir.sunkaddr508, !alias.scope !4, !noalias !7, addrspace 3), (load (s64) from %ir.sunkaddr518, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%5784:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 17056r:%bb.16 (LoopHdr %bb.16, Depth 1): %5787:vreg_128 = DS_READ2_B64_gfx9 %5939:vgpr_32, 4, 6, 0, implicit $exec :: (load (s64) from %ir.sunkaddr532, !alias.scope !4, !noalias !7, addrspace 3), (load (s64) from %ir.sunkaddr544, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%5787:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16976r:%bb.16 (LoopHdr %bb.16, Depth 1): %5785:vreg_128 = DS_READ2_B64_gfx9 %5938:vgpr_32, 4, 6, 0, implicit $exec :: (load (s64) from %ir.sunkaddr530, !alias.scope !4, !noalias !7, addrspace 3), (load (s64) from %ir.sunkaddr542, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%5785:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16604r:%bb.16 (LoopHdr %bb.16, Depth 1): %5786:vreg_128 = DS_READ2_B64_gfx9 %5939:vgpr_32, 0, 2, 0, implicit $exec :: (load (s64) from %ir.sunkaddr509, !alias.scope !4, !noalias !7, addrspace 3), (load (s64) from %ir.sunkaddr520, !alias.scope !4, !noalias !7, addrspace 3)"
+        ],
+        "header": "%5786:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7104r:%bb.10: %1518:vgpr_32 = V_AND_B32_e64 15, %1075:vgpr_32(s32), implicit $exec"
+        ],
+        "header": "%1518:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16580r:%bb.16 (LoopHdr %bb.16, Depth 1): %5790:vreg_128 = DS_READ2_B64_gfx9 %5792:vgpr_32, 0, 2, 0, implicit $exec :: (load (s64) from %ir.sunkaddr512, !alias.scope !7, !noalias !4, addrspace 3), (load (s64) from %ir.sunkaddr524, !alias.scope !7, !noalias !4, addrspace 3)"
+        ],
+        "header": "%5790:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16928r:%bb.16 (LoopHdr %bb.16, Depth 1): %5799:vreg_128 = DS_READ2_B64_gfx9 %5798:vgpr_32, 4, 6, 0, implicit $exec :: (load (s64) from %ir.sunkaddr538, !alias.scope !7, !noalias !4, addrspace 3), (load (s64) from %ir.sunkaddr550, !alias.scope !7, !noalias !4, addrspace 3)"
+        ],
+        "header": "%5799:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16880r:%bb.16 (LoopHdr %bb.16, Depth 1): %5793:vreg_128 = DS_READ2_B64_gfx9 %5792:vgpr_32, 4, 6, 0, implicit $exec :: (load (s64) from %ir.sunkaddr536, !alias.scope !7, !noalias !4, addrspace 3), (load (s64) from %ir.sunkaddr548, !alias.scope !7, !noalias !4, addrspace 3)"
+        ],
+        "header": "%5793:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "lds_fragment_vectors",
+        "definitions": [
+          "def 16588r:%bb.16 (LoopHdr %bb.16, Depth 1): %5796:vreg_128 = DS_READ2_B64_gfx9 %5798:vgpr_32, 0, 2, 0, implicit $exec :: (load (s64) from %ir.sunkaddr514, !alias.scope !7, !noalias !4, addrspace 3), (load (s64) from %ir.sunkaddr526, !alias.scope !7, !noalias !4, addrspace 3)"
+        ],
+        "header": "%5796:VReg_128, LiveMask 00000000000000FF (4 VGPRs)",
+        "vgprs": 4
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7120r:%bb.10: %30:vgpr_32 = V_ADD_U32_e64 %1554:vgpr_32, %1548:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%30:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7504r:%bb.11: %5940:vgpr_32 = IMPLICIT_DEF",
+          "def 8056r:%bb.12: %5940:vgpr_32 = disjoint V_OR_B32_e64 %1638:vgpr_32, %6206:vgpr_32, implicit $exec",
+          "def 11016r:%bb.14: %5940:vgpr_32 = disjoint V_OR_B32_e64 %1692:vgpr_32, %6206:vgpr_32, implicit $exec"
+        ],
+        "header": "%5940:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7560r:%bb.11: %5947:vgpr_32 = IMPLICIT_DEF",
+          "def 8112r:%bb.12: %5947:vgpr_32 = V_ADD_U32_e64 %1638:vgpr_32, %5834:vgpr_32, 0, implicit $exec",
+          "def 11120r:%bb.14: %5947:vgpr_32 = V_ADD_U32_e64 %1692:vgpr_32, %5834:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5947:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7664r:%bb.11: %5954:vgpr_32 = IMPLICIT_DEF",
+          "def 8224r:%bb.12: %5954:vgpr_32 = V_ADD_U32_e64 %5835:vgpr_32, %1645:vgpr_32, 0, implicit $exec",
+          "def 11232r:%bb.14: %5954:vgpr_32 = V_ADD_U32_e64 %5835:vgpr_32, %1699:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5954:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 9760r:%bb.13: undef %1820.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9776r:%bb.13: %1820.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9792r:%bb.13: %1820.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9808r:%bb.13: %1820.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9824r:%bb.13: %1820.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9840r:%bb.13: %1820.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9856r:%bb.13: %1820.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9872r:%bb.13: %1820.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 11968r:%bb.14: undef %1820.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 11984r:%bb.14: %1820.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 12000r:%bb.14: %1820.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 12016r:%bb.14: %1820.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 12032r:%bb.14: %1820.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 12048r:%bb.14: %1820.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 12064r:%bb.14: %1820.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 12080r:%bb.14: %1820.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19304r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5786.sub0_sub1:vreg_128, %5790.sub0_sub1:vreg_128, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19352r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5786.sub2_sub3:vreg_128, %5790.sub2_sub3:vreg_128, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19616r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5787.sub0_sub1:vreg_128, %5793.sub0_sub1:vreg_128, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19680r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5787.sub2_sub3:vreg_128, %5793.sub2_sub3:vreg_128, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23444r:%bb.18: early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1826:vreg_64, %1828:vreg_64, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23504r:%bb.18: early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1840:vreg_64, %1842:vreg_64, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23864r:%bb.18: early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1854:vreg_64, %1856:vreg_64, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24280r:%bb.18: early-clobber %1820:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1868:vreg_64, %1870:vreg_64, 8, %1820:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1820:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7776r:%bb.11: %5961:vgpr_32 = IMPLICIT_DEF",
+          "def 8336r:%bb.12: %5961:vgpr_32 = V_ADD_U32_e64 %1656:vgpr_32, %5836:vgpr_32, 0, implicit $exec",
+          "def 11344r:%bb.14: %5961:vgpr_32 = V_ADD_U32_e64 %1710:vgpr_32, %5836:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5961:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7408r:%bb.10: %6321:vgpr_32 = V_OR_B32_e64 %1542:vgpr_32, %1518:vgpr_32, implicit $exec"
+        ],
+        "header": "%6321:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7536r:%bb.11: %5944:vgpr_32 = IMPLICIT_DEF",
+          "def 8088r:%bb.12: %5944:vgpr_32 = V_ADD_U32_e64 %5834:vgpr_32, %6312:vgpr_32, 0, implicit $exec",
+          "def 11056r:%bb.14: %5944:vgpr_32 = V_ADD_U32_e64 %5834:vgpr_32, %6312:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5944:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7616r:%bb.11: %5951:vgpr_32 = IMPLICIT_DEF",
+          "def 8176r:%bb.12: %5951:vgpr_32 = V_ADD_U32_e64 %1625:vgpr_32, %5835:vgpr_32, 0, implicit $exec",
+          "def 11184r:%bb.14: %5951:vgpr_32 = V_ADD_U32_e64 %1679:vgpr_32, %5835:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5951:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 9376r:%bb.13: undef %1817.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9392r:%bb.13: %1817.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9408r:%bb.13: %1817.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9424r:%bb.13: %1817.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9440r:%bb.13: %1817.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9456r:%bb.13: %1817.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9472r:%bb.13: %1817.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9488r:%bb.13: %1817.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 11584r:%bb.14: undef %1817.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 11600r:%bb.14: %1817.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 11616r:%bb.14: %1817.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 11632r:%bb.14: %1817.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 11648r:%bb.14: %1817.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 11664r:%bb.14: %1817.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 11680r:%bb.14: %1817.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 11696r:%bb.14: %1817.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19280r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1747:vreg_64, %5796.sub0_sub1:vreg_128, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19368r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5802.sub0_sub1:vreg_128, %5796.sub2_sub3:vreg_128, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19424r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5802.sub2_sub3:vreg_128, %5799.sub0_sub1:vreg_128, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19656r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1763:vreg_64, %5799.sub2_sub3:vreg_128, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23376r:%bb.18: early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1824:vreg_64, %1829:vreg_64, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23480r:%bb.18: early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1838:vreg_64, %1843:vreg_64, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23840r:%bb.18: early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1852:vreg_64, %1857:vreg_64, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24240r:%bb.18: early-clobber %1817:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1866:vreg_64, %1871:vreg_64, 8, %1817:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1817:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7728r:%bb.11: %5958:vgpr_32 = IMPLICIT_DEF",
+          "def 8288r:%bb.12: %5958:vgpr_32 = V_ADD_U32_e64 %1632:vgpr_32, %5836:vgpr_32, 0, implicit $exec",
+          "def 11296r:%bb.14: %5958:vgpr_32 = V_ADD_U32_e64 %1686:vgpr_32, %5836:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5958:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7512r:%bb.11: %5941:vgpr_32 = IMPLICIT_DEF",
+          "def 8064r:%bb.12: %5941:vgpr_32 = disjoint V_OR_B32_e64 %6206:vgpr_32, %1645:vgpr_32, implicit $exec",
+          "def 11024r:%bb.14: %5941:vgpr_32 = disjoint V_OR_B32_e64 %6206:vgpr_32, %1699:vgpr_32, implicit $exec"
+        ],
+        "header": "%5941:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7568r:%bb.11: %5948:vgpr_32 = IMPLICIT_DEF",
+          "def 8128r:%bb.12: %5948:vgpr_32 = V_ADD_U32_e64 %5834:vgpr_32, %1645:vgpr_32, 0, implicit $exec",
+          "def 11136r:%bb.14: %5948:vgpr_32 = V_ADD_U32_e64 %5834:vgpr_32, %1699:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5948:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7680r:%bb.11: %5955:vgpr_32 = IMPLICIT_DEF",
+          "def 8240r:%bb.12: %5955:vgpr_32 = V_ADD_U32_e64 %1656:vgpr_32, %5835:vgpr_32, 0, implicit $exec",
+          "def 11248r:%bb.14: %5955:vgpr_32 = V_ADD_U32_e64 %1710:vgpr_32, %5835:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5955:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 9888r:%bb.13: undef %1821.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9904r:%bb.13: %1821.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9920r:%bb.13: %1821.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9936r:%bb.13: %1821.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9952r:%bb.13: %1821.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9968r:%bb.13: %1821.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9984r:%bb.13: %1821.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10000r:%bb.13: %1821.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 12096r:%bb.14: undef %1821.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 12112r:%bb.14: %1821.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 12128r:%bb.14: %1821.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 12144r:%bb.14: %1821.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 12160r:%bb.14: %1821.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 12176r:%bb.14: %1821.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 12192r:%bb.14: %1821.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 12208r:%bb.14: %1821.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19312r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5786.sub0_sub1:vreg_128, %5796.sub0_sub1:vreg_128, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19376r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5786.sub2_sub3:vreg_128, %5796.sub2_sub3:vreg_128, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19624r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5787.sub0_sub1:vreg_128, %5799.sub0_sub1:vreg_128, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19688r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5787.sub2_sub3:vreg_128, %5799.sub2_sub3:vreg_128, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23448r:%bb.18: early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1826:vreg_64, %1829:vreg_64, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23512r:%bb.18: early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1840:vreg_64, %1843:vreg_64, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23872r:%bb.18: early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1854:vreg_64, %1857:vreg_64, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24288r:%bb.18: early-clobber %1821:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1868:vreg_64, %1871:vreg_64, 8, %1821:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1821:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7488r:%bb.11: %5938:vgpr_32 = IMPLICIT_DEF",
+          "def 8040r:%bb.12: %5938:vgpr_32 = disjoint V_OR_B32_e64 %1625:vgpr_32, %6206:vgpr_32, implicit $exec",
+          "def 10904r:%bb.14: %5938:vgpr_32 = disjoint V_OR_B32_e64 %1679:vgpr_32, %6206:vgpr_32, implicit $exec"
+        ],
+        "header": "%5938:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7544r:%bb.11: %5945:vgpr_32 = IMPLICIT_DEF",
+          "def 8096r:%bb.12: %5945:vgpr_32 = V_ADD_U32_e64 %1625:vgpr_32, %5834:vgpr_32, 0, implicit $exec",
+          "def 11088r:%bb.14: %5945:vgpr_32 = V_ADD_U32_e64 %1679:vgpr_32, %5834:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5945:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7632r:%bb.11: %5952:vgpr_32 = IMPLICIT_DEF",
+          "def 8192r:%bb.12: %5952:vgpr_32 = V_ADD_U32_e64 %1632:vgpr_32, %5835:vgpr_32, 0, implicit $exec",
+          "def 11200r:%bb.14: %5952:vgpr_32 = V_ADD_U32_e64 %1686:vgpr_32, %5835:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5952:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 9504r:%bb.13: undef %1818.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9520r:%bb.13: %1818.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9536r:%bb.13: %1818.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9552r:%bb.13: %1818.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9568r:%bb.13: %1818.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9584r:%bb.13: %1818.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9600r:%bb.13: %1818.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9616r:%bb.13: %1818.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 11712r:%bb.14: undef %1818.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 11728r:%bb.14: %1818.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 11744r:%bb.14: %1818.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 11760r:%bb.14: %1818.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 11776r:%bb.14: %1818.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 11792r:%bb.14: %1818.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 11808r:%bb.14: %1818.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 11824r:%bb.14: %1818.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19288r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5784.sub0_sub1:vreg_128, %5790.sub0_sub1:vreg_128, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19336r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5784.sub2_sub3:vreg_128, %5790.sub2_sub3:vreg_128, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19432r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5785.sub0_sub1:vreg_128, %5793.sub0_sub1:vreg_128, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19664r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5785.sub2_sub3:vreg_128, %5793.sub2_sub3:vreg_128, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23384r:%bb.18: early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1825:vreg_64, %1828:vreg_64, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23488r:%bb.18: early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1839:vreg_64, %1842:vreg_64, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23848r:%bb.18: early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1853:vreg_64, %1856:vreg_64, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24248r:%bb.18: early-clobber %1818:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1867:vreg_64, %1870:vreg_64, 8, %1818:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1818:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7744r:%bb.11: %5959:vgpr_32 = IMPLICIT_DEF",
+          "def 8304r:%bb.12: %5959:vgpr_32 = V_ADD_U32_e64 %1638:vgpr_32, %5836:vgpr_32, 0, implicit $exec",
+          "def 11312r:%bb.14: %5959:vgpr_32 = V_ADD_U32_e64 %1692:vgpr_32, %5836:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5959:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7584r:%bb.11: %5949:vgpr_32 = IMPLICIT_DEF",
+          "def 8144r:%bb.12: %5949:vgpr_32 = V_ADD_U32_e64 %1656:vgpr_32, %5834:vgpr_32, 0, implicit $exec",
+          "def 11152r:%bb.14: %5949:vgpr_32 = V_ADD_U32_e64 %1710:vgpr_32, %5834:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5949:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7112r:%bb.10: %6205:vgpr_32 = V_AND_B32_e64 192, %1075:vgpr_32(s32), implicit $exec",
+          "def 81872r:%bb.161: %6205:vgpr_32 = IMPLICIT_DEF"
+        ],
+        "header": "%6205:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7696r:%bb.11: %5956:vgpr_32 = IMPLICIT_DEF",
+          "def 8256r:%bb.12: %5956:vgpr_32 = V_ADD_U32_e64 %5836:vgpr_32, %6312:vgpr_32, 0, implicit $exec",
+          "def 11264r:%bb.14: %5956:vgpr_32 = V_ADD_U32_e64 %5836:vgpr_32, %6312:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5956:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 10016r:%bb.13: undef %1822.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10032r:%bb.13: %1822.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10048r:%bb.13: %1822.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10064r:%bb.13: %1822.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10080r:%bb.13: %1822.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10096r:%bb.13: %1822.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10112r:%bb.13: %1822.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10128r:%bb.13: %1822.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 12224r:%bb.14: undef %1822.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 12240r:%bb.14: %1822.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 12256r:%bb.14: %1822.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 12272r:%bb.14: %1822.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 12288r:%bb.14: %1822.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 12304r:%bb.14: %1822.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 12320r:%bb.14: %1822.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 12336r:%bb.14: %1822.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19320r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5788.sub0_sub1:vreg_128, %5790.sub0_sub1:vreg_128, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19400r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5788.sub2_sub3:vreg_128, %5790.sub2_sub3:vreg_128, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19632r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5789.sub0_sub1:vreg_128, %5793.sub0_sub1:vreg_128, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19696r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5789.sub2_sub3:vreg_128, %5793.sub2_sub3:vreg_128, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23456r:%bb.18: early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1827:vreg_64, %1828:vreg_64, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23808r:%bb.18: early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1841:vreg_64, %1842:vreg_64, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23880r:%bb.18: early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1855:vreg_64, %1856:vreg_64, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24360r:%bb.18: early-clobber %1822:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1869:vreg_64, %1870:vreg_64, 8, %1822:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1822:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7496r:%bb.11: %5939:vgpr_32 = IMPLICIT_DEF",
+          "def 8048r:%bb.12: %5939:vgpr_32 = disjoint V_OR_B32_e64 %1632:vgpr_32, %6206:vgpr_32, implicit $exec",
+          "def 11012r:%bb.14: %5939:vgpr_32 = disjoint V_OR_B32_e64 %1686:vgpr_32, %6206:vgpr_32, implicit $exec"
+        ],
+        "header": "%5939:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7552r:%bb.11: %5946:vgpr_32 = IMPLICIT_DEF",
+          "def 8104r:%bb.12: %5946:vgpr_32 = V_ADD_U32_e64 %1632:vgpr_32, %5834:vgpr_32, 0, implicit $exec",
+          "def 11104r:%bb.14: %5946:vgpr_32 = V_ADD_U32_e64 %1686:vgpr_32, %5834:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5946:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7648r:%bb.11: %5953:vgpr_32 = IMPLICIT_DEF",
+          "def 8208r:%bb.12: %5953:vgpr_32 = V_ADD_U32_e64 %1638:vgpr_32, %5835:vgpr_32, 0, implicit $exec",
+          "def 11216r:%bb.14: %5953:vgpr_32 = V_ADD_U32_e64 %1692:vgpr_32, %5835:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5953:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 9632r:%bb.13: undef %1819.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9648r:%bb.13: %1819.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9664r:%bb.13: %1819.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9680r:%bb.13: %1819.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9696r:%bb.13: %1819.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9712r:%bb.13: %1819.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9728r:%bb.13: %1819.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9744r:%bb.13: %1819.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 11840r:%bb.14: undef %1819.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 11856r:%bb.14: %1819.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 11872r:%bb.14: %1819.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 11888r:%bb.14: %1819.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 11904r:%bb.14: %1819.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 11920r:%bb.14: %1819.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 11936r:%bb.14: %1819.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 11952r:%bb.14: %1819.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19296r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5784.sub0_sub1:vreg_128, %5796.sub0_sub1:vreg_128, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19344r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5784.sub2_sub3:vreg_128, %5796.sub2_sub3:vreg_128, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19440r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5785.sub0_sub1:vreg_128, %5799.sub0_sub1:vreg_128, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19672r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5785.sub2_sub3:vreg_128, %5799.sub2_sub3:vreg_128, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23432r:%bb.18: early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1825:vreg_64, %1829:vreg_64, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23496r:%bb.18: early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1839:vreg_64, %1843:vreg_64, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23856r:%bb.18: early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1853:vreg_64, %1857:vreg_64, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24272r:%bb.18: early-clobber %1819:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1867:vreg_64, %1871:vreg_64, 8, %1819:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1819:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7760r:%bb.11: %5960:vgpr_32 = IMPLICIT_DEF",
+          "def 8320r:%bb.12: %5960:vgpr_32 = V_ADD_U32_e64 %5836:vgpr_32, %1645:vgpr_32, 0, implicit $exec",
+          "def 11328r:%bb.14: %5960:vgpr_32 = V_ADD_U32_e64 %5836:vgpr_32, %1699:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5960:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7784r:%bb.11: %6320:vgpr_32 = IMPLICIT_DEF",
+          "def 8072r:%bb.12: %6320:vgpr_32 = V_MOV_B32_e32 0, implicit $exec",
+          "def 11032r:%bb.14: %6320:vgpr_32 = V_MOV_B32_e32 0, implicit $exec"
+        ],
+        "header": "%6320:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7528r:%bb.11: %5943:vgpr_32 = IMPLICIT_DEF",
+          "def 8080r:%bb.12: %5943:vgpr_32 = disjoint V_OR_B32_e64 %1656:vgpr_32, %6206:vgpr_32, implicit $exec",
+          "def 11040r:%bb.14: %5943:vgpr_32 = disjoint V_OR_B32_e64 %1710:vgpr_32, %6206:vgpr_32, implicit $exec"
+        ],
+        "header": "%5943:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7600r:%bb.11: %5950:vgpr_32 = IMPLICIT_DEF",
+          "def 8160r:%bb.12: %5950:vgpr_32 = V_ADD_U32_e64 %5835:vgpr_32, %6312:vgpr_32, 0, implicit $exec",
+          "def 11168r:%bb.14: %5950:vgpr_32 = V_ADD_U32_e64 %5835:vgpr_32, %6312:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5950:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7360r:%bb.10: %6206:vgpr_32 = V_AND_B32_e64 8, %1609:vgpr_32, implicit $exec",
+          "def 81888r:%bb.161: %6206:vgpr_32 = IMPLICIT_DEF"
+        ],
+        "header": "%6206:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 7096r:%bb.10: undef %1816.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9264r:%bb.13: %1816.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9280r:%bb.13: %1816.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9296r:%bb.13: %1816.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9312r:%bb.13: %1816.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9328r:%bb.13: %1816.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9344r:%bb.13: %1816.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 9360r:%bb.13: %1816.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 11456r:%bb.14: undef %1816.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 11472r:%bb.14: %1816.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 11488r:%bb.14: %1816.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 11504r:%bb.14: %1816.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 11520r:%bb.14: %1816.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 11536r:%bb.14: %1816.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 11552r:%bb.14: %1816.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 11568r:%bb.14: %1816.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19272r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1747:vreg_64, %5790.sub0_sub1:vreg_128, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19360r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5802.sub0_sub1:vreg_128, %5790.sub2_sub3:vreg_128, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19416r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5802.sub2_sub3:vreg_128, %5793.sub0_sub1:vreg_128, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19648r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1763:vreg_64, %5793.sub2_sub3:vreg_128, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23368r:%bb.18: early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1824:vreg_64, %1828:vreg_64, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23472r:%bb.18: early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1838:vreg_64, %1842:vreg_64, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23824r:%bb.18: early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1852:vreg_64, %1856:vreg_64, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24232r:%bb.18: early-clobber %1816:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1866:vreg_64, %1870:vreg_64, 8, %1816:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1816:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      },
+      {
+        "category": "other_address_or_state",
+        "definitions": [
+          "def 7712r:%bb.11: %5957:vgpr_32 = IMPLICIT_DEF",
+          "def 8272r:%bb.12: %5957:vgpr_32 = V_ADD_U32_e64 %1625:vgpr_32, %5836:vgpr_32, 0, implicit $exec",
+          "def 11280r:%bb.14: %5957:vgpr_32 = V_ADD_U32_e64 %1679:vgpr_32, %5836:vgpr_32, 0, implicit $exec"
+        ],
+        "header": "%5957:VGPR_32, LiveMask 0000000000000003 (1 VGPRs)",
+        "vgprs": 1
+      },
+      {
+        "category": "wmma_accumulator",
+        "definitions": [
+          "def 10144r:%bb.13: undef %1823.sub7:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10160r:%bb.13: %1823.sub6:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10176r:%bb.13: %1823.sub5:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10192r:%bb.13: %1823.sub4:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10208r:%bb.13: %1823.sub3:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10224r:%bb.13: %1823.sub2:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10240r:%bb.13: %1823.sub1:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 10256r:%bb.13: %1823.sub0:vreg_256 = V_MOV_B32_e32 0, implicit $exec",
+          "def 12352r:%bb.14: undef %1823.sub0:vreg_256 = COPY %6320:vgpr_32",
+          "def 12368r:%bb.14: %1823.sub1:vreg_256 = COPY %6320:vgpr_32",
+          "def 12384r:%bb.14: %1823.sub2:vreg_256 = COPY %6320:vgpr_32",
+          "def 12400r:%bb.14: %1823.sub3:vreg_256 = COPY %6320:vgpr_32",
+          "def 12416r:%bb.14: %1823.sub4:vreg_256 = COPY %6320:vgpr_32",
+          "def 12432r:%bb.14: %1823.sub5:vreg_256 = COPY %6320:vgpr_32",
+          "def 12448r:%bb.14: %1823.sub6:vreg_256 = COPY %6320:vgpr_32",
+          "def 12464r:%bb.14: %1823.sub7:vreg_256 = COPY %6320:vgpr_32",
+          "def use 19328r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5788.sub0_sub1:vreg_128, %5796.sub0_sub1:vreg_128, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19408r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5788.sub2_sub3:vreg_128, %5796.sub2_sub3:vreg_128, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19640r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5789.sub0_sub1:vreg_128, %5799.sub0_sub1:vreg_128, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 19704r:%bb.16 (LoopHdr %bb.16, Depth 1): early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %5789.sub2_sub3:vreg_128, %5799.sub2_sub3:vreg_128, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23464r:%bb.18: early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1827:vreg_64, %1829:vreg_64, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 23816r:%bb.18: early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1841:vreg_64, %1843:vreg_64, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24088r:%bb.18: early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1855:vreg_64, %1857:vreg_64, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec",
+          "def use 24376r:%bb.18: early-clobber %1823:vreg_256 = V_WMMA_F32_16X16X16_FP8_FP8_w32_twoaddr %1869:vreg_64, %1871:vreg_64, 8, %1823:vreg_256(tied-def 0), 0, 0, implicit $exec"
+        ],
+        "header": "%1823:VReg_256, LiveMask 000000000000FFFF (8 VGPRs)",
+        "vgprs": 8
+      }
+    ],
+    "unattributed_at_instruction_vgprs": 8
+  },
+  "schema": "tessera.rocm.folded_register_pressure.v1",
+  "scope": "compiler after-scheduler virtual liveness; not physical allocation or hardware counters",
+  "selected_instruction_stream_matches_native": true,
+  "shape_mnk": [
+    256,
+    4096,
+    1024
+  ],
+  "source_sha256": {
+    "benchmarks/rocm/record_gfx1201_folded_register_pressure.py": "cbfac58b43d14b10fb84284d15663b8be633edf7df797b4874d7c98d470b4d3e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "00b4a2fc7a076df1069420e10040ae21e95e803ea20d9db945e8036d760c8729",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "48c54348d7b528b9433b41281147aa0efd47c45d278ead8cd4c5f7b2793f04c2"
+  },
+  "target_sha256": "6ac30d649484c9201f04d80f39f9aba7439392edf539e98da2d5eb479f24591a"
+}

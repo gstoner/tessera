@@ -421,11 +421,73 @@ def test_hand_written_mxfp4_and_quark_packagers_name_their_producer() -> None:
     ):
         default = inspect.signature(function).parameters["pipeline_name"].default
         assert default == HAND_EMITTED_HIP_PRODUCER, function.__name__
-    # The folded, packed-folded and Quark packagers take no override; their
-    # source must not name an MLIR pipeline they never ran.
-    from pathlib import Path
+    # Inspect each producer: packed native MLIR and legacy HIP probes now
+    # coexist in one module, and must preserve their distinct ancestry.
+    from tessera.compiler import rocm_mxfp4_folded, rocm_mxfp4_packed_folded
 
-    root = Path(rocm_mxfp4_native.__file__).parent
-    for name in ("rocm_mxfp4_folded", "rocm_mxfp4_packed_folded", "rocm_mxfp4_quark_native"):
-        assert '"tessera-lower-to-rocm"' not in (root / f"{name}.py").read_text(), name
+    for function in (
+        rocm_mxfp4_folded.package_mxfp4_folded_prefill,
+        rocm_mxfp4_packed_folded.package_mxfp4_packed_folded_prefill,
+        rocm_mxfp4_quark_native.package_quark_w4a4_probe,
+    ):
+        source=inspect.getsource(function)
+        assert "HAND_EMITTED_HIP_PRODUCER" in source, function.__name__
+        assert '"tessera-lower-to-rocm"' not in source, function.__name__
+    native=inspect.getsource(rocm_mxfp4_packed_folded._materialize_packed_folded_native)
+    assert '_compile_native_tile_ir(' in native
+    assert 'pipeline_name="tessera-lower-to-rocm"' in native
     assert rocm_mxfp4_quark_native.GFX1201_QUARK_W4A4_PROBE_ABI
+
+
+@pytest.mark.parametrize("shape", [(1, 1), (1, 19), (17, 1), (1, 7, 1)])
+@pytest.mark.parametrize("expected_layout,actual_layout", [
+    ("col_major", "row_major"), ("row_major", "col_major"),
+])
+def test_singleton_contiguous_axes_have_equivalent_physical_order(
+    shape, expected_layout, actual_layout,
+):
+    image = _image()
+    bindings = list(_descriptor(image).buffers)
+    bindings[0] = replace(bindings[0], rank=len(shape), layout=expected_layout)
+    descriptor = _descriptor(image, buffers=tuple(bindings), shape_guards=())
+    descriptor.validate_invocation(
+        image, _buffers(a=BufferArgument("fp16", shape, actual_layout, 256)),
+        {"alpha": 1.0},
+    )
+
+
+@pytest.mark.parametrize("shape,actual_layout", [
+    ((2, 3), "col_major"), ((1, 2, 3), "col_major"),
+    ((1, 19), "strided"),
+])
+def test_non_equivalent_physical_orders_still_fail_validation(shape, actual_layout):
+    image = _image()
+    bindings = list(_descriptor(image).buffers)
+    bindings[0] = replace(bindings[0], rank=len(shape), layout="row_major")
+    descriptor = _descriptor(image, buffers=tuple(bindings), shape_guards=())
+    with pytest.raises(ArtifactContractError, match="layout mismatch"):
+        descriptor.validate_invocation(
+            image, _buffers(a=BufferArgument("fp16", shape, actual_layout, 256)),
+            {"alpha": 1.0},
+        )
+
+
+@pytest.mark.parametrize("dtype_name", ["float16", "bfloat16"])
+def test_owned_cuda_buffer_preserves_registered_dtype_from_scalar_class(dtype_name):
+    from types import SimpleNamespace
+    import numpy as np
+    from tessera.runtime import _native_buffer_value
+    from tessera.compiler.emit.nvidia_cuda import CudaOwnedDeviceBuffer
+    scalar_type = (
+        np.float16 if dtype_name == "float16"
+        else pytest.importorskip("ml_dtypes").bfloat16
+    )
+    buffer = CudaOwnedDeviceBuffer(
+        SimpleNamespace(stream=0x100), 0x1000, (1, 1), scalar_type, 2, owns=False,
+    )
+    try:
+        _, argument = _native_buffer_value(buffer)
+        assert argument.dtype == ("fp16" if dtype_name == "float16" else "bf16")
+        assert buffer.dtype == np.dtype(scalar_type)
+    finally:
+        buffer.close()

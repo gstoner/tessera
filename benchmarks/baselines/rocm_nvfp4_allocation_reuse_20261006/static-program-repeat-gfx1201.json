@@ -1,0 +1,157 @@
+{
+  "schema": "tessera.rocm.nvfp4.static-program-retention.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "opaque_hip_uuid": "32386439653765666266326566373136",
+  "rows": [
+    {
+      "shape_mnk": [
+        128,
+        32,
+        256
+      ],
+      "component_image_digests": [
+        "f0ccb4bc8b203eee5296c4183927b7ae864fca9eeacb76e18a7273aac6233a15",
+        "48c44d210ae3e809993b541a85e2633292364473f5e261ae05496dd0218fc953",
+        "fb5cf1ae08bb92f1b60f77ab0d296d452517f25d8686c5ca8521b4eb570a1fa7"
+      ],
+      "wall_samples_ms": {
+        "retained_static_contract": [
+          3.279206,
+          3.359329,
+          3.25485,
+          3.256043,
+          3.150319,
+          3.332467,
+          3.241875,
+          3.28644,
+          3.29685,
+          3.648712,
+          3.301589
+        ],
+        "reconstructed_contract_control": [
+          6.512485,
+          6.465345,
+          6.241457,
+          6.181254,
+          6.505591,
+          6.364322,
+          6.409489,
+          6.493899,
+          6.621834,
+          6.575074,
+          6.825512
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_static_contract": 3.28644,
+        "reconstructed_contract_control": 6.493899
+      },
+      "retained_over_reconstructed": 0.5060811694176334,
+      "correctness": "independent folded oracle after every call; unchanged addresses with alternating five-input values"
+    },
+    {
+      "shape_mnk": [
+        257,
+        80,
+        1024
+      ],
+      "component_image_digests": [
+        "5beb1458e38ddee1de15014ef995013ad33885087d7b787cb3fb64e0eea03ce8",
+        "2d9d9c3079035cf6369c3f40835b468ec68617d9f6517cbd84a0930cab9f2163",
+        "89ad4fd5a1feeaecb5a68817034fcef3ac749ea710aaadf438f74116c2067db1"
+      ],
+      "wall_samples_ms": {
+        "retained_static_contract": [
+          4.918253,
+          4.258444,
+          4.635454,
+          4.274064,
+          4.69668,
+          4.139237,
+          4.876123,
+          4.268113,
+          4.428469,
+          4.376349,
+          4.535103
+        ],
+        "reconstructed_contract_control": [
+          7.156443,
+          7.366675,
+          7.606972,
+          7.059509,
+          7.086009,
+          7.518905,
+          7.008632,
+          7.937132,
+          7.158176,
+          7.706282,
+          7.266353
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_static_contract": 4.428469,
+        "reconstructed_contract_control": 7.266353
+      },
+      "retained_over_reconstructed": 0.6094486463842316,
+      "correctness": "independent folded oracle after every call; unchanged addresses with alternating five-input values"
+    },
+    {
+      "shape_mnk": [
+        256,
+        64,
+        64
+      ],
+      "component_image_digests": [
+        "025492857bf2cca4f126e7f10ff5e96e2a116365d7e881140ba7108bf7bbc97d",
+        "8cafdd60918d1759501be30800f924e7be8d51193c466822cfe2e2a12974c0fd",
+        "78dee9efa9c19beeb657d7158547b3bdbb6b45bce215ae4cfa801eb66b7792d4"
+      ],
+      "wall_samples_ms": {
+        "retained_static_contract": [
+          3.1553,
+          3.272934,
+          3.17085,
+          3.231154,
+          3.298063,
+          3.311699,
+          3.176952,
+          3.204194,
+          3.201477,
+          3.108461,
+          3.148887
+        ],
+        "reconstructed_contract_control": [
+          6.142418,
+          6.107623,
+          6.128662,
+          6.199077,
+          6.064631,
+          6.057506,
+          6.164039,
+          6.281354,
+          6.289729,
+          6.080211,
+          6.313005
+        ]
+      },
+      "wall_medians_ms": {
+        "retained_static_contract": 3.201477,
+        "reconstructed_contract_control": 6.142418
+      },
+      "retained_over_reconstructed": 0.5212079347253802,
+      "correctness": "independent folded oracle after every call; unchanged addresses with alternating five-input values"
+    }
+  ],
+  "source_sha256": {
+    "python/tessera/runtime.py": "dceb0b1b57b54ff5c909c6080fb3ed2ef78087f92b61d7e0484ba5387c3f9efb",
+    "python/tessera/compiler/prepared_rocm_nvfp4_program.py": "b7b61861ffee62cd1214084cbf899e94a6116e78893770aa07d2e0dee63e003c",
+    "python/tessera/compiler/rocm_nvfp4_program.py": "5f0570b3aa6c5bfbf3aac0da4811bfaa155fb73732cdd843f368c7d746a3f236",
+    "benchmarks/rocm/benchmark_nvfp4_static_program_retention.py": "ce10a72a3e312ecb9de7009d908a5df11b195b46aea4a6cfdb8cfbf54232ecfe"
+  },
+  "runtime_sha256": "d150b7d25b87a9aa0df2e5de953e75c82cff605003dfdd158f9785201aafd60f",
+  "timing_domain": "ordinary warm host-array JIT wall: frontend dispatch, checked contract, native preparation/rebinding, uploads, three kernels, readback and release",
+  "control": "same images and native allocation reuse; only validated static-program retention is disabled",
+  "kernel_schedule_changed": false
+}

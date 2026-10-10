@@ -1121,7 +1121,7 @@ LAW_INPUT_SPECS.update({
                           {"router": "topk", "k": 1, "scores": None}),
              diff_args=(0, 1), rtol=1e-6),
     "moe_dispatch": S(lambda rng: ((rng.standard_normal((4, 3)),
-                                    np.array([1, 0, 1, 0])), {}),
+                                    np.array([1, 0, 1, 0, 3, 1], dtype=np.int32)), {}),
                       diff_args=(0,)),
     "moe_combine": S(lambda rng: ((rng.standard_normal((4, 3)),
                                    np.array([2, 0, 3, 1])),

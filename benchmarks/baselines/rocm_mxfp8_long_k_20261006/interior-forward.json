@@ -1,0 +1,4153 @@
+{
+  "schema": "tessera.gfx1201.three_format_package_evaluation.v1",
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_ordinal": 0,
+  "seed": 271,
+  "compiler_sha256": "d7739ced35cbf6c6200f1a8c67246c1ec010cdb2544958be54afb01de738fc9e",
+  "timing_scope": "resident graph device execution plus GPU dispatch; checked runtime staging/transfers/sync separately",
+  "selector_promotion": false,
+  "public_dtype_promotion": false,
+  "comparison_scope": "matched f32 source operands; existing distinct schedules/scales and approximate folded physical contract",
+  "rows": [
+    {
+      "shape_mnk": [
+        300,
+        1024,
+        3584
+      ],
+      "input_sha256": {
+        "a": "2ffce3c93a32c0f32b4a9f75cd54d0a16f5a1aaebd1451208dbc65cf35097728",
+        "b": "6248af14d3957d4e15a83d4a586063440857524778a7c4a83d1d13ce940e8e57"
+      },
+      "source_output_norm": 679027.2003141552,
+      "arms": {
+        "fp8_k128_n128": {
+          "group_k": 128,
+          "group_n": 128,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.981963465532317,
+            "relative_rms": 0.0016586999943990768,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 34.60767348979279,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 10.148582458496094,
+            "relative_rms": 0.02636594419563731
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 239.25930868778505,
+            "relative_rms": 0.03692840834673327
+          },
+          "native_output_error": {
+            "max_abs": 238.7773460771482,
+            "relative_rms": 0.03696872704043309
+          },
+          "prepare_compile_ms": 363.354177,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "5fe43605feb49519815c3ace45fbbe46fde2fbecedad5763944fcbb84438d454",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": false,
+            "lds_whole_m": false,
+            "lds_whole_n": false,
+            "macro_k": 128,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": false,
+            "runtime_shape_image": true,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 128,
+            "scale_n": 128,
+            "schedule_hash": "89bc18df6a8c3b1d88db657e0b7714ebc10f3a35801df1936633a2108b0ae184",
+            "shape": [
+              300,
+              1024,
+              3584
+            ],
+            "staging": "global",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "4d05fb9ba4fbd40acfbbe1dc4c214ec36b1d39afa15f7d33fdbc89151d0a9a84",
+            "tile_ir_sha256": "4eda5b3f1527257039bc4bd98ac962facae7ad6f4b8192a19bd2c50d58be6edd",
+            "warps": 1,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              32,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "87380a1a1b64ef5f981c639933adea48ffc3d503c52a1a830b108c9fdc546e09",
+          "tile_sha256": "4eda5b3f1527257039bc4bd98ac962facae7ad6f4b8192a19bd2c50d58be6edd",
+          "target_sha256": "4d05fb9ba4fbd40acfbbe1dc4c214ec36b1d39afa15f7d33fdbc89151d0a9a84",
+          "isa_file": "interior-forward_300_1024_3584_fp8_k128_n128.s",
+          "isa_sha256": "b902ae9f341cd501b5c30e1a9e9435db431e19bbe28a12cbd14a11bad4e05192",
+          "static_isa_counts": {
+            "v_mul_lo_u32": 62,
+            "v_add_co_u32": 210,
+            "v_add_co_ci_u32_e64": 210,
+            "v_wmma_f32_16x16x16_fp8_fp8": 20,
+            "v_mul_f32_e32": 30,
+            "v_add_f32_e32": 14
+          },
+          "grid": [
+            32,
+            19,
+            1
+          ],
+          "workgroup": [
+            32,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 128,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 128,
+            "scale_n": 128,
+            "staging": "global",
+            "warps": 1
+          },
+          "physical_input_bytes": 4779712,
+          "end_to_end_ms": [
+            10.995753333333333,
+            5.728317333333333,
+            5.489957666666666
+          ],
+          "end_to_end_median_ms": 5.728317333333333,
+          "device_windows": [
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.487893,
+              "event_window_ms": 42.30848693847656,
+              "host_window_ms": 42.393418,
+              "device_window_ms": 42.29404,
+              "device_event_disagreement": 0.00034146667777479686
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.487893,
+              "event_window_ms": 42.359683990478516,
+              "host_window_ms": 42.437272,
+              "device_window_ms": 42.33952,
+              "device_event_disagreement": 0.00047601843495923533
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.487893,
+              "event_window_ms": 41.59010314941406,
+              "host_window_ms": 41.708491,
+              "device_window_ms": 41.56524,
+              "device_event_disagreement": 0.0005978140839116897
+            }
+          ],
+          "device_execution_dispatch_median_ms": 1.32168875
+        },
+        "fp8_k32_n1_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.99870017424837,
+            "relative_rms": 0.0016609462068782183,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 34.15758147290089,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 9.442590713500977,
+            "relative_rms": 0.023988766983114366
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 220.0986204487246,
+            "relative_rms": 0.034033614732651984
+          },
+          "native_output_error": {
+            "max_abs": 220.45916385546366,
+            "relative_rms": 0.03407414265510198
+          },
+          "prepare_compile_ms": 314.408709,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "3cb0b693f2c2e1c0e822db4f444d81c5336267e92c046f35bc16135345c3873b",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": false,
+            "lds_whole_m": false,
+            "lds_whole_n": false,
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": false,
+            "runtime_shape_image": true,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "eeb20432814bd251689b5c00a621f2c11964e22c62b48f5dcc533609ca918c80",
+            "shape": [
+              300,
+              1024,
+              3584
+            ],
+            "staging": "global",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "adca6433ae120a5cb5919cf1c97b14a51a4d054e50b172083677c4cf570b1fb7",
+            "tile_ir_sha256": "74d9f48497931192afa93106be4ac1621947b12f6444d31efa4402bb0478cc7e",
+            "warps": 1,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              32,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "e3f42e0f43f77d85816e924f7fb019ada1a1440f5212c865990e390f0565e4fb",
+          "tile_sha256": "74d9f48497931192afa93106be4ac1621947b12f6444d31efa4402bb0478cc7e",
+          "target_sha256": "adca6433ae120a5cb5919cf1c97b14a51a4d054e50b172083677c4cf570b1fb7",
+          "isa_file": "interior-forward_300_1024_3584_fp8_k32_n1_control.s",
+          "isa_sha256": "acf3da489029724abbbb0ccb7405b3a045f78c90748104ccd5ab6a2a1a27deed",
+          "static_isa_counts": {
+            "v_mul_lo_u32": 61,
+            "v_add_co_u32": 197,
+            "v_add_co_ci_u32_e64": 197,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_mul_f32_e32": 31,
+            "v_add_f32_e32": 17
+          },
+          "grid": [
+            32,
+            19,
+            1
+          ],
+          "workgroup": [
+            32,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "global",
+            "warps": 1
+          },
+          "physical_input_bytes": 5338368,
+          "end_to_end_ms": [
+            9.364531666666666,
+            6.8693773333333334,
+            6.819538333333334
+          ],
+          "end_to_end_median_ms": 6.8693773333333334,
+          "device_windows": [
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.103089,
+              "event_window_ms": 46.429996490478516,
+              "host_window_ms": 46.508027,
+              "device_window_ms": 46.41552,
+              "device_event_disagreement": 0.0003117917633589218
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.103089,
+              "event_window_ms": 47.33910369873047,
+              "host_window_ms": 47.417462,
+              "device_window_ms": 47.3172,
+              "device_event_disagreement": 0.0004626977914467032
+            },
+            {
+              "launches": 32,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 34,
+              "graph_build_wall_ms": 1.103089,
+              "event_window_ms": 46.379150390625,
+              "host_window_ms": 46.552633,
+              "device_window_ms": 46.36236,
+              "device_event_disagreement": 0.00036202454084608506
+            }
+          ],
+          "device_execution_dispatch_median_ms": 1.450485
+        },
+        "mxfp8_k32_n1": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.999415040016174,
+            "relative_rms": 0.0016559631984271524,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 34.13113807382454,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 15.781158447265625,
+            "relative_rms": 0.026598193328690664
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 241.17814817502995,
+            "relative_rms": 0.037731798499069116
+          },
+          "native_output_error": {
+            "max_abs": 248.14782776906986,
+            "relative_rms": 0.037767410173669504
+          },
+          "prepare_compile_ms": 263.919869,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "12aac1f4fdc79d4346e9f82d1814be9a05cd924a81b269688002ff6a125fcb73",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": false,
+            "lds_whole_m": false,
+            "lds_whole_n": false,
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              16
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_register_wmma_blockscale_nk_1x1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": false,
+            "runtime_shape_image": true,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "bd0ed518fa3e350a9278e1cf8f9e7e2118b95794067fe63b762a5a10c4962230",
+            "shape": [
+              300,
+              1024,
+              3584
+            ],
+            "staging": "global",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "00fd6f7e74c3e9b7ab913a0308ccb91d892f3f47165e1787cf4aa55eb957942f",
+            "tile_ir_sha256": "c07ea10f8905eb140a0c89095e318987bdaf5e615fa4725fff4412d9f96ef805",
+            "warps": 1,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              32,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "0cecb063223641fd071dff788f6416e47d85cfe0c11e1fc16da8c0c3eedeed65",
+          "tile_sha256": "c07ea10f8905eb140a0c89095e318987bdaf5e615fa4725fff4412d9f96ef805",
+          "target_sha256": "00fd6f7e74c3e9b7ab913a0308ccb91d892f3f47165e1787cf4aa55eb957942f",
+          "isa_file": "interior-forward_300_1024_3584_mxfp8_k32_n1.s",
+          "isa_sha256": "5c94aa117c9f32d9a59227ff87a11c23e457b2abf8076d233524a1a1f9f179d6",
+          "static_isa_counts": {
+            "v_mul_lo_u32": 57,
+            "v_add_co_u32": 123,
+            "v_add_co_ci_u32_e64": 123,
+            "v_wmma_f32_16x16x16_fp8_fp8": 4,
+            "v_add_nc_u32_e32": 16,
+            "v_ldexp_f32": 16,
+            "v_add_f32_e32": 12
+          },
+          "grid": [
+            64,
+            19,
+            1
+          ],
+          "workgroup": [
+            32,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              16
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "global",
+            "warps": 1
+          },
+          "physical_input_bytes": 4893504,
+          "end_to_end_ms": [
+            7.972494666666667,
+            5.683560333333333,
+            5.560898000000001
+          ],
+          "end_to_end_median_ms": 5.683560333333333,
+          "device_windows": [
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.736488,
+              "event_window_ms": 37.25687026977539,
+              "host_window_ms": 37.34083,
+              "device_window_ms": 37.16956,
+              "device_event_disagreement": 0.0023434676381344885
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.736488,
+              "event_window_ms": 36.8338737487793,
+              "host_window_ms": 36.994058,
+              "device_window_ms": 36.81956,
+              "device_event_disagreement": 0.0003886028625965118
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.736488,
+              "event_window_ms": 36.77106475830078,
+              "host_window_ms": 36.855314,
+              "device_window_ms": 36.697,
+              "device_event_disagreement": 0.002014213044621151
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.14382640625
+        },
+        "mxfp4_folded": {
+          "approximate_policy": "explicit_allow",
+          "fold_lossless": false,
+          "fold_inexact_value_count": 884999,
+          "folding_weight_error": {
+            "max_abs": 0.0625,
+            "relative_rms": 0.0007899969005157881
+          },
+          "folding_output_error": {
+            "max_abs": 5.616282743257898,
+            "relative_rms": 0.0007909052308702024
+          },
+          "pre_fold_quantized_output_error": {
+            "max_abs": 717.6098252710077,
+            "relative_rms": 0.11880852766115095
+          },
+          "physical_weight_storage": "expanded_e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.984375162239303,
+            "relative_rms": 0.0016623969695797125,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 33.33948404638736,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 47.781158447265625,
+            "relative_rms": 0.11551648283255352
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 718.8143483907174,
+            "relative_rms": 0.11881080714819572
+          },
+          "native_output_error": {
+            "max_abs": 720.3449054147651,
+            "relative_rms": 0.11882200619714423
+          },
+          "prepare_compile_ms": 771.316887,
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "native_provenance": {
+            "accum": "fp32",
+            "architecture": "gfx1201",
+            "authored_target_ir_sha256": "3248d5f7a3f57e809cb2c05492fd51c7b0f718cd5fb589339f0c5084a604c4b5",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "fold_inexact_value_count": 884999,
+            "fold_lossless": false,
+            "fold_max_normalized_abs_error": 0.0009765625,
+            "fold_max_normalized_relative_error": 1.0,
+            "image_input_level": "target",
+            "image_k": 0,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mnk",
+            "image_whole_m": false,
+            "image_whole_n": true,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "output": "bf16",
+            "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+            "producer_kind": "native_mlir_typed_lds",
+            "raster": "grouped_m4_1d",
+            "raster_group_m": 4,
+            "route": "folded_row_reference_bm256_tm4",
+            "row_guard": "wave",
+            "row_reference_sha256": "ef9fbb0b48a47b7a511851dd7ba91d9dd4aa8d74dab24c401b25c6a74371506d",
+            "schedule_hash": "78b67c35e0859d229ae84a8e4072a015bd033b4d6ff67f3a37eace7794480775",
+            "staging_policy": "unconditional_k64",
+            "staging_prefetch": "register_next_slab",
+            "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+            "target_ir_sha256": "47c6aab20f8905fb925c94bfb497453af81969eceb4fb2b07f5c559dffc65983",
+            "tile_ir_sha256": "f00efcd744174055a7d000f3d18c1c6a25c03b548f5c980f70fd9cf4ffbbf0cc",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+            "weight_sha256": "8e268dd403ae99e2533e091a5cf092b71f8baf7695d34f5d40b90f3856b0485c",
+            "work_item": "ROCM-MXFP4-W4A8-1",
+            "workgroup_mode": "cu"
+          },
+          "payload_sha256": "c1fddd977c575b04c25d4b2ed06a17443d03ba1cc01a0f2043ecd64d90a17174",
+          "tile_sha256": "f00efcd744174055a7d000f3d18c1c6a25c03b548f5c980f70fd9cf4ffbbf0cc",
+          "target_sha256": "47c6aab20f8905fb925c94bfb497453af81969eceb4fb2b07f5c559dffc65983",
+          "isa_file": "interior-forward_300_1024_3584_mxfp4_folded.s",
+          "isa_sha256": "a7e5a9c90b71ba73a920246034c4e4912856bfa2b0a5239b2ba71987fac53d04",
+          "static_isa_counts": {
+            "v_cvt_f32_u32_e32": 2,
+            "v_mul_f32_e32": 130,
+            "v_cvt_u32_f32_e32": 2,
+            "v_mul_lo_u32": 17,
+            "v_add_co_u32": 235,
+            "v_add_co_ci_u32_e64": 235,
+            "v_mul_u32_u24_e32": 7,
+            "v_add_nc_u32_e32": 3,
+            "ds_store_b128": 10,
+            "s_barrier_signal": 3,
+            "s_barrier_wait": 3,
+            "ds_load_2addr_b64": 12,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_cvt_f64_f32_e32": 192,
+            "v_mul_f64_e32": 128,
+            "v_cvt_f32_f64_e32": 64
+          },
+          "grid": [
+            32,
+            1,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "folded_row_reference_bm256_tm4",
+          "schedule": {
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "image_shape_policy": "runtime_mnk",
+            "raster_group_m": 4,
+            "row_guard": "wave",
+            "staging_prefetch": "register_next_slab",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2
+          },
+          "physical_input_bytes": 4747440,
+          "end_to_end_ms": [
+            8.414584666666666,
+            8.287694666666667,
+            7.714332333333334
+          ],
+          "end_to_end_median_ms": 8.287694666666667,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.497053,
+              "event_window_ms": 21.165599822998047,
+              "host_window_ms": 21.248263,
+              "device_window_ms": 21.0954,
+              "device_event_disagreement": 0.003316694239006064
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.497053,
+              "event_window_ms": 21.034889221191406,
+              "host_window_ms": 21.112353,
+              "device_window_ms": 20.96456,
+              "device_event_disagreement": 0.003343455744019558
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.497053,
+              "event_window_ms": 21.047016143798828,
+              "host_window_ms": 21.141008,
+              "device_window_ms": 20.96448,
+              "device_event_disagreement": 0.003921512827990483
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.04094640625
+        },
+        "mxfp8_lds_k32_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.999415040016174,
+            "relative_rms": 0.0016559631984271524,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 34.13113807382454,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 15.781158447265625,
+            "relative_rms": 0.026598193328690664
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 241.17814817502995,
+            "relative_rms": 0.037731798499069116
+          },
+          "native_output_error": {
+            "max_abs": 248.14782776906986,
+            "relative_rms": 0.037767410173669504
+          },
+          "prepare_compile_ms": 254.787635,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "e9264031d45be04d52f01abf75dfbf35998a9835ebe238584e899e4183f545a3",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "b159bdf19f0640b3ade767be8e92e9474b033c5ec8a3f00dd3eaa012369e6033",
+            "shape": [
+              300,
+              1024,
+              3584
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+            "tile_ir_sha256": "c2ebea8b3cd664ceed2642612548dd8c065ab4e630ddb1d045114ecfa629807a",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "e95eaa84b029c70f6cc6e5dd148ce693f710ae0ac7e971d23b71637ee0840fed",
+          "tile_sha256": "c2ebea8b3cd664ceed2642612548dd8c065ab4e630ddb1d045114ecfa629807a",
+          "target_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+          "isa_file": "interior-forward_300_1024_3584_mxfp8_lds_k32_control.s",
+          "isa_sha256": "1f4b4169c9ca02366e26c89454276d9694be172b52c5c36f335055206613995d",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_add_nc_u32_e32": 36,
+            "v_add_co_u32": 140,
+            "v_add_co_ci_u32_e64": 140,
+            "v_mul_lo_u32": 40,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_ldexp_f32": 32,
+            "v_add_f32_e32": 6,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            16,
+            3,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 4893504,
+          "end_to_end_ms": [
+            10.778944666666668,
+            4.515565666666666,
+            4.321473666666667
+          ],
+          "end_to_end_median_ms": 4.515565666666666,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.607655,
+              "event_window_ms": 39.29458236694336,
+              "host_window_ms": 39.393326,
+              "device_window_ms": 39.2228,
+              "device_event_disagreement": 0.0018267751588001858
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.607655,
+              "event_window_ms": 39.10504150390625,
+              "host_window_ms": 39.195819,
+              "device_window_ms": 39.0256,
+              "device_event_disagreement": 0.0020314900803344578
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.607655,
+              "event_window_ms": 39.14400100708008,
+              "host_window_ms": 39.324525,
+              "device_window_ms": 39.12988,
+              "device_event_disagreement": 0.000360745113345057
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.076425546875
+        },
+        "mxfp8_lds_k64_candidate": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.999415040016174,
+            "relative_rms": 0.0016559631984271524,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 34.13113807382454,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 15.781158447265625,
+            "relative_rms": 0.026598193328690664
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 241.17814817502995,
+            "relative_rms": 0.037731798499069116
+          },
+          "native_output_error": {
+            "max_abs": 248.14782776906986,
+            "relative_rms": 0.037767410173669504
+          },
+          "prepare_compile_ms": 291.501418,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "cfa78dc6803d0b920573ec56a3328be8aba48aa5f152e45396cb9b6f957f1d57",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k64",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "8ed09a7f04dbbf84d9f9642316287e0e85ee3c66c33bb4543cac614b1caa129a",
+            "shape": [
+              300,
+              1024,
+              3584
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "29f6082d555f3b1772026253878d98e486f78795668ef5a3201c85334947bab2",
+            "tile_ir_sha256": "fff3bad2fc649d8c838e79d8deed2f009fbb8f2637bf3848ef43482de2e922ed",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "61dff4d0700a3fbbc9ed8cf92b136a62b02b82762887bfa04e52568577bf6a6d",
+          "tile_sha256": "fff3bad2fc649d8c838e79d8deed2f009fbb8f2637bf3848ef43482de2e922ed",
+          "target_sha256": "29f6082d555f3b1772026253878d98e486f78795668ef5a3201c85334947bab2",
+          "isa_file": "interior-forward_300_1024_3584_mxfp8_lds_k64_candidate.s",
+          "isa_sha256": "2af638ae53c257cb964445d1d1f3de73786b071f91ad7ce578a55505eef0d8c6",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_mul_lo_u32": 41,
+            "v_add_co_u32": 161,
+            "v_add_co_ci_u32_e64": 161,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "v_add_nc_u32_e32": 70,
+            "ds_store_b128": 3,
+            "ds_load_2addr_b64": 8,
+            "v_wmma_f32_16x16x16_fp8_fp8": 16,
+            "v_ldexp_f32": 64,
+            "v_add_f32_e32": 10
+          },
+          "grid": [
+            16,
+            3,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 4893504,
+          "end_to_end_ms": [
+            6.993334,
+            4.752308666666667,
+            4.996932
+          ],
+          "end_to_end_median_ms": 4.996932,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.512343,
+              "event_window_ms": 30.580623626708984,
+              "host_window_ms": 30.678442,
+              "device_window_ms": 30.51028,
+              "device_event_disagreement": 0.002300267894064297
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.512343,
+              "event_window_ms": 30.672687530517578,
+              "host_window_ms": 30.774775,
+              "device_window_ms": 30.59256,
+              "device_event_disagreement": 0.0026123413684522078
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.512343,
+              "event_window_ms": 30.35212516784668,
+              "host_window_ms": 30.442511,
+              "device_window_ms": 30.27156,
+              "device_event_disagreement": 0.0026543501452091054
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.059590390625
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        400,
+        512,
+        3584
+      ],
+      "input_sha256": {
+        "a": "ba1e429a4bcaa594de3bdd36fe4e5f8641ff70a8f70e9d7f5ae182c351d4798a",
+        "b": "d7d6e56d750f3a0f733b9e3ebf3f8fd00f6bb3ce8cbd69b7ab46b6c894d5ae3e"
+      },
+      "source_output_norm": 552667.4460653024,
+      "arms": {
+        "fp8_k128_n128": {
+          "group_k": 128,
+          "group_n": 128,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.912628500213941,
+            "relative_rms": 0.0016593180969626826,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 33.655651896046884,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 9.863082885742188,
+            "relative_rms": 0.02655339071813396
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 236.5513320561313,
+            "relative_rms": 0.036910814620874116
+          },
+          "native_output_error": {
+            "max_abs": 242.0361818047586,
+            "relative_rms": 0.03694648122242358
+          },
+          "prepare_compile_ms": 119.839215,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "5faff1cfbe4c77cd8e92ca171b0df78f13bf18babc41891cf7fb944ced22d140",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": false,
+            "lds_whole_m": false,
+            "lds_whole_n": false,
+            "macro_k": 128,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k128",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": false,
+            "runtime_shape_image": true,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 128,
+            "scale_n": 128,
+            "schedule_hash": "e7afed3c88e35849d27260fc91e3a4540e71b0cdbe32a2bf557dbe387a87ca03",
+            "shape": [
+              400,
+              512,
+              3584
+            ],
+            "staging": "global",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "4d05fb9ba4fbd40acfbbe1dc4c214ec36b1d39afa15f7d33fdbc89151d0a9a84",
+            "tile_ir_sha256": "dcab359c2eb165ca25835a017e970e94f7f0a199d8d67e45a243580329dc305f",
+            "warps": 1,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              32,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "87380a1a1b64ef5f981c639933adea48ffc3d503c52a1a830b108c9fdc546e09",
+          "tile_sha256": "dcab359c2eb165ca25835a017e970e94f7f0a199d8d67e45a243580329dc305f",
+          "target_sha256": "4d05fb9ba4fbd40acfbbe1dc4c214ec36b1d39afa15f7d33fdbc89151d0a9a84",
+          "isa_file": "interior-forward_400_512_3584_fp8_k128_n128.s",
+          "isa_sha256": "ea4562fffc0084c62f4a9d04de29d43fd6ba12ca90686f088c63f95b347c33f0",
+          "static_isa_counts": {
+            "v_mul_lo_u32": 62,
+            "v_add_co_u32": 210,
+            "v_add_co_ci_u32_e64": 210,
+            "v_wmma_f32_16x16x16_fp8_fp8": 20,
+            "v_mul_f32_e32": 30,
+            "v_add_f32_e32": 14
+          },
+          "grid": [
+            16,
+            25,
+            1
+          ],
+          "workgroup": [
+            32,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 128,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 128,
+            "scale_n": 128,
+            "staging": "global",
+            "warps": 1
+          },
+          "physical_input_bytes": 3313856,
+          "end_to_end_ms": [
+            8.911008333333333,
+            3.7303243333333334,
+            3.689124
+          ],
+          "end_to_end_median_ms": 3.7303243333333334,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.974569,
+              "event_window_ms": 21.023509979248047,
+              "host_window_ms": 21.096092,
+              "device_window_ms": 20.95248,
+              "device_event_disagreement": 0.0033785975471345197
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.974569,
+              "event_window_ms": 21.054658889770508,
+              "host_window_ms": 21.130047,
+              "device_window_ms": 20.98464,
+              "device_event_disagreement": 0.003325577020130586
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.974569,
+              "event_window_ms": 20.998149871826172,
+              "host_window_ms": 21.073308,
+              "device_window_ms": 20.92972,
+              "device_event_disagreement": 0.003258852434327396
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.0409228125
+        },
+        "fp8_k32_n1_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.999082933334648,
+            "relative_rms": 0.0016546388296397596,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 34.000958426216656,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 9.863082885742188,
+            "relative_rms": 0.023998275173296824
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 205.5565191640119,
+            "relative_rms": 0.03388457272562355
+          },
+          "native_output_error": {
+            "max_abs": 207.87253532803607,
+            "relative_rms": 0.03392645108833291
+          },
+          "prepare_compile_ms": 137.212629,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "290becee96b3309086db321621767c3e57cf53fdd288c1e7ad8bfec032b6c1e1",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": false,
+            "lds_whole_m": false,
+            "lds_whole_n": false,
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_register_wmma_blockscale_nk_1x2_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": false,
+            "runtime_shape_image": true,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "3f62fefd2925854f5ae6d969db33d70c3fd1c48fd1e8181fd4ce1a405d476e06",
+            "shape": [
+              400,
+              512,
+              3584
+            ],
+            "staging": "global",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "adca6433ae120a5cb5919cf1c97b14a51a4d054e50b172083677c4cf570b1fb7",
+            "tile_ir_sha256": "4527a7daabedcc7ab80a714d0b86f974103af742aeadd62e346c13c3403f2758",
+            "warps": 1,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              32,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "e3f42e0f43f77d85816e924f7fb019ada1a1440f5212c865990e390f0565e4fb",
+          "tile_sha256": "4527a7daabedcc7ab80a714d0b86f974103af742aeadd62e346c13c3403f2758",
+          "target_sha256": "adca6433ae120a5cb5919cf1c97b14a51a4d054e50b172083677c4cf570b1fb7",
+          "isa_file": "interior-forward_400_512_3584_fp8_k32_n1_control.s",
+          "isa_sha256": "7dcc47a8f585de237cdab045f5538f0d01e31d08311747497fe03e700ddef0e8",
+          "static_isa_counts": {
+            "v_mul_lo_u32": 61,
+            "v_add_co_u32": 197,
+            "v_add_co_ci_u32_e64": 197,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_mul_f32_e32": 31,
+            "v_add_f32_e32": 17
+          },
+          "grid": [
+            16,
+            25,
+            1
+          ],
+          "workgroup": [
+            32,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              32
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "global",
+            "warps": 1
+          },
+          "physical_input_bytes": 3677184,
+          "end_to_end_ms": [
+            8.899316333333333,
+            6.962396333333333,
+            5.823655666666667
+          ],
+          "end_to_end_median_ms": 6.962396333333333,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.564362,
+              "event_window_ms": 21.553958892822266,
+              "host_window_ms": 21.625954,
+              "device_window_ms": 21.48324,
+              "device_event_disagreement": 0.003281016409742589
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.564362,
+              "event_window_ms": 21.63033676147461,
+              "host_window_ms": 21.705725,
+              "device_window_ms": 21.4782,
+              "device_event_disagreement": 0.0070334901926065365
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.564362,
+              "event_window_ms": 21.629135131835938,
+              "host_window_ms": 21.78656,
+              "device_window_ms": 21.4648,
+              "device_event_disagreement": 0.007597859592363089
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.041949609375
+        },
+        "mxfp8_k32_n1": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.965132161974907,
+            "relative_rms": 0.0016583573868344083,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 33.643047665937424,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 9.5733642578125,
+            "relative_rms": 0.026493697360937835
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 237.93420615761875,
+            "relative_rms": 0.03754075899644741
+          },
+          "native_output_error": {
+            "max_abs": 241.0987551507294,
+            "relative_rms": 0.037578481915035204
+          },
+          "prepare_compile_ms": 114.872738,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "9ca820b186032a2f779d4cd71faed4953a4e9cf9bda750c0e328e15a3b950e51",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": false,
+            "lds_whole_m": false,
+            "lds_whole_n": false,
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              16
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_register_wmma_blockscale_nk_1x1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": false,
+            "runtime_shape_image": true,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "af56671311d7de6d890b81e6797f3f5961342257f46027e06078eda5e26a7cbb",
+            "shape": [
+              400,
+              512,
+              3584
+            ],
+            "staging": "global",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "00fd6f7e74c3e9b7ab913a0308ccb91d892f3f47165e1787cf4aa55eb957942f",
+            "tile_ir_sha256": "1bf6a68240521c785d758a626aa62a455aac9920c16d9159aec3432561970646",
+            "warps": 1,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              32,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "0cecb063223641fd071dff788f6416e47d85cfe0c11e1fc16da8c0c3eedeed65",
+          "tile_sha256": "1bf6a68240521c785d758a626aa62a455aac9920c16d9159aec3432561970646",
+          "target_sha256": "00fd6f7e74c3e9b7ab913a0308ccb91d892f3f47165e1787cf4aa55eb957942f",
+          "isa_file": "interior-forward_400_512_3584_mxfp8_k32_n1.s",
+          "isa_sha256": "527e098867c3f4fa4f3f13c053b499747e553068c745aae474573d98ee59e582",
+          "static_isa_counts": {
+            "v_mul_lo_u32": 57,
+            "v_add_co_u32": 123,
+            "v_add_co_ci_u32_e64": 123,
+            "v_wmma_f32_16x16x16_fp8_fp8": 4,
+            "v_add_nc_u32_e32": 16,
+            "v_ldexp_f32": 16,
+            "v_add_f32_e32": 12
+          },
+          "grid": [
+            32,
+            25,
+            1
+          ],
+          "workgroup": [
+            32,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              16,
+              16
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "global",
+            "warps": 1
+          },
+          "physical_input_bytes": 3370752,
+          "end_to_end_ms": [
+            8.412643000000001,
+            3.627137333333333,
+            3.718807333333333
+          ],
+          "end_to_end_median_ms": 3.718807333333333,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.563881,
+              "event_window_ms": 26.204906463623047,
+              "host_window_ms": 26.281414,
+              "device_window_ms": 26.13256,
+              "device_event_disagreement": 0.002760798391838366
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.563881,
+              "event_window_ms": 26.18355369567871,
+              "host_window_ms": 26.366396,
+              "device_window_ms": 26.1124,
+              "device_event_disagreement": 0.0027174957420104924
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.563881,
+              "event_window_ms": 26.34380340576172,
+              "host_window_ms": 26.417945,
+              "device_window_ms": 26.27376,
+              "device_event_disagreement": 0.002658819027870518
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.05104015625
+        },
+        "mxfp4_folded": {
+          "approximate_policy": "explicit_allow",
+          "fold_lossless": false,
+          "fold_inexact_value_count": 443876,
+          "folding_weight_error": {
+            "max_abs": 0.0625,
+            "relative_rms": 0.0007843580643328214
+          },
+          "folding_output_error": {
+            "max_abs": 5.485017809082819,
+            "relative_rms": 0.0007818444887807296
+          },
+          "pre_fold_quantized_output_error": {
+            "max_abs": 822.703449282631,
+            "relative_rms": 0.11843693756185161
+          },
+          "physical_weight_storage": "expanded_e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.98693176303641,
+            "relative_rms": 0.0016588910908319594,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 32.72428616123366,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 31.998855590820312,
+            "relative_rms": 0.1154379340017352
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 821.7637822845118,
+            "relative_rms": 0.11844031214596074
+          },
+          "native_output_error": {
+            "max_abs": 816.4338329320453,
+            "relative_rms": 0.11845002603480932
+          },
+          "prepare_compile_ms": 391.356331,
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "native_provenance": {
+            "accum": "fp32",
+            "architecture": "gfx1201",
+            "authored_target_ir_sha256": "c83414ff62243a441f092b02c4ab1d48962a5bc877587e30f3969f21988603ee",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "fold_inexact_value_count": 443876,
+            "fold_lossless": false,
+            "fold_max_normalized_abs_error": 0.0009765625,
+            "fold_max_normalized_relative_error": 1.0,
+            "image_input_level": "target",
+            "image_k": 0,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mnk",
+            "image_whole_m": false,
+            "image_whole_n": true,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "output": "bf16",
+            "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+            "producer_kind": "native_mlir_typed_lds",
+            "raster": "grouped_m4_1d",
+            "raster_group_m": 4,
+            "route": "folded_row_reference_bm256_tm4",
+            "row_guard": "wave",
+            "row_reference_sha256": "e5dc12f9dbb4371f50c98f2046e4f00812cc486e871b14f6271609b3d71441f0",
+            "schedule_hash": "d3d85901a7c1a9a5ca1f2ba18265b44894ab2ac9bdd0702e320697944b45f416",
+            "staging_policy": "unconditional_k64",
+            "staging_prefetch": "register_next_slab",
+            "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+            "target_ir_sha256": "47c6aab20f8905fb925c94bfb497453af81969eceb4fb2b07f5c559dffc65983",
+            "tile_ir_sha256": "e1bcfaa0044bafbf5faa61ddd261e124ccc0dc6908494804d3f23d25d8e35a42",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+            "weight_sha256": "89132ea299918fe06a8156819e6820a8480dff3f537fb1e24977c6bc324078cb",
+            "work_item": "ROCM-MXFP4-W4A8-1",
+            "workgroup_mode": "cu"
+          },
+          "payload_sha256": "c1fddd977c575b04c25d4b2ed06a17443d03ba1cc01a0f2043ecd64d90a17174",
+          "tile_sha256": "e1bcfaa0044bafbf5faa61ddd261e124ccc0dc6908494804d3f23d25d8e35a42",
+          "target_sha256": "47c6aab20f8905fb925c94bfb497453af81969eceb4fb2b07f5c559dffc65983",
+          "isa_file": "interior-forward_400_512_3584_mxfp4_folded.s",
+          "isa_sha256": "a559349e2c8e901fecd1e889dc5933314825201460d3e81a432bd5216c60fbd4",
+          "static_isa_counts": {
+            "v_cvt_f32_u32_e32": 2,
+            "v_mul_f32_e32": 130,
+            "v_cvt_u32_f32_e32": 2,
+            "v_mul_lo_u32": 17,
+            "v_add_co_u32": 235,
+            "v_add_co_ci_u32_e64": 235,
+            "v_mul_u32_u24_e32": 7,
+            "v_add_nc_u32_e32": 3,
+            "ds_store_b128": 10,
+            "s_barrier_signal": 3,
+            "s_barrier_wait": 3,
+            "ds_load_2addr_b64": 12,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_cvt_f64_f32_e32": 192,
+            "v_mul_f64_e32": 128,
+            "v_cvt_f32_f64_e32": 64
+          },
+          "grid": [
+            16,
+            1,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "folded_row_reference_bm256_tm4",
+          "schedule": {
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "image_shape_policy": "runtime_mnk",
+            "raster_group_m": 4,
+            "row_guard": "wave",
+            "staging_prefetch": "register_next_slab",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2
+          },
+          "physical_input_bytes": 3270720,
+          "end_to_end_ms": [
+            6.896065,
+            6.595160666666666,
+            7.008472333333334
+          ],
+          "end_to_end_median_ms": 6.896065,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.397383,
+              "event_window_ms": 21.467348098754883,
+              "host_window_ms": 21.538527,
+              "device_window_ms": 21.39948,
+              "device_event_disagreement": 0.003161457038972536
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.397383,
+              "event_window_ms": 21.569555282592773,
+              "host_window_ms": 21.757233,
+              "device_window_ms": 21.49312,
+              "device_event_disagreement": 0.003543665207342393
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.397383,
+              "event_window_ms": 21.513776779174805,
+              "host_window_ms": 21.589032,
+              "device_window_ms": 21.45648,
+              "device_event_disagreement": 0.002663259908426143
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.0419071875
+        },
+        "mxfp8_lds_k32_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.965132161974907,
+            "relative_rms": 0.0016583573868344083,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 33.643047665937424,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 9.5733642578125,
+            "relative_rms": 0.026493697360937835
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 237.93420615761875,
+            "relative_rms": 0.03754075899644741
+          },
+          "native_output_error": {
+            "max_abs": 241.0987551507294,
+            "relative_rms": 0.037578481915035204
+          },
+          "prepare_compile_ms": 114.690857,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "7efe5e7bc0b0936d05b7be4ce2ddc9f3e86508e89f745bf301c71aeb95048d63",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "e27896c96236e5b239bdad211d97eed37b655c14ab68ea5758555bc2c4d6f68f",
+            "shape": [
+              400,
+              512,
+              3584
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+            "tile_ir_sha256": "26bc40165771922633f632b7553cbe502f8a4342cede3ce4bd19c09e4ba21487",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "e95eaa84b029c70f6cc6e5dd148ce693f710ae0ac7e971d23b71637ee0840fed",
+          "tile_sha256": "26bc40165771922633f632b7553cbe502f8a4342cede3ce4bd19c09e4ba21487",
+          "target_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+          "isa_file": "interior-forward_400_512_3584_mxfp8_lds_k32_control.s",
+          "isa_sha256": "d8dc014777d2540cef40b50eada6ef706b6bd30690c689c3f9eff05d66563ebe",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_add_nc_u32_e32": 36,
+            "v_add_co_u32": 140,
+            "v_add_co_ci_u32_e64": 140,
+            "v_mul_lo_u32": 40,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_ldexp_f32": 32,
+            "v_add_f32_e32": 6,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            8,
+            4,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 3370752,
+          "end_to_end_ms": [
+            7.484572333333333,
+            3.937659666666667,
+            3.8413193333333333
+          ],
+          "end_to_end_median_ms": 3.937659666666667,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.408133,
+              "event_window_ms": 39.055328369140625,
+              "host_window_ms": 39.123691,
+              "device_window_ms": 39.04048,
+              "device_event_disagreement": 0.0003801880501497735
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.408133,
+              "event_window_ms": 39.24132537841797,
+              "host_window_ms": 39.335937,
+              "device_window_ms": 39.17268,
+              "device_event_disagreement": 0.0017493134535084475
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.408133,
+              "event_window_ms": 39.091644287109375,
+              "host_window_ms": 39.167285,
+              "device_window_ms": 39.02328,
+              "device_event_disagreement": 0.0017488209656076976
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.0762509375
+        },
+        "mxfp8_lds_k64_candidate": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.965132161974907,
+            "relative_rms": 0.0016583573868344083,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 33.643047665937424,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 9.5733642578125,
+            "relative_rms": 0.026493697360937835
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 237.93420615761875,
+            "relative_rms": 0.03754075899644741
+          },
+          "native_output_error": {
+            "max_abs": 241.0987551507294,
+            "relative_rms": 0.037578481915035204
+          },
+          "prepare_compile_ms": 113.140574,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "6270381281dbb232333aa123514c38a93a2fabe8b6db25572ec9e7925826afc0",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k64",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "c1671c449e122a8960ae4afda46ec499318eac616cf6f22e56a791b6b46fbdfe",
+            "shape": [
+              400,
+              512,
+              3584
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "29f6082d555f3b1772026253878d98e486f78795668ef5a3201c85334947bab2",
+            "tile_ir_sha256": "912a845956a5728764442ed6c723b4019e831c74b5857f2e26bdf368ad23c89c",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "61dff4d0700a3fbbc9ed8cf92b136a62b02b82762887bfa04e52568577bf6a6d",
+          "tile_sha256": "912a845956a5728764442ed6c723b4019e831c74b5857f2e26bdf368ad23c89c",
+          "target_sha256": "29f6082d555f3b1772026253878d98e486f78795668ef5a3201c85334947bab2",
+          "isa_file": "interior-forward_400_512_3584_mxfp8_lds_k64_candidate.s",
+          "isa_sha256": "78ccb31d2c72222bfaaa4a5dc43569c87692b271b56a078b680bf3c73c318425",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_mul_lo_u32": 41,
+            "v_add_co_u32": 161,
+            "v_add_co_ci_u32_e64": 161,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "v_add_nc_u32_e32": 70,
+            "ds_store_b128": 3,
+            "ds_load_2addr_b64": 8,
+            "v_wmma_f32_16x16x16_fp8_fp8": 16,
+            "v_ldexp_f32": 64,
+            "v_add_f32_e32": 10
+          },
+          "grid": [
+            8,
+            4,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 3370752,
+          "end_to_end_ms": [
+            5.5481066666666665,
+            5.905949333333333,
+            4.3624
+          ],
+          "end_to_end_median_ms": 5.5481066666666665,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.398776,
+              "event_window_ms": 24.602819442749023,
+              "host_window_ms": 24.803405,
+              "device_window_ms": 24.53052,
+              "device_event_disagreement": 0.0029386649329872804
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.398776,
+              "event_window_ms": 24.723939895629883,
+              "host_window_ms": 24.798957,
+              "device_window_ms": 24.56828,
+              "device_event_disagreement": 0.006295917895245946
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.398776,
+              "event_window_ms": 24.720592498779297,
+              "host_window_ms": 24.796351,
+              "device_window_ms": 24.6508,
+              "device_event_disagreement": 0.0028232534791689545
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.047984921875
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        512,
+        1024,
+        2560
+      ],
+      "input_sha256": {
+        "a": "13532853fd72db099dcb7a3dc27f2f9649d97c232e785232c1cb169a989bbc45",
+        "b": "88a7b18a1a7e77d3dd87bdf7788dbfc3d1d142713f282d1167d5fb5da36348a6"
+      },
+      "source_output_norm": 750215.8772544989,
+      "arms": {
+        "fp8_k128_n128": {
+          "group_k": 128,
+          "group_n": 128,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.970593408186687,
+            "relative_rms": 0.0016606165432516474,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 25.89307731786638,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 9.978195190429688,
+            "relative_rms": 0.026417383189168458
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 211.2260450606086,
+            "relative_rms": 0.03691596626114368
+          },
+          "native_output_error": {
+            "max_abs": 211.83608792457107,
+            "relative_rms": 0.03695458184852154
+          },
+          "prepare_compile_ms": 233.954073,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "72e90fd8c448ee3df8097147b707cbc60557e0e8e0f9215380ed11d938bcfc96",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 128,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 128,
+            "scale_n": 128,
+            "schedule_hash": "2db9add110a4a1e7dfe588b5853d5fa573e7ccb2f9599fb551c865102bf83c8d",
+            "shape": [
+              512,
+              1024,
+              2560
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "779466084c70fa468714e884879162b70beb854d770378319e3bfe69565bdd21",
+            "tile_ir_sha256": "a5f9b1f28bd72df0d48bd67f9f636f05092695cd2fb99635304511c6e6cf867a",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "a9dcf6ee9d72d49a20286ce643542b44b6d03e7087ca5a7adc633e5ca6db7b30",
+          "tile_sha256": "a5f9b1f28bd72df0d48bd67f9f636f05092695cd2fb99635304511c6e6cf867a",
+          "target_sha256": "779466084c70fa468714e884879162b70beb854d770378319e3bfe69565bdd21",
+          "isa_file": "interior-forward_512_1024_2560_fp8_k128_n128.s",
+          "isa_sha256": "44f5e7315ee3fd393a0603d1dae2beab7867520fff43b8668c3c9d521ad5d720",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 6,
+            "v_mul_lo_u32": 42,
+            "v_add_co_u32": 76,
+            "v_add_co_ci_u32_e64": 76,
+            "v_add_nc_u32_e32": 4,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_store_b128": 6,
+            "ds_load_2addr_b64": 16,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_mul_f32_e32": 2,
+            "v_add_f32_e32": 8
+          },
+          "grid": [
+            16,
+            4,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 128,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 128,
+            "scale_n": 128,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 3973760,
+          "end_to_end_ms": [
+            5.2022536666666666,
+            6.284175333333334,
+            4.089561
+          ],
+          "end_to_end_median_ms": 5.2022536666666666,
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.97889,
+              "event_window_ms": 27.050960540771484,
+              "host_window_ms": 27.137918,
+              "device_window_ms": 27.03384,
+              "device_event_disagreement": 0.0006328995506713596
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.97889,
+              "event_window_ms": 27.464170455932617,
+              "host_window_ms": 27.582687,
+              "device_window_ms": 27.45077,
+              "device_event_disagreement": 0.00048792502049607527
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 3.97889,
+              "event_window_ms": 27.533052444458008,
+              "host_window_ms": 27.643694,
+              "device_window_ms": 27.45664,
+              "device_event_disagreement": 0.002775298692803977
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.026807392578125
+        },
+        "fp8_k32_n1_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.945280513227772,
+            "relative_rms": 0.0016577930955041776,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 25.54158284302338,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 8.81600570678711,
+            "relative_rms": 0.023991337843362045
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 208.90093166436725,
+            "relative_rms": 0.03393907266858197
+          },
+          "native_output_error": {
+            "max_abs": 208.67170172794852,
+            "relative_rms": 0.03398018157653289
+          },
+          "prepare_compile_ms": 245.437443,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "3f5744729939a47e3bed50619a2ab71d1569a8dc7eb4da96d93d182cf818a566",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "65665dfaf5fb38ab44c378237889e8017ae446503e53b8e84acea87813ded89b",
+            "shape": [
+              512,
+              1024,
+              2560
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "ad7312475bb86df1d1f2996ea093133569df24d04fb645501a2fa63ea11585e3",
+            "tile_ir_sha256": "6a13a333aa90d2b450103e1a992dc05a9363acf745d7c3e5f51200e6a1d7f602",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "6d2c5c7cc8202746184ada45e6284d16993074dc6cf5592002c61e48650f9cad",
+          "tile_sha256": "6a13a333aa90d2b450103e1a992dc05a9363acf745d7c3e5f51200e6a1d7f602",
+          "target_sha256": "ad7312475bb86df1d1f2996ea093133569df24d04fb645501a2fa63ea11585e3",
+          "isa_file": "interior-forward_512_1024_2560_fp8_k32_n1_control.s",
+          "isa_sha256": "465b3b758e908d751e9ffc802ed395d65a3d433659de415a45f81fb4acef11b9",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_add_co_u32": 71,
+            "v_add_co_ci_u32_e64": 71,
+            "v_mul_lo_u32": 39,
+            "v_add_nc_u32_e32": 1,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_add_f32_e32": 10,
+            "v_mul_f32_e32": 14,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            16,
+            4,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 4423680,
+          "end_to_end_ms": [
+            11.029421333333334,
+            5.457510666666667,
+            5.527049666666667
+          ],
+          "end_to_end_median_ms": 5.527049666666667,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.339362,
+              "event_window_ms": 26.297571182250977,
+              "host_window_ms": 26.484979,
+              "device_window_ms": 26.23216,
+              "device_event_disagreement": 0.0024873469035469014
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.339362,
+              "event_window_ms": 25.542015075683594,
+              "host_window_ms": 25.62873,
+              "device_window_ms": 25.47624,
+              "device_event_disagreement": 0.002575171750885544
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.339362,
+              "event_window_ms": 26.575895309448242,
+              "host_window_ms": 26.660848,
+              "device_window_ms": 26.50172,
+              "device_event_disagreement": 0.0027910747158110833
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.0512346875
+        },
+        "mxfp8_k32_n1": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.989220380783081,
+            "relative_rms": 0.0016592992141773464,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 25.73304532153164,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 14.448760986328125,
+            "relative_rms": 0.026548732456713697
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 223.43653528749408,
+            "relative_rms": 0.03762918547213751
+          },
+          "native_output_error": {
+            "max_abs": 223.4727613216585,
+            "relative_rms": 0.037665980327378494
+          },
+          "prepare_compile_ms": 248.078248,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "2ece537cd6d67f32c48240474abbbcd940df5066bc4e065acec65543077c9403",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "b8d149077a9a54d34388e4db8a80f72e4f882baec3f0e3d584cae2c551a5181d",
+            "shape": [
+              512,
+              1024,
+              2560
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "327ae8131da06079be05488461b3206fa78edb9413cb405b7ff8d15ea2ff2def",
+            "tile_ir_sha256": "a746327336b0c4004ef1efbcb455c34ddfae7f221cd8d764708dc12eec12d231",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "2fefafb77bd0c6567b6832d139940fb6944c4fdefbd76874862ba73d7d08aeb1",
+          "tile_sha256": "a746327336b0c4004ef1efbcb455c34ddfae7f221cd8d764708dc12eec12d231",
+          "target_sha256": "327ae8131da06079be05488461b3206fa78edb9413cb405b7ff8d15ea2ff2def",
+          "isa_file": "interior-forward_512_1024_2560_mxfp8_k32_n1.s",
+          "isa_sha256": "d24b0d314587de7cc1c6273130d634f9335156794d0ff9a4a0b239c7c8ac5a6b",
+          "static_isa_counts": {
+            "v_add_co_u32": 55,
+            "v_add_co_ci_u32_e64": 55,
+            "v_mul_u32_u24_e32": 5,
+            "v_mul_lo_u32": 39,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_add_nc_u32_e32": 34,
+            "v_ldexp_f32": 32,
+            "v_add_f32_e32": 4,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            16,
+            4,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 4055040,
+          "end_to_end_ms": [
+            9.103353666666667,
+            6.0995073333333325,
+            5.471771
+          ],
+          "end_to_end_median_ms": 6.0995073333333325,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.284718,
+              "event_window_ms": 30.35431671142578,
+              "host_window_ms": 30.445518,
+              "device_window_ms": 30.25876,
+              "device_event_disagreement": 0.0031480435660676104
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.284718,
+              "event_window_ms": 31.094812393188477,
+              "host_window_ms": 31.189908,
+              "device_window_ms": 30.94364,
+              "device_event_disagreement": 0.004861659600223007
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.284718,
+              "event_window_ms": 31.405254364013672,
+              "host_window_ms": 31.493188,
+              "device_window_ms": 31.32676,
+              "device_event_disagreement": 0.0024994022689278396
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.060436796875
+        },
+        "mxfp4_folded": {
+          "approximate_policy": "explicit_allow",
+          "fold_lossless": false,
+          "fold_inexact_value_count": 610148,
+          "folding_weight_error": {
+            "max_abs": 0.0625,
+            "relative_rms": 0.0007264539550867731
+          },
+          "folding_output_error": {
+            "max_abs": 5.076701377810423,
+            "relative_rms": 0.0007279253716400736
+          },
+          "pre_fold_quantized_output_error": {
+            "max_abs": 728.6781831858071,
+            "relative_rms": 0.11852723587989451
+          },
+          "physical_weight_storage": "expanded_e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.862452620523982,
+            "relative_rms": 0.0016606924597558977,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 26.050497078911505,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 55.137451171875,
+            "relative_rms": 0.11538030260237538
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 729.7929087343337,
+            "relative_rms": 0.11852984485232573
+          },
+          "native_output_error": {
+            "max_abs": 729.879473813814,
+            "relative_rms": 0.11854056350833711
+          },
+          "prepare_compile_ms": 707.401046,
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "native_provenance": {
+            "accum": "fp32",
+            "architecture": "gfx1201",
+            "authored_target_ir_sha256": "331c4f871d67a6cedca5f6be9d0b5a2a304ef54edbca28377a9941de41b3f1e3",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "fold_inexact_value_count": 610148,
+            "fold_lossless": false,
+            "fold_max_normalized_abs_error": 0.0009765625,
+            "fold_max_normalized_relative_error": 1.0,
+            "image_input_level": "target",
+            "image_k": 0,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mnk",
+            "image_whole_m": true,
+            "image_whole_n": true,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "output": "bf16",
+            "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+            "producer_kind": "native_mlir_typed_lds",
+            "raster": "grouped_m4_1d",
+            "raster_group_m": 4,
+            "route": "folded_row_reference_bm256_tm4",
+            "row_guard": "cta",
+            "row_reference_sha256": "13edb45bf90d2db86e63b501d5447156a7e0b849f70c619e047dd4922db07612",
+            "schedule_hash": "c475f07ecdaca2d3b9e982a2fbd680bf9a416778d059ed200c3efcbb7975c5c8",
+            "staging_policy": "unconditional_k64",
+            "staging_prefetch": "register_next_slab",
+            "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+            "target_ir_sha256": "cc6d2c1a685e40167ea5e1af8bb76dd337a1c075914daa3ac9aca97bb5be3219",
+            "tile_ir_sha256": "b8ec4c7c4cba32595be39debd3507dd25d6e10a7f7853fcdad245097f772fb6b",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+            "weight_sha256": "42a5aa9efc9a30fe0cdbce7112572398a9d1e26d371b18cb0c7c5e925ddef96d",
+            "work_item": "ROCM-MXFP4-W4A8-1",
+            "workgroup_mode": "cu"
+          },
+          "payload_sha256": "efdf53b2e41f7b7af9685e0b68a0d21833874a1ab2ad56ea33fa84d926ff2533",
+          "tile_sha256": "b8ec4c7c4cba32595be39debd3507dd25d6e10a7f7853fcdad245097f772fb6b",
+          "target_sha256": "cc6d2c1a685e40167ea5e1af8bb76dd337a1c075914daa3ac9aca97bb5be3219",
+          "isa_file": "interior-forward_512_1024_2560_mxfp4_folded.s",
+          "isa_sha256": "fa1af852209dd579d09ef3b3c85d16a6fc7a38059f96dbb2e5ebf03d8d13ded2",
+          "static_isa_counts": {
+            "v_cvt_f32_u32_e32": 2,
+            "v_mul_f32_e32": 130,
+            "v_cvt_u32_f32_e32": 2,
+            "v_mul_lo_u32": 13,
+            "v_add_co_u32": 160,
+            "v_add_co_ci_u32_e64": 160,
+            "v_mul_u32_u24_e32": 7,
+            "v_add_nc_u32_e32": 2,
+            "ds_store_b128": 10,
+            "s_barrier_signal": 3,
+            "s_barrier_wait": 3,
+            "ds_load_2addr_b64": 12,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_cvt_f64_f32_e32": 192,
+            "v_mul_f64_e32": 128,
+            "v_cvt_f32_f64_e32": 64
+          },
+          "grid": [
+            32,
+            1,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "folded_row_reference_bm256_tm4",
+          "schedule": {
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "image_shape_policy": "runtime_mnk",
+            "raster_group_m": 4,
+            "row_guard": "cta",
+            "staging_prefetch": "register_next_slab",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2
+          },
+          "physical_input_bytes": 3935232,
+          "end_to_end_ms": [
+            10.573255999999999,
+            6.644565,
+            6.952842666666666
+          ],
+          "end_to_end_median_ms": 6.952842666666666,
+          "device_windows": [
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 4.14623,
+              "event_window_ms": 39.936763763427734,
+              "host_window_ms": 40.066503,
+              "device_window_ms": 39.85432,
+              "device_event_disagreement": 0.002064357640897065
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 4.14623,
+              "event_window_ms": 42.816261291503906,
+              "host_window_ms": 42.92254,
+              "device_window_ms": 42.74372,
+              "device_event_disagreement": 0.0016942462820381157
+            },
+            {
+              "launches": 1024,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 1026,
+              "graph_build_wall_ms": 4.14623,
+              "event_window_ms": 42.95768737792969,
+              "host_window_ms": 43.043941,
+              "device_window_ms": 42.88168,
+              "device_event_disagreement": 0.001769354510660525
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.0417419140625
+        },
+        "mxfp8_lds_k32_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.989220380783081,
+            "relative_rms": 0.0016592992141773464,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 25.73304532153164,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 14.448760986328125,
+            "relative_rms": 0.026548732456713697
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 223.43653528749408,
+            "relative_rms": 0.03762918547213751
+          },
+          "native_output_error": {
+            "max_abs": 223.4727613216585,
+            "relative_rms": 0.037665980327378494
+          },
+          "prepare_compile_ms": 137.37788,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "3a6c5f1c8b06cc9cdcd82fdaff6d74063bad024f979d5895cba700ce566ab215",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "b8d149077a9a54d34388e4db8a80f72e4f882baec3f0e3d584cae2c551a5181d",
+            "shape": [
+              512,
+              1024,
+              2560
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "327ae8131da06079be05488461b3206fa78edb9413cb405b7ff8d15ea2ff2def",
+            "tile_ir_sha256": "a09ac300ee1865bf2d1401814fb72c4c5727015797f4c246557a805e00a85be5",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "2fefafb77bd0c6567b6832d139940fb6944c4fdefbd76874862ba73d7d08aeb1",
+          "tile_sha256": "a09ac300ee1865bf2d1401814fb72c4c5727015797f4c246557a805e00a85be5",
+          "target_sha256": "327ae8131da06079be05488461b3206fa78edb9413cb405b7ff8d15ea2ff2def",
+          "isa_file": "interior-forward_512_1024_2560_mxfp8_lds_k32_control.s",
+          "isa_sha256": "3b6102aa15163588ee749019abefc7b002ec8803fe78013ba3c957eb8eefcc6a",
+          "static_isa_counts": {
+            "v_add_co_u32": 55,
+            "v_add_co_ci_u32_e64": 55,
+            "v_mul_u32_u24_e32": 5,
+            "v_mul_lo_u32": 39,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_add_nc_u32_e32": 34,
+            "v_ldexp_f32": 32,
+            "v_add_f32_e32": 4,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            16,
+            4,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 4055040,
+          "end_to_end_ms": [
+            8.516887,
+            6.314347000000001,
+            5.029277666666666
+          ],
+          "end_to_end_median_ms": 6.314347000000001,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.326894,
+              "event_window_ms": 29.574108123779297,
+              "host_window_ms": 29.659538,
+              "device_window_ms": 29.5218,
+              "device_event_disagreement": 0.0017687134827656622
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.326894,
+              "event_window_ms": 31.015153884887695,
+              "host_window_ms": 31.107533,
+              "device_window_ms": 30.94,
+              "device_event_disagreement": 0.0024231343544715792
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.326894,
+              "event_window_ms": 29.438156127929688,
+              "host_window_ms": 29.563154,
+              "device_window_ms": 29.39148,
+              "device_event_disagreement": 0.001585565608350102
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.057659765625
+        },
+        "mxfp8_lds_k64_candidate": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.989220380783081,
+            "relative_rms": 0.0016592992141773464,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 25.73304532153164,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 14.448760986328125,
+            "relative_rms": 0.026548732456713697
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 223.43653528749408,
+            "relative_rms": 0.03762918547213751
+          },
+          "native_output_error": {
+            "max_abs": 223.4727613216585,
+            "relative_rms": 0.037665980327378494
+          },
+          "prepare_compile_ms": 270.444885,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "0ce0590052ff7a527b5d1e0d7efad4843cf45a1b16376e14c4984eba67ee8d1e",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": true,
+            "lds_whole_n": true,
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k64",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "0c9a294423fac81571386bb74d3b6f217c3bea5cf7c7e910d7da8999962ea568",
+            "shape": [
+              512,
+              1024,
+              2560
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "2bcde9d715dccfe587948da2e6c76c2f1be466dc567ea2cb4d38c0e643113bd4",
+            "tile_ir_sha256": "ad6e99827bb9d811f41a6b5d6a40087183456b524cdf3d08ef52431de3d7c33c",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "d534231f83715d1e79e911fe33da97dc67f6f4f480b728419c6b242f11dd696e",
+          "tile_sha256": "ad6e99827bb9d811f41a6b5d6a40087183456b524cdf3d08ef52431de3d7c33c",
+          "target_sha256": "2bcde9d715dccfe587948da2e6c76c2f1be466dc567ea2cb4d38c0e643113bd4",
+          "isa_file": "interior-forward_512_1024_2560_mxfp8_lds_k64_candidate.s",
+          "isa_sha256": "fe0bb1f429bcc156c37ef61d1c15c1545e742e0fd9e500cf5045da6bcd6d5462",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_add_nc_u32_e32": 71,
+            "v_mul_lo_u32": 39,
+            "v_add_co_u32": 76,
+            "v_add_co_ci_u32_e64": 76,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_store_b128": 3,
+            "ds_load_2addr_b64": 8,
+            "v_wmma_f32_16x16x16_fp8_fp8": 16,
+            "v_ldexp_f32": 64,
+            "v_add_f32_e32": 10
+          },
+          "grid": [
+            16,
+            4,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 4055040,
+          "end_to_end_ms": [
+            8.077328666666666,
+            5.927393666666667,
+            4.915366666666666
+          ],
+          "end_to_end_median_ms": 5.927393666666667,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.320537,
+              "event_window_ms": 23.04509925842285,
+              "host_window_ms": 23.160306,
+              "device_window_ms": 22.99108,
+              "device_event_disagreement": 0.0023440670754805992
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.320537,
+              "event_window_ms": 24.34528350830078,
+              "host_window_ms": 24.432319,
+              "device_window_ms": 24.26832,
+              "device_event_disagreement": 0.003161331363199796
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.320537,
+              "event_window_ms": 23.06805419921875,
+              "host_window_ms": 23.176562,
+              "device_window_ms": 22.99552,
+              "device_event_disagreement": 0.0031443570659378567
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.044913125
+        }
+      }
+    },
+    {
+      "shape_mnk": [
+        200,
+        2048,
+        5120
+      ],
+      "input_sha256": {
+        "a": "a8c1ca8bc8e6f23fb3e9bfb5e85592bebec3e4b1c8c67fca8077349b5c46a0e7",
+        "b": "6662552b1fb75d65efc7346598d384cd3b8137a9ce148dd3131cd7cb2f4283d4"
+      },
+      "source_output_norm": 938142.3602563275,
+      "arms": {
+        "fp8_k128_n128": {
+          "group_k": 128,
+          "group_n": 128,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.993339141318756,
+            "relative_rms": 0.0016532869360222759,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 50.10598159444483,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 10.894393920898438,
+            "relative_rms": 0.026440944348334956
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 264.10106303554403,
+            "relative_rms": 0.03678585689021447
+          },
+          "native_output_error": {
+            "max_abs": 262.21907113267525,
+            "relative_rms": 0.036825898829201904
+          },
+          "prepare_compile_ms": 416.620991,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "af114e207d5762e33c4c46b035be3f9f10845ededa65e5bf33914fa26fef3622",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 128,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k128",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 128,
+            "scale_n": 128,
+            "schedule_hash": "7aa0536cd5f47647bc34631484c51709cb6d9269f0eb0c158016c59610447ff4",
+            "shape": [
+              200,
+              2048,
+              5120
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "344604a3a546cab6d176d7de0b52c55f8aff2bc589d9760e430c5a25f96bc7e6",
+            "tile_ir_sha256": "1367db3a6c3771cbacaf9bfd7e54c5b6f0156886e404d3a3a3941c6bf691a67a",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "c865c3fff2a7086c1d6349829f0db5f05edfa9d0e546845c1a01432bc0f61dc3",
+          "tile_sha256": "1367db3a6c3771cbacaf9bfd7e54c5b6f0156886e404d3a3a3941c6bf691a67a",
+          "target_sha256": "344604a3a546cab6d176d7de0b52c55f8aff2bc589d9760e430c5a25f96bc7e6",
+          "isa_file": "interior-forward_200_2048_5120_fp8_k128_n128.s",
+          "isa_sha256": "801df36706577432b4ac6df48e90c174843f339bed4ea55f074e84b32893dee7",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 6,
+            "v_add_nc_u32_e32": 4,
+            "v_mul_lo_u32": 46,
+            "v_add_co_u32": 161,
+            "v_add_co_ci_u32_e64": 161,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_store_b128": 6,
+            "ds_load_2addr_b64": 16,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_mul_f32_e32": 16,
+            "v_add_f32_e32": 8
+          },
+          "grid": [
+            32,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 128,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 128,
+            "scale_n": 128,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 11544320,
+          "end_to_end_ms": [
+            8.3857,
+            4.738494333333334,
+            4.738932
+          ],
+          "end_to_end_median_ms": 4.738932,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.331087,
+              "event_window_ms": 24.838647842407227,
+              "host_window_ms": 24.914406,
+              "device_window_ms": 24.76456,
+              "device_event_disagreement": 0.002982764717197541
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.331087,
+              "event_window_ms": 23.298908233642578,
+              "host_window_ms": 23.39094,
+              "device_window_ms": 23.22656,
+              "device_event_disagreement": 0.0031052199063178127
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.331087,
+              "event_window_ms": 25.667478561401367,
+              "host_window_ms": 25.744138,
+              "device_window_ms": 25.59616,
+              "device_event_disagreement": 0.0027785573573484764
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.04836828125
+        },
+        "fp8_k32_n1_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 15.997305985858475,
+            "relative_rms": 0.0016582411456336423,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 50.37301790208324,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 8.90018081665039,
+            "relative_rms": 0.02398303673258761
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 272.0042282397008,
+            "relative_rms": 0.033885813449030425
+          },
+          "native_output_error": {
+            "max_abs": 271.75180664498964,
+            "relative_rms": 0.033928846942623624
+          },
+          "prepare_compile_ms": 412.434831,
+          "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "bee2f3fd1f67cbb8b73c68a91c46ea44848f947ed8f5e336ed008bc0ebf2b5ab",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_fp8_w8a8_blockscale_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "fp32",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "93033e2fdcf583ada828423ead0d8486e5ff13c7191067529bb8fa91305e7065",
+            "shape": [
+              200,
+              2048,
+              5120
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "00f5d4b164938f6c1826f3af4e69e56bb9e10b30c54fb6eb1f4e496841a3748a",
+            "tile_ir_sha256": "5241d6df90e6972c5d94bfa89162c6975b57628494adb63779800df5fc2d750e",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "22bb1741080c50b5e53ef10884cbbc28a649ef2db29b3e994eec0fd1b411b6df",
+          "tile_sha256": "5241d6df90e6972c5d94bfa89162c6975b57628494adb63779800df5fc2d750e",
+          "target_sha256": "00f5d4b164938f6c1826f3af4e69e56bb9e10b30c54fb6eb1f4e496841a3748a",
+          "isa_file": "interior-forward_200_2048_5120_fp8_k32_n1_control.s",
+          "isa_sha256": "2b9df4f4ab247f62a60cc1fbfbf8603366110c262a503becc04356973c027d97",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_add_nc_u32_e32": 3,
+            "v_add_co_u32": 156,
+            "v_add_co_ci_u32_e64": 156,
+            "v_mul_lo_u32": 40,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_add_f32_e32": 4,
+            "v_mul_f32_e32": 12,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            32,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "fp32",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 12948480,
+          "end_to_end_ms": [
+            8.912005666666667,
+            6.591821333333333,
+            6.553775666666667
+          ],
+          "end_to_end_median_ms": 6.591821333333333,
+          "device_windows": [
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.718969,
+              "event_window_ms": 24.87161636352539,
+              "host_window_ms": 24.944484,
+              "device_window_ms": 24.80588,
+              "device_event_disagreement": 0.0026430273997710757
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.718969,
+              "event_window_ms": 24.095943450927734,
+              "host_window_ms": 24.164757,
+              "device_window_ms": 24.04008,
+              "device_event_disagreement": 0.0023183757482458677
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.718969,
+              "event_window_ms": 25.277359008789062,
+              "host_window_ms": 25.354185,
+              "device_window_ms": 25.20528,
+              "device_event_disagreement": 0.002851524511085273
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.09689796875
+        },
+        "mxfp8_k32_n1": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 21.565055146813393,
+            "relative_rms": 0.001659562998479541,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 49.77233839789483,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 15.716278076171875,
+            "relative_rms": 0.026549702043674683
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 299.1541450233344,
+            "relative_rms": 0.03741535095604465
+          },
+          "native_output_error": {
+            "max_abs": 299.8879701108817,
+            "relative_rms": 0.037450640889741926
+          },
+          "prepare_compile_ms": 256.020173,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "c1d7735d18723974d5c0e118be21d6c13323ed9716c35b35e4b91ca890853ce7",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "6f1ff925c90d800474055faf7c2761f7be9e26b7f1023499fab49be12edd942a",
+            "shape": [
+              200,
+              2048,
+              5120
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+            "tile_ir_sha256": "f46c64aaaa879ece51d8fcb8afe50867d40e06efd6b364f76f02f24a501a28f5",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "e95eaa84b029c70f6cc6e5dd148ce693f710ae0ac7e971d23b71637ee0840fed",
+          "tile_sha256": "f46c64aaaa879ece51d8fcb8afe50867d40e06efd6b364f76f02f24a501a28f5",
+          "target_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+          "isa_file": "interior-forward_200_2048_5120_mxfp8_k32_n1.s",
+          "isa_sha256": "dc01a5ba850a60c254d2bca88ff95618956f88824792fd200d72fbbda1c4f56a",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_add_nc_u32_e32": 36,
+            "v_add_co_u32": 140,
+            "v_add_co_ci_u32_e64": 140,
+            "v_mul_lo_u32": 40,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_ldexp_f32": 32,
+            "v_add_f32_e32": 6,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            32,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 11869440,
+          "end_to_end_ms": [
+            9.392865,
+            5.872564666666666,
+            5.777370666666666
+          ],
+          "end_to_end_median_ms": 5.872564666666666,
+          "device_windows": [
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.71116,
+              "event_window_ms": 29.95661735534668,
+              "host_window_ms": 30.121821,
+              "device_window_ms": 29.9216,
+              "device_event_disagreement": 0.0011689355620930356
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.71116,
+              "event_window_ms": 28.727556228637695,
+              "host_window_ms": 28.81128,
+              "device_window_ms": 28.66208,
+              "device_event_disagreement": 0.002279213314094024
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.71116,
+              "event_window_ms": 27.845548629760742,
+              "host_window_ms": 27.938825,
+              "device_window_ms": 27.77964,
+              "device_event_disagreement": 0.0023669359378432164
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.11196125
+        },
+        "mxfp4_folded": {
+          "approximate_policy": "explicit_allow",
+          "fold_lossless": false,
+          "fold_inexact_value_count": 2617412,
+          "folding_weight_error": {
+            "max_abs": 0.0625,
+            "relative_rms": 0.0008454063323719972
+          },
+          "folding_output_error": {
+            "max_abs": 6.867061014026149,
+            "relative_rms": 0.0008424826615384635
+          },
+          "pre_fold_quantized_output_error": {
+            "max_abs": 837.2344108898371,
+            "relative_rms": 0.11802041121709474
+          },
+          "physical_weight_storage": "expanded_e4m3_bytes",
+          "correctness": {
+            "max_abs": 27.295127667621273,
+            "relative_rms": 0.001658026129856823,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 48.87574632307067,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 58.342681884765625,
+            "relative_rms": 0.11539148843212821
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 837.22803223307,
+            "relative_rms": 0.1180244807067995
+          },
+          "native_output_error": {
+            "max_abs": 837.4207433672457,
+            "relative_rms": 0.11803635659110136
+          },
+          "prepare_compile_ms": 1727.146262,
+          "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1",
+          "native_provenance": {
+            "accum": "fp32",
+            "architecture": "gfx1201",
+            "authored_target_ir_sha256": "a2f30c8554b674c53ef891d3df1b6e75e715c9a7c117ba63984890e38f3e9ed3",
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "fold_inexact_value_count": 2617412,
+            "fold_lossless": false,
+            "fold_max_normalized_abs_error": 0.0009765625,
+            "fold_max_normalized_relative_error": 1.0,
+            "image_input_level": "target",
+            "image_k": 0,
+            "image_m": 0,
+            "image_n": 0,
+            "image_shape_policy": "runtime_mnk",
+            "image_whole_m": false,
+            "image_whole_n": true,
+            "kernel_argument_layout": "expanded_memref",
+            "materializer": "tessera_rocm.scaled_wmma_gemm",
+            "native_compiler_owned": true,
+            "numeric_policy": "folded_row_reference_explicit_approximate",
+            "output": "bf16",
+            "physical_contract": "rocm_mxfp4_w4a8_folded_prefill_v1",
+            "producer_kind": "native_mlir_typed_lds",
+            "raster": "grouped_m4_1d",
+            "raster_group_m": 4,
+            "route": "folded_row_reference_bm256_tm4",
+            "row_guard": "wave",
+            "row_reference_sha256": "f21b9aa38c9f4f1748fe11d8ed3ae639224a758c123f52669443fb0ef1a15d9d",
+            "schedule_hash": "27a9649a832149c5018c4510e52edc40a38e515ecc916db56623497b88f9e911",
+            "staging_policy": "unconditional_k64",
+            "staging_prefetch": "register_next_slab",
+            "sync_key": "ROCM-MXFP4-FOLDED-PREFILL-2026-09-22",
+            "target_ir_sha256": "b495d3bd1344e66cbb16fe43e51e652d92ee3ccaeeda767ace4e085b7849869d",
+            "tile_ir_sha256": "634128b77689df68b0821e33e255c0bde099ddcd0f64ba223ecfe58e1fb0fda0",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2,
+            "weight_layout": "mxfp4.gfx12.folded_e4m3.nk_row_major.v1",
+            "weight_sha256": "a0972e7995f626de3f1917162dc0651fbbb72afbe769e5c65d9224b23cac5eb9",
+            "work_item": "ROCM-MXFP4-W4A8-1",
+            "workgroup_mode": "wgp"
+          },
+          "payload_sha256": "999514c6d3d83fa78584c0bba7af9af2dbe3a77e4c463a5f222b22bd335fb3c4",
+          "tile_sha256": "634128b77689df68b0821e33e255c0bde099ddcd0f64ba223ecfe58e1fb0fda0",
+          "target_sha256": "b495d3bd1344e66cbb16fe43e51e652d92ee3ccaeeda767ace4e085b7849869d",
+          "isa_file": "interior-forward_200_2048_5120_mxfp4_folded.s",
+          "isa_sha256": "72ded205789beaea8cbcc78bb24f1c0354e76c708cddc2165dfcca90d5185c90",
+          "static_isa_counts": {
+            "v_cvt_f32_u32_e32": 2,
+            "v_mul_f32_e32": 130,
+            "v_cvt_u32_f32_e32": 2,
+            "v_mul_lo_u32": 17,
+            "v_add_co_u32": 235,
+            "v_add_co_ci_u32_e64": 235,
+            "v_mul_u32_u24_e32": 7,
+            "ds_store_b128": 10,
+            "s_barrier_signal": 3,
+            "s_barrier_wait": 3,
+            "v_add_nc_u32_e32": 3,
+            "ds_load_2addr_b64": 12,
+            "v_wmma_f32_16x16x16_fp8_fp8": 32,
+            "v_cvt_f64_f32_e32": 192,
+            "v_mul_f64_e32": 128,
+            "v_cvt_f32_f64_e32": 64
+          },
+          "grid": [
+            32,
+            1,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "folded_row_reference_bm256_tm4",
+          "schedule": {
+            "block_k": 64,
+            "block_m": 256,
+            "block_n": 64,
+            "epilogue_schedule": "complete_tile_vector_scales",
+            "image_shape_policy": "runtime_mnk",
+            "raster_group_m": 4,
+            "row_guard": "wave",
+            "staging_prefetch": "register_next_slab",
+            "tile_m_per_wave": 4,
+            "tile_n_per_wave": 2
+          },
+          "physical_input_bytes": 11512608,
+          "end_to_end_ms": [
+            12.168767,
+            11.219505666666668,
+            11.472845666666666
+          ],
+          "end_to_end_median_ms": 11.472845666666666,
+          "device_windows": [
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.462718,
+              "event_window_ms": 30.21065902709961,
+              "host_window_ms": 30.287084,
+              "device_window_ms": 30.13736,
+              "device_event_disagreement": 0.0024262637578960967
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.462718,
+              "event_window_ms": 28.15751838684082,
+              "host_window_ms": 28.228778,
+              "device_window_ms": 28.09096,
+              "device_event_disagreement": 0.0023637873880223326
+            },
+            {
+              "launches": 512,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 514,
+              "graph_build_wall_ms": 2.462718,
+              "event_window_ms": 27.864328384399414,
+              "host_window_ms": 27.939206,
+              "device_window_ms": 27.80252,
+              "device_event_disagreement": 0.002218190352437057
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.05486515625
+        },
+        "mxfp8_lds_k32_control": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 21.565055146813393,
+            "relative_rms": 0.001659562998479541,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 49.77233839789483,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 15.716278076171875,
+            "relative_rms": 0.026549702043674683
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 299.1541450233344,
+            "relative_rms": 0.03741535095604465
+          },
+          "native_output_error": {
+            "max_abs": 299.8879701108817,
+            "relative_rms": 0.037450640889741926
+          },
+          "prepare_compile_ms": 283.196362,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "5affbe0a99deca34e358b19ee0536a6018d95c8fef27d16c82746705c72ade20",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k32",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "6f1ff925c90d800474055faf7c2761f7be9e26b7f1023499fab49be12edd942a",
+            "shape": [
+              200,
+              2048,
+              5120
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+            "tile_ir_sha256": "aa1ddff51267625f585f8a4076654d41b02097650b2266ba437a979141e3e91c",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "e95eaa84b029c70f6cc6e5dd148ce693f710ae0ac7e971d23b71637ee0840fed",
+          "tile_sha256": "aa1ddff51267625f585f8a4076654d41b02097650b2266ba437a979141e3e91c",
+          "target_sha256": "46eb6dbc84e0b289919738cd313ef36deb367a835deab0f78e7b76c4bff660fc",
+          "isa_file": "interior-forward_200_2048_5120_mxfp8_lds_k32_control.s",
+          "isa_sha256": "5558f672d600b3a19e4e90fa3abb26d94d9de03b30348f2973fbc01175fdb13b",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_add_nc_u32_e32": 36,
+            "v_add_co_u32": 140,
+            "v_add_co_ci_u32_e64": 140,
+            "v_mul_lo_u32": 40,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "ds_load_2addr_b64": 4,
+            "v_wmma_f32_16x16x16_fp8_fp8": 8,
+            "v_ldexp_f32": 32,
+            "v_add_f32_e32": 6,
+            "ds_store_b128": 2
+          },
+          "grid": [
+            32,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 32,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 11869440,
+          "end_to_end_ms": [
+            9.869911,
+            6.0929123333333335,
+            5.230822
+          ],
+          "end_to_end_median_ms": 6.0929123333333335,
+          "device_windows": [
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.675617,
+              "event_window_ms": 26.98817253112793,
+              "host_window_ms": 27.06536,
+              "device_window_ms": 26.92248,
+              "device_event_disagreement": 0.00243412298673281
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.675617,
+              "event_window_ms": 27.909887313842773,
+              "host_window_ms": 27.979804,
+              "device_window_ms": 27.844,
+              "device_event_disagreement": 0.0023607158675303355
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.675617,
+              "event_window_ms": 27.463651657104492,
+              "host_window_ms": 27.537451,
+              "device_window_ms": 27.39756,
+              "device_event_disagreement": 0.002406513814319974
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.10702171875
+        },
+        "mxfp8_lds_k64_candidate": {
+          "group_k": 32,
+          "group_n": 1,
+          "approximate_policy": "none",
+          "physical_weight_storage": "e4m3_bytes",
+          "correctness": {
+            "max_abs": 21.565055146813393,
+            "relative_rms": 0.001659562998479541,
+            "correctness": "elementwise_f32_forward_bound_plus_bf16_store",
+            "max_error_bound": 49.77233839789483,
+            "violations": 0
+          },
+          "quantized_weight_error": {
+            "max_abs": 15.716278076171875,
+            "relative_rms": 0.026549702043674683
+          },
+          "quantized_ideal_output_error": {
+            "max_abs": 299.1541450233344,
+            "relative_rms": 0.03741535095604465
+          },
+          "native_output_error": {
+            "max_abs": 299.8879701108817,
+            "relative_rms": 0.037450640889741926
+          },
+          "prepare_compile_ms": 265.280797,
+          "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1",
+          "native_provenance": {
+            "a_storage": "e4m3",
+            "accum": "f32",
+            "b_layout": "nk",
+            "b_storage": "e4m3",
+            "blockscale_lds_pad_bytes": -1,
+            "blockscale_prefetch": -1,
+            "blockscale_stage_k": -1,
+            "graph_ir_sha256": "073b11af2cf2978818150a11f9bb4e63e89a78603be27df8a2d1910a317e7825",
+            "image_input_level": "target",
+            "k_unroll": 1,
+            "lds_runtime_k": true,
+            "lds_whole_m": false,
+            "lds_whole_n": true,
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "materializer": "generate-wmma-gemm-kernel",
+            "numeric_policy": {
+              "accum": "f32",
+              "execution_mode": "exact_per_block",
+              "storage": "e4m3"
+            },
+            "output_storage": "bf16",
+            "physical_contract": "rocm_mxfp8_e4m3_e8m0_k32_nk_v1",
+            "physical_route": "gfx1201_lds_wmma_blockscale_nk_128x64_w8_d1_k64",
+            "pipeline_depth": 1,
+            "route": "canonical_scheduled_tile_consumer",
+            "runtime_mn_image": true,
+            "runtime_shape_image": false,
+            "scale_format": "e8m0",
+            "scale_group_panels": -1,
+            "scale_k": 32,
+            "scale_n": 1,
+            "schedule_hash": "c591cf133e5face88c36ddde8966aeff515a0786a765b4ac21a9e04d60d3fdcf",
+            "shape": [
+              200,
+              2048,
+              5120
+            ],
+            "staging": "lds",
+            "sync_key": "GFX1201-LANES-2026-09-27",
+            "target_ir_sha256": "29f6082d555f3b1772026253878d98e486f78795668ef5a3201c85334947bab2",
+            "tile_ir_sha256": "9ff357e2da63b6e8f331d6ce0e5558db728d52bff6afa3ccbc7e8e9bcf18b2d6",
+            "warps": 8,
+            "work_item": "ROCM-FP8-BLOCKSCALE-1",
+            "workgroup": [
+              256,
+              1,
+              1
+            ]
+          },
+          "payload_sha256": "61dff4d0700a3fbbc9ed8cf92b136a62b02b82762887bfa04e52568577bf6a6d",
+          "tile_sha256": "9ff357e2da63b6e8f331d6ce0e5558db728d52bff6afa3ccbc7e8e9bcf18b2d6",
+          "target_sha256": "29f6082d555f3b1772026253878d98e486f78795668ef5a3201c85334947bab2",
+          "isa_file": "interior-forward_200_2048_5120_mxfp8_lds_k64_candidate.s",
+          "isa_sha256": "d87852d54bf656c8c44e8684599df83e490cb94ad69087a2b8d078c27995cc9b",
+          "static_isa_counts": {
+            "v_mul_u32_u24_e32": 5,
+            "v_mul_lo_u32": 41,
+            "v_add_co_u32": 161,
+            "v_add_co_ci_u32_e64": 161,
+            "s_barrier_signal": 2,
+            "s_barrier_wait": 2,
+            "v_add_nc_u32_e32": 70,
+            "ds_store_b128": 3,
+            "ds_load_2addr_b64": 8,
+            "v_wmma_f32_16x16x16_fp8_fp8": 16,
+            "v_ldexp_f32": 64,
+            "v_add_f32_e32": 10
+          },
+          "grid": [
+            32,
+            2,
+            1
+          ],
+          "workgroup": [
+            256,
+            1,
+            1
+          ],
+          "route": "canonical_scheduled_tile_consumer",
+          "schedule": {
+            "macro_k": 64,
+            "macro_tile": [
+              128,
+              64
+            ],
+            "pipeline_depth": 1,
+            "scale_format": "e8m0",
+            "scale_k": 32,
+            "scale_n": 1,
+            "staging": "lds",
+            "warps": 8
+          },
+          "physical_input_bytes": 11869440,
+          "end_to_end_ms": [
+            7.2070229999999995,
+            5.887631,
+            5.462216333333333
+          ],
+          "end_to_end_median_ms": 5.887631,
+          "device_windows": [
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.450887,
+              "event_window_ms": 21.895244598388672,
+              "host_window_ms": 21.993464,
+              "device_window_ms": 21.85032,
+              "device_event_disagreement": 0.0020517970551458477
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.450887,
+              "event_window_ms": 22.911819458007812,
+              "host_window_ms": 23.041454,
+              "device_window_ms": 22.8702,
+              "device_event_disagreement": 0.0018165060214484945
+            },
+            {
+              "launches": 256,
+              "bracketed": true,
+              "dispatch_mode": "hip_graph_replay",
+              "host_graph_launches": 1,
+              "graph_node_count": 258,
+              "graph_build_wall_ms": 1.450887,
+              "event_window_ms": 22.54561996459961,
+              "host_window_ms": 22.619248,
+              "device_window_ms": 22.47648,
+              "device_event_disagreement": 0.0030666694776267846
+            }
+          ],
+          "device_execution_dispatch_median_ms": 0.08779875
+        }
+      }
+    }
+  ],
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_gfx1201_three_formats.py": "5af056891b2008b1349ac2df2b2a1e7a2744b6bf0a7d0fc888a18b92df1be50a",
+    "benchmarks/rocm/benchmark_gfx1201_mxfp8_package.py": "dddf3a39843a98ed497318ff02879a4eec6931b1f08bf99f31441178c4568a74",
+    "python/tessera/compiler/rocm_fp8_blockscale.py": "430a298fe4c84942eef535d169c1a4e723bc4289d92b9ebee0238f5d03969fca",
+    "python/tessera/compiler/rocm_mxfp8_blockscale.py": "eda12d55fea0e6aa95a1c5f167ce947f033bce71eb823f45096f2508f715e2bc",
+    "python/tessera/compiler/rocm_mxfp4_folded_frontend.py": "4fa16282c78be6dd1012a0615b7e1382b03dc680a6f006868b887d8de0226e56",
+    "python/tessera/compiler/rocm_mxfp4.py": "de1d552374baf645ab4b1289748b7c410b459f759d654bc48a57e4c3a918d093",
+    "python/tessera/compiler/rocm_mxfp4_packed_folded.py": "2b62c7c416540bc0f74a839dc3dc2aa5fbec3143042a91bb8d323c6c71e73a35",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMFoldedW4A8Contract.h": "81acf0a9e4003a6fa04f3873087b5c785d7cdca829e9b0b0cd8c8f375aa8594c",
+    "python/tessera/runtime.py": "32a44668c961465d5551c3567f76b2974bb6c1ee69e5cf215184b074bef4010a",
+    "python/tessera/compiler/rocm_mxfp4_folded_carrier.py": "ef13010d4a461419ab7fc441106eaabc80c641225e108b89dbb41437ad266f52",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "2a432ff2e7d49657f5e4e6a73c27a97bd3bcd84cfe3539e44c7ed5deaa97cb1d",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "d62c6eeee7c65759606696616c9b0d1623bc6d46b2ddb232babb7f526014f384",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/ROCMKernelIdentity.cpp": "f390fb55a96876bb98d66ad593bbd1cb93b79848e0285c779b2d4a91c747bd9e",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "7782ea3f96ef6905d1969cddb606db3fcf22c03b631e8a7ad22562e4f93d9213",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp": "de79c54809cb467308de2af793e8b633e886857e491af4fca1e21ff59ac43729"
+  }
+}

@@ -1,0 +1,37 @@
+........................................................................ [ 24%]
+........................................................................ [ 49%]
+........................................................................ [ 73%]
+......................................................................F. [ 98%]
+....                                                                     [100%]
+=================================== FAILURES ===================================
+____________ test_static_kernel_cannot_be_reinterpreted_as_dynamic _____________
+
+    def test_static_kernel_cannot_be_reinterpreted_as_dynamic():
+        source=np.ones((17,35),np.float16)
+        rhs=np.ones((35,19),np.float16,order="F")
+        # Prepare a static consumer without attachment so the parameter ABI is the refusal.
+        from tessera.compiler.prepared_nvidia_matmul import PreparedMatmulCall
+        from tessera.compiler.nvidia_tensor_lhs import _semantic_graph,_partitions
+        from tessera.compiler.nvidia_tensor_rhs import NvidiaNormRhsProgram
+        program=rms_lhs.compile_native_lhs_matmul(source,rhs)
+        _,graph=_partitions(_semantic_graph(17,35,19,"fp16",program.semantics))
+        owner=PreparedMatmulCall.__new__(PreparedMatmulCall)
+>       owner._initialize(NvidiaNormRhsProgram.runtime_artifact(program.edge.consumer),graph,program.graph_ir)
+
+tests/device/nvidia/test_prepared_dynamic_lhs_owner.py:123: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+python/tessera/compiler/prepared_nvidia_matmul.py:118: in _initialize
+    self.input_positions = tuple(names.index(item.name) for item in self.bindings[:-1])
+                           ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+.0 = <tuple_iterator object at 0x762e5a1a8220>
+
+>   self.input_positions = tuple(names.index(item.name) for item in self.bindings[:-1])
+                                 ^^^^^^^^^^^^^^^^^^^^^^
+E   ValueError: list.index(x): x not in list
+
+python/tessera/compiler/prepared_nvidia_matmul.py:118: ValueError
+=========================== short test summary info ============================
+FAILED tests/device/nvidia/test_prepared_dynamic_lhs_owner.py::test_static_kernel_cannot_be_reinterpreted_as_dynamic
+1 failed, 291 passed in 205.88s (0:03:25)

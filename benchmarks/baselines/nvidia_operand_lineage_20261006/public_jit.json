@@ -1,0 +1,388 @@
+{
+  "schema": "tessera.public_matmul_package.v1",
+  "architecture": "sm_120",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "rows": [
+    {
+      "mode": "plain",
+      "dtype": "fp16",
+      "rhs_storage_order": "row_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 698.105523,
+      "warm_public_call_wall_samples_ms": [
+        1.089568,
+        0.699045,
+        0.749055,
+        0.657954,
+        0.687354
+      ],
+      "warm_public_call_wall_median_ms": 0.699045,
+      "resident_device_event_samples_ms": [
+        0.00831920001655817,
+        0.008933920413255692,
+        0.009699679911136627,
+        0.009834240190684795,
+        0.009278560057282448
+      ],
+      "resident_device_event_median_ms": 0.009278560057282448,
+      "max_abs_error": 1.2386590242385864e-07,
+      "schedule_digest": "c2370ef556dfdc31ebee1b2fad73fb494876e305e392f901500ce344186dc676",
+      "tile_ir_digest": "4d505328eccd7a05f2e45503389060c85961bd8c2e6a627c6b99f07988ae0d7c",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "plain",
+      "dtype": "fp16",
+      "rhs_storage_order": "col_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 381.525185,
+      "warm_public_call_wall_samples_ms": [
+        0.861695,
+        0.674215,
+        0.713495,
+        0.662764,
+        0.659745
+      ],
+      "warm_public_call_wall_median_ms": 0.674215,
+      "resident_device_event_samples_ms": [
+        0.008420960046350956,
+        0.008719360455870628,
+        0.012557439506053925,
+        0.009117119945585728,
+        0.00927599985152483
+      ],
+      "resident_device_event_median_ms": 0.009117119945585728,
+      "max_abs_error": 1.2386590242385864e-07,
+      "schedule_digest": "0dadf840dac9c26d496c24f43b3dbc2f6052c1fb6495b1153200550a4db1e367",
+      "tile_ir_digest": "d2056c17ed2273fea1cd452a0a9be7a411a37f282b8761e8ba91af600ab7784e",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "plain",
+      "dtype": "bf16",
+      "rhs_storage_order": "row_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 373.331099,
+      "warm_public_call_wall_samples_ms": [
+        0.888286,
+        0.663014,
+        0.715495,
+        0.652185,
+        0.663274
+      ],
+      "warm_public_call_wall_median_ms": 0.663274,
+      "resident_device_event_samples_ms": [
+        0.009165279567241669,
+        0.009720960631966591,
+        0.00866719987243414,
+        0.009102560579776764,
+        0.008472800254821777
+      ],
+      "resident_device_event_median_ms": 0.009102560579776764,
+      "max_abs_error": 5.21540641784668e-08,
+      "schedule_digest": "fa709a526e220f707c069e989805d388d6200454b218be41fc4495ee5f95a960",
+      "tile_ir_digest": "639911892bfe76465c22619f1bb69b94b64d3ac9e84594099be6c7b809dff3f2",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "plain",
+      "dtype": "bf16",
+      "rhs_storage_order": "col_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 375.165352,
+      "warm_public_call_wall_samples_ms": [
+        0.945836,
+        0.672225,
+        0.645494,
+        0.682904,
+        0.647985
+      ],
+      "warm_public_call_wall_median_ms": 0.672225,
+      "resident_device_event_samples_ms": [
+        0.008828800171613693,
+        0.008388159796595573,
+        0.008921920321881771,
+        0.009823840111494064,
+        0.008493599481880665
+      ],
+      "resident_device_event_median_ms": 0.008828800171613693,
+      "max_abs_error": 5.21540641784668e-08,
+      "schedule_digest": "008f8768614b3299d7d1f891616f131006d81c97111ca88a3fe8d1941e090e34",
+      "tile_ir_digest": "e6465aa3e401cc06d20ade18be760f5493470bee00d8e9f50f7fd1a528533cdd",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "fused",
+      "dtype": "fp16",
+      "rhs_storage_order": "row_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 373.447034,
+      "warm_public_call_wall_samples_ms": [
+        1.128528,
+        0.872296,
+        0.828045,
+        0.811545,
+        0.828316
+      ],
+      "warm_public_call_wall_median_ms": 0.828316,
+      "resident_device_event_samples_ms": [
+        0.008986399509012699,
+        0.008772480301558971,
+        0.00949088018387556,
+        0.009440479800105095,
+        0.009102240204811096
+      ],
+      "resident_device_event_median_ms": 0.009102240204811096,
+      "max_abs_error": 7.776543498039246e-08,
+      "schedule_digest": "75677ae554c36053661cbda4663a0fa10b54e12a24689603a6cd5ea0c3c1250f",
+      "tile_ir_digest": "4d8193e5883f8ebed87142d08655e34d251c5e4b3c8e3b75accaa63078a33ef9",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "fused",
+      "dtype": "fp16",
+      "rhs_storage_order": "col_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 374.163899,
+      "warm_public_call_wall_samples_ms": [
+        1.087037,
+        0.803585,
+        0.830946,
+        0.791965,
+        0.795566
+      ],
+      "warm_public_call_wall_median_ms": 0.803585,
+      "resident_device_event_samples_ms": [
+        0.009054719470441341,
+        0.008566560223698616,
+        0.008779359981417656,
+        0.00914175994694233,
+        0.009195679798722267
+      ],
+      "resident_device_event_median_ms": 0.009054719470441341,
+      "max_abs_error": 7.776543498039246e-08,
+      "schedule_digest": "4e1d14e8e15375ba5b18cd2e481c02aae06f7962696814a244b2bba279d5275c",
+      "tile_ir_digest": "6d81c70fc181b69ad1df94c3461983e18d8c097dc334c9d004996a5745f4280a",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "fused",
+      "dtype": "bf16",
+      "rhs_storage_order": "row_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 393.445364,
+      "warm_public_call_wall_samples_ms": [
+        1.035316,
+        0.830746,
+        0.801255,
+        0.862166,
+        0.790195
+      ],
+      "warm_public_call_wall_median_ms": 0.830746,
+      "resident_device_event_samples_ms": [
+        0.009096000343561172,
+        0.008118719793856144,
+        0.012022720649838448,
+        0.009620480239391327,
+        0.008936639875173569
+      ],
+      "resident_device_event_median_ms": 0.009096000343561172,
+      "max_abs_error": 9.592622518539429e-08,
+      "schedule_digest": "3f8d95e9a44e3911594b7a190663430de8fa8c86622796d9d9a1b9e5eed71bff",
+      "tile_ir_digest": "8eb9b7e36fa56f72449131d311e36322b74f168041cdad908b0f967fc73c820d",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "fused",
+      "dtype": "bf16",
+      "rhs_storage_order": "col_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 374.965195,
+      "warm_public_call_wall_samples_ms": [
+        1.107327,
+        0.833485,
+        0.906257,
+        0.818635,
+        0.832215
+      ],
+      "warm_public_call_wall_median_ms": 0.833485,
+      "resident_device_event_samples_ms": [
+        0.008963840082287788,
+        0.009629599750041962,
+        0.009089440107345581,
+        0.009421439841389656,
+        0.00923839956521988
+      ],
+      "resident_device_event_median_ms": 0.00923839956521988,
+      "max_abs_error": 9.592622518539429e-08,
+      "schedule_digest": "e5f6523dc0713052e9bc9ea0f4684143f4b988eb97a2872e235607949a6ce853",
+      "tile_ir_digest": "f4fa294c3b47ba45e0a4f3bd5d8f80a513f672bb9199cd76478e47fccc0e470e",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "half_fused",
+      "dtype": "fp16",
+      "rhs_storage_order": "row_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 373.147808,
+      "warm_public_call_wall_samples_ms": [
+        1.074288,
+        0.846985,
+        0.813966,
+        0.796575,
+        0.812265
+      ],
+      "warm_public_call_wall_median_ms": 0.813966,
+      "resident_device_event_samples_ms": [
+        0.00996783934533596,
+        0.009294720366597176,
+        0.008872159756720066,
+        0.008088960312306881,
+        0.008449600078165531
+      ],
+      "resident_device_event_median_ms": 0.008872159756720066,
+      "max_abs_error": 0.0,
+      "schedule_digest": "763ab9a159cf697f78ecfd89cfcdf6f5c8aed0cce543f5f29116f0b0f50467d6",
+      "tile_ir_digest": "4a601a05fa6be9bcf540db2c46f59797d38fab6ca1cd1ce3ccc2470b82c96e29",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "half_fused",
+      "dtype": "fp16",
+      "rhs_storage_order": "col_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 392.305498,
+      "warm_public_call_wall_samples_ms": [
+        1.044167,
+        0.865916,
+        0.854135,
+        0.886896,
+        0.823025
+      ],
+      "warm_public_call_wall_median_ms": 0.865916,
+      "resident_device_event_samples_ms": [
+        0.008804639801383018,
+        0.008380480110645294,
+        0.008536159992218018,
+        0.009017279371619225,
+        0.008708959445357323
+      ],
+      "resident_device_event_median_ms": 0.008708959445357323,
+      "max_abs_error": 0.0,
+      "schedule_digest": "f5ff4d4fe236ac866008a1b1f2bdaf7de616ec791374ea5c6fc8dda6eb4a0755",
+      "tile_ir_digest": "0f77ee95b2e1f801ac890c641456e6947fc60b0d39c5818037da2dde9e91132d",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "half_fused",
+      "dtype": "bf16",
+      "rhs_storage_order": "row_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 372.15765,
+      "warm_public_call_wall_samples_ms": [
+        1.094877,
+        0.814476,
+        0.838115,
+        0.813675,
+        0.831616
+      ],
+      "warm_public_call_wall_median_ms": 0.831616,
+      "resident_device_event_samples_ms": [
+        0.009099360555410385,
+        0.008275359869003296,
+        0.009568640030920506,
+        0.009282879531383514,
+        0.009455840103328228
+      ],
+      "resident_device_event_median_ms": 0.009282879531383514,
+      "max_abs_error": 0.0,
+      "schedule_digest": "285232cd28ae18ab7e8090c1c29cf6d8b065b4135d3cccd494cfba1ca00d3b15",
+      "tile_ir_digest": "7c4f9a72adc562812858cba78a82cac22ed7c461fa808fc0aefbe31f5f65880e",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    },
+    {
+      "mode": "half_fused",
+      "dtype": "bf16",
+      "rhs_storage_order": "col_major",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "cold_public_call_wall_ms": 377.551334,
+      "warm_public_call_wall_samples_ms": [
+        1.052287,
+        0.812795,
+        0.856266,
+        0.829315,
+        0.838416
+      ],
+      "warm_public_call_wall_median_ms": 0.838416,
+      "resident_device_event_samples_ms": [
+        0.009599040262401104,
+        0.008953600190579891,
+        0.018685439601540565,
+        0.010190879926085472,
+        0.010749599896371365
+      ],
+      "resident_device_event_median_ms": 0.010190879926085472,
+      "max_abs_error": 0.0,
+      "schedule_digest": "93c0c6047c2aea01efcd21f25f8661f19b1a543bc5c59768377cd90b6896fc3f",
+      "tile_ir_digest": "a57423611e8bec09ce8661157c7d9f42180367c3ab7253b476ea23b54b6df0ee",
+      "correctness": "fp64_oracle_and_bitwise_public_resident_parity"
+    }
+  ],
+  "timing_scope": "cold includes tracing/compilation/launch; warm includes Python tracing, ABI checks, host transfers and launch; resident CUDA-event windows include driver dispatch gaps; no speedup claim",
+  "source_sha256": {
+    "python/tessera/compiler/jit.py": "f7b7ec2ad5b5b30078bbd74a13c2914aabda5588c88d21a03baba6f70896a37b",
+    "python/tessera/compiler/scheduled_matmul.py": "bb7b69b123046449afceb3e3eca77a5af787fccf080b3426eeedcfdb3af74727",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "96dd7143d46c2dfaa21eaa11d8f51050aafa46d104c00d7b8b5069ea6b39772b",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "d62c6eeee7c65759606696616c9b0d1623bc6d46b2ddb232babb7f526014f384",
+    "tests/device/nvidia/test_permuted_matmul_jit.py": "63866132b9b554ca1812015bd864ca334c1fd227fdcaf48c9d91d66428279bee",
+    "benchmarks/nvidia/benchmark_public_matmul_package.py": "9e54c4d7b6c815bb2ef6bca97246a73b19d9d6b3a4d43c4c65c34e95a8f13743"
+  }
+}

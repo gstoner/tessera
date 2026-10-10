@@ -111,20 +111,49 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="X86-TYPED-FAMILY-PLUGIN-1",
     ),
     PassMetadata(
+        name="generate-rocm-binary-kernel",
+        cpp_class="GenerateROCMBinaryKernelPass",
+        summary="Materializes ROCm scalar binary kernels; native scaled-program f32 sums project checked SSA buffer IDs, entry symbols, runtime counts and launch geometry.",
+        input_dialects=("tessera_rocm",),
+        output_dialects=("gpu", "arith", "memref", "math", "scf"),
+        preserved_attrs=("tessera.autodiff.scaled_program_json", "tessera.rocm.program_member_json"),
+        diagnostic_codes=(),
+        pass_kind="lowering",
+        sprint="FRONTEND-IR-MEDIUM-1",
+    ),
+    PassMetadata(
+        name="generate-wmma-gemm-kernel",
+        cpp_class="GenerateWMMAGemmKernelPass",
+        summary="Materializes checked ROCm WMMA Target contracts as native GPU kernels with typed Tile views/fragments, predicated partial LDS copies, isolated FP8/fp32 or MXFP8/E8M0 K32 scale groups and full-K folded scale epilogues; compiler-exported static scaled members carry native entry/scalar/grid ABI metadata.",
+        input_dialects=("tessera_rocm", "tile", "arith", "func"),
+        output_dialects=("tile", "gpu", "memref", "arith", "scf", "vector", "rocdl"),
+        preserved_attrs=("tessera.autodiff.scaled_program_json", "tessera.rocm.program_member_json"),
+        diagnostic_codes=("ROCM_FOLDED_NATIVE_CONTRACT", "ROCM_FP8_BLOCKSCALE_CONTRACT"),
+        pass_kind="lowering",
+        sprint="ROCM-MXFP4-W4A8-1",
+    ),
+    PassMetadata(
         name="lower-tile-to-rocm",
         cpp_class="LowerTileToROCMPass",
         summary=(
-            "Lowers Tessera Tile IR matmul/attention movement contracts to "
+            "Replays architecture-owned static f32 math Tile contracts into ROCm unary/binary/scan directives. Lowers Tessera Tile IR matmul/attention movement contracts to "
             "ROCm Target IR, including verified gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation. Typed `!tile.fragment` values go through a "
             "dialect conversion (fragment -> physical per-lane vector) so a "
             "K-loop accumulator, chained MMAs, and a non-zero accumulator all "
             "compose; the legacy bare `!tile.fragment` spelling still takes "
-            "the single-shot whole-chain path."
+            "the single-shot whole-chain path. The typed full-K folded scale "
+            "epilogue consumes f32 token scales and E8M0 column references, "
+            "recovers zero/nonfinite scale products through ordered f64 multiplies "
+            "and leaves final output rounding to the accumulator store. "
+            "Standard E8M0 group scaling composes signed byte exponents into "
+            "LLVM ldexp with explicit code-255 NaN propagation; its one f32 "
+            "rounding matches the wide reference without intermediate "
+            "scale-product underflow/overflow."
         ),
         input_dialects=("tile", "tessera_rocm", "func", "scf", "vector",
                         "memref", "arith", "gpu"),
         output_dialects=("tessera_rocm", "func", "scf", "vector", "memref",
-                         "arith", "gpu"),
+                         "arith", "gpu", "llvm"),
         required_attrs=("tile.layout", "tile.memory"),
         diagnostic_codes=(
             "ROCM_FRAGMENT_ILLEGAL_ARCH_DESCRIPTOR",
@@ -465,7 +494,7 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "linear-transposition interfaces with SSA activity propagation."
         ),
         input_dialects=("tessera", "func", "arith"),
-        output_dialects=("tessera", "tessera.attn", "func", "arith"),
+        output_dialects=("tessera", "tessera_attn", "func", "arith"),
         required_attrs=("tessera.autodiff",),
         preserved_attrs=("tessera.autodiff.activity",),
         diagnostic_codes=("AUTODIFF_STOCHASTIC_EFFECT",),
@@ -477,13 +506,13 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         cpp_class="AutodiffForwardPass",
         summary=(
             "Emits a separate paired JVP function from compiler-owned Graph "
-            "TangentInterface implementations and structured SCF products; tensor extraction propagates tangents and scalar comparisons retain primal predicates. HVP products capture primal and continuous residual tangents together. Optional export-hvp isolates the tensor entry with typed product ABI for CPU/GPU consumers. Includes dense f32 Q/K/V attention with same-generation O/LSE. Optional export-attention-jvp projects an isolated verified product into a physical binding contract. Optional emit-storage-child scalarizes "
+            "TangentInterface implementations and structured SCF products; tensor extraction propagates tangents and scalar comparisons retain primal predicates. HVP products capture primal and continuous residual tangents together. Optional export-hvp isolates the tensor entry with typed product ABI for CPU/GPU consumers. Includes dense f32 Q/K/V attention with same-generation O/LSE. Optional export-attention-jvp projects an isolated verified distinct Q/K/V argument permutation into a physical binding contract; frontend capture and requested tangent order follow the native role mapping; value-only exports bind their linear product to the primal O/LSE generation without changing the general TangentInterface recipe. Optional export-scaled-program outlines actual scaled-product/add SSA into private member functions and exports typed buffer IDs, logical byte extents, original argument attributes, returned ownership and first-write/last-read lifetimes; select-scaled-member projects an actual outlined member with its full program witness and input/output buffer IDs for native Schedule/Tile compilation; a machine-readable native SSA manifest binds the differentiated Graph witness, typed buffer storage and lifetimes for program packaging; this alone is not executable AD proof. Optional emit-storage-child scalarizes "
             "one rank-one f32 arithmetic/sigmoid/tanh/stop-gradient or power-of-two sum/mean pair into a native GPU storage child, preserving requested tangent argument order."
         ),
         input_dialects=("tessera", "func", "arith", "tensor", "scf"),
-        output_dialects=("tessera", "tessera.attn", "func", "arith", "gpu", "llvm", "memref", "tile", "math", "scf", "tensor"),
+        output_dialects=("tessera", "tessera_attn", "func", "arith", "gpu", "llvm", "memref", "tile", "math", "scf", "tensor"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.autodiff.attention_jvp_contract", "tessera.autodiff.jvp", "tessera.autodiff.role",
+        preserved_attrs=("tessera.autodiff.scaled_program_json", "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness", "tessera.autodiff.scaled_program", "tessera.autodiff.product_abi", "tessera.autodiff.product_pair", "tessera.autodiff.attention_jvp_contract", "tessera.autodiff.jvp", "tessera.autodiff.role",
                          "tessera.native_jvp_pair", "tessera.native_jvp_inputs",
                          "tessera.native_jvp_input_widths", "tessera.native_jvp_output_widths",
                          "tessera.native_jvp_width", "tessera.native_jvp_output_width", "tessera.native_jvp_wrt"),
@@ -513,10 +542,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         name="tessera-autodiff-paired",
         cpp_class="AutodiffPairedPass",
         summary=(
+            "Optional export-scaled-transpose outlines actual native static typed FP8/f32-scale adjoint tensor/scf regions with verified captured input order, requested gradient order, immutable Graph witness and first-write/last-read buffer lifetimes. select-scaled-transpose-member projects one actual region for later Schedule/Tile lowering; this contract is not executable reverse AD proof. "
             "Index-only tensor.generate gathers transpose to serial accumulating scatters with exact cotangent-shape guards; nonlinear generator bodies remain unsupported. "
             "Optional normalize-counted-while converts proven counted whiles; normalize-data-while freezes data-dependent state after exit when an SSA counter guard proves the capacity, including nonnegative initial counters, positive constant strides, signed inclusive/exclusive upper bounds and false-else short-circuit scf.if/arith.select guards. box-product-scalars projects index/predicate residuals into i64/i8 tensor storage. "
             "Bounded pure native CFG replay accepts execute regions or bounded multi-block function bodies, supports typed cf.br, cf.cond_br and cf.switch edges, and promotes cross-block SSA definitions to distinct state slots. "
-            "Optional export-product preserves full typed nested residual forward/backward ABIs and paired lineage without scalarization. Rank-preserving dynamic slice pullbacks assert exact cotangent extents before scatter. "
+            "Optional prune-checkpoint-gradients derives requested checkpoint result roles from the native wrt request and verified forward SSA argument mapping, seals them in Schedule/Tile and skips inactive arithmetic while zero-filling complete physical ABI outputs. Optional compact-checkpoint-gradients exports only requested physical gradient pointers and packed or preserved logical launch ranges with verified 64- or 128-thread geometry after native activity verification; the complete logical Graph result contract remains retained. Optional export-product preserves full typed nested residual forward/backward ABIs and paired lineage without scalarization. Rank-preserving dynamic slice pullbacks assert exact cotangent extents before scatter. "
             "Emits paired forward and backward functions under the explicit "
             "residual ABI: recompute-all by default, SAVE state tapes for "
             "control_scan and generic multi-state counted loops, plus saved "
@@ -524,14 +554,18 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
             "emit-storage-child fuses one single-input rank-one f32 with explicit straight-line saved residuals or recomputation "
             "forward/backward pair with an explicit output cotangent into a native child, "
             "including scalar sum/mean VJP. Dense f32 attention reverse products use "
-            "checkpoint forward/backward ops with natural-log LSE returned by forward "
+            "checkpoint forward/backward ops with rank-four broadcast bias and physical-shaped bias cotangents, with natural-log LSE returned by forward "
             "and consumed as an explicit backward residual. Optional checkpoint-product exports "
-            "one generated forward/backward checkpoint with canonical physical argument order."
+            "one generated forward/backward checkpoint with canonical physical argument order and a native-verified frontend argument permutation hashed into its Schedule contract, "
+            "retaining requested Q/K/V and exact-shaped f32 score-bias cotangent selection/order in paired lineage while "
+            "the native package exports the complete physical gradient product."
         ),
         input_dialects=("tessera", "func", "arith", "scf", "tensor"),
-        output_dialects=("tessera", "tessera.attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
+        output_dialects=("tessera", "tessera_attn", "func", "arith", "scf", "tensor", "gpu", "llvm", "memref", "tile", "math"),
         required_attrs=("tessera.autodiff",),
-        preserved_attrs=("tessera.autodiff.product_abi", "tessera.autodiff.product_pair",
+        preserved_attrs=("tessera.autodiff.scaled_program", "tessera.autodiff.scaled_program_json",
+            "tessera.autodiff.scaled_member", "tessera.autodiff.scaled_program_witness",
+            "tessera.autodiff.product_abi", "tessera.autodiff.product_pair",
             "tessera.attention_ad_pair", "tessera.native_vjp_pair", "tessera.native_vjp_inputs",
             "tessera.native_vjp_input_widths", "tessera.native_vjp_output_widths",
             "tessera.native_vjp_width", "tessera.native_vjp_output_width", "tessera.native_vjp_wrt",
@@ -748,11 +782,11 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
     PassMetadata(
         name="tessera-graph-to-schedule",
         cpp_class="GraphToSchedulePass",
-        summary="Selects bounded native Schedule contracts from typed Graph IR, including native checked-2:4 and wave-uniform automatic sparse/dense gfx1201 half matmul packing, replay-bound x86 absolute/floor/ceil/trunc and physical batch/head attention bias broadcasting. Unsupported dtype/layout/policy envelopes refuse before artifact creation.",
-        input_dialects=("tessera", "func"),
-        output_dialects=("tessera", "schedule", "func", "gpu", "arith", "scf", "memref", "vector"),
+        summary="Selects bounded native Schedule contracts from typed Graph IR, including replay-sealed static ROCm f32 sqrt/exp/add/div/cumsum/cummax math with exact f16/bf16-to-f32 Graph widening cast fusion with original SSA roles and explicit host bindings, replay-sealed original SM120 recompute-backward Graph admission with f16/bf16/f32 storage, end-aligned window, softcap, seeded dropout and SSA roles; direct authored SM120 saved-LSE forward/backward import with policy validation and SSA argument-role bindings, hashed native requested-gradient activity for SM120 saved-output/LSE backward and replay-sealed SM120 static f32 saved-LSE JVP products with argument roles and inactive tangent slots, including value-only linear products that omit V/primal reads and use one native shared reduction, architecture-owned gfx1201 MXFP8 E8M0 K32 global/LDS profiles with explicit native auto/seed/lds module intent, native checked-2:4 and wave-uniform automatic sparse/dense gfx1201 half matmul packing, replay-bound x86 absolute/floor/ceil/trunc and physical batch/head attention bias broadcasting. Native scale-adjoint regions admit an explicit experimental scale-transpose-wave option that partitions only additive outer reductions with a 32-lane XOR tree while preserving K-group dot products; serial remains the default. Named SM120 NVFP4 policy and scale-layout dictionaries retain the exact declared fields; additional fields require explicit native admission. Unsupported dtype/layout/policy envelopes refuse before artifact creation.",
+        input_dialects=("tessera", "tessera_attn", "func", "tensor", "arith", "scf"),
+        output_dialects=("tessera", "tessera_attn", "schedule", "func", "gpu", "arith", "scf", "memref", "vector", "tensor"),
         required_attrs=("tessera.target", "tessera.arch", "tessera.launch_bindings", "tessera.sparse_policy"),
-        preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names"),
+        preserved_attrs=("numeric_policy", "tessera.launch_bindings", "tessera.dim_names", "tessera.rocm.mxfp8_schedule"),
         pass_kind="lowering", sprint="IR-NATIVE-FOUNDATION-1",
         # ROCM_SPLIT_K_NOT_APPLIED is a warning (ROCM-SPLIT-K-1): the
         # occupancy rule asked for split-K and no aligned split existed.
@@ -999,13 +1033,24 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="COMPILER-DEVEX-1",
     ),
     PassMetadata(
+        name="tessera-rocm-project-kernel-identity",
+        cpp_class="ProjectROCMKernelIdentityPass",
+        summary="Validate the audited attribute-only ROCm Target directive and host scaffold, including sealed f16/bf16/f32 input-to-f32 unary/binary/scan math; remove only validated math launch bindings and static ownership metadata while retaining kind/storage/architecture, preserve all physical and module attributes, and derive the native image symbol independently of shape-bound host signatures. Matmul Schedule ancestry remains in the checked launch descriptor. Verified one-wave global gfx1201 W8A8 and MXFP8 directives project to an explicit runtime-shape Target contract; MXFP8 retains K32/per-column E8M0 bytes and the distinct wide-scale ABI under checked 16x16 one-wave global or NK 128x64/128 eight-wave LDS profiles; LDS projects runtime M/N while retaining static K and explicit whole/partial panel edge classes; raster geometry uses runtime bounds. The runtime-k option derives LDS scale-group bounds and the final prefetch clamp from checked positive, scale-divisible runtime K. Folded full-K gfx1201 Target shares one strict native admission helper with the LDS generator and projects M/N with optional runtime K, retaining explicit whole/partial panel classes and every physical schedule key. Runtime folded K uses zero-valued k/scale_k/macro_k as the full runtime extent, retains K64 stages and full-K accumulation followed by one row-reference epilogue; the checked ABI admits only positive K64 multiples.",
+        diagnostic_codes=("ROCM_FOLDED_NATIVE_CONTRACT", "ROCM_FP8_BLOCKSCALE_CONTRACT"),
+        input_dialects=("tessera_rocm", "func", "arith", "bufferization", "memref", "llvm", "tensor"),
+        output_dialects=("tessera_rocm",),
+        preserved_attrs=("arch", "numeric_policy"),
+        pass_kind="transform",
+        sprint="E2E-REAL-6-ROCM-CACHE-KEYS",
+    ),
+    PassMetadata(
         name="tessera-schedule-to-tile",
         cpp_class="ScheduleToTilePass",
-        summary="Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation, into Tile carriers and structured SSD loops, including the x86 absolute/floor/ceil/trunc and inclusive trailing-axis cumsum contracts and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
-        input_dialects=("schedule", "func", "tessera"),
+        summary="Native gfx1201 scale-adjoint regions retain sealed serial or experimental 32-lane outer reductions with proved accumulator lineage, K-group arithmetic and exact algorithm/thread ABI. Static ROCm f32 math replays its original Graph, complete contract and SSA roles into typed elementwise/scan Tile kernels. SM120 recompute backward replays the native policy certificate into a storage-bearing launch symbol and typed Tile kernel; no Python Tile construction. SM120 saved-output/LSE backward prunes unrequested gradient arithmetic from native activity and zero-fills those complete ABI outputs. SM120 saved-LSE JVP lowers its verified paired Graph product into native cooperative GPU/Tile shared memory with checked scratch lifetime and a nine-pointer tensor ABI. SM120 saved-output/LSE checkpoint backward emits a physical-shaped f32 bias gradient, with a deterministic lexicographic broadcast reduction in the native arithmetic core. Distinct checked broadcast ABIs bind physical bias extents, host copies and private saved-state allocations; public reverse execution has SM120 device proof. The existing full-shape route optionally emits a f32 bias gradient with one deterministic writer per element and a replay-bound fourth result. The checked eleven-buffer bias-gradient ABI and bounded public paired AD export have SM120 device proof. SM120 typed B fragment packing admits explicitly transposed row-major fp16/bf16 physical views through pitched scalar gathers; The static row-major RHS Schedule profile and checked RMSNorm RHS producer/consumer edge have SM120 exact-device proof; dynamic, fused and general producer integration remain separate. SM120 f16/bf16 matmul emits explicit typed fragment K loops and fp32 bias/activation/residual stores with final f16/f32 output conversion. Replays registered Schedule decisions, including gfx1201 packed sparse MMA fragments with f32 or matching f16/bf16 accumulation, independently signed byte-addressable INT4/i8 with i32 accumulation, and independently typed FP8/BF8 operands with f32 accumulation, into Tile carriers and structured SSD loops, including the x86 absolute/floor/ceil/trunc and inclusive trailing-axis cumsum contracts and SM120 physical batch/head bias broadcasting. The x86 u8s8 matmul recipe preserves unsigned A, signed B and modulo-i32 accumulation in the physical MMA descriptor. The opt-in ssd-gpu=nvidia/rocm mode accepts one isolated verified static f32 SSD entry, assigns a block to each head/value column and at most 256 state lanes, and uses shared-memory barriers with an ordered leader reduction. It emits a replay-bound GPU package input; device validation and performance admission remain separate.",
+        input_dialects=("schedule", "func", "tessera", "tensor", "scf", "arith"),
         output_dialects=("tile", "gpu", "llvm", "arith", "scf", "tensor", "memref"),
         required_attrs=("chunk_size", "artifact_hash", "storage", "accum", "output", "a_layout", "b_layout", "contract", "bias_shape"),
-        preserved_attrs=("tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes", "tessera.schedule_hash", "numeric_policy"),
+        preserved_attrs=("tessera.ssd.source", "tessera.ssd.cooperative", "tessera.autodiff.temporary_bytes", "tessera.schedule_hash", "numeric_policy", "tile.epilogue", "tile.residual", "tile.epilogue_order"),
         pass_kind="lowering", sprint="W5.2f",
     ),
     PassMetadata(
@@ -1170,6 +1215,25 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         sprint="TILE-SYNC-TYPED-2026-08-15",
     ),
     PassMetadata(
+        name="tessera-tile-ir-lowering",
+        cpp_class="TileIRLoweringPass",
+        summary=(
+            "Lowers legacy attention/control Tile entries. Standalone SM120 "
+            "Graph matmul delegates to the registered Graph-to-Schedule and "
+            "Schedule-to-Tile passes, preserving replay-verified pointer-backed "
+            "views, typed fragments and accumulator lineage. Canonical tensor K "
+            "reductions recover their Graph contraction only after whole-function "
+            "semantic tiling replay verifies padding, accumulator and epilogue. "
+            "The canonical-recovery-only stage runs before SM120 Graph prepasses "
+            "and retains the recovered Graph contraction for normal scheduling."
+        ),
+        input_dialects=("tessera", "schedule", "func", "tessera_attn"),
+        output_dialects=("tile", "llvm", "arith", "scf", "tensor", "tessera_attn"),
+        preserved_attrs=("numeric_policy", "tessera.schedule_hash"),
+        pass_kind="lowering",
+        sprint="W1.1-SM120-LEGACY-SCHEDULE-2026-10-02",
+    ),
+    PassMetadata(
         name="tessera-tile-pipeline-legality",
         cpp_class="TilePipelineLegality",
         summary=(
@@ -1188,6 +1252,20 @@ REGISTERED_PASSES: tuple[PassMetadata, ...] = (
         ),
         pass_kind="verifier",
         sprint="C3 (TIRx)",
+    ),
+    PassMetadata(
+        name="tessera-tiling",
+        cpp_class="TilingPassImpl",
+        summary=(
+            "Generic tensor M/N/K tiling and value carriers; explicit SM120 "
+            "matmul instead produces the replay-bound native Schedule contract "
+            "before K-reduction materialization at the Schedule-to-Tile boundary."
+        ),
+        input_dialects=("tessera", "func"),
+        output_dialects=("tessera", "schedule", "tile", "tensor", "arith", "scf"),
+        preserved_attrs=("numeric_policy", "schedule.artifact_hash"),
+        pass_kind="lowering",
+        sprint="W1.1-SM120-NATIVE-K-SCHEDULE-2026-10-02",
     ),
     PassMetadata(
         name="tessera-to-linalg",

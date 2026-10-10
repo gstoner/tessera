@@ -1,0 +1,13 @@
+[100%] Built target tessera_rocm_native_image
+[100%] Building CXX object src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/CMakeFiles/tessera_rocm_native_movement.dir/native_movement_runtime.cpp.o
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp: In function ‘int {anonymous}::identity(Identity&)’:
+/home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:46:23: warning: ‘hipError_t hipCtxGetCurrent(ihipCtx_t**)’ is deprecated: This API is marked as deprecated and might not be supported in future releases. For more details please refer https://github.com/ROCm/HIP/blob/develop/docs/reference/deprecated_api_list.md [-Wdeprecated-declarations]
+   46 |       hipCtxGetCurrent(&context) != hipSuccess ||
+      |       ~~~~~~~~~~~~~~~~^~~~~~~~~~
+In file included from /opt/rocm/core-10.0/include/hip/hip_runtime.h:49,
+                 from /home/angstorms/scratch/next-five-compiler-slices-rocm/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp:3:
+/opt/rocm/core-10.0/include/hip/hip_runtime_api.h:6607:12: note: declared here
+ 6607 | hipError_t hipCtxGetCurrent(hipCtx_t* ctx);
+      |            ^~~~~~~~~~~~~~~~
+[100%] Linking CXX shared library libtessera_rocm_native_movement.so
+[100%] Built target tessera_rocm_native_movement

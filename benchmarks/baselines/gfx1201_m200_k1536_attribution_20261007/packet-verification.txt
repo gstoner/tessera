@@ -1,0 +1,5 @@
+interleaved-formats-broad-assume.json: compiler/source/device fingerprints and K32 identity checked
+interleaved-formats-profile.json: compiler/source/device fingerprints and K32 identity checked
+interleaved-formats-shared-allocation.json: compiler/source/device fingerprints and K32 identity checked
+interleaved-formats-long-windows.json: compiler/recorder/device fingerprints and unchanged profile identity checked
+interleaved-broad-shared-long.json: compiler/recorder/device fingerprints and unchanged profile identity checked

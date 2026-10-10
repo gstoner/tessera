@@ -1,0 +1,8 @@
+88 public cases and 88 matched cases passed on RTX5070/SM120.
+All 88 native program pins match the previous public reverse packet.
+Three externally pinned fresh-process replays pass without compiler access.
+34 device/guard tests pass including 64-thread logical Q-only and bias-gradient cases.
+456 shared host tests pass; one Apple hardware test requires a Darwin host.
+Compiler-plan links and git diff --check pass.
+Graphify update is blocked by the absent owning-WSL CLI (exit 127).
+Final wide-key compatibility proof passes at K=65,537 with atol=1e-10/rtol=3e-5.

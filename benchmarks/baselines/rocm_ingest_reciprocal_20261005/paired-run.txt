@@ -1,0 +1,6 @@
+/home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/rocm_native.py:1523: RuntimeWarning: /home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/ingest-ab-20261005/tessera-opt-baseline is older than 1 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/NativeNVFP4Ingest.h. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+  warn_if_generator_is_stale(tool)
+verified paired [128, 32, 256] speedup 1.55908918995536
+verified paired [257, 80, 1024] speedup 1.3493766076665021
+verified paired [256, 64, 64] speedup 1.2744920952264693
+verified paired [256, 24576, 4096] speedup 2.1714277887642566

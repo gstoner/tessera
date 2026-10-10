@@ -1,0 +1,1 @@
+verified 16 row-major RHS physical gather cases

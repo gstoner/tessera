@@ -1,0 +1,3281 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "architecture": "sm_120",
+  "rows": [
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 3.7644420913807153e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.427842,
+        0.253101
+      ],
+      "checked_jvp_wall_median_ms": 0.34047150000000004,
+      "tangent_digest": "c0101b3455ae7bcf13b671dd2b917678787ad55c70d4c701a5aa4676e00ec448",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010923500172793865,
+        0.012747500091791153,
+        0.009334499947726727,
+        0.009625500068068504,
+        0.010351000353693962
+      ],
+      "device_dispatch_median_ms": 0.010351000353693962,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.32321076107678e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.253041,
+        0.246951
+      ],
+      "checked_jvp_wall_median_ms": 0.249996,
+      "tangent_digest": "e6f0be3319f8888bdf3398e324981094a79220da7fc524fdab7e9c994ca8c00c",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.009906000457704067,
+        0.011095999740064144,
+        0.011435999535024166,
+        0.010048000141978264,
+        0.010049999691545963
+      ],
+      "device_dispatch_median_ms": 0.010049999691545963,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 9.63735946601929e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.310302,
+        0.298852
+      ],
+      "checked_jvp_wall_median_ms": 0.304577,
+      "tangent_digest": "a06c47296f4d957edfe2053e9cc26bd734f1d86b578a0d0f217420df4609226e",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.009548500180244446,
+        0.010068999603390694,
+        0.013579499907791615,
+        0.009998999536037445,
+        0.009965499863028526
+      ],
+      "device_dispatch_median_ms": 0.009998999536037445,
+      "resources": {
+        "registers": 29,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 7.307955351976148e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.243831,
+        0.264131
+      ],
+      "checked_jvp_wall_median_ms": 0.253981,
+      "tangent_digest": "0abd3f51cf93db349ccf2f3416b4e6ea653966fbe448ffc296b1683eaf63de54",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010579999536275864,
+        0.009251000359654427,
+        0.011219499632716179,
+        0.010477500036358833,
+        0.009762999601662159
+      ],
+      "device_dispatch_median_ms": 0.010477500036358833,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 1.4274018217408369e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.253412,
+        0.250322
+      ],
+      "checked_jvp_wall_median_ms": 0.251867,
+      "tangent_digest": "7a4524174874e0b9df99605fc1d62c0edbf76cbb4fbb98d9b42b421914c0d15b",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010064500384032726,
+        0.010218500159680843,
+        0.011309499852359295,
+        0.00964100006967783,
+        0.010325499810278416
+      ],
+      "device_dispatch_median_ms": 0.010218500159680843,
+      "resources": {
+        "registers": 39,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 1.3915991803337135e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.326522,
+        0.254122
+      ],
+      "checked_jvp_wall_median_ms": 0.29032199999999997,
+      "tangent_digest": "911866bfd099a8f233cbc05639df6652c14fc369ac02b9f182241ffb7242943d",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.009524499997496605,
+        0.010955999605357647,
+        0.00982350017875433,
+        0.010083500295877457,
+        0.009808500297367573
+      ],
+      "device_dispatch_median_ms": 0.00982350017875433,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 5.511505141164719e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.345922,
+        0.349762
+      ],
+      "checked_jvp_wall_median_ms": 0.347842,
+      "tangent_digest": "87c885de0481407f6bfe0168154e508c6164db65cb4ca18a65fcc7933b8e927f",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.010050499811768532,
+        0.010225499980151653,
+        0.010085499845445156,
+        0.011152000166475773,
+        0.010301000438630581
+      ],
+      "device_dispatch_median_ms": 0.010225499980151653,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.13403042301519e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.358933,
+        0.365273
+      ],
+      "checked_jvp_wall_median_ms": 0.362103,
+      "tangent_digest": "4adf5d2ede80c44d35c74bb9ab24a46f5c787bb0e2894377bf77d848a6a6639c",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.013338999822735786,
+        0.012838000431656837,
+        0.01331149972975254,
+        0.012890500016510487,
+        0.012437500059604645
+      ],
+      "device_dispatch_median_ms": 0.012890500016510487,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 4.109988654965591e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.380973,
+        0.342062
+      ],
+      "checked_jvp_wall_median_ms": 0.3615175,
+      "tangent_digest": "874471f388b1e8dc2a5aef01e504e6c1244e40e63025f969f52135806489bb73",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01155100017786026,
+        0.010623999871313572,
+        0.013481000438332558,
+        0.011386999860405922,
+        0.009682499803602695
+      ],
+      "device_dispatch_median_ms": 0.011386999860405922,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 5.725238894083162e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.345322,
+        0.345603
+      ],
+      "checked_jvp_wall_median_ms": 0.3454625,
+      "tangent_digest": "5e530cead5a0608f8f9585b1dce07cc06d44282947c8f913687004225285e646",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.011286499910056591,
+        0.01089600007981062,
+        0.011055500246584415,
+        0.01113549992442131,
+        0.011339000426232815
+      ],
+      "device_dispatch_median_ms": 0.01113549992442131,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 3.4642741453261294e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.332762,
+        0.341732
+      ],
+      "checked_jvp_wall_median_ms": 0.33724699999999996,
+      "tangent_digest": "b7c6bd0a24b08de0bef28205db5e16a6be6b01911e185dead8a0cf68aa61897e",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012749999761581421,
+        0.011660500429570675,
+        0.011064000427722931,
+        0.011908000335097313,
+        0.01269499957561493
+      ],
+      "device_dispatch_median_ms": 0.011908000335097313,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        1,
+        2
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 9.629518848974783e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.340322,
+        0.335572
+      ],
+      "checked_jvp_wall_median_ms": 0.337947,
+      "tangent_digest": "02c52ac0c8caa0743621cf31f7554c05b24b8632a74ac4f732db90dcd94c5fa3",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012141499668359756,
+        0.01252250000834465,
+        0.012160499580204487,
+        0.01380200032144785,
+        0.013204500079154968
+      ],
+      "device_dispatch_median_ms": 0.01252250000834465,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 3.7644420913807153e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.348122,
+        0.372233
+      ],
+      "checked_jvp_wall_median_ms": 0.3601775,
+      "tangent_digest": "3a447ab2c31682dc38e415876625799613fb79d213544cad63be5a623e8a89ad",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.01053099986165762,
+        0.0111285001039505,
+        0.01161549985408783,
+        0.01065049972385168,
+        0.010495999827980995
+      ],
+      "device_dispatch_median_ms": 0.01065049972385168,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.32321076107678e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.339542,
+        0.371662
+      ],
+      "checked_jvp_wall_median_ms": 0.355602,
+      "tangent_digest": "4788a0a79827e6ade321a7258debb03d835f298a711fd709ae9f26ed15845034",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011068499647080898,
+        0.01126050017774105,
+        0.011788999661803246,
+        0.011137999594211578,
+        0.012083499692380428
+      ],
+      "device_dispatch_median_ms": 0.01126050017774105,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 9.63735946601929e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.381693,
+        0.380392
+      ],
+      "checked_jvp_wall_median_ms": 0.3810425,
+      "tangent_digest": "5780a08635788a3c3e92dfb89a7861454c735610b79f46d745b7bf3105b6403c",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.012033499777317047,
+        0.010390499606728554,
+        0.011473000049591064,
+        0.012152000330388546,
+        0.014530000276863575
+      ],
+      "device_dispatch_median_ms": 0.012033499777317047,
+      "resources": {
+        "registers": 29,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 7.307955351976148e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.381302,
+        0.319872
+      ],
+      "checked_jvp_wall_median_ms": 0.350587,
+      "tangent_digest": "f1ebb1a17aae2a2a4f9b79d655b732721567545a761a177de0f7fbece08ba1b0",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011215000413358212,
+        0.011458500288426876,
+        0.012097500264644623,
+        0.011068999767303467,
+        0.012477000243961811
+      ],
+      "device_dispatch_median_ms": 0.011458500288426876,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 1.4274018217408369e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.392892,
+        0.367293
+      ],
+      "checked_jvp_wall_median_ms": 0.3800925,
+      "tangent_digest": "3c64bf56b39293aebf0c7091c20f63acd566f718419d4a0a9645dfe98b2ba33b",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011861500330269337,
+        0.012082500383257866,
+        0.011750999838113785,
+        0.012302500195801258,
+        0.011724499985575676
+      ],
+      "device_dispatch_median_ms": 0.011861500330269337,
+      "resources": {
+        "registers": 39,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 1.3915991803337135e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.357543,
+        0.346582
+      ],
+      "checked_jvp_wall_median_ms": 0.3520625,
+      "tangent_digest": "f9617c06f0d65c90f8a5af33de0f03a1396b4e12366da5a9387a57f648ab99fc",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.018996000289916992,
+        0.011219499632716179,
+        0.010727999731898308,
+        0.01150749996304512,
+        0.010464499704539776
+      ],
+      "device_dispatch_median_ms": 0.011219499632716179,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 5.511505141164719e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.339012,
+        0.331502
+      ],
+      "checked_jvp_wall_median_ms": 0.335257,
+      "tangent_digest": "6282992dde1daeaffd0c94057030740b9252c3d5b8c304b37925e523e4a11952",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01163250021636486,
+        0.012159500271081924,
+        0.015004499815404415,
+        0.011181499809026718,
+        0.011371999979019165
+      ],
+      "device_dispatch_median_ms": 0.01163250021636486,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.13403042301519e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.391333,
+        0.372112
+      ],
+      "checked_jvp_wall_median_ms": 0.38172249999999996,
+      "tangent_digest": "9cf41f33385712219dc7ea6f9ff4157524af02f96b3fe94352a1f75648ad442e",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.011698000133037567,
+        0.010985500179231167,
+        0.010136500000953674,
+        0.00991399958729744,
+        0.011889000423252583
+      ],
+      "device_dispatch_median_ms": 0.010985500179231167,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 4.109988654965591e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330882,
+        0.356282
+      ],
+      "checked_jvp_wall_median_ms": 0.343582,
+      "tangent_digest": "d98f547b96a76c4572f7ebfbad32986060b8e9b29d6911db7b186ea223c7e0c2",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.010777000337839127,
+        0.010764000006020069,
+        0.011571000330150127,
+        0.011749500408768654,
+        0.010116499848663807
+      ],
+      "device_dispatch_median_ms": 0.010777000337839127,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 5.725238894083162e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.370962,
+        0.530174
+      ],
+      "checked_jvp_wall_median_ms": 0.450568,
+      "tangent_digest": "0214dc763f4d3738cfa98fd9cbfe0a079b2ded205b546d0b9817393090440ca4",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012809500098228455,
+        0.01206200011074543,
+        0.013234499841928482,
+        0.009613499976694584,
+        0.011312499642372131
+      ],
+      "device_dispatch_median_ms": 0.01206200011074543,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 3.4642741453261294e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.337782,
+        0.334832
+      ],
+      "checked_jvp_wall_median_ms": 0.336307,
+      "tangent_digest": "825ec01436cdcec163cb919b211ea402d51dbd6784d7589fc8857f908ede83f3",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.013974499888718128,
+        0.012754499912261963,
+        0.011974499560892582,
+        0.012577500194311142,
+        0.01199750043451786
+      ],
+      "device_dispatch_median_ms": 0.012577500194311142,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        0,
+        2,
+        1
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 9.629518848974783e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330892,
+        0.354723
+      ],
+      "checked_jvp_wall_median_ms": 0.34280750000000004,
+      "tangent_digest": "d4b18ff415f9f47490207a612a03a6db0c46b7a1d897a4ddf18abbda00b5790c",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.010923500172793865,
+        0.011711499653756618,
+        0.01319700013846159,
+        0.014541000127792358,
+        0.01788949966430664
+      ],
+      "device_dispatch_median_ms": 0.01319700013846159,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 3.7644420913807153e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.365072,
+        0.362143
+      ],
+      "checked_jvp_wall_median_ms": 0.3636075,
+      "tangent_digest": "4a243028712340c96c591f10df50262168e3c8779c8b71c6bf7eec98dfb5234d",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011702500283718109,
+        0.012600500136613846,
+        0.013240999542176723,
+        0.011355999857187271,
+        0.014933000318706036
+      ],
+      "device_dispatch_median_ms": 0.012600500136613846,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.32321076107678e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.332932,
+        0.368012
+      ],
+      "checked_jvp_wall_median_ms": 0.350472,
+      "tangent_digest": "b905488409a9373469ba58270f74e845f34bd54a6c3b8851bb6c705804560329",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.014020499773323536,
+        0.01039199996739626,
+        0.010720999911427498,
+        0.012329500168561935,
+        0.011173499748110771
+      ],
+      "device_dispatch_median_ms": 0.011173499748110771,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 9.63735946601929e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330312,
+        0.360223
+      ],
+      "checked_jvp_wall_median_ms": 0.3452675,
+      "tangent_digest": "06490448030d7c76616c9f840b4cf068cf8909bb1b039683bb8ac88453008cbf",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010417499579489231,
+        0.009268499910831451,
+        0.011908999644219875,
+        0.012028000317513943,
+        0.012393999844789505
+      ],
+      "device_dispatch_median_ms": 0.011908999644219875,
+      "resources": {
+        "registers": 29,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 7.307955351976148e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.325192,
+        0.428113
+      ],
+      "checked_jvp_wall_median_ms": 0.3766525,
+      "tangent_digest": "d248874acf33e40e0d11ac75f787d12520606a735faf828394b1498b3812505a",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.013958499766886234,
+        0.012867500074207783,
+        0.012254999950528145,
+        0.012158500030636787,
+        0.010785000398755074
+      ],
+      "device_dispatch_median_ms": 0.012254999950528145,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 1.4274018217408369e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.332482,
+        0.322542
+      ],
+      "checked_jvp_wall_median_ms": 0.327512,
+      "tangent_digest": "118c6b82cb91ed71fbf0f6a8b462b4ebbb4f6e68a2affaebc32e05cbd3764274",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.012137999758124352,
+        0.011121000163257122,
+        0.01206899993121624,
+        0.012417499907314777,
+        0.012709500268101692
+      ],
+      "device_dispatch_median_ms": 0.012137999758124352,
+      "resources": {
+        "registers": 39,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 1.3915991803337135e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330362,
+        0.341292
+      ],
+      "checked_jvp_wall_median_ms": 0.335827,
+      "tangent_digest": "5355f19180ad2930a98768a919592e997c9e51cd787d9e3d1badfb232761b65e",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.014007000252604485,
+        0.010393000207841396,
+        0.010091500356793404,
+        0.012946000322699547,
+        0.009949499741196632
+      ],
+      "device_dispatch_median_ms": 0.010393000207841396,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 5.511505141164719e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.332553,
+        0.353662
+      ],
+      "checked_jvp_wall_median_ms": 0.3431075,
+      "tangent_digest": "62047c9b5592d750186a554e51612aea909df254f5d8e7bb54d81b8faaa6a8ea",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.014612000435590744,
+        0.012678000144660473,
+        0.011261500418186188,
+        0.009037000127136707,
+        0.014422000385820866
+      ],
+      "device_dispatch_median_ms": 0.012678000144660473,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.13403042301519e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.343652,
+        0.357093
+      ],
+      "checked_jvp_wall_median_ms": 0.3503725,
+      "tangent_digest": "db3ad79b00660d643e87a5a12e241b38ab0b52d9cc36be82bc8a7d9f39bf172f",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01195599976927042,
+        0.011706500314176083,
+        0.010093499906361103,
+        0.014573000371456146,
+        0.010210500098764896
+      ],
+      "device_dispatch_median_ms": 0.011706500314176083,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 4.109988654965591e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330443,
+        0.354582
+      ],
+      "checked_jvp_wall_median_ms": 0.3425125,
+      "tangent_digest": "e18ae8b8be73c986f5d5cbe47c5d283c38c943dc558d159622868dcfcdd0be6a",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01314849965274334,
+        0.010949499905109406,
+        0.010778499767184258,
+        0.010917499661445618,
+        0.010161500424146652
+      ],
+      "device_dispatch_median_ms": 0.010917499661445618,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 5.725238894083162e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.345832,
+        0.355032
+      ],
+      "checked_jvp_wall_median_ms": 0.35043199999999997,
+      "tangent_digest": "60bfa05888b8e234526ebffedef8820c2694f5c297c728344fef2c9802a330a6",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01268799975514412,
+        0.012595999985933304,
+        0.009979000315070152,
+        0.013216500170528889,
+        0.013939499855041504
+      ],
+      "device_dispatch_median_ms": 0.01268799975514412,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 3.4642741453261294e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.337453,
+        0.325772
+      ],
+      "checked_jvp_wall_median_ms": 0.3316125,
+      "tangent_digest": "29af64496559dd927036075f8414c05eaeef104b0f74f5bb9c602fcc70ca63bc",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.013129999861121178,
+        0.01127300038933754,
+        0.013564500026404858,
+        0.012427500449120998,
+        0.012476000003516674
+      ],
+      "device_dispatch_median_ms": 0.012476000003516674,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        0,
+        2
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 9.629518848974783e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.323352,
+        0.325752
+      ],
+      "checked_jvp_wall_median_ms": 0.32455199999999995,
+      "tangent_digest": "825cf721899995c979e2b6cea3e0bd44b5cd83d32f2977295bfdeb9881351b58",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01249849982559681,
+        0.012784999795258045,
+        0.012854999862611294,
+        0.011826500296592712,
+        0.014378000050783157
+      ],
+      "device_dispatch_median_ms": 0.012784999795258045,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 3.7644420913807153e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.346772,
+        0.351953
+      ],
+      "checked_jvp_wall_median_ms": 0.3493625,
+      "tangent_digest": "deaca1a6b821ff34acdb703772f63347c60c1293a464f8747d40ba55456fbb21",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.012249000370502472,
+        0.011200499720871449,
+        0.010487000457942486,
+        0.01322800014168024,
+        0.010550499893724918
+      ],
+      "device_dispatch_median_ms": 0.011200499720871449,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.32321076107678e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.329162,
+        0.332822
+      ],
+      "checked_jvp_wall_median_ms": 0.330992,
+      "tangent_digest": "b448e79bf986b063fea5318aea88c6eb1e7da2b2af612912957185f9a67247ce",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010753500275313854,
+        0.014004499651491642,
+        0.012091499753296375,
+        0.011528999544680119,
+        0.01120350044220686
+      ],
+      "device_dispatch_median_ms": 0.011528999544680119,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 9.63735946601929e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.339743,
+        0.481213
+      ],
+      "checked_jvp_wall_median_ms": 0.410478,
+      "tangent_digest": "dabb4e3840213f30d2152c0430aa5bc3d972bf8e6011950f922089d72edafc9b",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.01025249995291233,
+        0.009870500303804874,
+        0.009110500104725361,
+        0.011079500429332256,
+        0.011355499736964703
+      ],
+      "device_dispatch_median_ms": 0.01025249995291233,
+      "resources": {
+        "registers": 29,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 7.307955351976148e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.323122,
+        0.319992
+      ],
+      "checked_jvp_wall_median_ms": 0.321557,
+      "tangent_digest": "db63ece066e0b94d8e7fe1c20e69ee3be64ccbd5bf8bd8f7cf8d1e73f1ac0c1c",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010745000094175339,
+        0.011212499812245369,
+        0.017263999208807945,
+        0.013144000433385372,
+        0.012008500285446644
+      ],
+      "device_dispatch_median_ms": 0.012008500285446644,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 1.4274018217408369e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.323502,
+        0.322022
+      ],
+      "checked_jvp_wall_median_ms": 0.322762,
+      "tangent_digest": "c7bca2a79b9967515cd02c538c8fa3cdc044885e75cb801bf9170ead0fd6c20c",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011449499987065792,
+        0.01179100014269352,
+        0.010962000116705894,
+        0.01177349966019392,
+        0.015210499987006187
+      ],
+      "device_dispatch_median_ms": 0.01177349966019392,
+      "resources": {
+        "registers": 39,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 1.3915991803337135e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.367693,
+        0.319252
+      ],
+      "checked_jvp_wall_median_ms": 0.34347249999999996,
+      "tangent_digest": "7d692f2a9d25835dcd19ab3ff90e0d8378a605dfc1740036bbef1f5ab7feadda",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.012690500356256962,
+        0.009972499683499336,
+        0.01153349969536066,
+        0.010815500281751156,
+        0.012759500183165073
+      ],
+      "device_dispatch_median_ms": 0.01153349969536066,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 5.511505141164719e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.508703,
+        0.368363
+      ],
+      "checked_jvp_wall_median_ms": 0.438533,
+      "tangent_digest": "fb1f6e5b0311a5e5c8f6d3e4d127cb20f42a42e9ae7eb4f6e2cee4d7d25e2199",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012444499880075455,
+        0.01176149956882,
+        0.015702499076724052,
+        0.009709499776363373,
+        0.014777000062167645
+      ],
+      "device_dispatch_median_ms": 0.012444499880075455,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.13403042301519e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.354302,
+        0.362753
+      ],
+      "checked_jvp_wall_median_ms": 0.3585275,
+      "tangent_digest": "1e55c0513aac9976dd45dc230a78b1861b69e8cf1c046dc811a8a22dfa99116d",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012403000146150589,
+        0.015186499804258347,
+        0.01303850021213293,
+        0.01177200023084879,
+        0.013399500399827957
+      ],
+      "device_dispatch_median_ms": 0.01303850021213293,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 4.109988654965591e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.327742,
+        0.252852
+      ],
+      "checked_jvp_wall_median_ms": 0.290297,
+      "tangent_digest": "3d3a25262e81504c153bd0781565d8b10354750c5b82f4d458a20c285d0adc66",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01157000008970499,
+        0.014831000007689,
+        0.012621999718248844,
+        0.011837000027298927,
+        0.012186000123620033
+      ],
+      "device_dispatch_median_ms": 0.012186000123620033,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 5.725238894083162e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.342352,
+        0.332642
+      ],
+      "checked_jvp_wall_median_ms": 0.337497,
+      "tangent_digest": "21b1d46c3d6a748b3afff068cf80b04129ee538e73e3ccf9707d48fd266f2e9d",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012202000245451927,
+        0.010820000432431698,
+        0.013314500451087952,
+        0.012637999840080738,
+        0.010482000187039375
+      ],
+      "device_dispatch_median_ms": 0.012202000245451927,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 3.4642741453261294e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.343722,
+        0.375742
+      ],
+      "checked_jvp_wall_median_ms": 0.35973200000000005,
+      "tangent_digest": "09da073d0a65fdb8032759a0eb804d07d837c2a0b78b398db0adce79be47970a",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.0115769999101758,
+        0.011200999841094017,
+        0.011219000443816185,
+        0.012989499606192112,
+        0.011805499903857708
+      ],
+      "device_dispatch_median_ms": 0.0115769999101758,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        0,
+        1
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 9.629518848974783e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.343402,
+        0.334463
+      ],
+      "checked_jvp_wall_median_ms": 0.33893249999999997,
+      "tangent_digest": "c84a1eb1a67b5fd5e0ff87ad78a60f6b7ef892993a259cc6c681e5c9d83f7738",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01235949993133545,
+        0.015287499874830246,
+        0.010475999675691128,
+        0.0109655000269413,
+        0.0098860003054142
+      ],
+      "device_dispatch_median_ms": 0.0109655000269413,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 3.7644420913807153e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.328192,
+        0.350602
+      ],
+      "checked_jvp_wall_median_ms": 0.339397,
+      "tangent_digest": "8f0791157c7f19274ee7a95f2baf772ccd68134758590d1cb6d36300a0bfec4a",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.01082600001245737,
+        0.010694500058889389,
+        0.011713500134646893,
+        0.01205699983984232,
+        0.014832000248134136
+      ],
+      "device_dispatch_median_ms": 0.011713500134646893,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.32321076107678e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330082,
+        0.358072
+      ],
+      "checked_jvp_wall_median_ms": 0.34407699999999997,
+      "tangent_digest": "11f8d04c565fa1d99ec75fea87747154f65fa767fa4d85f30fdc52dab123bac5",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.013230499811470509,
+        0.01141900010406971,
+        0.01074950024485588,
+        0.01131999958306551,
+        0.01191600039601326
+      ],
+      "device_dispatch_median_ms": 0.01141900010406971,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 9.63735946601929e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.334882,
+        0.336342
+      ],
+      "checked_jvp_wall_median_ms": 0.335612,
+      "tangent_digest": "5e0d17063c8da2ad6c46cac7e43d081cc9e02448d0bcf149aa8e69fa4612e1dc",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011415000073611736,
+        0.01009450014680624,
+        0.012714999727904797,
+        0.010455500334501266,
+        0.010095999576151371
+      ],
+      "device_dispatch_median_ms": 0.010455500334501266,
+      "resources": {
+        "registers": 29,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 7.307955351976148e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.335162,
+        0.327052
+      ],
+      "checked_jvp_wall_median_ms": 0.33110700000000004,
+      "tangent_digest": "5f32411c46783203b753f7be8919828260c9bd08a9007789d34b160d0745bdaf",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.012614499777555466,
+        0.011896000243723392,
+        0.011404500342905521,
+        0.010778999887406826,
+        0.011591999791562557
+      ],
+      "device_dispatch_median_ms": 0.011591999791562557,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 1.4274018217408369e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.333472,
+        0.324492
+      ],
+      "checked_jvp_wall_median_ms": 0.328982,
+      "tangent_digest": "603be5b4ccd9c084b4c4a354747c3df23591252d24eace1a93a2b1970ffbeada",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010626000352203846,
+        0.013755500316619873,
+        0.011772999539971352,
+        0.011854000389575958,
+        0.010579000227153301
+      ],
+      "device_dispatch_median_ms": 0.011772999539971352,
+      "resources": {
+        "registers": 39,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 1.3915991803337135e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.331462,
+        0.380242
+      ],
+      "checked_jvp_wall_median_ms": 0.355852,
+      "tangent_digest": "9e32b506e35fbb61a15fded0b28d3c24cbcb8d4e76594df381258cb76f0a7a34",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.01227550022304058,
+        0.011486999690532684,
+        0.010591000318527222,
+        0.013124000281095505,
+        0.013819499872624874
+      ],
+      "device_dispatch_median_ms": 0.01227550022304058,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 5.511505141164719e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.408643,
+        0.346322
+      ],
+      "checked_jvp_wall_median_ms": 0.3774825,
+      "tangent_digest": "ce83e92058016f1c0ca22238c61865e033a555bd02cb175c462992bf7a6e14c2",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.013175000436604023,
+        0.011978000402450562,
+        0.01241500023752451,
+        0.0130195003002882,
+        0.012831499800086021
+      ],
+      "device_dispatch_median_ms": 0.012831499800086021,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.13403042301519e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.346052,
+        0.352503
+      ],
+      "checked_jvp_wall_median_ms": 0.3492775,
+      "tangent_digest": "7c996b3ebc376a73142c1f6f47881edd5d522b474b958baa05d9045b083616aa",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012470999732613564,
+        0.01261849980801344,
+        0.01167299970984459,
+        0.011649999767541885,
+        0.0113305002450943
+      ],
+      "device_dispatch_median_ms": 0.01167299970984459,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 4.109988654965591e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.339762,
+        0.295482
+      ],
+      "checked_jvp_wall_median_ms": 0.317622,
+      "tangent_digest": "97e4d81f205b9a8fcd432eb4e5f1f77546771c410760dba8421aa08d57e9192e",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.010114500299096107,
+        0.012183000333607197,
+        0.009603000245988369,
+        0.009853499941527843,
+        0.010799500159919262
+      ],
+      "device_dispatch_median_ms": 0.010114500299096107,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 5.725238894083162e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.345062,
+        0.335572
+      ],
+      "checked_jvp_wall_median_ms": 0.340317,
+      "tangent_digest": "fd90cebc246c6d1f2a3980b08fd6cdbd083d75b98615031f4352bc92fc3d0c73",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01052400004118681,
+        0.01278700027614832,
+        0.009774000383913517,
+        0.01465850044041872,
+        0.012009000405669212
+      ],
+      "device_dispatch_median_ms": 0.012009000405669212,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 3.4642741453261294e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330272,
+        0.343322
+      ],
+      "checked_jvp_wall_median_ms": 0.336797,
+      "tangent_digest": "214fc245330c5ea5c27519276d0aa10335390d1c7a9cbe60532018e3c3aacbda",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012587499804794788,
+        0.012103999964892864,
+        0.010862999595701694,
+        0.011536999605596066,
+        0.010292500257492065
+      ],
+      "device_dispatch_median_ms": 0.011536999605596066,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        1,
+        2,
+        0
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 9.629518848974783e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.335802,
+        0.318623
+      ],
+      "checked_jvp_wall_median_ms": 0.3272125,
+      "tangent_digest": "9ee6e8c24ec1e943465b95a30912da5557a3bc8813c08bf33a9e8593e3a36344",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.010008499957621098,
+        0.011063500307500362,
+        0.013844500295817852,
+        0.012931999750435352,
+        0.010223999619483948
+      ],
+      "device_dispatch_median_ms": 0.011063500307500362,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 3.7644420913807153e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.331993,
+        0.420443
+      ],
+      "checked_jvp_wall_median_ms": 0.376218,
+      "tangent_digest": "83aecf09c86780f97cb81e0ded5f475fe777edd3fa9dc2c81e28499804705be9",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.010943500325083733,
+        0.01111149974167347,
+        0.0117595000192523,
+        0.01287749968469143,
+        0.010524500161409378
+      ],
+      "device_dispatch_median_ms": 0.01111149974167347,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.32321076107678e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.341122,
+        0.353613
+      ],
+      "checked_jvp_wall_median_ms": 0.3473675,
+      "tangent_digest": "1fa04a677210d275fb23099959674e57adf43a17fff0e8c382002654039ce306",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.012322000227868557,
+        0.010401500388979912,
+        0.011021500453352928,
+        0.010378500446677208,
+        0.010050499811768532
+      ],
+      "device_dispatch_median_ms": 0.010401500388979912,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 9.63735946601929e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.332002,
+        0.358483
+      ],
+      "checked_jvp_wall_median_ms": 0.3452425,
+      "tangent_digest": "14263d164166a1a64467750d2fa642c90e98ce9b187d3848eb7debdbb0b4b033",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.00963599979877472,
+        0.01046849973499775,
+        0.009771999903023243,
+        0.011775000020861626,
+        0.010404500178992748
+      ],
+      "device_dispatch_median_ms": 0.010404500178992748,
+      "resources": {
+        "registers": 29,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 7.307955351976148e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.331202,
+        0.341232
+      ],
+      "checked_jvp_wall_median_ms": 0.336217,
+      "tangent_digest": "e88159911ae774c0048e75350fa340756586e570dad86922daf3395fb6260886",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011244500055909157,
+        0.01079300045967102,
+        0.011460499837994576,
+        0.010886999778449535,
+        0.010513000190258026
+      ],
+      "device_dispatch_median_ms": 0.010886999778449535,
+      "resources": {
+        "registers": 37,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 1.4274018217408369e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.330812,
+        0.327892
+      ],
+      "checked_jvp_wall_median_ms": 0.329352,
+      "tangent_digest": "355750fdd2740ed0cd5ca3bdc22db645f2e8a1df0211459203994ee8329eef82",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.012444499880075455,
+        0.01029099989682436,
+        0.009978000074625015,
+        0.012384000234305859,
+        0.011799500323832035
+      ],
+      "device_dispatch_median_ms": 0.011799500323832035,
+      "resources": {
+        "registers": 39,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 1.3915991803337135e-08,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.364662,
+        0.342432
+      ],
+      "checked_jvp_wall_median_ms": 0.353547,
+      "tangent_digest": "710f9a4ce325f896d2e596212e4a717dd08d166fd03152955b0c81836f7210ba",
+      "forward_digest": "dbb9acdb3a02a86290df7a16de36056adc8e2f57d408e3d490547665f65bb5b6",
+      "device_dispatch_samples_ms": [
+        0.011122000403702259,
+        0.012460500001907349,
+        0.012600000016391277,
+        0.011757499538362026,
+        0.011213500052690506
+      ],
+      "device_dispatch_median_ms": 0.011757499538362026,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        0
+      ],
+      "max_abs_error": 5.511505141164719e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.344142,
+        0.259082
+      ],
+      "checked_jvp_wall_median_ms": 0.301612,
+      "tangent_digest": "30a92968d00b066426f33c2b0367388906436cb9f7bd9157cf14c1eb1679a42e",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.01115449983626604,
+        0.013240000233054161,
+        0.012041999958455563,
+        0.010750499553978443,
+        0.012494999915361404
+      ],
+      "device_dispatch_median_ms": 0.012041999958455563,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        1
+      ],
+      "max_abs_error": 5.13403042301519e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.336722,
+        0.290312
+      ],
+      "checked_jvp_wall_median_ms": 0.31351700000000005,
+      "tangent_digest": "9320d089f9d65389916e68bf0697d6c459cd07be4989ccc1a69884e6325ef493",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.011873000301420689,
+        0.012133999727666378,
+        0.01346299983561039,
+        0.011385500431060791,
+        0.01327150035649538
+      ],
+      "device_dispatch_median_ms": 0.012133999727666378,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        2
+      ],
+      "max_abs_error": 4.109988654965591e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.334823,
+        0.363032
+      ],
+      "checked_jvp_wall_median_ms": 0.3489275,
+      "tangent_digest": "75ebd1b9a37034c179ed343dbd40eb9c6ba8c620d3829b1b890d08e076ff2db5",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.012760000303387642,
+        0.013496999628841877,
+        0.009986000135540962,
+        0.0113305002450943,
+        0.012973999604582787
+      ],
+      "device_dispatch_median_ms": 0.012760000303387642,
+      "resources": {
+        "registers": 38,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 512,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        1,
+        0
+      ],
+      "max_abs_error": 5.725238894083162e-10,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.360502,
+        0.326202
+      ],
+      "checked_jvp_wall_median_ms": 0.343352,
+      "tangent_digest": "b43770016e75e40cf921c68e838953dd98026143854e5f2986edf677a6345c75",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.011187500320374966,
+        0.014201500453054905,
+        0.011685499921441078,
+        0.012146499939262867,
+        0.012512000277638435
+      ],
+      "device_dispatch_median_ms": 0.012146499939262867,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        2,
+        0
+      ],
+      "max_abs_error": 3.4642741453261294e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.361043,
+        0.319632
+      ],
+      "checked_jvp_wall_median_ms": 0.3403375,
+      "tangent_digest": "c64e35de53b7c01de2a65855858b5ce47f9e8754963d12bbf546a80ede70ba8c",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.013574999757111073,
+        0.013280999846756458,
+        0.012598499655723572,
+        0.012729000300168991,
+        0.012636000290513039
+      ],
+      "device_dispatch_median_ms": 0.012729000300168991,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    },
+    {
+      "frontend_order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "native_mapping": [
+        2,
+        1,
+        0
+      ],
+      "physical_active": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_error": 9.629518848974783e-09,
+      "private_capture_mutation_and_repeated_directions": "passed",
+      "checked_jvp_wall_samples_ms": [
+        0.335202,
+        0.320872
+      ],
+      "checked_jvp_wall_median_ms": 0.328037,
+      "tangent_digest": "fb433b4d2829a66fee64d14c7f1c41aff33e82fb7e2036441ccece4dde0700ce",
+      "forward_digest": "0bb7528249fc9a2b562f1753f4c6f0150ba3d6878847e993528a14d4f51442e3",
+      "device_dispatch_samples_ms": [
+        0.013022500090301037,
+        0.012562500312924385,
+        0.012668999843299389,
+        0.011618499644100666,
+        0.012764500454068184
+      ],
+      "device_dispatch_median_ms": 0.012668999843299389,
+      "resources": {
+        "registers": 40,
+        "local_bytes": 0,
+        "dynamic_shared_bytes": 1024,
+        "block_threads": 128,
+        "active_blocks_per_sm": 12
+      }
+    }
+  ],
+  "fingerprints": {
+    "python/tessera/compiler/native_attention_program.py": "30b69767215d2a00117185c819daf26897ea16ec40da156876a8ee8af00ce758",
+    "python/tessera/compiler/native_attention_jvp.py": "c7a0090edb74784f06c45723e1169da1e4cefdd501d4855f22496707ea2234be",
+    "python/tessera/compiler/jit.py": "5c4e30d2fab2b427ed128e27127dcbe2d582f3f533372d9c36d2ba16740d5c76",
+    "src/compiler/programming_model/lib/NativeAttentionJvp.h": "d452424d5f420ee5a95c0470e900c79db6457d7e92d22d02e1a1bf81008c1076",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "b89224a0c9a0cef98e4fbbae521308dabccda87471d80c4c8d11e6425f1e2b77",
+    "benchmarks/nvidia/benchmark_jvp_argument_order.py": "c51f3925fc00f16a819071110953b7b7647a9fa6f744b52248c386b90d116034",
+    "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt": "565541351f3e1f28b99be72ba2c2d48be7c4f0595d38e65f6d8d313adc65418f"
+  },
+  "timing_scope": "preloaded raw CUDA-event dispatch window; checked allocating JVP wall separate; no throughput or isolated kernel claim",
+  "route": "frontend -> native AD -> Graph/Schedule/Tile -> native GPU LLVM/NVVM image"
+}

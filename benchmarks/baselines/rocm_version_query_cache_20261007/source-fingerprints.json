@@ -1,0 +1,5 @@
+{
+  "python/tessera/compiler/rocm_native.py": "9e7d2fb2d491bf1f5541563a7c8d9f205a2af7aa23feb58dc49bf5bb80d84351",
+  "tests/unit/test_rocm_version_fingerprint_cache.py": "7081769f1a49e8131a583563b082e42cb8e93c7175ddc3f371e27a837a6c4aff",
+  "benchmarks/rocm/record_rocm_version_query_cache.py": "d8b98301a27bf994ef0f2a9093dc4654f5fdd145bd64ef15262904acac0d7b31"
+}

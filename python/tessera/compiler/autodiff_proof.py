@@ -71,6 +71,15 @@ def _contracts() -> tuple[DerivativeProofContract, ...]:
             "mul", ProofKind.DIRECTIONAL_AND_DUALITY,
             "d(x*y)=dx*y+x*dy", "floating tensors"),
         DerivativeProofContract(
+            "scaled_matmul", ProofKind.DIRECTIONAL_AND_DUALITY,
+            "d sum_g(P_g*sA_g*sB_g) is the sum of products with each "
+            "active floating operand replaced once by its tangent",
+            "ranked floating semantic roles; exact_per_block and FP32 result; "
+            "original contraction and scale-group axes preserved",
+            "encoded integer scales have no implicit derivative; rounded output "
+            "requires an explicit policy. Owning gfx1201 physical proof covers "
+            "FP32 scale roles with fixed E4M3 storage, not general storage AD."),
+        DerivativeProofContract(
             "matmul", ProofKind.DIRECTIONAL_AND_DUALITY,
             "d(A@B)=dA@B+A@dB", "legal contraction shapes"),
         DerivativeProofContract(

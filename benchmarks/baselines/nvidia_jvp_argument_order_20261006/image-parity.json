@@ -1,0 +1,41 @@
+{
+  "grouped_by": "same semantic wrt, shape, causal across all six frontend permutations",
+  "groups": {
+    "q_5_0": [
+      "68d21ea1ded39089b0ea1393e38d57ab9c298046019f56cede460bdc1e9e39a3"
+    ],
+    "k_5_0": [
+      "19eda9957412143ba48f9365507f953e4fe34888a871ecc80574b48ea2a07ccf"
+    ],
+    "v_5_0": [
+      "96e90164dadfe555d8dd010808e44d723110ff428df21eaae31e77d37180c2d3"
+    ],
+    "k_q_5_0": [
+      "238fe6c9a17aaaa11f04cadf3d99e0e44794310e58282055cef65c6f327cfafc"
+    ],
+    "v_q_5_0": [
+      "1229ed8b26ee894fa5fe99c8f5f84e85bf979bb4455b66f91c436732c1844f72"
+    ],
+    "q_k_v_5_0": [
+      "275d562553d42b00ebedad0e54d410ec8a39a86c6c7edf76a55c4374f30d13ef"
+    ],
+    "q_129_1": [
+      "93337f58b8fc117fdeb0c8d18f6e0ea1d7f7c9f13b355219d8cf77fee553971f"
+    ],
+    "k_129_1": [
+      "69d026c32a5e722d9564e051cf2273623ecc2c39646f83efed7c0c1c9de46536"
+    ],
+    "v_129_1": [
+      "d82b7208b9e2b5accd910c26864a13caa90644007ede79ead98a031e3ae3704d"
+    ],
+    "k_q_129_1": [
+      "db99d07913578e15a158f0f2d10cb21ba782492b02b245185d6de358b27e49b2"
+    ],
+    "v_q_129_1": [
+      "eed0cd2ce48718edb113bb4fc171bd7e5e4b37618ed8085d76556dd6abc02712"
+    ],
+    "q_k_v_129_1": [
+      "c9aeb4a218637af7902df3f8ad680676985e0c9240e746359f4e646f71913c55"
+    ]
+  }
+}

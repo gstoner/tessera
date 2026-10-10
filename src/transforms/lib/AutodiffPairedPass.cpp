@@ -56,8 +56,7 @@
 #include <algorithm>
 #include <functional>
 
-#include "Tessera/AdjointInterface.h.inc"
-#include "Tessera/LinearTransposeInterface.h.inc"
+#include "Tessera/IR/TesseraOps.h"
 #include "Tessera/Transforms/GraphDataflow.h"
 #include "Tessera/Transforms/Passes.h"
 #include "llvm/Support/JSON.h"
@@ -70,6 +69,7 @@
 #include "mlir/Dialect/MemRef/IR/MemRef.h"
 #include "mlir/Dialect/Math/IR/Math.h"
 #include "NativeStorageJVP.h"
+#include "NativeScaledMatmulProgram.h"
 #include "../../compiler/ir/AttentionADContract.h"
 
 namespace tessera {
@@ -1746,6 +1746,11 @@ public:
   MLIR_DEFINE_EXPLICIT_INTERNAL_INLINE_TYPE_ID(AutodiffPairedPass)
   AutodiffPairedPass() = default;
   AutodiffPairedPass(const AutodiffPairedPass &other) : PassWrapper(other) {}
+  mlir::Pass::Option<bool> exportScaledTranspose{*this, "export-scaled-transpose",
+      llvm::cl::desc("Export native typed scale-adjoint regions and their SSA lifetimes"),
+      llvm::cl::init(false)};
+  mlir::Pass::Option<int64_t> selectScaledTransposeMember{*this, "select-scaled-transpose-member",
+      llvm::cl::desc("Project one actual native scale-adjoint member"), llvm::cl::init(-1)};
   mlir::Pass::Option<bool> normalizeCountedWhile{*this, "normalize-counted-while",
       llvm::cl::desc("Normalize proven counted whiles for persistent tensor products"), llvm::cl::init(false)};
   mlir::Pass::Option<bool> normalizeDataWhile{*this, "normalize-data-while",
@@ -1758,6 +1763,22 @@ public:
 
   mlir::Pass::Option<std::string> checkpointProduct{*this, "checkpoint-product",
       llvm::cl::desc("Export one isolated generated attention forward/backward checkpoint"), llvm::cl::init("")};
+
+  mlir::Pass::Option<bool> pruneCheckpointGradients{*this, "prune-checkpoint-gradients",
+      llvm::cl::desc("Skip unrequested checkpoint gradient computations, retaining zero-filled ABI outputs"),
+      llvm::cl::init(false)};
+
+  mlir::Pass::Option<bool> compactCheckpointGradients{*this, "compact-checkpoint-gradients",
+      llvm::cl::desc("Export a compact requested-gradient physical checkpoint ABI"),
+      llvm::cl::init(false)};
+
+  mlir::Pass::Option<std::string> compactCheckpointLaunch{*this, "compact-checkpoint-launch",
+      llvm::cl::desc("Compact checkpoint launch layout: packed_v1 or logical_v1"),
+      llvm::cl::init("packed_v1")};
+
+  mlir::Pass::Option<unsigned> compactCheckpointThreads{*this, "compact-checkpoint-threads",
+      llvm::cl::desc("Compact checkpoint block threads: 64 or 128"),
+      llvm::cl::init(128)};
 
   mlir::Pass::Option<std::string> exportProduct{*this, "export-product",
       llvm::cl::desc("Export a typed generated forward/backward product without scalarizing residual tapes"), llvm::cl::init("")};
@@ -1833,7 +1854,7 @@ public:
     // CI cannot see either outcome: its unit lane has no tessera-opt, so the test
     // that covers this skips there.
     const bool wantsProduct =
-        emitStorageChild || !exportProduct.empty() || !checkpointProduct.empty();
+        emitStorageChild || exportScaledTranspose || !exportProduct.empty() || !checkpointProduct.empty();
     if (wantsProduct) {
       for (auto fn : targets)
         if (module.lookupSymbol<mlir::func::FuncOp>((fn.getName() + "__bwd").str())) {
@@ -1849,6 +1870,27 @@ public:
       module.emitError("typed product export requires one fresh reverse request and one forward/backward role");
       return signalPassFailure();
     }
+    if ((compactCheckpointThreads != 64 && compactCheckpointThreads != 128) ||
+        (!compactCheckpointGradients && compactCheckpointThreads != 128)) {
+      module.emitError("compact checkpoint threads require 64 or 128 in a compact gradient export");
+      return signalPassFailure();
+    }
+    if (compactCheckpointLaunch != "packed_v1" && compactCheckpointLaunch != "logical_v1") {
+      module.emitError("compact checkpoint launch requires packed_v1 or logical_v1");
+      return signalPassFailure();
+    }
+    if (!compactCheckpointGradients && compactCheckpointLaunch != "packed_v1") {
+      module.emitError("compact checkpoint launch requires compact gradient export");
+      return signalPassFailure();
+    }
+    if (compactCheckpointGradients && (!pruneCheckpointGradients || checkpointProduct != "backward")) {
+      module.emitError("compact checkpoint outputs require pruned backward checkpoint export");
+      return signalPassFailure();
+    }
+    if (pruneCheckpointGradients && checkpointProduct.empty()) {
+      module.emitError("checkpoint gradient pruning requires a checkpoint product export");
+      return signalPassFailure();
+    }
     if (!checkpointProduct.empty() && (emitStorageChild || targets.size() != 1 ||
         (checkpointProduct != "forward" && checkpointProduct != "backward"))) {
       module.emitError("checkpoint product requires one fresh reverse request and forward/backward role");
@@ -1862,16 +1904,88 @@ public:
       for (auto fn : targets) normalizeCountedTapeWhiles(fn);
     if (normalizeDataWhile)
       for (auto fn : targets) normalizeDataDependentTapeWhiles(fn);
+    if (module->hasAttr("tessera.attention_sequence_bounds")) {
+      if (targets.size()!=1 || checkpointProduct.empty() ||
+          failed(projectBoundedAttentionEntry(module,targets.front())))
+        return signalPassFailure();
+    }
     for (auto fn : targets)
       if (failed(buildBackward(fn)))
         return signalPassFailure();
     if (!exportProduct.empty() && failed(exportTypedProduct(module,exportProduct)))
       return signalPassFailure();
+    if (exportScaledTranspose) {
+      if (emitStorageChild || !exportProduct.empty() || !checkpointProduct.empty() ||
+          targets.size() != 1 || selectScaledTransposeMember < -1) {
+        module.emitError("scaled transpose export conflicts with another product export");
+        return signalPassFailure();
+      }
+      if (failed(emitNativeScaledMatmulProgram(module, false, true)) ||
+          (selectScaledTransposeMember >= 0 &&
+           failed(projectNativeScaledMatmulMember(module, selectScaledTransposeMember))))
+        return signalPassFailure();
+    } else if (selectScaledTransposeMember != -1) {
+      module.emitError("scaled transpose member selection requires program export");
+      return signalPassFailure();
+    }
     if (emitStorageChild && failed(emitNativeStorageJVP(module, true))) signalPassFailure();
     if (!checkpointProduct.empty() && failed(exportCheckpoint(module, checkpointProduct))) signalPassFailure();
   }
 
 private:
+  mlir::LogicalResult projectBoundedAttentionEntry(mlir::ModuleOp module,mlir::func::FuncOp fn) {
+    auto request=module->getAttrOfType<mlir::DenseI64ArrayAttr>("tessera.attention_sequence_bounds");
+    auto target=module->getAttrOfType<mlir::StringAttr>("tessera.target");
+    auto arch=module->getAttrOfType<mlir::StringAttr>("tessera.arch");
+    if (!request || request.size()!=2 || request[0]<=0 || request[1]<=0 ||
+        !target || target.getValue()!="nvidia_sm120" || !arch || arch.getValue()!="sm_120" ||
+        module->hasAttr("tessera.attention_shape_bounds") || !fn.getBody().hasOneBlock() ||
+        fn.getBody().front().getOperations().size()!=2)
+      return fn.emitError("bounded attention projection requires one isolated SM120 entry and positive Sq/Sk capacities");
+    auto *op=&fn.getBody().front().front();
+    if (op->getName().getStringRef()!="tessera.flash_attn" || !denseAttentionAD(op,true,true))
+      return fn.emitError("bounded attention projection requires a supported static attention Graph");
+    auto ret=mlir::dyn_cast<mlir::func::ReturnOp>(fn.getBody().front().back());
+    if (!ret || ret.getOperands()!=op->getResults() || fn.getNumArguments()!=op->getNumOperands())
+      return fn.emitError("bounded attention projection must retain every result and input role");
+    llvm::SmallDenseSet<unsigned> inputs;
+    for (auto value:op->getOperands()) {
+      auto argument=mlir::dyn_cast<mlir::BlockArgument>(value);
+      if (!argument || argument.getOwner()!=&fn.getBody().front() ||
+          !inputs.insert(argument.getArgNumber()).second ||
+          fn.getArgAttr(argument.getArgNumber(),"tessera.layout"))
+        return fn.emitError("bounded attention projection requires distinct direct input roles without layout overrides");
+    }
+    auto q=mlir::cast<mlir::RankedTensorType>(op->getOperand(0).getType());
+    auto k=mlir::cast<mlir::RankedTensorType>(op->getOperand(1).getType());
+    auto v=mlir::cast<mlir::RankedTensorType>(op->getOperand(2).getType());
+    if (q.getDimSize(2)>request[0] || k.getDimSize(2)>request[1])
+      return fn.emitError("attention trace exceeds requested sequence capacity");
+    auto project=[&](mlir::Type type,llvm::ArrayRef<unsigned> axes) {
+      auto tensor=mlir::cast<mlir::RankedTensorType>(type);
+      llvm::SmallVector<int64_t> shape(tensor.getShape());
+      for (unsigned axis:axes) shape[axis]=mlir::ShapedType::kDynamic;
+      return mlir::RankedTensorType::get(shape,tensor.getElementType(),tensor.getEncoding());
+    };
+    for (unsigned role=0;role<3;++role)
+      op->getOperand(role).setType(project(op->getOperand(role).getType(),{2}));
+    if (op->getNumOperands()==4) {
+      auto bias=mlir::cast<mlir::RankedTensorType>(op->getOperand(3).getType());
+      llvm::SmallVector<unsigned> axes;
+      bool logical=bias.getShape()==llvm::ArrayRef<int64_t>({q.getDimSize(0),q.getDimSize(1),q.getDimSize(2),k.getDimSize(2)});
+      if (logical || bias.getDimSize(2)!=1) axes.push_back(2);
+      if (logical || bias.getDimSize(3)!=1) axes.push_back(3);
+      op->getOperand(3).setType(project(bias,axes));
+    }
+    for (auto result:op->getResults()) result.setType(project(result.getType(),{2}));
+    mlir::OpBuilder builder(module.getContext());
+    fn.setFunctionType(builder.getFunctionType(fn.getBody().front().getArgumentTypes(),op->getResultTypes()));
+    module->setAttr("tessera.attention_shape_bounds",builder.getDenseI64ArrayAttr(
+        {q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),request[0],request[1],q.getDimSize(3),v.getDimSize(3)}));
+    module->removeAttr("tessera.attention_sequence_bounds");
+    return mlir::success();
+  }
+
   mlir::LogicalResult exportTypedProduct(mlir::ModuleOp module, llvm::StringRef role) {
     llvm::SmallVector<mlir::func::FuncOp> functions;
     mlir::func::FuncOp backward;
@@ -1988,6 +2102,8 @@ private:
     llvm::SmallVector<mlir::func::FuncOp> functions;
     mlir::Operation *selected = nullptr;
     unsigned forwards = 0, backwards = 0;
+    llvm::SmallVector<int64_t> frontendArgumentIndices, gradientActivity, requestedArguments;
+    bool hasActivityRequest = false;
     for (auto fn : module.getOps<mlir::func::FuncOp>()) {
       functions.push_back(fn);
       if (!fn.getBody().hasOneBlock() || fn.getBody().front().getOperations().size() != 2)
@@ -2000,7 +2116,57 @@ private:
       forwards += forward; backwards += backward;
       if ((role == "forward" && forward) || (role == "backward" && backward)) selected = op;
       auto ret = mlir::dyn_cast<mlir::func::ReturnOp>(fn.getBody().front().back());
-      if (!ret || ret.getOperands() != op->getResults()) return fn.emitError("checkpoint return roles disagree");
+      if (!ret) return fn.emitError("checkpoint return roles disagree");
+      if (forward) {
+        llvm::SmallDenseSet<unsigned> seenArguments;
+        if (fn.getNumArguments() != op->getNumOperands())
+          return fn.emitError("checkpoint export requires one entry argument per input role");
+        for (auto value : op->getOperands()) {
+          auto arg = mlir::dyn_cast<mlir::BlockArgument>(value);
+          if (!arg || arg.getOwner() != &fn.getBody().front() ||
+              !seenArguments.insert(arg.getArgNumber()).second)
+            return fn.emitError("checkpoint input roles require distinct entry arguments");
+          frontendArgumentIndices.push_back(arg.getArgNumber());
+        }
+        if (pruneCheckpointGradients) {
+          if (auto requestAttr = fn->getAttr("tessera.autodiff.wrt_indices")) {
+            auto request = mlir::dyn_cast<mlir::ArrayAttr>(requestAttr);
+            llvm::SmallDenseSet<int64_t> seen;
+            if (!request || request.empty())
+              return fn.emitError("checkpoint gradient request requires nonempty input indices");
+            for (auto attr : request) {
+              auto index = mlir::dyn_cast<mlir::IntegerAttr>(attr);
+              if (!index || index.getInt() < 0 ||
+                  index.getInt() >= fn.getNumArguments() ||
+                  !seen.insert(index.getInt()).second)
+                return fn.emitError("checkpoint gradient request requires unique in-range input indices");
+              requestedArguments.push_back(index.getInt());
+            }
+            hasActivityRequest = true;
+          }
+        }
+        // Paired AD appends the saved forward output and LSE after the
+        // user-visible output. The package boundary still exports the two
+        // checkpoint results, with the output residual aliasing result 0.
+        unsigned visible = ret.getNumOperands() >= 2 ? ret.getNumOperands() - 2 : 0;
+        if ((visible != 1 && visible != 2) || op->getNumResults() != 2 ||
+            ret.getOperand(0) != op->getResult(0) ||
+            (visible == 2 && ret.getOperand(1) != op->getResult(1)) ||
+            ret.getOperand(visible) != op->getResult(0) ||
+            ret.getOperand(visible + 1) != op->getResult(1))
+          return fn.emitError("checkpoint forward output/LSE residual roles disagree");
+      } else {
+        // Reverse activity may select/reorder Q/K/V cotangents. The native
+        // checkpoint still exports the complete physical gradient product;
+        // the frontend selects requested results without rebuilding AD IR.
+        llvm::SmallDenseSet<mlir::Value> returned;
+        if (ret.getNumOperands() == 0 || ret.getNumOperands() > op->getNumResults())
+          return fn.emitError("checkpoint return roles disagree");
+        for (auto value : ret.getOperands())
+          if (!llvm::is_contained(op->getResults(), value) ||
+              !returned.insert(value).second)
+            return fn.emitError("checkpoint return roles disagree");
+      }
       for (auto operand : op->getOperands()) {
         auto arg = mlir::dyn_cast<mlir::BlockArgument>(operand);
         if (!arg || arg.getOwner() != &fn.getBody().front()) return fn.emitError("checkpoint operands must be entry arguments");
@@ -2008,6 +2174,13 @@ private:
     }
     if (functions.size() != 2 || forwards != 1 || backwards != 1 || !selected)
       return module.emitError("checkpoint export requires exactly one generated forward/backward pair");
+    if (pruneCheckpointGradients && role == "backward") {
+      if (frontendArgumentIndices.size() != selected->getNumResults())
+        return selected->emitError("checkpoint gradient roles disagree with forward input roles");
+      for (int64_t index : frontendArgumentIndices)
+        gradientActivity.push_back(!hasActivityRequest ||
+                                   llvm::is_contained(requestedArguments, index));
+    }
     std::string lineage; llvm::raw_string_ostream stream(lineage); module.print(stream); stream.flush();
     mlir::OpBuilder builder(module.getContext());
     builder.setInsertionPointToEnd(module.getBody());
@@ -2022,14 +2195,29 @@ private:
     mlir::func::ReturnOp::create(builder, selected->getLoc(), product->getResults());
     llvm::SmallVector<mlir::Attribute> args, results;
     llvm::SmallVector<llvm::StringRef> argumentNames = role == "forward" ?
-        llvm::SmallVector<llvm::StringRef>{"q", "k", "v"} : llvm::SmallVector<llvm::StringRef>{"dO", "q", "k", "v", "lse"};
+        llvm::SmallVector<llvm::StringRef>{"q", "k", "v"} : llvm::SmallVector<llvm::StringRef>{"dO", "q", "k", "v", "output", "lse"};
     llvm::SmallVector<llvm::StringRef> resultNames = role == "forward" ?
         llvm::SmallVector<llvm::StringRef>{"output", "lse"} : llvm::SmallVector<llvm::StringRef>{"dq", "dk", "dv"};
+    auto seedAttr = selected->getAttrOfType<mlir::BoolAttr>("lse_cotangent");
+    bool seeded = role == "backward" && seedAttr && seedAttr.getValue();
+    bool bias = selected->getNumOperands() - unsigned(seeded) == (role == "forward" ? 4u : 7u);
+    if (bias) argumentNames.insert(argumentNames.begin() + (role == "forward" ? 3 : 5), "bias");
+    if (seeded) argumentNames.push_back("row_seed");
+    if (role == "backward" && selected->getNumResults() == 4) resultNames.push_back("dbias");
     for (auto name : argumentNames) args.push_back(builder.getStringAttr(name));
     for (auto name : resultNames) results.push_back(builder.getStringAttr(name));
     fn->setAttr("tessera.argument_bindings", builder.getArrayAttr(args));
     fn->setAttr("tessera.result_bindings", builder.getArrayAttr(results));
+    if (pruneCheckpointGradients && role == "backward")
+      fn->setAttr("tessera.checkpoint_gradient_activity",
+                  builder.getDenseI64ArrayAttr(gradientActivity));
+    if (compactCheckpointGradients) {
+      fn->setAttr("tessera.checkpoint_gradient_output", builder.getStringAttr("compact_v1"));
+      fn->setAttr("tessera.checkpoint_gradient_launch", builder.getStringAttr(compactCheckpointLaunch));
+      fn->setAttr("tessera.checkpoint_gradient_threads", builder.getI64IntegerAttr(compactCheckpointThreads));
+    }
     for (auto old : functions) old.erase();
+    module->setAttr("tessera.attention_argument_indices", builder.getDenseI64ArrayAttr(frontendArgumentIndices));
     module->setAttr("tessera.attention_ad_pair", builder.getStringAttr(lineage));
     return mlir::success();
   }
@@ -2134,13 +2322,17 @@ private:
       auto materialized = op->getAttrOfType<mlir::BoolAttr>(
           "tessera.autodiff.residual_materialized");
       llvm::SmallVector<mlir::Value> values;
-      if (op->getName().getStringRef() == "tessera.flash_attn" && denseAttentionAD(op)) {
+      if (op->getName().getStringRef() == "tessera.flash_attn" && denseAttentionAD(op, true, true, true)) {
         mlir::OpBuilder attentionBuilder(op);
         auto saved = attentionCheckpoint(attentionBuilder, op, false, op->getOperands());
         if (!saved) return mlir::failure();
         attentionForwards.try_emplace(op, saved);
+        values.push_back(saved->getResult(0));
         values.push_back(saved->getResult(1));
-        residualSources.push_back(mlir::StringAttr::get(ctx, "tessera.flash_attn:lse"));
+        residualSources.push_back(
+            mlir::StringAttr::get(ctx, "tessera.flash_attn:output"));
+        residualSources.push_back(
+            mlir::StringAttr::get(ctx, "tessera.flash_attn:lse"));
       } else if (materialized && materialized.getValue()) {
         auto indices = op->getAttrOfType<mlir::DenseI64ArrayAttr>(
             "tessera.autodiff.residual_result_indices");
@@ -2427,7 +2619,8 @@ private:
     // Replace forward primals only after building the derivative cone: its
     // original SSA values key activity and cotangent maps during construction.
     for (auto [original, saved] : attentionForwards) {
-      original->getResult(0).replaceAllUsesWith(saved->getResult(0));
+      for (unsigned i = 0; i < original->getNumResults(); ++i)
+        original->getResult(i).replaceAllUsesWith(saved->getResult(i));
       original->erase();
     }
     eraseStopGradientBarriers(bwd);
@@ -2806,10 +2999,15 @@ private:
     auto savedAttention = explicitRegionResiduals.find(op);
     if (op->getName().getStringRef() == "tessera.flash_attn" &&
         savedAttention != explicitRegionResiduals.end()) {
-      if (!denseAttentionAD(op) || savedAttention->second.size() != 1 ||
-          outputCotangents.size() != 1 || !outputCotangents[0]) return mlir::failure();
-      llvm::SmallVector<mlir::Value> args{outputCotangents[0], op->getOperand(0),
-          op->getOperand(1), op->getOperand(2), savedAttention->second[0]};
+      if (!denseAttentionAD(op, true, true, true) || savedAttention->second.size() != 2 ||
+          outputCotangents.size() != op->getNumResults()) return mlir::failure();
+      auto outputSeed = outputCotangents[0] ? outputCotangents[0] : buildZeroLike(builder, op->getResult(0));
+      llvm::SmallVector<mlir::Value> args{outputSeed, op->getOperand(0),
+          op->getOperand(1), op->getOperand(2), savedAttention->second[0],
+          savedAttention->second[1]};
+      if (op->getNumOperands() == 4) args.insert(args.end() - 1, op->getOperand(3));
+      if (op->getNumResults() == 2)
+        args.push_back(outputCotangents[1] ? outputCotangents[1] : buildZeroLike(builder, op->getResult(1)));
       auto backward = attentionCheckpoint(builder, op, true, args);
       if (!backward) return mlir::failure();
       llvm::append_range(inputCotangents, backward->getResults());

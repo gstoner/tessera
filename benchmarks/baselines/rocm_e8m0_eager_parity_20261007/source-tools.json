@@ -1,0 +1,5 @@
+{
+  "python/tessera/compiler/reference_typed_scaled_matmul.py": "c618ae2aa5e77b5b998e1e2d97c5a85742881d3c817b5421345107d8bc5ef23f",
+  "tests/device/rocm/test_public_typed_scaled_primal.py": "6c32581fa31a033aa6ddf7dbb8adced27100439023c7fe0464b74f8c5a7a5fa6",
+  "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c"
+}

@@ -1,0 +1,1 @@
+Current enumerated source SHA verification passed; native core 489 and owning RTX 5070 159 counts verified. Scaled AD executable proof remains open.

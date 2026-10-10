@@ -1,0 +1,32 @@
+{
+  "schema": "tessera.rocm.nvfp4_gate_up_validation.v1",
+  "timestamp_utc": "2026-10-03T10:01:38.134505+00:00",
+  "device": "RX 9070 XT gfx1201; rocminfo.txt",
+  "compiler_sha256": "fd8acb4877bc5e2cea58f280d8f31d882f6ff3618e16e7e10bb283fb17675640",
+  "source_sha256": {
+    "benchmarks/rocm/benchmark_rocm_nvfp4_checkpoint.py": "8f656a8e2ce9ff6f7dc292169864cdd29fbc376dc5e39110a500c9b002e08abd",
+    "benchmarks/rocm/benchmark_rocm_nvfp4_ingest_schedule.py": "07e5b9f587819724df8359557c8acca2abc28ee7735a0b1894ab7d3fb5188c3d",
+    "benchmarks/rocm/record_gfx1201_mxfp4.py": "c7faf6fc41513888b686ee636006c607d52500b13d0f22729a40d41c54869a20",
+    "tests/unit/test_nvfp4_checkpoint_recorder.py": "545d07525e3aac5bc8536356e820f0ad1c3c6c6406414c8606d004f8c9a6dc94",
+    "tests/device/rocm/test_nvfp4_ingest_schedule.py": "95bbbcb00625253ba8513e536748a4f0a4fce8521f479f7bd4b28596148ad8ef",
+    "tests/device/rocm/test_mxfp4_w4a8_exact.py": "c29527c34c093bed07c8bf9e81a16c1111b0e759a5ada1d6093769fb2516b29b",
+    "tests/tessera-ir/phase2/e2e_mxfp4_ingest_rocm.mlir": "b62c63f22c5da09dfabf8742265bf4ddb2d646c988624e09dcdded2309b3cf01",
+    "tests/tessera-ir/phase2/e2e_scaled_matmul_rocm_target.mlir": "cf5c721e9a77e1d76d946e0045dde347922e318c2ca91b0abdeca4b8499efd7b"
+  },
+  "tests": {
+    "gfx1201_host_and_device": 38,
+    "super_bear_host_contracts": 46,
+    "audit_docs": 11
+  },
+  "native_filecheck": [
+    "packed MXFP4 Graph/Schedule/Tile/Target",
+    "standard E8M0 Graph/Schedule/Tile/WMMA/LLVM ldexp"
+  ],
+  "same_native_image_as_historical_q_proj": true,
+  "generated_docs": 32,
+  "compiler_plan": "passed",
+  "ruff": "passed",
+  "diff_check": "passed",
+  "graphify_update": "not available in WSL",
+  "scope": "real layer-0 gate/up and independent unequal-scale synthetic case; no global format promotion"
+}

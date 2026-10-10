@@ -618,8 +618,14 @@ static void buildROCMExecutablePipeline(
   // producer. Every other family already arrives as canonical Tile IR and its
   // plugin runs after the Target-IR consumer.
   bool matmulPlugin = family == "matmul";
-  if (matmulPlugin && output == "binary")
-    addFamilyGenerator(pm, family, input == "tile", opts.staging, opts.depthCooperative,
+  if (matmulPlugin && output == "binary") {
+    const bool typedMatmul =
+        input == "tile" || (input == "directive" &&
+                            (arch == "gfx1201" || opts.staging == "lds"));
+    // LDS always uses the existing typed Tile producer, including projected
+    // portable-ABI Target directives. The generator checks portableABI before
+    // constructing that body; raw nonportable directives remain invalid.
+    addFamilyGenerator(pm, family, typedMatmul, opts.staging, opts.depthCooperative,
                        opts.ldsWavesM, opts.ldsWavesN, opts.kUnroll,
                        opts.schedGroups, opts.ldsPadDwords,
                        opts.ldsCopyWidth, opts.ldsCopyElide,
@@ -627,6 +633,7 @@ static void buildROCMExecutablePipeline(
                        opts.ldsSchedValuPerMma, opts.ldsBRowMajor,
                        opts.scaleGroupPanels, opts.blockscaleStageK,
                        opts.blockscaleLdsPadBytes, opts.blockscalePrefetch);
+  }
 
   pm.addPass(createROCMWaveLdsPipelinePass());
   pm.addPass(createROCMWaveLdsLegalityPass());
@@ -708,6 +715,7 @@ void buildTesseraROCMBackendPipeline(OpPassManager &pm) {
 }
 
 void registerTesseraROCMPasses() {
+  registerPass([]() { return createProjectROCMKernelIdentityPass(); });
   registerPass([]() { return createROCMWaveLdsPipelinePass(); });
   registerPass([]() { return createROCMWaveLdsLegalityPass(); });
   registerPass([]() { return createROCMDynamicLDSPass(); });

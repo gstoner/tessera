@@ -1,0 +1,6 @@
+{
+  "python/tessera/compiler/autodiff_request.py": "c6b8012de30b5ae0f9d6aa572ca2e158205451cce07af76ec69806f286d65c65",
+  "python/tessera/compiler/autodiff_proof.py": "2c02d20fbd5e2ec16b09ed7e7471ae10ea13310471bb0db78a9274465563b177",
+  "python/tessera/runtime.py": "93d3a04828b880b9e6db2641b95b2a5e67189ef4c3230e3d9442c19caa227694",
+  "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt": "a760556c6b8bdc800d05fabb77a7d5bd4e3fba6309c9f625be82b052d557cf89"
+}

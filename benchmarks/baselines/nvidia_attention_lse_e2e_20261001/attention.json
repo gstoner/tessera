@@ -1,0 +1,788 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "method": {
+    "device_repetitions_per_sample": 20,
+    "end_to_end_repetitions_per_sample": 5,
+    "runs": 2,
+    "samples_per_run": 9,
+    "sampling": "sample_interleaved_disjoint_cohorts",
+    "timing_domains": [
+      "device_event",
+      "end_to_end"
+    ],
+    "warmup": 3
+  },
+  "rows": [
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": false,
+      "compile": {
+        "cold_ms": 824.4477459811606,
+        "cold_state": "cold",
+        "warm_ms": 232.39520797505975,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 0.002,
+      "entry": "tessera_tile_attention_f16_full_4155c592f4",
+      "image_digest": "8dbf414dea05b074ca4c0cf2bbb70df260e4d49d34a12f15f9e86d18ef563287",
+      "max_abs_error": 4.470348358154297e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.0252384003251791,
+          "device_samples_ms": [
+            0.025916799902915955,
+            0.025600001215934753,
+            0.02510719932615757,
+            0.0252384003251791,
+            0.027249600738286972,
+            0.024926399812102318,
+            0.02521280013024807,
+            0.02508159913122654,
+            0.02730559930205345
+          ],
+          "end_to_end_ms": 1.0035571991465986,
+          "end_to_end_samples_ms": [
+            1.1728927958756685,
+            1.0574146057479084,
+            0.9660565992817283,
+            0.9696903987787664,
+            0.9972473955713212,
+            3.5407554008997977,
+            1.0541813913732767,
+            0.9911451954394579,
+            1.0035571991465986
+          ]
+        },
+        {
+          "device_event_ms": 0.025179201737046242,
+          "device_samples_ms": [
+            0.025038400664925575,
+            0.025060798972845078,
+            0.025206398218870163,
+            0.025593599304556847,
+            0.024987200275063515,
+            0.02648479864001274,
+            0.02510400116443634,
+            0.02547360025346279,
+            0.025179201737046242
+          ],
+          "end_to_end_ms": 0.9764260030351579,
+          "end_to_end_samples_ms": [
+            0.9688568068668246,
+            0.9578163968399167,
+            3.7776035955175757,
+            1.0666178073734045,
+            0.9818247985094786,
+            0.9764260030351579,
+            0.9714027983136475,
+            1.0182978003285825,
+            0.971244799438864
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        4,
+        16,
+        16,
+        32,
+        32
+      ],
+      "stability": {
+        "device_fraction": 0.002351090743506741,
+        "end_to_end_fraction": 0.027786228579641536,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp16"
+    },
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": false,
+      "compile": {
+        "cold_ms": 384.4586940249428,
+        "cold_state": "cold",
+        "warm_ms": 222.84851100994274,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 0.002,
+      "entry": "tessera_tile_attention_f16_full_d023f7ad18",
+      "image_digest": "0327c48749558bdfa959c8a3dc460f7023ac686c5cd7f9257a78b150da2bb5d1",
+      "max_abs_error": 3.725290298461914e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.030374398455023766,
+          "device_samples_ms": [
+            0.030208000913262367,
+            0.03038400039076805,
+            0.031859200447797775,
+            0.03022400103509426,
+            0.030374398455023766,
+            0.031110400334000587,
+            0.030185600742697716,
+            0.030155200511217117,
+            0.030446400865912437
+          ],
+          "end_to_end_ms": 1.0158497956581414,
+          "end_to_end_samples_ms": [
+            1.041018997784704,
+            0.9496431914158165,
+            1.0492841945961118,
+            1.0593004059046507,
+            0.9569864021614194,
+            1.0774872032925487,
+            1.0071014054119587,
+            0.9877529926598072,
+            1.0158497956581414
+          ]
+        },
+        {
+          "device_event_ms": 0.030556801706552505,
+          "device_samples_ms": [
+            0.03031199797987938,
+            0.030427198857069016,
+            0.03182240203022957,
+            0.030217599123716354,
+            0.030932798981666565,
+            0.0317951999604702,
+            0.030556801706552505,
+            0.03012000024318695,
+            0.030843202024698257
+          ],
+          "end_to_end_ms": 1.0459654033184052,
+          "end_to_end_samples_ms": [
+            1.008476596325636,
+            1.060798391699791,
+            1.1430646060034633,
+            1.1086047976277769,
+            1.0459654033184052,
+            1.0096771991811693,
+            1.0628427960909903,
+            1.0151317925192416,
+            1.028384594246745
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        1,
+        17,
+        19,
+        31,
+        29
+      ],
+      "stability": {
+        "device_fraction": 0.006005164243790033,
+        "end_to_end_fraction": 0.029645728914827113,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp16"
+    },
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": true,
+      "compile": {
+        "cold_ms": 382.75838299887255,
+        "cold_state": "cold",
+        "warm_ms": 229.12701300811023,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 0.002,
+      "entry": "tessera_tile_attention_f16_causal_ed04a7b488",
+      "image_digest": "e202e53f711665cada3b2042b56086ab8d17fe17d40c73e00473cc2b4f3b937f",
+      "max_abs_error": 5.960464477539063e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.025863999500870705,
+          "device_samples_ms": [
+            0.025497600436210632,
+            0.025839999318122864,
+            0.02550559863448143,
+            0.026027198880910873,
+            0.026838401332497597,
+            0.02621760033071041,
+            0.025863999500870705,
+            0.027236800640821457,
+            0.02582240104675293
+          ],
+          "end_to_end_ms": 0.9833088028244674,
+          "end_to_end_samples_ms": [
+            0.9773358004167676,
+            0.9833088028244674,
+            1.018527999985963,
+            1.011557609308511,
+            1.0490084066987038,
+            0.9387762052938342,
+            0.9623304009437561,
+            0.9640927892178297,
+            0.9873148053884506
+          ]
+        },
+        {
+          "device_event_ms": 0.02598080039024353,
+          "device_samples_ms": [
+            0.026873599737882614,
+            0.026183998212218285,
+            0.025760000571608543,
+            0.02587360143661499,
+            0.02613759972155094,
+            0.02598080039024353,
+            0.02698880061507225,
+            0.025828799232840538,
+            0.025523200631141663
+          ],
+          "end_to_end_ms": 1.0140256024897099,
+          "end_to_end_samples_ms": [
+            1.0770826018415391,
+            0.960580597165972,
+            0.9267715970054269,
+            1.0140256024897099,
+            1.08485899399966,
+            1.0792920016683638,
+            1.0511146043427289,
+            0.9608302032575011,
+            0.9902692050673068
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        4,
+        16,
+        16,
+        32,
+        32
+      ],
+      "stability": {
+        "device_fraction": 0.004515963950930851,
+        "end_to_end_fraction": 0.031238202665338853,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp16"
+    },
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": true,
+      "compile": {
+        "cold_ms": 383.1076449714601,
+        "cold_state": "cold",
+        "warm_ms": 223.75378001015633,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 0.002,
+      "entry": "tessera_tile_attention_f16_causal_ecef722444",
+      "image_digest": "35c9e7d7ee4988edd1ca2ee3d37229ba840c8ab8670bfc2962bb291d2ea18ca3",
+      "max_abs_error": 2.9802322387695312e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.03107840195298195,
+          "device_samples_ms": [
+            0.03107840195298195,
+            0.03216960281133652,
+            0.030955201014876366,
+            0.031729601323604584,
+            0.03089120052754879,
+            0.03089280053973198,
+            0.03664160147309303,
+            0.030910398811101913,
+            0.03110400214791298
+          ],
+          "end_to_end_ms": 1.0067216004244983,
+          "end_to_end_samples_ms": [
+            1.0904583963565528,
+            1.0067216004244983,
+            0.9810587973333895,
+            0.9452603990212083,
+            1.0902771959081292,
+            0.9645506041124463,
+            0.9833488031290472,
+            3.60411680303514,
+            1.0179375996813178
+          ]
+        },
+        {
+          "device_event_ms": 0.031198401004076004,
+          "device_samples_ms": [
+            0.03333120048046112,
+            0.031142398715019226,
+            0.03195840120315552,
+            0.03320639953017235,
+            0.030955201014876366,
+            0.03103039786219597,
+            0.031540799885988235,
+            0.031198401004076004,
+            0.030886400490999222
+          ],
+          "end_to_end_ms": 1.0050915996544063,
+          "end_to_end_samples_ms": [
+            1.0517764021642506,
+            1.0084973997436464,
+            1.0050915996544063,
+            0.9845228050835431,
+            0.9777387953363359,
+            1.0273040039464831,
+            0.9867811924777925,
+            0.9683283977210522,
+            3.714949998538941
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        1,
+        17,
+        19,
+        31,
+        29
+      ],
+      "stability": {
+        "device_fraction": 0.0038611718606252647,
+        "end_to_end_fraction": 0.00162174350144054,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp16"
+    },
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": false,
+      "compile": {
+        "cold_ms": 382.7277719974518,
+        "cold_state": "cold",
+        "warm_ms": 222.42085996549577,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 3e-05,
+      "entry": "tessera_tile_attention_f32_full_065a35244f",
+      "image_digest": "c59253ab00de0f6283c1b5bb47f86a9d65fe5c8e2c851633f5ebfc4f0620f301",
+      "max_abs_error": 4.470348358154297e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.027475198730826378,
+          "device_samples_ms": [
+            0.02759999968111515,
+            0.0267472006380558,
+            0.02786559984087944,
+            0.026870399713516235,
+            0.027985598891973495,
+            0.027475198730826378,
+            0.028916800394654274,
+            0.027140799909830093,
+            0.02720159851014614
+          ],
+          "end_to_end_ms": 0.9988052072003484,
+          "end_to_end_samples_ms": [
+            0.9852110059000552,
+            1.0095451958477497,
+            0.9941454045474529,
+            0.9988052072003484,
+            1.0625267983414233,
+            1.1245159897953272,
+            1.0923934052698314,
+            0.9707015939056873,
+            0.9334180038422346
+          ]
+        },
+        {
+          "device_event_ms": 0.026926402002573013,
+          "device_samples_ms": [
+            0.026737600564956665,
+            0.026947200298309326,
+            0.027003198862075806,
+            0.02680959925055504,
+            0.02688319981098175,
+            0.026926402002573013,
+            0.027188798412680626,
+            0.026796799153089523,
+            0.027187202125787735
+          ],
+          "end_to_end_ms": 1.0087855975143611,
+          "end_to_end_samples_ms": [
+            1.044866000302136,
+            0.9894871967844665,
+            0.9453839971683919,
+            1.0087855975143611,
+            1.0521485935896635,
+            1.1397402035072446,
+            1.0323418071493506,
+            1.0034083970822394,
+            1.0001900023780763
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        4,
+        16,
+        16,
+        32,
+        32
+      ],
+      "stability": {
+        "device_fraction": 0.020381361319678843,
+        "end_to_end_fraction": 0.009992329076845531,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp32"
+    },
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": false,
+      "compile": {
+        "cold_ms": 378.4209809964523,
+        "cold_state": "cold",
+        "warm_ms": 223.06077904067934,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 3e-05,
+      "entry": "tessera_tile_attention_f32_full_107cedc8d5",
+      "image_digest": "35b155f45b958cb16a938444d7ebbe54ba8d0d563b2b4641555fb52d76de6307",
+      "max_abs_error": 4.470348358154297e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.03243999928236008,
+          "device_samples_ms": [
+            0.032552000135183334,
+            0.033320002257823944,
+            0.035094402730464935,
+            0.032313600182533264,
+            0.032417602837085724,
+            0.03243999928236008,
+            0.03218240290880203,
+            0.03226879984140396,
+            0.03421599790453911
+          ],
+          "end_to_end_ms": 1.0226455982774496,
+          "end_to_end_samples_ms": [
+            0.9914951981045306,
+            1.1498764040879905,
+            1.02957000490278,
+            1.0226455982774496,
+            0.936975993681699,
+            1.0059574036858976,
+            1.024037809111178,
+            0.9629406034946442,
+            3.6433355999179184
+          ]
+        },
+        {
+          "device_event_ms": 0.032392002642154694,
+          "device_samples_ms": [
+            0.03224160149693489,
+            0.03224479779601097,
+            0.032788801938295364,
+            0.032392002642154694,
+            0.032179199159145355,
+            0.032388798892498016,
+            0.03466720134019852,
+            0.033131200820207596,
+            0.032443199306726456
+          ],
+          "end_to_end_ms": 1.0234615998342633,
+          "end_to_end_samples_ms": [
+            1.0234615998342633,
+            0.9634808055125177,
+            1.0196118033491075,
+            1.0240620002150536,
+            0.9488720097579062,
+            1.0847631958313286,
+            1.0287742014043033,
+            0.9827088098973036,
+            1.0606105905026197
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        1,
+        17,
+        19,
+        31,
+        29
+      ],
+      "stability": {
+        "device_fraction": 0.001481743525882554,
+        "end_to_end_fraction": 0.0007979319112977113,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp32"
+    },
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": true,
+      "compile": {
+        "cold_ms": 387.48570799361914,
+        "cold_state": "cold",
+        "warm_ms": 223.41634199256077,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 3e-05,
+      "entry": "tessera_tile_attention_f32_causal_b71f6da50f",
+      "image_digest": "9fd9d4e3b343ddc7c8a257413e01648d69ac225349d6e7cea8e39039b82606c6",
+      "max_abs_error": 2.9802322387695312e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.027049601078033447,
+          "device_samples_ms": [
+            0.02884959802031517,
+            0.028960000723600388,
+            0.027049601078033447,
+            0.027665600180625916,
+            0.02653920091688633,
+            0.026582399383187294,
+            0.027454400435090065,
+            0.026395197957754135,
+            0.026467200368642807
+          ],
+          "end_to_end_ms": 1.0075555997900665,
+          "end_to_end_samples_ms": [
+            0.9938069968484342,
+            1.0100016021169722,
+            1.0468181921169162,
+            1.1020174017176032,
+            0.9804590023122728,
+            1.0297917993739247,
+            0.9944694000296295,
+            0.9964869939722121,
+            1.0075555997900665
+          ]
+        },
+        {
+          "device_event_ms": 0.026793599128723145,
+          "device_samples_ms": [
+            0.02680160105228424,
+            0.02680639922618866,
+            0.026694398373365402,
+            0.027379199862480164,
+            0.026497598737478256,
+            0.02637920156121254,
+            0.026793599128723145,
+            0.026790400967001915,
+            0.027720000594854355
+          ],
+          "end_to_end_ms": 1.0003473958931863,
+          "end_to_end_samples_ms": [
+            1.0507986065931618,
+            0.9906768100336194,
+            1.0798309929668903,
+            0.9959994000382721,
+            0.9910247987136245,
+            1.0003473958931863,
+            1.0066992021165788,
+            0.9866510052233934,
+            3.6780462018214166
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        4,
+        16,
+        16,
+        32,
+        32
+      ],
+      "stability": {
+        "device_fraction": 0.009554593546033342,
+        "end_to_end_fraction": 0.00720570066606123,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp32"
+    },
+    {
+      "abi_id": "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1",
+      "candidate_role": "correctness_first_canonical",
+      "causal": true,
+      "compile": {
+        "cold_ms": 387.1148420148529,
+        "cold_state": "cold",
+        "warm_ms": 221.92863997770473,
+        "warm_state": "warm_cache"
+      },
+      "correctness": "passed_before_timing",
+      "correctness_atol_rtol": 3e-05,
+      "entry": "tessera_tile_attention_f32_causal_5dab329f02",
+      "image_digest": "cb54badd2a58ebff5e63214854a1c12d66fc078f698c1339509383ec14ec6101",
+      "max_abs_error": 2.9802322387695312e-08,
+      "resources": {
+        "metrics": {
+          "registers_per_thread": 40,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "provenance": "ptxas --arch=sm_120a -v"
+      },
+      "runs": [
+        {
+          "device_event_ms": 0.032419197261333466,
+          "device_samples_ms": [
+            0.04703360050916672,
+            0.032419197261333466,
+            0.03251039981842041,
+            0.03220000118017197,
+            0.03234719857573509,
+            0.032235197722911835,
+            0.03219360113143921,
+            0.03253760188817978,
+            0.0374687984585762
+          ],
+          "end_to_end_ms": 0.9626796003431082,
+          "end_to_end_samples_ms": [
+            1.1277700075879693,
+            0.9291919996030629,
+            0.9876850061118603,
+            0.9626796003431082,
+            1.0758710093796253,
+            0.8905205992050469,
+            0.89349519694224,
+            0.9605013998225331,
+            0.9794329991564155
+          ]
+        },
+        {
+          "device_event_ms": 0.03245919942855835,
+          "device_samples_ms": [
+            0.03452320024371147,
+            0.03223999962210655,
+            0.03245919942855835,
+            0.03359200060367584,
+            0.0330624021589756,
+            0.03214400261640549,
+            0.03210879862308502,
+            0.03213759884238243,
+            0.03251039981842041
+          ],
+          "end_to_end_ms": 0.9659775998443365,
+          "end_to_end_samples_ms": [
+            1.0175489936955273,
+            1.0527804028242826,
+            0.8777420036494732,
+            1.507095992565155,
+            0.9517910075373948,
+            1.0143997962586582,
+            0.912087201140821,
+            0.8683366002514958,
+            0.9659775998443365
+          ]
+        }
+      ],
+      "selector_changed": false,
+      "selector_eligible": false,
+      "shape": [
+        1,
+        4,
+        1,
+        17,
+        19,
+        31,
+        29
+      ],
+      "stability": {
+        "device_fraction": 0.0012339036930009,
+        "end_to_end_fraction": 0.0034258537316599357,
+        "policy_fraction": 0.03
+      },
+      "storage": "fp32"
+    }
+  ],
+  "schema": "tessera.nvidia.e2e-spine-attention.v1",
+  "selector_policy": "no promotion before <=3% stability in both timing domains and comparative evidence",
+  "work_item": "NVIDIA-E2E-2"
+}

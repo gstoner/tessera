@@ -1,0 +1,3162 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid_raw_hex": "32386439653765666266326566373136",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "compiler_sha256": "ed1c775c7e092b2e1e4971baaab0402966f7526d4ccdb5dbe470b7affe920ec8",
+  "package_sha256": "66ebfe3f7c43b8a494beffbd352bf3e53e18d99be55d4f4a399fbc164fa3dc4d",
+  "recorder_sha256": "eb2e6d627956149f535ebf0124c670cf05961604b6b3f0b133d88effa66c54a0",
+  "adapter_sha256": "3c7577ca87731172c3d8501b288825918a22ba0e3a6e11ba7fcab85f50c4d4f9",
+  "route": "native Graph program -> Schedule -> Tile -> ROCm Target -> LLVM -> HSACO -> checked HIP owner",
+  "timing_scope": "one-member primal or four-member JVP native launch window; separate prepared update/invoke/read wall time",
+  "limitations": [
+    "static M3 N5 K64 baseline",
+    "transposeA remains open",
+    "partial K scale groups remain open",
+    "public independent primal/JVP projection remains open",
+    "no speedup claim"
+  ],
+  "rows": [
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.223396125688453e-08,
+      "native_launch_window_samples_ms": [
+        0.017620598897337914,
+        0.017596598714590073,
+        0.017602648586034775,
+        0.015990549698472023,
+        0.008872299455106258
+      ],
+      "native_launch_window_median_ms": 0.017596598714590073,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3875572234392166,
+        0.3895670175552368,
+        0.3840724006295204,
+        0.36552720703184605,
+        0.4561214242130518
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3875572234392166,
+      "image_sha256": [
+        "a8855635f6d197a4ab394b89689153c90f896dc61083185c589dbffa0b8bd18e"
+      ]
+    },
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.009054199792444706,
+        0.009052200242877007,
+        0.009198149666190147,
+        0.00902014970779419,
+        0.009004199877381325
+      ],
+      "native_launch_window_median_ms": 0.009052200242877007,
+      "prepared_update_invoke_read_samples_ms": [
+        0.36491802893579006,
+        0.3536566160619259,
+        0.3695347812026739,
+        0.37221601232886314,
+        0.3515786025673151
+      ],
+      "prepared_update_invoke_read_median_ms": 0.36491802893579006,
+      "image_sha256": [
+        "085da3b8c799a51d19797a0ec59ee1e337ea1e798ec7ce37a2e3f65c02c02377"
+      ]
+    },
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.041149624292359e-07,
+      "native_launch_window_samples_ms": [
+        0.008456150069832802,
+        0.008482200093567371,
+        0.008462349884212017,
+        0.008434349671006203,
+        0.00845235027372837
+      ],
+      "native_launch_window_median_ms": 0.008456150069832802,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4726175684481859,
+        0.48325578682124615,
+        0.47847661189734936,
+        0.47513218596577644,
+        0.4915195982903242
+      ],
+      "prepared_update_invoke_read_median_ms": 0.47847661189734936,
+      "image_sha256": [
+        "4b3e053d53a2468744c3c0d58809b2a3e7fec7d989b806e5fd27db12620ab770"
+      ]
+    },
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.008420350030064583,
+        0.00842835009098053,
+        0.008414349518716335,
+        0.008384349755942822,
+        0.008406350389122963
+      ],
+      "native_launch_window_median_ms": 0.008414349518716335,
+      "prepared_update_invoke_read_samples_ms": [
+        0.34398618154227734,
+        0.34964103251695633,
+        0.34808400087058544,
+        0.3752295859158039,
+        0.3481279592961073
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3481279592961073,
+      "image_sha256": [
+        "af9c639ad1deb49b8bd552c21897607c7e15fcb568e08afda7193411940a7114"
+      ]
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.930749978957152e-08,
+      "native_launch_window_samples_ms": [
+        0.008802150376141071,
+        0.008760149590671062,
+        0.008770099841058254,
+        0.008804099634289742,
+        0.008802150376141071
+      ],
+      "native_launch_window_median_ms": 0.008802150376141071,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4957938101142645,
+        0.48299520276486874,
+        0.43506319634616375,
+        0.38179620169103146,
+        0.3304341807961464
+      ],
+      "prepared_update_invoke_read_median_ms": 0.43506319634616375,
+      "image_sha256": [
+        "070a4b8b88e6d3566ecf115e6d2f87788888a9059e4592f2e2288ee4a4b586a9"
+      ]
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.008882150053977966,
+        0.00891214981675148,
+        0.008910099975764751,
+        0.008844099938869476,
+        0.008898099884390831
+      ],
+      "native_launch_window_median_ms": 0.008898099884390831,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3581611905246973,
+        0.3431485965847969,
+        0.38680960424244404,
+        0.38884780369699,
+        0.3926508128643036
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38680960424244404,
+      "image_sha256": [
+        "4a160d67fe9a8d783a6c34b27e6e687393c8c197b157371a43a5bc02e696cb8c"
+      ]
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 6.587892809051255e-08,
+      "native_launch_window_samples_ms": [
+        0.008384150452911854,
+        0.008398150093853474,
+        0.008374100551009178,
+        0.00829205010086298,
+        0.008360049687325954
+      ],
+      "native_launch_window_median_ms": 0.008374100551009178,
+      "prepared_update_invoke_read_samples_ms": [
+        0.34981919452548027,
+        0.3124519716948271,
+        0.29751742258667946,
+        0.3473264165222645,
+        0.36026318557560444
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3473264165222645,
+      "image_sha256": [
+        "6f216c374c260c300ccf1f592cffaccf2c50d3ce1ef16e8b93597a67640a1638"
+      ]
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.008496049791574478,
+        0.008680050261318684,
+        0.00843810010701418,
+        0.008458049967885017,
+        0.008456049486994743
+      ],
+      "native_launch_window_median_ms": 0.008458049967885017,
+      "prepared_update_invoke_read_samples_ms": [
+        0.34201638773083687,
+        0.3319130279123783,
+        0.3143535926938057,
+        0.33758380450308323,
+        0.3563778009265661
+      ],
+      "prepared_update_invoke_read_median_ms": 0.33758380450308323,
+      "image_sha256": [
+        "e52581c15bcdf5010cc5131bad02dfb4ff2d04bc7927b32d1e1688fef214073b"
+      ]
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 9.31892696343084e-08,
+      "native_launch_window_samples_ms": [
+        0.009092049673199654,
+        0.009116100147366524,
+        0.009068050421774387,
+        0.009026049636304379,
+        0.00908804964274168
+      ],
+      "native_launch_window_median_ms": 0.00908804964274168,
+      "prepared_update_invoke_read_samples_ms": [
+        0.35892059095203876,
+        0.3528771921992302,
+        0.3527688328176737,
+        0.3536846023052931,
+        0.34478558227419853
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3528771921992302,
+      "image_sha256": [
+        "4c2cc64667e820565ce8fd3b753fa3fd98e071f0d39ed862c0fb973695c4bfb6"
+      ]
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.009252049960196018,
+        0.009046049788594246,
+        0.009154049679636955,
+        0.009052050299942493,
+        0.009083999320864677
+      ],
+      "native_launch_window_median_ms": 0.009083999320864677,
+      "prepared_update_invoke_read_samples_ms": [
+        0.30039697885513306,
+        0.34331679344177246,
+        0.4973205737769604,
+        0.4839030094444752,
+        0.49693179316818714
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4839030094444752,
+      "image_sha256": [
+        "ed40898d1b9ec7190697ff263898a4d11a33c5aa27ea952672caf502ea933ea0"
+      ]
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 5.57320907756953e-08,
+      "native_launch_window_samples_ms": [
+        0.008247950114309788,
+        0.008395949378609657,
+        0.008201999589800835,
+        0.008341950364410877,
+        0.008269949816167355
+      ],
+      "native_launch_window_median_ms": 0.008269949816167355,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3513019997626543,
+        0.3432587720453739,
+        0.3501577768474817,
+        0.35267877392470837,
+        0.3497472032904625
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3501577768474817,
+      "image_sha256": [
+        "8fc5776575218b7e0a745bfe152719be304211d1468e1dd9a180ed954551d694"
+      ]
+    },
+    {
+      "mask": 3,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.008605950511991978,
+        0.008661950007081032,
+        0.008701950311660767,
+        0.008605999872088432,
+        0.00858595035970211
+      ],
+      "native_launch_window_median_ms": 0.008605999872088432,
+      "prepared_update_invoke_read_samples_ms": [
+        0.39090560749173164,
+        0.398676423355937,
+        0.38698422722518444,
+        0.37187538109719753,
+        0.3247736021876335
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38698422722518444,
+      "image_sha256": [
+        "735ef936fb408819245b0433e15dc415775d00fcf0bb9a41426a1093fada10c6"
+      ]
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 9.131638512016593e-08,
+      "native_launch_window_samples_ms": [
+        0.009267950430512428,
+        0.009253949858248234,
+        0.009245949797332287,
+        0.00926200021058321,
+        0.009269949980080128
+      ],
+      "native_launch_window_median_ms": 0.00926200021058321,
+      "prepared_update_invoke_read_samples_ms": [
+        0.48130196519196033,
+        0.48356642946600914,
+        0.5081592127680779,
+        0.48571303486824036,
+        0.340405385941267
+      ],
+      "prepared_update_invoke_read_median_ms": 0.48356642946600914,
+      "image_sha256": [
+        "5cbdf4a1d0a7a695e65cf36f6fbbc484ee21e2d542f53cc4358600339a75bb1c"
+      ]
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.00997604988515377,
+        0.00980604998767376,
+        0.009846050292253494,
+        0.009798049926757812,
+        0.00980604998767376
+      ],
+      "native_launch_window_median_ms": 0.00980604998767376,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5080692004412413,
+        0.5112189799547195,
+        0.48560420982539654,
+        0.4905056208372116,
+        0.47991136088967323
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4905056208372116,
+      "image_sha256": [
+        "dcb3248e7395588dc81e43cd95bbf607138866dea748a7ddc632ca7cde3e3c3f"
+      ]
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.801109247473903e-08,
+      "native_launch_window_samples_ms": [
+        0.009894049726426601,
+        0.009878049604594707,
+        0.010678050108253956,
+        0.009922049939632416,
+        0.009906049817800522
+      ],
+      "native_launch_window_median_ms": 0.009906049817800522,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4138414282351732,
+        0.37617157213389874,
+        0.4014737904071808,
+        0.33995439298450947,
+        0.4303450230509043
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4014737904071808,
+      "image_sha256": [
+        "30b93e827abce20262458518e1d694d96f428c501091645f55d463d17f8b4888"
+      ]
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010280050337314606,
+        0.010484050028026104,
+        0.010248050093650818,
+        0.010264050215482712,
+        0.010234049521386623
+      ],
+      "native_launch_window_median_ms": 0.010264050215482712,
+      "prepared_update_invoke_read_samples_ms": [
+        0.36776140332221985,
+        0.37340219132602215,
+        0.3735403995960951,
+        0.3806981723755598,
+        0.3836938180029392
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3735403995960951,
+      "image_sha256": [
+        "6450a30644d32d3afc5a2f71c005cc559be8d6f27508386d26dc7ddc94329926"
+      ]
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 9.926510990965198e-08,
+      "native_launch_window_samples_ms": [
+        0.01077600009739399,
+        0.010751999914646149,
+        0.010778000578284264,
+        0.010732000693678856,
+        0.01077600009739399
+      ],
+      "native_launch_window_median_ms": 0.01077600009739399,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3711719997227192,
+        0.3932701889425516,
+        0.38763536140322685,
+        0.3666793927550316,
+        0.4082445986568928
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38763536140322685,
+      "image_sha256": [
+        "c4a2ec22c5c75848f40ebb0f699fe82ff0eb4031f9a36683e995e1d378aa47e5"
+      ]
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.011032000184059143,
+        0.011012000031769276,
+        0.010999999940395355,
+        0.010976050049066544,
+        0.011003999970853329
+      ],
+      "native_launch_window_median_ms": 0.011003999970853329,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3880159929394722,
+        0.36180000752210617,
+        0.3948049619793892,
+        0.3771794028580189,
+        0.4346910398453474
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3880159929394722,
+      "image_sha256": [
+        "4021b47e31d079c25fd066073fee7933a1efc298d596fdbb51aaf631b5b69744"
+      ]
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.0579753007000647e-07,
+      "native_launch_window_samples_ms": [
+        0.00989800039678812,
+        0.009870000183582306,
+        0.009862000122666359,
+        0.009888050146400928,
+        0.0098879998549819
+      ],
+      "native_launch_window_median_ms": 0.0098879998549819,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38590021431446075,
+        0.35696481354534626,
+        0.3826598171144724,
+        0.386445177718997,
+        0.40224920958280563
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38590021431446075,
+      "image_sha256": [
+        "ab395f045a5b12a9317c77df83deca886e0ceb76a6f209bd4594a259c5065090"
+      ]
+    },
+    {
+      "mask": 5,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010259999893605709,
+        0.010273999534547329,
+        0.010267999954521656,
+        0.010267999954521656,
+        0.01028599962592125
+      ],
+      "native_launch_window_median_ms": 0.010267999954521656,
+      "prepared_update_invoke_read_samples_ms": [
+        0.40837679989635944,
+        0.4012614022940397,
+        0.3928591962903738,
+        0.3995902370661497,
+        0.40070218965411186
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40070218965411186,
+      "image_sha256": [
+        "afc329ccca39fd39acf39fb6d9fcbeec2994b83f253b4445f3ae541a2de0da88"
+      ]
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 9.788836097257558e-08,
+      "native_launch_window_samples_ms": [
+        0.010598000138998032,
+        0.01058799959719181,
+        0.01056000031530857,
+        0.010592000558972359,
+        0.010608000680804253
+      ],
+      "native_launch_window_median_ms": 0.010592000558972359,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4963305778801441,
+        0.5082716234028339,
+        0.5167033988982439,
+        0.5004805978387594,
+        0.5256342235952616
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5082716234028339,
+      "image_sha256": [
+        "e54586bee9430d9846f0768e0bd5d3385794194ef8ba5b85858a7c230c6baf04"
+      ]
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010769999586045742,
+        0.010772000066936016,
+        0.010755950585007668,
+        0.010751999914646149,
+        0.01076200045645237
+      ],
+      "native_launch_window_median_ms": 0.01076200045645237,
+      "prepared_update_invoke_read_samples_ms": [
+        0.37321182899177074,
+        0.3915749955922365,
+        0.40971944108605385,
+        0.3858440089970827,
+        0.40608462877571583
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3915749955922365,
+      "image_sha256": [
+        "2b5052b8d17f978dd2db751cd28fa556be9878505995231093ae917b99ffada1"
+      ]
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.2521214376448597e-07,
+      "native_launch_window_samples_ms": [
+        0.009948000311851501,
+        0.009907949715852737,
+        0.00991000048816204,
+        0.009940000250935555,
+        0.009935949929058552
+      ],
+      "native_launch_window_median_ms": 0.009935949929058552,
+      "prepared_update_invoke_read_samples_ms": [
+        0.37679881788790226,
+        0.4037801641970873,
+        0.38812821730971336,
+        0.3946967888623476,
+        0.3540612291544676
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38812821730971336,
+      "image_sha256": [
+        "179c11e4aaf036bdbaeda5cc476ae7829b2911c3c977f1cd4a2b0d1bd44dd02b"
+      ]
+    },
+    {
+      "mask": 6,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010503999888896942,
+        0.010230000130832195,
+        0.010205949656665325,
+        0.010241949930787086,
+        0.010208000428974628
+      ],
+      "native_launch_window_median_ms": 0.010230000130832195,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38471980951726437,
+        0.39820363745093346,
+        0.37004980258643627,
+        0.3920678049325943,
+        0.38036960177123547
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38471980951726437,
+      "image_sha256": [
+        "05c598233ee51ea7a1b0e245048b67dbbff323c2d43f2e610f31d369ad73dfac"
+      ]
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.3760907768833874e-07,
+      "native_launch_window_samples_ms": [
+        0.010545949451625347,
+        0.010533949360251427,
+        0.010525950230658054,
+        0.010533999651670456,
+        0.010544000193476677
+      ],
+      "native_launch_window_median_ms": 0.010533999651670456,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3887475933879614,
+        0.4207204096019268,
+        0.4222154151648283,
+        0.37679458037018776,
+        0.5402224138379097
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4207204096019268,
+      "image_sha256": [
+        "dad46c4f6e67a8e730ccc23bca542eb54164882e8df128dfa89f8ef2bdc4533e"
+      ]
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010684099979698658,
+        0.010752099566161633,
+        0.010662099346518517,
+        0.01067809946835041,
+        0.010646100156009197
+      ],
+      "native_launch_window_median_ms": 0.01067809946835041,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5223081912845373,
+        0.5140743684023619,
+        0.5263399798423052,
+        0.5044941790401936,
+        0.493683572858572
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5140743684023619,
+      "image_sha256": [
+        "b6902883ab8f194e8f000e80fa0061cd88ad166507460d0a021847ea963930a2"
+      ]
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 9.472293527323927e-08,
+      "native_launch_window_samples_ms": [
+        0.009672099724411964,
+        0.009662100113928318,
+        0.009676100686192513,
+        0.009664099663496017,
+        0.00985809974372387
+      ],
+      "native_launch_window_median_ms": 0.009672099724411964,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3613272216171026,
+        0.4086433909833431,
+        0.38470979779958725,
+        0.5344133824110031,
+        0.6621889770030975
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4086433909833431,
+      "image_sha256": [
+        "13b332ef3050303edcee511fbe8f9912feebf09f74041ae91712cb1ea9216f15"
+      ]
+    },
+    {
+      "mask": 7,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.009286049753427505,
+        0.009320099838078022,
+        0.009336049668490887,
+        0.009334100410342216,
+        0.009332049638032913
+      ],
+      "native_launch_window_median_ms": 0.009332049638032913,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6522541865706444,
+        0.4058282356709242,
+        0.3975022118538618,
+        0.40721679106354713,
+        0.35098339430987835
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4058282356709242,
+      "image_sha256": [
+        "cc5a39d8692f350e902234bbb5e78bef3bddb9bb1182a06a1cfd49ba7f3904d5"
+      ]
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.1213327866244072e-07,
+      "native_launch_window_samples_ms": [
+        0.010673949494957924,
+        0.010687950067222118,
+        0.010679950006306171,
+        0.010685949586331844,
+        0.010717949829995632
+      ],
+      "native_launch_window_median_ms": 0.010685949586331844,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38415458984673023,
+        0.38591199554502964,
+        0.41443859227001667,
+        0.3704365808516741,
+        0.37772241048514843
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38415458984673023,
+      "image_sha256": [
+        "57f64b137dad00c77e6c9bea33e5ee732bcd1b337e8b42cae76a48fbe43343cf"
+      ]
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010727950371801853,
+        0.01071195024996996,
+        0.010725949890911579,
+        0.010707950219511986,
+        0.010733949951827526
+      ],
+      "native_launch_window_median_ms": 0.010725949890911579,
+      "prepared_update_invoke_read_samples_ms": [
+        0.383641617372632,
+        0.3488012123852968,
+        0.3797623794525862,
+        0.38668159395456314,
+        0.4014137666672468
+      ],
+      "prepared_update_invoke_read_median_ms": 0.383641617372632,
+      "image_sha256": [
+        "2d225865fe09a55062a4727d75425ab9a271c00b61e272cc353dd1e56b4b126e"
+      ]
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.450500849603969e-08,
+      "native_launch_window_samples_ms": [
+        0.010059949941933155,
+        0.010065949521958828,
+        0.010071950033307076,
+        0.010071950033307076,
+        0.010075950063765049
+      ],
+      "native_launch_window_median_ms": 0.010071950033307076,
+      "prepared_update_invoke_read_samples_ms": [
+        0.36068777553737164,
+        0.38936459459364414,
+        0.4080344457179308,
+        0.39444640278816223,
+        0.409889779984951
+      ],
+      "prepared_update_invoke_read_median_ms": 0.39444640278816223,
+      "image_sha256": [
+        "c9f3df72366707d3ac05b5a66e0e4a82de90ad073100f1eaf414db204ff76c7a"
+      ]
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.009999999776482582,
+        0.009965999983251095,
+        0.009960000403225422,
+        0.009944000281393528,
+        0.009970000013709068
+      ],
+      "native_launch_window_median_ms": 0.009965999983251095,
+      "prepared_update_invoke_read_samples_ms": [
+        0.39260881021618843,
+        0.37074522115290165,
+        0.3835415933281183,
+        0.3685547970235348,
+        0.39702123031020164
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3835415933281183,
+      "image_sha256": [
+        "2304d0a1c358e2d8e37084e8d79d3aafd617c2a5a1a68f7d9419618c7faddbd7"
+      ]
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 9.913264120697818e-08,
+      "native_launch_window_samples_ms": [
+        0.010991999879479408,
+        0.010750049725174904,
+        0.010727999731898308,
+        0.010730049572885036,
+        0.01070799957960844
+      ],
+      "native_launch_window_median_ms": 0.010730049572885036,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5375491920858622,
+        0.5076601635664701,
+        0.5114353727549314,
+        0.49589979462325573,
+        0.5262202117592096
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5114353727549314,
+      "image_sha256": [
+        "639974f48bf5951982cf3228bfb52b8ed42a92138471e63cd8ef0e00ecaa0a02"
+      ]
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.011366049759089947,
+        0.010842000134289265,
+        0.010879999957978725,
+        0.01084204949438572,
+        0.01085600070655346
+      ],
+      "native_launch_window_median_ms": 0.01085600070655346,
+      "prepared_update_invoke_read_samples_ms": [
+        0.39539001882076263,
+        0.38583995774388313,
+        0.38744299672544,
+        0.37715937942266464,
+        0.36792182363569736
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38583995774388313,
+      "image_sha256": [
+        "c0520e092858eb664f4f355e4f1b305588768822a8c39023845caf51baa0dee4"
+      ]
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 8.604453349825292e-08,
+      "native_launch_window_samples_ms": [
+        0.00992400012910366,
+        0.009906049817800522,
+        0.00991000048816204,
+        0.009914049878716469,
+        0.0098860003054142
+      ],
+      "native_launch_window_median_ms": 0.00991000048816204,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38857520557940006,
+        0.3699635621160269,
+        0.37185121327638626,
+        0.3790430258959532,
+        0.3800950013101101
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3790430258959532,
+      "image_sha256": [
+        "47311ef51e89639edeea0a4690e6f826878ccbc6b02ac80900dac9bfe49678d2"
+      ]
+    },
+    {
+      "mask": 9,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010185999795794487,
+        0.01016400009393692,
+        0.010180050507187843,
+        0.01016599964350462,
+        0.01017600018531084
+      ],
+      "native_launch_window_median_ms": 0.01017600018531084,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3872346132993698,
+        0.3916210029274225,
+        0.3835595678538084,
+        0.37607960402965546,
+        0.33349618315696716
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3835595678538084,
+      "image_sha256": [
+        "39be5929acf470f2dc4dc85ee031f187f581d71c913e732e336fa301a8b9872b"
+      ]
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.0191554311589357e-07,
+      "native_launch_window_samples_ms": [
+        0.010565999895334244,
+        0.01057405024766922,
+        0.01057604979723692,
+        0.010552000254392624,
+        0.010546000674366951
+      ],
+      "native_launch_window_median_ms": 0.010565999895334244,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3464388195425272,
+        0.38240738213062286,
+        0.46491879038512707,
+        0.4076615907251835,
+        0.41971062310039997
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4076615907251835,
+      "image_sha256": [
+        "5120bad1e6d6f3ae204d5de4a85d466c3f38e96b54614984213efee1bc05819c"
+      ]
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010865999385714531,
+        0.010849949903786182,
+        0.010911999270319939,
+        0.010865950025618076,
+        0.010873950086534023
+      ],
+      "native_launch_window_median_ms": 0.010865999385714531,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3936989698559046,
+        0.4133664071559906,
+        0.5310764070600271,
+        0.5127300042659044,
+        0.5330006126314402
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5127300042659044,
+      "image_sha256": [
+        "596a547c301b03512463706955982a1199db42085e0b19c7169d9237a9ad4337"
+      ]
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.209601505625102e-07,
+      "native_launch_window_samples_ms": [
+        0.009914000518620014,
+        0.009911949746310711,
+        0.009895949624478817,
+        0.009933999739587307,
+        0.009905950166285038
+      ],
+      "native_launch_window_median_ms": 0.009911949746310711,
+      "prepared_update_invoke_read_samples_ms": [
+        0.375854829326272,
+        0.36760522052645683,
+        0.3874931950122118,
+        0.3933302126824856,
+        0.36554918624460697
+      ],
+      "prepared_update_invoke_read_median_ms": 0.375854829326272,
+      "image_sha256": [
+        "b9a05a50a0871c28ed42b89c0d29d66ec020267fdab334fb3fbde86bd0c117f1"
+      ]
+    },
+    {
+      "mask": 10,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010189949534833431,
+        0.010197999887168407,
+        0.010163949802517891,
+        0.01016400009393692,
+        0.010197999887168407
+      ],
+      "native_launch_window_median_ms": 0.010189949534833431,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3927671816200018,
+        0.410709623247385,
+        0.37142438814044,
+        0.3676151856780052,
+        0.39543421007692814
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3927671816200018,
+      "image_sha256": [
+        "4b51645d5d904c58aac8ef7772e306defd97f5e3649d96e1ec4962b4cba0f10a"
+      ]
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.1536644395349072e-07,
+      "native_launch_window_samples_ms": [
+        0.010319999419152737,
+        0.01030999980866909,
+        0.010300000198185444,
+        0.01028599962592125,
+        0.010319999419152737
+      ],
+      "native_launch_window_median_ms": 0.01030999980866909,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3642147872596979,
+        0.37092543207108974,
+        0.38279821164906025,
+        0.39111399091780186,
+        0.40151597931981087
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38279821164906025,
+      "image_sha256": [
+        "a7c4f003a30477778da4df521ab7dc6139681f42fcc04bd9dc2d2ce08f899b29"
+      ]
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010670000687241554,
+        0.010675949975848198,
+        0.010672000236809254,
+        0.010661950334906578,
+        0.010652000084519386
+      ],
+      "native_launch_window_median_ms": 0.010670000687241554,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3914685919880867,
+        0.37030838429927826,
+        0.36830040626227856,
+        0.3880922216922045,
+        0.4280364140868187
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3880922216922045,
+      "image_sha256": [
+        "0e6e913aaf449d0aeb1abaf798a95c839a8f9867a1b5baaa952a287a8ed66a5a"
+      ]
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.0755713819587953e-07,
+      "native_launch_window_samples_ms": [
+        0.010137999430298805,
+        0.01011594943702221,
+        0.010099999606609344,
+        0.01012794952839613,
+        0.010084000416100025
+      ],
+      "native_launch_window_median_ms": 0.01011594943702221,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38635903038084507,
+        0.39643398486077785,
+        0.37056878209114075,
+        0.3686971962451935,
+        0.3771733958274126
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3771733958274126,
+      "image_sha256": [
+        "6286617ff39de32d79147b79d2174927a4d3d4c502946ac64e8fbf064ccbdd25"
+      ]
+    },
+    {
+      "mask": 11,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.009948000311851501,
+        0.009941999800503254,
+        0.009932000190019608,
+        0.009928000159561634,
+        0.00991200003772974
+      ],
+      "native_launch_window_median_ms": 0.009932000190019608,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5390261765569448,
+        0.5304737947881222,
+        0.43209362775087357,
+        0.3517227713018656,
+        0.35734563134610653
+      ],
+      "prepared_update_invoke_read_median_ms": 0.43209362775087357,
+      "image_sha256": [
+        "bdd4ec06aea7f343ad2b1cdb358713ff05dc2e14492522b2544bff9967e4562f"
+      ]
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 8.703453191483135e-08,
+      "native_launch_window_samples_ms": [
+        0.01085600070655346,
+        0.010834000073373318,
+        0.010846000164747238,
+        0.010847999714314938,
+        0.010877999477088451
+      ],
+      "native_launch_window_median_ms": 0.010847999714314938,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4168451763689518,
+        0.3547545988112688,
+        0.37706121802330017,
+        0.5513731855899096,
+        0.529313599690795
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4168451763689518,
+      "image_sha256": [
+        "61856f4887282c0e3ce9cc5d18ecd27f0d3a449491c71487832a961b849cd0fb"
+      ]
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010937999933958054,
+        0.01093399990350008,
+        0.010952000506222248,
+        0.010925999842584133,
+        0.010911999270319939
+      ],
+      "native_launch_window_median_ms": 0.01093399990350008,
+      "prepared_update_invoke_read_samples_ms": [
+        0.43840017169713974,
+        0.42494661174714565,
+        0.4108536057174206,
+        0.3711340017616749,
+        0.37233601324260235
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4108536057174206,
+      "image_sha256": [
+        "128792b001a8744537b254212a243dfa96c3711ed92e722c1121e436abae7036"
+      ]
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 8.452779831635837e-08,
+      "native_launch_window_samples_ms": [
+        0.009843999519944191,
+        0.009852049872279167,
+        0.009846000000834465,
+        0.009846050292253494,
+        0.009836000390350819
+      ],
+      "native_launch_window_median_ms": 0.009846000000834465,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5219915881752968,
+        0.5335018038749695,
+        0.5158779677003622,
+        0.5364532116800547,
+        0.5160042084753513
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5219915881752968,
+      "image_sha256": [
+        "6f5541a7fb7df49f4f921eba2524abc886bc008f5a7c22a438e4d5cdac8094c5"
+      ]
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010168000124394894,
+        0.010158000513911247,
+        0.0101539995521307,
+        0.010160000063478947,
+        0.010168000124394894
+      ],
+      "native_launch_window_median_ms": 0.010160000063478947,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3666614182293415,
+        0.37776059471070766,
+        0.38564959540963173,
+        0.3686009906232357,
+        0.391701003536582
+      ],
+      "prepared_update_invoke_read_median_ms": 0.37776059471070766,
+      "image_sha256": [
+        "96948f5215ea4e4329b9176d91d4f82e0a11e5cfa63826008a193f01bd995469"
+      ]
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.3050441749484776e-07,
+      "native_launch_window_samples_ms": [
+        0.010626000352203846,
+        0.010604050010442734,
+        0.010617999359965324,
+        0.010608050040900707,
+        0.010614050552248955
+      ],
+      "native_launch_window_median_ms": 0.010614050552248955,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5473979748785496,
+        0.5162026267498732,
+        0.5188936367630959,
+        0.49415058456361294,
+        0.5404428113251925
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5188936367630959,
+      "image_sha256": [
+        "676466f0ac1d8aa22289deff954ec69226ea38bec120d4a3c227c6fc4ae24bab"
+      ]
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010796000249683857,
+        0.010759949684143066,
+        0.01077600009739399,
+        0.010771950706839561,
+        0.010783949866890907
+      ],
+      "native_launch_window_median_ms": 0.01077600009739399,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4056096076965332,
+        0.4009627737104893,
+        0.370580842718482,
+        0.3765001893043518,
+        0.4195844288915396
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4009627737104893,
+      "image_sha256": [
+        "b0f44f1d9690ec9e0fe990b63be8f802b739422465e197ac1b42b89b06051c05"
+      ]
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 2.126443234828912e-07,
+      "native_launch_window_samples_ms": [
+        0.009854000061750412,
+        0.009833949618041515,
+        0.00985995028167963,
+        0.00980400014668703,
+        0.009827950038015842
+      ],
+      "native_launch_window_median_ms": 0.009833949618041515,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3657395951449871,
+        0.39923139847815037,
+        0.4572073929011822,
+        0.49591180868446827,
+        0.5294879898428917
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4572073929011822,
+      "image_sha256": [
+        "bf17ddc1c9e49a00695a9ad5be8beb85e1c7bb9c5e520051239d54ba8708d250"
+      ]
+    },
+    {
+      "mask": 13,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010174000635743141,
+        0.010153950192034245,
+        0.010189949534833431,
+        0.010193999856710434,
+        0.010167949832975864
+      ],
+      "native_launch_window_median_ms": 0.010174000635743141,
+      "prepared_update_invoke_read_samples_ms": [
+        0.424220971763134,
+        0.39457459934055805,
+        0.37373900413513184,
+        0.3165055997669697,
+        0.38984757848083973
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38984757848083973,
+      "image_sha256": [
+        "4b0796414b6b4caa04ad39a47775f0464ff95728dda7230669c48f5660dce1fa"
+      ]
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.1749761097412659e-07,
+      "native_launch_window_samples_ms": [
+        0.0102699501439929,
+        0.010261950083076954,
+        0.010275950655341148,
+        0.010259950533509254,
+        0.010261950083076954
+      ],
+      "native_launch_window_median_ms": 0.010261950083076954,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38800821639597416,
+        0.3662286326289177,
+        0.3697453998029232,
+        0.38038757629692554,
+        0.37586078979074955
+      ],
+      "prepared_update_invoke_read_median_ms": 0.37586078979074955,
+      "image_sha256": [
+        "05e87cd647354677add210acca4225d348c77c766697eff731436f5dfb9706cb"
+      ]
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010627949610352516,
+        0.010659949854016304,
+        0.010633950121700764,
+        0.010627949610352516,
+        0.010623900219798088
+      ],
+      "native_launch_window_median_ms": 0.010627949610352516,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5521713756024837,
+        0.5181604065001011,
+        0.5351568106561899,
+        0.5010322201997042,
+        0.3684988245368004
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5181604065001011,
+      "image_sha256": [
+        "a0b7c20de6287b82a911d809114f74d9e4c1d1723ec2203b46288c4f2e775b7b"
+      ]
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.1223442664132222e-07,
+      "native_launch_window_samples_ms": [
+        0.009895949624478817,
+        0.00987195037305355,
+        0.009895949624478817,
+        0.009879949502646923,
+        0.009901950135827065
+      ],
+      "native_launch_window_median_ms": 0.009895949624478817,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38030720315873623,
+        0.37120399065315723,
+        0.39524598978459835,
+        0.39793900214135647,
+        0.387871777638793
+      ],
+      "prepared_update_invoke_read_median_ms": 0.387871777638793,
+      "image_sha256": [
+        "d5c2a6ad6112ccd139e527fdf021a3f88a7777b68b3f04884403f10f7fd84434"
+      ]
+    },
+    {
+      "mask": 14,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010201999917626381,
+        0.010172000154852867,
+        0.010183999314904213,
+        0.010161999613046646,
+        0.01018999982625246
+      ],
+      "native_launch_window_median_ms": 0.010183999314904213,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3855513874441385,
+        0.3730194177478552,
+        0.3713443875312805,
+        0.4111422225832939,
+        0.3500355873256922
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3730194177478552,
+      "image_sha256": [
+        "223b79257361e5706b1751e9175b046c60eb39297044a7acb1c7a0785f7977eb"
+      ]
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.2910954816369724e-07,
+      "native_launch_window_samples_ms": [
+        0.01032199990004301,
+        0.01032399944961071,
+        0.010314050130546093,
+        0.010317999869585037,
+        0.010319999419152737
+      ],
+      "native_launch_window_median_ms": 0.010319999419152737,
+      "prepared_update_invoke_read_samples_ms": [
+        0.39145462214946747,
+        0.3877416253089905,
+        0.38721663877367973,
+        0.36951880902051926,
+        0.36988756619393826
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38721663877367973,
+      "image_sha256": [
+        "bb877be43a9ba383ca676c1646a9ddaec5294d7257b306ad2197d273486946e8"
+      ]
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.010676000267267227,
+        0.010670000687241554,
+        0.010670000687241554,
+        0.01064400002360344,
+        0.01065600011497736
+      ],
+      "native_launch_window_median_ms": 0.010670000687241554,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3815396223217249,
+        0.3860523924231529,
+        0.48491237685084343,
+        0.5496141966432333,
+        0.5244123749434948
+      ],
+      "prepared_update_invoke_read_median_ms": 0.48491237685084343,
+      "image_sha256": [
+        "3bb74cfe9861f30dbafa8a4829f24ec6aaf24daf707c331920abc0020f3afb55"
+      ]
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 8.272026508215902e-08,
+      "native_launch_window_samples_ms": [
+        0.00996399950236082,
+        0.009977949783205986,
+        0.009961999952793121,
+        0.010027950629591942,
+        0.009941949509084225
+      ],
+      "native_launch_window_median_ms": 0.00996399950236082,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4642575979232788,
+        0.4266137722879648,
+        0.36327880807220936,
+        0.3953239880502224,
+        0.3478013910353184
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3953239880502224,
+      "image_sha256": [
+        "9b87202468e3de4f92ada258b23eb87a49fd74415345f155d0d9c653a80e89fa"
+      ]
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 0.0,
+      "native_launch_window_samples_ms": [
+        0.009967999532818794,
+        0.009943949989974499,
+        0.009961949661374092,
+        0.009927949868142605,
+        0.009947950020432472
+      ],
+      "native_launch_window_median_ms": 0.009947950020432472,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38666357286274433,
+        0.38994578644633293,
+        0.3852168098092079,
+        0.41045481339097023,
+        0.3737288061529398
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38666357286274433,
+      "image_sha256": [
+        "5f14d67990269457ac444035ad49aa2c7eb247b282665b9dc76f526f8b8a093c"
+      ]
+    },
+    {
+      "mask": null,
+      "prefixes": [
+        [
+          2,
+          1
+        ],
+        [
+          3
+        ],
+        [],
+        [
+          1,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.1704454472294401e-07,
+      "native_launch_window_samples_ms": [
+        0.01007395051419735,
+        0.010035949759185314,
+        0.010039949789643288,
+        0.010041999630630016,
+        0.010067950002849102
+      ],
+      "native_launch_window_median_ms": 0.010041999630630016,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3889417741447687,
+        0.4103987943381071,
+        0.40849121287465096,
+        0.3643290139734745,
+        0.408813776448369
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40849121287465096,
+      "image_sha256": [
+        "81e841982f4c4cebb9daea3e0e2838847b4ab9bcb671aee0543e8035cc746193"
+      ]
+    },
+    {
+      "mask": null,
+      "prefixes": [
+        [],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.059667990663485e-08,
+      "native_launch_window_samples_ms": [
+        0.010507999919354916,
+        0.010181999765336514,
+        0.010192000307142735,
+        0.010143999941647053,
+        0.01017794944345951
+      ],
+      "native_launch_window_median_ms": 0.010181999765336514,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3972175996750593,
+        0.37322198040783405,
+        0.3697492182254791,
+        0.37666638381779194,
+        0.38466560654342175
+      ],
+      "prepared_update_invoke_read_median_ms": 0.37666638381779194,
+      "image_sha256": [
+        "3db5ffa2ab3ee8ff662f5d916b4e9c8dc556c7a1f6cae1f20a1bc3f79dd4aa95"
+      ]
+    },
+    {
+      "mask": null,
+      "prefixes": [
+        [
+          2,
+          1,
+          3
+        ],
+        [],
+        [
+          1,
+          1,
+          3
+        ],
+        [
+          2,
+          1,
+          1
+        ]
+      ],
+      "output_prefix": [
+        2,
+        1,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.4272701265305443e-07,
+      "native_launch_window_samples_ms": [
+        0.010047949850559235,
+        0.01001795008778572,
+        0.01005799975246191,
+        0.010038000531494617,
+        0.010067950002849102
+      ],
+      "native_launch_window_median_ms": 0.010047949850559235,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3896049689501524,
+        0.3820507787168026,
+        0.3845876082777977,
+        0.3833431750535965,
+        0.32603777945041656
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3833431750535965,
+      "image_sha256": [
+        "fc4c88c3ebb7cf59383a12b1c3d043b0f870a45f716d3c4ea4656db618af2d69"
+      ]
+    },
+    {
+      "mask": 1,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 4.96900295354763e-08,
+      "native_launch_window_samples_ms": [
+        0.03412390127778053,
+        0.03407390043139458,
+        0.03400789946317673,
+        0.03397339954972267,
+        0.03271994739770889
+      ],
+      "native_launch_window_median_ms": 0.03400789946317673,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5017751827836037,
+        0.46604098752141,
+        0.47766719944775105,
+        0.755257997661829,
+        0.7559559773653746
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5017751827836037,
+      "image_sha256": [
+        "8b0a0c6b26e73e78336174239abbb83d237edfdaec657ee8a0a2995a36580c53",
+        "eb32fdbd09e2dce2f7dda5c1d0327692fd7da6a4945ccd2c1750918d31bfc32d",
+        "dfa44eeac14e8985c630da9e504eaea5e12000f20bc2a8b1791e5ddd42fc5f28",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 2,
+      "prefixes": [
+        [],
+        [
+          2,
+          3
+        ],
+        [],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.4260600689208758e-07,
+      "native_launch_window_samples_ms": [
+        0.03265240043401718,
+        0.03224790096282959,
+        0.032943449914455414,
+        0.032219402492046356,
+        0.03151189908385277
+      ],
+      "native_launch_window_median_ms": 0.03224790096282959,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5692777689546347,
+        0.5045501980930567,
+        0.5083033815026283,
+        0.4778993781656027,
+        0.4419170320034027
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5045501980930567,
+      "image_sha256": [
+        "424d8fb34ef62c0dedfb1bfd0acd417e74e1aa4afa2dac9697fd712fe74837bc",
+        "d9434d798d638d0270776f3526e00c4ae7b3fb64f4b52ece0fd728d3f9e4a326",
+        "1d210216c069bae32ec1beb0886f6d4d31d7a2bb3f906b1265b49a3faed3b7bd",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 4,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        []
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 6.244204542316112e-08,
+      "native_launch_window_samples_ms": [
+        0.03816189989447594,
+        0.03406795114278793,
+        0.03412339836359024,
+        0.034086450934410095,
+        0.03378845006227493
+      ],
+      "native_launch_window_median_ms": 0.034086450934410095,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5814190022647381,
+        0.5501953884959221,
+        0.5598598159849644,
+        0.7871171925216913,
+        0.7404642179608345
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5814190022647381,
+      "image_sha256": [
+        "bc7bb943716a0d667d63d142a9147dbb59d1b7fb5b56ca156cfaf076dc542a08",
+        "b70805db3535abec77f66b5ee6795bc7b907093db02b53db2a6d57af252568b5",
+        "8955c57ba43fce5f9e1635d234d9064bd020cccd9e5bcb3da3ad93c9067685e2",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 8,
+      "prefixes": [
+        [],
+        [],
+        [],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.2246831482265463e-07,
+      "native_launch_window_samples_ms": [
+        0.03350194916129112,
+        0.03272389993071556,
+        0.03265789896249771,
+        0.033903948962688446,
+        0.03390694782137871
+      ],
+      "native_launch_window_median_ms": 0.03350194916129112,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5679213907569647,
+        0.5422683898359537,
+        0.4757014103233814,
+        0.5322733893990517,
+        0.499176187440753
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5322733893990517,
+      "image_sha256": [
+        "910fba85f3fd759592bb65f7d86fce67c954ba14bf48fe5152a7b866e8fbfa3e",
+        "e8a2a1ae2ca15e429ec95de4a7f4382d4396630e8eda60808c09b129acbde2b6",
+        "c2682615aac1197f76c91a164002bad716dfbf66e29064902596211efd82d33c",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 12,
+      "prefixes": [
+        [],
+        [],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 1.177925839090932e-07,
+      "native_launch_window_samples_ms": [
+        0.03309744969010353,
+        0.03308144956827164,
+        0.033132947981357574,
+        0.037413399666547775,
+        0.03321395069360733
+      ],
+      "native_launch_window_median_ms": 0.033132947981357574,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5295599810779095,
+        0.5627254024147987,
+        0.7276860065758228,
+        0.6242452189326286,
+        0.6857479922473431
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6242452189326286,
+      "image_sha256": [
+        "27cdb02b120ad20f660025981bcc8fc4e2d2f94e7edf874d2eac8fc5d8116853",
+        "f6f42caf050f4442b08fa464dbc950d92f83351c1d55a1382a783989b2d39b1e",
+        "bb818c2a464e46a7265a2ce6cbda0c701c41d6909dc0d815ef56c8a3af0fabf5",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 15,
+      "prefixes": [
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          2,
+          3
+        ]
+      ],
+      "output_prefix": [
+        2,
+        3
+      ],
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "correctness": "passed_before_and_after_each_domain",
+      "changed_inputs": "passed",
+      "stale_generation": "rejected",
+      "max_abs_error": 7.104725452400373e-08,
+      "native_launch_window_samples_ms": [
+        0.03443890064954758,
+        0.03432244807481766,
+        0.033615950495004654,
+        0.03292990103363991,
+        0.032489899545907974
+      ],
+      "native_launch_window_median_ms": 0.033615950495004654,
+      "prepared_update_invoke_read_samples_ms": [
+        0.502474419772625,
+        0.4862555768340826,
+        0.5097401794046164,
+        0.5183145869523287,
+        0.49068001098930836
+      ],
+      "prepared_update_invoke_read_median_ms": 0.502474419772625,
+      "image_sha256": [
+        "638f4a775871fcf4fde330f0fa09c84e55d9b6c9a34aa8141ec81b7fcf612037",
+        "8f1e3964c1e7e1a3c22bc1e19ef49d3338414e2244c1db31fad371be0fd9bb1d",
+        "d8bbb8f8c83b874cf33976553a5e8a7008d8c88c7da6f4df1b7e2e88f8b5c594",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    }
+  ]
+}

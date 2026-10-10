@@ -1,0 +1,16 @@
+verified (False, False, False, 'primal') 6.117284168105641e-08
+verified (False, False, True, 'primal') 6.895285054042688e-08
+verified (False, True, False, 'primal') 7.054787043436761e-08
+verified (False, True, True, 'primal') 4.681300491693463e-08
+verified (True, False, False, 'primal') 0.0
+verified (True, False, True, 'primal') 0.0
+verified (True, True, False, 'primal') 0.0
+verified (True, True, True, 'primal') 0.0
+verified (False, False, False, 'jvp') 6.117284168105641e-08
+verified (False, False, False, 'vjp') 1.0195906896548479e-07
+verified (False, False, True, 'jvp') 6.895285054042688e-08
+verified (False, False, True, 'vjp') 8.714603039194913e-08
+verified (False, True, False, 'jvp') 7.054787043436761e-08
+verified (False, True, False, 'vjp') 7.902265175552259e-08
+verified (False, True, True, 'jvp') 4.681300491693463e-08
+verified (False, True, True, 'vjp') 6.10785910737377e-08

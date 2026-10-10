@@ -11,14 +11,11 @@
 //   * tessera-nvidia-pipeline-sm100   (Blackwell tcgen05 + TMEM)
 //   * tessera-nvidia-pipeline-sm120   (consumer Blackwell warp MMA)
 //
-// Each pipeline runs: EffectAnnotation → Canonicalize → SwigluFusion →
-// MLAFusion → NSAFusion → HybridAttnExpand → LightningAttnFusion →
-// DeltaAttnChunking → DistributionLowering → TileIRLowering →
-// WarpSpec → exact-SM AsyncCopy → TMA. SM90 additionally consumes the proven
-// WGMMA and Hopper FlashAttention marker passes; SM100/SM120 retain typed MMA
-// and attention carriers for their exact backend pipelines.
+// The SM120 route projects registered matmuls through Graph -> Schedule ->
+// Tile before residual generic lowering. SM90 and SM100 retain their existing
+// TileIRLowering chains; SM90 additionally consumes WGMMA and Hopper FA.
 
-module {
+module attributes {tessera.target = "nvidia_sm120", tessera.arch = "sm_120"} {
   func.func @entry(%A : tensor<64x16xbf16>,
                    %B : tensor<16x256xbf16>) -> tensor<64x256xf32> {
     %C = "tessera.matmul"(%A, %B) : (tensor<64x16xbf16>,
@@ -38,9 +35,11 @@ module {
 // SM100: tile.mma
 // SM100-SAME: sm = 100
 // SM100-SAME: !tile.async_token
-// SM120: tessera.effect
-// SM120: tile.mbarrier.wait
-// SM120-SAME: !tile.async_token
-// SM120: tile.mma
-// SM120-SAME: sm = 120
-// SM120-SAME: !tile.async_token
+// SM120-NOT: tessera.matmul
+// SM120-NOT: tile.async_copy
+// SM120: tile.fragment_pack {{.*}} : (!tile.tile) -> !tile.fragment
+// SM120: tile.fragment_pack {{.*}} : (!tile.tile) -> !tile.fragment
+// SM120: tile.mma {{.*}} -> !tile.fragment
+// SM120: tile.fragment_unpack
+// SM120-NOT: tessera.matmul
+// SM120-NOT: tile.async_copy

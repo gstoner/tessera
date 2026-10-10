@@ -1,0 +1,17 @@
+....s.s..............sss..sss........................................... [ 20%]
+........................................................................ [ 41%]
+........................................................................ [ 62%]
+........................................................................ [ 83%]
+........................................................                 [100%]
+=============================== warnings summary ===============================
+.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464
+  /home/angstorms/scratch/next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+SKIPPED [2] tests/unit/test_rocm_movement_compiler_spine.py:71: different owning architecture
+SKIPPED [3] tests/unit/test_public_movement_frontend.py:98: different owning architecture
+SKIPPED [3] tests/unit/test_public_movement_frontend.py:152: different owning architecture
+336 passed, 8 skipped, 1 warning in 4.79s

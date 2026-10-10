@@ -1,0 +1,710 @@
+{
+  "schema": "tessera.nvidia.broadcast_checkpoint_core.v1",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "compiler_sha256": "c3350de9509f7e986d6e8889fda8c4529f94a5ed94b365a83d13cf513b6a8b8e",
+  "source_sha256": {
+    "src/compiler/ir/AttentionADContract.h": "9b9c0de24442fd2303e4001e44bec57b55ce4cf892ff5fb0ed873821722c2861",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "e09c9be03eccbf7306bdc6df26fb2df392c44ae439b9cd3ce6739da88aee013a",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "a4c3aa422ccd81b7d8095f10e76bbfda950925faaf818391877f79dd41d014d2",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "58b21402a01a791ca09a749095a7e81ccb27b6f1bc21e04721812cdb156449cc",
+    "python/tessera/compiler/scheduled_checkpoint.py": "bfea391d1814c886a2f0e2c7ca1ed1ccfab7cefbf7defe0732be6ceffa93128a",
+    "benchmarks/nvidia/benchmark_checkpoint_broadcast_core.py": "1a2ab1f90d5416e1bfaafdf8fee3e5aed5c8d44e6b64a7581e0c9cb73f170719"
+  },
+  "rows": [
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        1,
+        4,
+        5,
+        7
+      ],
+      "causal": false,
+      "reduction_axes": [
+        0
+      ],
+      "max_abs_gradient_errors": [
+        3.7499133485885405e-09,
+        6.2159807197315065e-09,
+        4.368733019788351e-08,
+        1.77672735274248e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.011206400580704212,
+        0.011529279872775078,
+        0.017975039780139923,
+        0.0154796801507473,
+        0.017673920840024948
+      ],
+      "device_dispatch_window_median_ms": 0.0154796801507473,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_fdcfd421d3",
+          "schedule_hash": "fdcfd421d3e4b2c7b73b06e6f014eaf781cdef2cc3927625432e48a8c051c087",
+          "graph_sha256": "ea499dc43d1f14ea51503ee2805d94bc4124595e8c01fdf8d16444ac0354db6b",
+          "schedule_sha256": "2bd06634efc51bed0d04172f0b4d82e4ae51950321b5fa344c89f2d2412f27fe",
+          "tile_sha256": "3d71e9bacfce990ee86ce58b9bc675f449eb8a34561d3e7c76debd27d8e273a0",
+          "target_sha256": "0b055bf9d21dd1df6d8394f095a2d2e15c3b639e0e5e0856adb74a00654657df",
+          "ptx_sha256": "9274bee5a7fe2958821fba49388782d30d14b9736ccc878fb4aef957b0ffd692"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_127f43b35d",
+          "schedule_hash": "127f43b35d6f73b0c8f643b6ba7645da4dcc4e7472afa5d7f027f00a1e9fa5f5",
+          "graph_sha256": "eab9f7559ea3e4bd8ee1494dfebd8dc93229104b7e01a9163ff1ffcb84fb149d",
+          "schedule_sha256": "cf1fa35c29882ac90ffd498f73016401bb001fd110aba16f452e895487651824",
+          "tile_sha256": "6bbfeb7a67f8cb5167e13650728222ff10217cec66c5dc59b786fee7469dab6c",
+          "target_sha256": "2535c5c6463857082fba7eadaf9770719bea5af46175284760871d96960ac7b8",
+          "ptx_sha256": "c8bc465abcf5a3aeb5c8f8842938f19419ea14b5c0564a86e0ee2502de0040ba"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        1,
+        4,
+        5,
+        7
+      ],
+      "causal": true,
+      "reduction_axes": [
+        0
+      ],
+      "max_abs_gradient_errors": [
+        4.497975330494978e-09,
+        7.547357173259828e-09,
+        8.671080253819241e-08,
+        1.562865727805507e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.01190240029245615,
+        0.0145123191177845,
+        0.010592959821224213,
+        0.013396159745752811,
+        0.013348800130188465
+      ],
+      "device_dispatch_window_median_ms": 0.013348800130188465,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_bd9a7a6bbc",
+          "schedule_hash": "bd9a7a6bbc4292e6642ee91364bb2648d3720bb9033d4b5609cde671945e6225",
+          "graph_sha256": "35e5be4426ef615e40951adb63bb12e0c52983ef68661a50e9a3dc3d1d219166",
+          "schedule_sha256": "11c559d846c573c5941643abae50f451b994611067d380489e4ed981c3adc327",
+          "tile_sha256": "d681bff324bfe68dd0416e8fc70914311f1cafd8f3f8a9023f71938546c8c7ee",
+          "target_sha256": "c9b5cabb34e39f67a8c79d52e9d619596c158f00da02562bb96026b62d7e414a",
+          "ptx_sha256": "5d1e9616bd571b10fd4eab08cd52ce4edea3c0b15372d998472ee3d26c0a9a24"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_0cd787448b",
+          "schedule_hash": "0cd787448b3b6a2b728cccc437c680bf6ca4b91e4351032837eb46893b8d6230",
+          "graph_sha256": "fe39f03f714635614236fa2998de8f547562722ca1de490133d9b115778ce1ef",
+          "schedule_sha256": "131ddc5a64d1d8cfa67620e5495f10bdb186611355a39a8031b9fe077b8017fe",
+          "tile_sha256": "ed8bfb48e548b40a9dd5a0824066873d03b2618b4ff21b82ad263982009fbade",
+          "target_sha256": "6c487d430a32783ff6be15910270d1cc154fb218f199e408c2f9ef46dd3d057a",
+          "ptx_sha256": "1b09355ab3ea1ce03822353c879260ba76c92e96ca7442364688f1280bf5fec9"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        2,
+        1,
+        5,
+        7
+      ],
+      "causal": false,
+      "reduction_axes": [
+        1
+      ],
+      "max_abs_gradient_errors": [
+        3.938374921325094e-09,
+        7.450526168240046e-09,
+        6.667467150611728e-08,
+        2.5803715053562826e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.011064959689974785,
+        0.012373119592666626,
+        0.016022399067878723,
+        0.013304639607667923,
+        0.011836480349302292
+      ],
+      "device_dispatch_window_median_ms": 0.012373119592666626,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_4c743967be",
+          "schedule_hash": "4c743967be62b44cd16260947fd614a69190b14c2e2dfe435793e0a7cdaa8cdc",
+          "graph_sha256": "fcaa22abbedb52447fc5fa4b86a5734a051d271bfee980193a4f76d2ae15dc4d",
+          "schedule_sha256": "fcaecc9a7d925fcf6aca9a3b3fac03d28d39c218ec8f98414ccc706a541a7904",
+          "tile_sha256": "ff1eb667f92c1b67e27421017d8753082d1cc87ad925f32fb8b0e2a4518dc639",
+          "target_sha256": "42e23662f712d44b4df435dce2b1f75176df23d6c019758fdf07b5453fc27b38",
+          "ptx_sha256": "4bc0e300f08ab692baf8f26907f0740fe13cc3b8792f8b1619735db35d82849b"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_0a62794d85",
+          "schedule_hash": "0a62794d854b3cb8332e958f15c286759b3f17263a2b3f6985b861526a02f09e",
+          "graph_sha256": "adbf96347ee7d6dfe8a799bdf59ca124801202731c1ad8a60ad04ac254cc2c6a",
+          "schedule_sha256": "5f4950fbb859538c8cf91e94a952971c65dd078b6a301a3bf704c39d48d5f0d0",
+          "tile_sha256": "887c442f71e8c6be7a26b961fd451941103615b6221543393826f5bf1783ef23",
+          "target_sha256": "15b19cbf60162675e9ae98352768903f31d98c5cc45089098d488f22d600e919",
+          "ptx_sha256": "78593c78748a6550902c3bed86d68fc1ff018f3f9d1ccfed89a4c49aa39a2d8f"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        2,
+        1,
+        5,
+        7
+      ],
+      "causal": true,
+      "reduction_axes": [
+        1
+      ],
+      "max_abs_gradient_errors": [
+        7.497890083113523e-09,
+        6.02386797735055e-09,
+        8.382965432929268e-08,
+        1.6962351814808763e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.010410560294985771,
+        0.010640319436788559,
+        0.015537600964307785,
+        0.010541759431362152,
+        0.012118079699575901
+      ],
+      "device_dispatch_window_median_ms": 0.010640319436788559,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_e9f9cee421",
+          "schedule_hash": "e9f9cee421c31f1dd592496312c2991ce83b2845297f449e068a86efdbf8bc7c",
+          "graph_sha256": "be94b0cd0130a8d4f02a565b927f622aee4ea59a037a360afa1fec209e42e375",
+          "schedule_sha256": "b93f21f69b201afedabf5945032d913895baaa4dd0f1c53b0d4e18948cd0f50a",
+          "tile_sha256": "86beb9af970305786097263f16a80419ece328ad4f29e8fdc441339760f0a3ea",
+          "target_sha256": "1d33ad725bbb10bdfa17077a8acf5c2c9db2b91deadc2a971b219d5ea02ee0ba",
+          "ptx_sha256": "eb6ff19a2c78cb8fcc07a0a829a1b06390aa183dd0de4db69a19e49ff31398e9"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_cfe2705c6c",
+          "schedule_hash": "cfe2705c6cc101e4be99bc5b039e363873d4b2d20c1d9936d81d3bf471723009",
+          "graph_sha256": "caf667e5e5f97f3649e6b5c71f064eaffde6c6e06699be5e9e4243a0f4193c01",
+          "schedule_sha256": "a4bfd1f40e41dd2505d6115e1d835d477b02f74624a917c28ceeba3af019929d",
+          "tile_sha256": "8f9b27de9ce47392bfd7aa6c4f00434cd5118f49340e12d0e7446497c5eb7749",
+          "target_sha256": "f18498ab68d048998262504e43798570d6445e0b96b5700e88a44eb191c2ce7c",
+          "ptx_sha256": "a5429f353976dc473be929dfcefd38ade4da45c4e1018341e563fc4a6973ba1e"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        2,
+        4,
+        1,
+        7
+      ],
+      "causal": false,
+      "reduction_axes": [
+        2
+      ],
+      "max_abs_gradient_errors": [
+        4.276954342768979e-09,
+        5.570277747737884e-09,
+        6.873377822458338e-08,
+        3.33927400175682e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.010693440213799477,
+        0.011059199459850788,
+        0.010966399684548378,
+        0.011205120012164116,
+        0.011672320775687695
+      ],
+      "device_dispatch_window_median_ms": 0.011059199459850788,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_4e507e331e",
+          "schedule_hash": "4e507e331ee03edb07b42d116b3c4e4f90b4ba004854bb0048feb4678e494747",
+          "graph_sha256": "c1ef8a6229809cd446499247cee2ee0e3979607152b30c8668ca463bbbe0eab4",
+          "schedule_sha256": "fcc3ae5816f1a695cd95ad1321c197a62ebd232f0e32d9a23b5e48e17cc7ecf4",
+          "tile_sha256": "09d5181c7dd79344c6515030dc4591015b606400b2ba92b12abe1ec6d0e215cc",
+          "target_sha256": "e2f4f6a949fa71014864c7dedb12731cb65f1401ea9e37e70e09950844151f61",
+          "ptx_sha256": "95dd3ac3a3dbbe347b605df210d2e6b06e1ceb9621cadbcf2ba4503cda37735d"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_7cd74440d9",
+          "schedule_hash": "7cd74440d9c8da7ed1f244c8bd633ad1e88290c481e3fb1e1ec49330802ccd83",
+          "graph_sha256": "c5343647c9ab4d2ef5372a5596e3c26519ddada94fc591bd801462778da01eea",
+          "schedule_sha256": "40fd5449ee489f4c1fe0d51dd57418685a03c35aa7fc39d8ced1e0eddaf3a4e9",
+          "tile_sha256": "80a054fc9e34c92cf7827de2e6b6fd3945f36f60a589e94afe9487cecbfdbce8",
+          "target_sha256": "10def41f6091780682382fc2d495235340a18d59f3bd673d0ba2dcecd456cced",
+          "ptx_sha256": "d137cf3eb052f2671749a290e01b7893c924807ee7d24ca597793dbfd8d237ed"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        2,
+        4,
+        1,
+        7
+      ],
+      "causal": true,
+      "reduction_axes": [
+        2
+      ],
+      "max_abs_gradient_errors": [
+        5.883329833727968e-09,
+        5.248234631605175e-09,
+        9.777149867495893e-08,
+        2.305375733369086e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.011568959802389145,
+        0.010894720442593098,
+        0.010948480106890202,
+        0.011567679233849049,
+        0.011125439777970314
+      ],
+      "device_dispatch_window_median_ms": 0.011125439777970314,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_0baafb5687",
+          "schedule_hash": "0baafb5687a848f116f57b54308a8ebea433b8c2f9811c348506e039e93aec6b",
+          "graph_sha256": "929d5a7af0dc0b0b4d70f8649d7db5e1e963c71b8fc53431cb3251e015e48b7e",
+          "schedule_sha256": "704a6856fae15c050d55c08e0d52f2fd23f5c2d9ec0be020563e8063ea53149f",
+          "tile_sha256": "f1ed280747e59e0eb0ec8ac04be51c85907680d3364fcaeb79c9083059b87f00",
+          "target_sha256": "4543268e331ecdb72acf7af57995564784c53c750171a241a483621dc4145fa4",
+          "ptx_sha256": "9cc178b9a5ec241236d37ba306c403e8e5f95df1f08a9d5dfc07798744317e70"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_a6def19b3e",
+          "schedule_hash": "a6def19b3eb68a7f5782ccfc26cc5ce8823b13bc2e095c34eff9df381de5a80e",
+          "graph_sha256": "59cf1ba908557cffd2af8adf0ec230aeb18a9d56b7077b6d525316f6ce21e1ec",
+          "schedule_sha256": "cfcaa98db1460e00f4a1479174a15958019c5db0a0d75f36b7807e6d5930868b",
+          "tile_sha256": "49d96ee135bcde177a84054b3940b17d5e4ac4b508b44a575c766b202da810f9",
+          "target_sha256": "4ef78ad1f04daf6da721e4c41bcfc0d2f1c69fb75d3d937a34414e8c02b910f9",
+          "ptx_sha256": "0a80d01b221953c21b5f01004726b052c539bbe7bf980665e25f41308a9fe7d8"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        2,
+        4,
+        5,
+        1
+      ],
+      "causal": false,
+      "reduction_axes": [
+        3
+      ],
+      "max_abs_gradient_errors": [
+        5.136680891401624e-09,
+        4.4286216603628414e-09,
+        7.522369419032948e-08,
+        2.7939677252342143e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.015055359341204166,
+        0.0113215995952487,
+        0.016517119482159615,
+        0.011346559971570969,
+        0.011255359277129173
+      ],
+      "device_dispatch_window_median_ms": 0.011346559971570969,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_8d276635d3",
+          "schedule_hash": "8d276635d36a9bae802072159faed32cffd794a8215396adfecfb1283e301f2a",
+          "graph_sha256": "2c6127d38a0b7a48e3c331eeee0840d0bfb6e11a55f584db8a15a199a9d0c3bc",
+          "schedule_sha256": "2218458a1e6a32a24dea63f6cf163457086996120516dde9c07dbccfbe2b0bdf",
+          "tile_sha256": "facc5b129da4c534b3042b1224f0344fa6814ad4884cdaf41d70eb7fddf40bd5",
+          "target_sha256": "0fcb5438510e8c69c32fbf03ee3b4c246de8a34cda1a996ed4fb43c692a91a42",
+          "ptx_sha256": "7027779ce396a7f56c814fee26f38e137a7586c0c108a6eb3b82f53fc159b2c3"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_725510e35b",
+          "schedule_hash": "725510e35b462b05807374a4a1499ae7ec346a6b387ad76fc39a547124450bc7",
+          "graph_sha256": "640e4bf54598481bef4344287f21dad429a5809b97ea8c1effe357d774db70fa",
+          "schedule_sha256": "d1b68d21aff0fcfc0b75ab3190a6fcea0a5aa6c8b26004d62f79bb2408cf84a0",
+          "tile_sha256": "8e7163e6d6a462e9f84e879429b5b7b29c97761f1baf3be9a0f59c89bf0d8f47",
+          "target_sha256": "c0bf5ce0b0b5520fcc980a1628d19077552c9349cbe03c372c59b1aff188f7ae",
+          "ptx_sha256": "f43ab455ed1b4fd0ea48800e687e7ce05811996e50186d470e109449f0192b93"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        2,
+        4,
+        5,
+        1
+      ],
+      "causal": true,
+      "reduction_axes": [
+        3
+      ],
+      "max_abs_gradient_errors": [
+        5.273316613235712e-09,
+        4.113495542454326e-09,
+        7.134790414031755e-08,
+        2.2351741769954803e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.010940159671008587,
+        0.010916479863226414,
+        0.010576959699392319,
+        0.010456319898366928,
+        0.010552320629358292
+      ],
+      "device_dispatch_window_median_ms": 0.010576959699392319,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_cae83d131a",
+          "schedule_hash": "cae83d131af0d961b6b8d832013f786de0277a801eda1a91ad2ea42bd6a23b79",
+          "graph_sha256": "c7f2971bb142aba430267776e2484eaf8ec21a14cc3567ab09ef2e2a8b2d3306",
+          "schedule_sha256": "6e2b3eefff82e4ef515c87df967ee72578c9554a449f0dcf5e795a6f3594e280",
+          "tile_sha256": "a28efe1bed1113328932d31024e41d4625ad07faa6b51d9031297e61e668ffd1",
+          "target_sha256": "2c1c8203ad35df74b5274b3cb7408a0f14de4bff2f17616fd956c1092af1da21",
+          "ptx_sha256": "8e58d2dd6bd74d3846f6056286a6134eff3edf38ec218c3c27aa967db0afd56f"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_18ad410491",
+          "schedule_hash": "18ad410491b152722fd301a7c461158e6505071bba526749fbf7c4fb21609c71",
+          "graph_sha256": "d7697399cf5af2b2e175a15146bdcb63d0751276b80c3a759b2bd8721e2a4377",
+          "schedule_sha256": "d9c98ce4c76a4cfe84a6b2fe51e2055aed55f373a520c5f80dc9e08f180c6af1",
+          "tile_sha256": "bfe23c274944be024ba34136738d0237ae9fe1bdfc547ecc2a3d97133a523937",
+          "target_sha256": "4e7f752288ff19148c39265bdccbfdd30b58d88d5798539dc164d93f55564fcc",
+          "ptx_sha256": "bb989e88965ba76db0be00423a017cde1fcf155dbe828e8c3edc111e7f818b46"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        1,
+        1,
+        1,
+        7
+      ],
+      "causal": false,
+      "reduction_axes": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_gradient_errors": [
+        5.956590529848649e-09,
+        4.609856909393306e-09,
+        5.191270591176078e-08,
+        4.3897494084177424e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.024784639477729797,
+        0.02689984068274498,
+        0.02450943924486637,
+        0.024510079994797707,
+        0.024928320199251175
+      ],
+      "device_dispatch_window_median_ms": 0.024784639477729797,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_d8ea234101",
+          "schedule_hash": "d8ea2341018c07bbebbf8acc9974f035df45351271c8f5edbd370027ce7e6c12",
+          "graph_sha256": "e606a0d68a19e49a4dc6a5019f6c6efe1160dfd16628e83888b1003edcf5e9c4",
+          "schedule_sha256": "50885a0e24a069734c6d74133f2ce0a49e1a95655d176f1ec7bee3fc5046e11e",
+          "tile_sha256": "7354a64179dbb3c39424e0e76b79b5a5bd6c17e043cf57e36e4123b3e6a567e9",
+          "target_sha256": "df1b5bdb9ced79d7e5adb1987e36170857481ac124f257e4863549f7dac4e3c7",
+          "ptx_sha256": "4440dbc84a3bf489c09f53641fc04034b43ed83f86539aa12da26d5ab05f8d7e"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_b211e9b429",
+          "schedule_hash": "b211e9b429aab262904b5818229d8f27065d712307ab198fa28575cf2be89495",
+          "graph_sha256": "6a15e853f490d693e6d8b6c840ac4417b2d8fbe52c73dddf0546f31a6b26fb63",
+          "schedule_sha256": "07d96fd121388437411dde9e6e666807a638e01d8b4e4cd235054b894c1ffe73",
+          "tile_sha256": "f64bdeb34f66d5f608a775f6d728957db2185383ba48cd0dd2839bfdefc59b0d",
+          "target_sha256": "dd05f07b63f060aac3605c88315bf8b289a66aa19129fe1c4849940a0175f73b",
+          "ptx_sha256": "b96ad9b9e4f73171f0480be4689caa844d7296d14f9c958b50796d9eee204c11"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        1,
+        1,
+        1,
+        7
+      ],
+      "causal": true,
+      "reduction_axes": [
+        0,
+        1,
+        2
+      ],
+      "max_abs_gradient_errors": [
+        5.805767380739901e-09,
+        5.925564653536108e-09,
+        1.083628400344594e-07,
+        7.305245330879728e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.02465759962797165,
+        0.024587519466876984,
+        0.02466944046318531,
+        0.0246799997985363,
+        0.024787841364741325
+      ],
+      "device_dispatch_window_median_ms": 0.02466944046318531,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_3e490425f8",
+          "schedule_hash": "3e490425f81bf84014efbcb7aeff34ad8f059037c0412b0a5e60bead4c31a6ee",
+          "graph_sha256": "e7417f8e362fdc0c89aa382025fd77f63975e64daa66fa178035333b1747b8c8",
+          "schedule_sha256": "1e2eb9c54c2d9afffa674be7fb73ce5b95c7f031297bf165a354f278c0f117fb",
+          "tile_sha256": "105c4e1341533e20beacaa90c5fb7863731d3c3e88903109a820ac3157eb055f",
+          "target_sha256": "5f3caae60c3eb94864a7ae4d62f83ab3b5acecdf7ae58da6d66be4e71f564551",
+          "ptx_sha256": "77a2dff30280db57d658a33ce15104d9668f9b83260f6787108df3e7fbac9af7"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_8749817b2e",
+          "schedule_hash": "8749817b2e87f1596203e018e19d397360e6fbbb1d2d60031c6fec3ec5a75c90",
+          "graph_sha256": "40bdb55b2bd75a989c9be3d57900fbe0d669ac4fab15ab9338259e74f10d8e45",
+          "schedule_sha256": "da33660b10e9758ed04a4a210f199e8bef162fd3ea745873efbf8dfcf81dba99",
+          "tile_sha256": "80713afe08572370b94a91ea9ccfeae92699394121805c3949b1999e96b57475",
+          "target_sha256": "56b205fe09d4898aabdc0a113383ce0cbc9dce0143a5763169bb4bc93bdfbdce",
+          "ptx_sha256": "8244045fa56c86177d267055d5aa6034b354a1d9d59ead0a90a8e83c493e199c"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "causal": false,
+      "reduction_axes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "max_abs_gradient_errors": [
+        4.179036509205369e-09,
+        5.899345650872689e-09,
+        4.74562346086671e-08,
+        2.433080216468486e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.11891616135835648,
+        0.11891679465770721,
+        0.11889856308698654,
+        0.1189030334353447,
+        0.11888447403907776
+      ],
+      "device_dispatch_window_median_ms": 0.1189030334353447,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_1a1a0e3c61",
+          "schedule_hash": "1a1a0e3c61fb08f3ba68f03c492b5b66d1541e241d2c94e14c4b5a6e372b03c6",
+          "graph_sha256": "f88b1efc666f653a69a01bf6651cb7f0adeea4916acbc01f8eda19606bc8dd08",
+          "schedule_sha256": "c2b40c25524a1d1e1bf0e1535c5c90b231dee445a90abf5650709b1f3b163bd5",
+          "tile_sha256": "0fdd80d468775e4b63fbbc3a550c9cf24fb4c5063d881acacfa33126a0b43ddc",
+          "target_sha256": "00cfb436533a1857a0a130ea33c1e3c2aa4bdfabb424ddc08690377c6fe64b91",
+          "ptx_sha256": "acce95a9285af7f986ae54569c188b650ffa1bb734a212d0489fd7e7c128f2e5"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_17c79355e7",
+          "schedule_hash": "17c79355e7cfa2de8706fe9728ea7101d6da3d03c9aed87fc9dccc7399ec82f3",
+          "graph_sha256": "9d02ce03dc84bcf1583b2229f2638c69979af50849a1b8f6c4fd6273a87c6b82",
+          "schedule_sha256": "8977479dd65bd9f5a14cf315c953bb30e1b6b63164a9eba0ea9a8977258e8364",
+          "tile_sha256": "0e7a5130925683f91b8fe0b3d7a41230945872b6b77a44482ae26457dc6e0400",
+          "target_sha256": "7e8268501e176a2ffb16bda2bf4ec8048b63be5962d1d8842b6e8b58d6bf11f5",
+          "ptx_sha256": "d928ff9fe10eb54a1835bdef3eabc90927bf01e1472d11d78a528ee931966679"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    },
+    {
+      "logical_dims": [
+        2,
+        4,
+        2,
+        5,
+        7,
+        4,
+        3
+      ],
+      "physical_bias_shape": [
+        1,
+        1,
+        1,
+        1
+      ],
+      "causal": true,
+      "reduction_axes": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "max_abs_gradient_errors": [
+        3.6802236251954473e-09,
+        7.468235391216993e-09,
+        7.519854361426326e-08,
+        4.6449713450580354e-08
+      ],
+      "guard_words_untouched": 32,
+      "device_dispatch_window_samples_ms": [
+        0.12068895995616913,
+        0.12072256207466125,
+        0.12071647495031357,
+        0.12071359902620316,
+        0.1206902414560318
+      ],
+      "device_dispatch_window_median_ms": 0.12071359902620316,
+      "compiled": [
+        {
+          "entry": "tessera_tile_attention_lse_a3977aff54",
+          "schedule_hash": "a3977aff5475c59eb5ced54cff087d6a70f6adae8838cece150881894dbb9da9",
+          "graph_sha256": "e8969db0369a7919fd7c10da3e78d348c62c45794578792d05717293c65bea89",
+          "schedule_sha256": "2eb87f8e50c2124d67cddc0acd48b8391ab2dbdbcc71ba5cb7c63031d6d00b7b",
+          "tile_sha256": "5b71d9f83c364ea601920a569039016309de8f7514d8718011ef567c0f868781",
+          "target_sha256": "8925992811f01fa4a87f82b41613edd5265d70af0fc9a2dd278961342ae6241d",
+          "ptx_sha256": "c48b481a3c5c643f5182f29f2cb04622069663b3ea526fe9073d1f7a3f5a5453"
+        },
+        {
+          "entry": "tessera_tile_attention_backward_lse_output_bias_gradient_7ef8d87aa3",
+          "schedule_hash": "7ef8d87aa33cc4a3e03a02ce4d8226fd6b9a7a38bb2662e671552c00f230f11f",
+          "graph_sha256": "dfa19b0e66d0270b548173685ff81192dac12a48756d258ed2bdd1823a2a9fdf",
+          "schedule_sha256": "d23d315e55e16e057da9441b2bb50e3e686d989522e7d0c0008213602a4bcdd0",
+          "tile_sha256": "7564eef6ef99514210339da3109f85b43805bb4b14c7c3c085639e9b61e568fc",
+          "target_sha256": "412c22d3a44e7e0def8250c1c46970a32d95ae3ffdb765d804c0f619521336e1",
+          "ptx_sha256": "e3fe59b3d3e54e120bef43e36c2537f1337668423e389d29d6c7df0f45e84e62"
+        }
+      ],
+      "scope": "raw resident native arithmetic proof; no checked broadcast package/tape ABI"
+    }
+  ],
+  "production_package_support": false
+}

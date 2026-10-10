@@ -1,0 +1,3447 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "device_uuid_raw_hex": "32386439653765666266326566373136",
+  "compiler_sha256": "ed1c775c7e092b2e1e4971baaab0402966f7526d4ccdb5dbe470b7affe920ec8",
+  "runtime_sha256": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c",
+  "recorder_sha256": "6a279db41f20db8894d757605f02f05d415334799cc36250efba91b9555b8f77",
+  "adapter_source_sha256": {
+    "tessera.runtime": "d8b57debe1eff8b13efe3d6e4f816e93117c7e6e6c49323eef2f54b3f66b6837",
+    "tessera.compiler.native_vmap": "02c86506e20262b4e185aada5c4106cd0b8c5733d846f4b2b2129ec339be4246",
+    "tessera.compiler.rocm_typed_scaled_native": "8aa056c2c81d9bab590cd85f709aab71b79f90091b4efeb51ccd07e8c1669089",
+    "tessera.compiler.native_scaled_program": "026c94fd71fa94b2e4cb6dfdcae1bff145594141faff5dc452cb8ca65eaef138"
+  },
+  "timing_boundaries": {
+    "public": "compiler-free warm host call including frontend, upload, execution and readback",
+    "native": "prepared native program HIP launch window averaged by runtime over 20 repeats",
+    "prepared": "update/invoke/read host wall; preparation excluded"
+  },
+  "limitations": [
+    "static M3 N5 K64 and prefix 2x3",
+    "FP32 scale derivatives only",
+    "no speedup or selector promotion",
+    "no sibling-device proof"
+  ],
+  "rows": [
+    {
+      "mask": 1,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.223396125688453e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9098598267883062,
+        0.8752735797315836,
+        0.8643046021461487,
+        0.8772192057222128,
+        0.8630381897091866
+      ],
+      "public_warm_median_ms": 0.8752735797315836,
+      "native_launch_window_samples_ms": [
+        0.017867350950837135,
+        0.017913350835442543,
+        0.01787940040230751,
+        0.017851348966360092,
+        0.017873350530862808
+      ],
+      "native_launch_window_median_ms": 0.017873350530862808,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3901190124452114,
+        0.3851254004985094,
+        0.39282822981476784,
+        0.38943379186093807,
+        0.38976622745394707
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38976622745394707,
+      "program_sha256": "291da0954d4e72b26ff8c71dcbaf30ac156a2f1026a53a9002119294fe6c10d2",
+      "images_sha256": [
+        "ddf94114bb47b42b854001a95327bfeaa81dbfefef053595907a919c657aa599"
+      ]
+    },
+    {
+      "mask": 1,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.941325630992651,
+        0.8834329899400473,
+        0.9858185891062021,
+        0.9618028067052364,
+        0.9574043564498425
+      ],
+      "public_warm_median_ms": 0.9574043564498425,
+      "native_launch_window_samples_ms": [
+        0.01889974996447563,
+        0.018885700032114983,
+        0.018901750445365906,
+        0.018811751157045364,
+        0.0189177505671978
+      ],
+      "native_launch_window_median_ms": 0.01889974996447563,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4435309674590826,
+        0.44855657033622265,
+        0.4288730211555958,
+        0.41763181798160076,
+        0.47337599098682404
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4435309674590826,
+      "program_sha256": "c889e6e862393c88c9636b2957ccb1fec1f467c4eb82df75a09fed0ca0866d36",
+      "images_sha256": [
+        "73324d4237a4aab8c7a3b3c6aa2994b7b31d8a65d7c52b54ff319fb54a2ec29b"
+      ]
+    },
+    {
+      "mask": 1,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.589375528027631e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8721795864403248,
+        0.8859280031174421,
+        0.8344736415892839,
+        0.9038964286446571,
+        0.8541091810911894
+      ],
+      "public_warm_median_ms": 0.8721795864403248,
+      "native_launch_window_samples_ms": [
+        0.01766369864344597,
+        0.01763569936156273,
+        0.01763175055384636,
+        0.017605699598789215,
+        0.017623700201511383
+      ],
+      "native_launch_window_median_ms": 0.01763175055384636,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38686878979206085,
+        0.37953658029437065,
+        0.37410641089081764,
+        0.385530199855566,
+        0.3881271928548813
+      ],
+      "prepared_update_invoke_read_median_ms": 0.385530199855566,
+      "program_sha256": "f040cb08354bd2d39dc86611f948a6fa9991334808e90c5af3ed597ff711d9e8",
+      "images_sha256": [
+        "94e1ac6fb6fd9b95442e4e0041eea3024bbc2ac73cf385a1014c4590c5aa480a"
+      ]
+    },
+    {
+      "mask": 1,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8853608276695013,
+        0.8892582263797522,
+        0.9228965733200312,
+        0.9152278304100037,
+        0.8585835807025433
+      ],
+      "public_warm_median_ms": 0.8892582263797522,
+      "native_launch_window_samples_ms": [
+        0.017783749848604202,
+        0.017733749002218246,
+        0.017751749604940414,
+        0.017709800973534584,
+        0.01782580092549324
+      ],
+      "native_launch_window_median_ms": 0.017751749604940414,
+      "prepared_update_invoke_read_samples_ms": [
+        0.39998581632971764,
+        0.40595121681690216,
+        0.4128244239836931,
+        0.42080958373844624,
+        0.3935715649276972
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40595121681690216,
+      "program_sha256": "34cd83c43e3929eb37679aec75743725e1e9f176d7703cfe0c93be93f49b6585",
+      "images_sha256": [
+        "37b7127f886200e6d810934e1d0371f4b546955b27286940f425964c5bde2d8f"
+      ]
+    },
+    {
+      "mask": 2,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 9.435448489192311e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9116509929299355,
+        0.8923262357711792,
+        0.8737846277654171,
+        0.900489604100585,
+        0.8524318225681782
+      ],
+      "public_warm_median_ms": 0.8923262357711792,
+      "native_launch_window_samples_ms": [
+        0.01883379928767681,
+        0.018853800371289253,
+        0.018817801028490067,
+        0.018857799470424652,
+        0.01883780024945736
+      ],
+      "native_launch_window_median_ms": 0.01883780024945736,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4168520215898752,
+        0.44431639835238457,
+        0.4112094175070524,
+        0.3986392170190811,
+        0.41529303416609764
+      ],
+      "prepared_update_invoke_read_median_ms": 0.41529303416609764,
+      "program_sha256": "b7334953b88af7b5165dc3e0ffe45192c9a8fc4297faf94afd04611fe70de0b1",
+      "images_sha256": [
+        "2e345d2f6d208f9511be388089e45ef1cb4089ab2d3b6420cc7e16d8a19d9930"
+      ]
+    },
+    {
+      "mask": 2,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9089197963476181,
+        0.917421979829669,
+        0.8871022146195173,
+        0.8876229636371136,
+        0.8671519812196493
+      ],
+      "public_warm_median_ms": 0.8876229636371136,
+      "native_launch_window_samples_ms": [
+        0.01855980046093464,
+        0.018497798591852188,
+        0.018565800040960312,
+        0.018529798835515976,
+        0.018553799018263817
+      ],
+      "native_launch_window_median_ms": 0.018553799018263817,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4190822131931782,
+        0.42066341266036034,
+        0.397677393630147,
+        0.40294937789440155,
+        0.4240037873387337
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4190822131931782,
+      "program_sha256": "8a3a4b9413f0ec6ac9ed1dad6c15df3ae739f4cae9fd05fa77003ff6c3a6a564",
+      "images_sha256": [
+        "7b44cafceecfc3711b8c77709bc1c4e254c0a500779ca3b578a1d6b0bbc2c85c"
+      ]
+    },
+    {
+      "mask": 2,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.3834284051661427e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9036336094141006,
+        0.88939662091434,
+        0.8637935854494572,
+        0.9060801938176155,
+        0.8555860258638859
+      ],
+      "public_warm_median_ms": 0.88939662091434,
+      "native_launch_window_samples_ms": [
+        0.017451848834753036,
+        0.017435850575566292,
+        0.017507849261164665,
+        0.017461849376559258,
+        0.01744985021650791
+      ],
+      "native_launch_window_median_ms": 0.017451848834753036,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3800497855991125,
+        0.40198960341513157,
+        0.38728560321033,
+        0.38655418902635574,
+        0.4214447923004627
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38728560321033,
+      "program_sha256": "07131d3f27420256aeef22249fd21e7378f0ce2b2cdffc3fc2f1c9e1cef5e235",
+      "images_sha256": [
+        "ccb6828c2d1fdc30178e6bc958584950e80dca11ee022d3f7d6a875d54121a52"
+      ]
+    },
+    {
+      "mask": 2,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9119153954088688,
+        0.8867173921316862,
+        0.9507637936621904,
+        0.8719292003661394,
+        0.8798283990472555
+      ],
+      "public_warm_median_ms": 0.8867173921316862,
+      "native_launch_window_samples_ms": [
+        0.01796184852719307,
+        0.01783985085785389,
+        0.017845850437879562,
+        0.017893848940730095,
+        0.01784985139966011
+      ],
+      "native_launch_window_median_ms": 0.01784985139966011,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3859249874949455,
+        0.3972406033426523,
+        0.38318182341754436,
+        0.36735162138938904,
+        0.3987455740571022
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3859249874949455,
+      "program_sha256": "44813be7e69c21a3b7f8bef4d78ee7d655eaa909e27dd0d19913189e6ce68704",
+      "images_sha256": [
+        "93d599806f4cab7de273a80e442f44ca2feadda700283cd2f3e670a9a9b2bc3b"
+      ]
+    },
+    {
+      "mask": 3,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.2754693723415755e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9440870024263859,
+        0.9376506321132183,
+        0.8544157724827528,
+        0.9040184319019318,
+        0.8865249808877707
+      ],
+      "public_warm_median_ms": 0.9040184319019318,
+      "native_launch_window_samples_ms": [
+        0.018959850072860718,
+        0.018929850310087204,
+        0.018897850066423416,
+        0.01896584965288639,
+        0.018949849531054497
+      ],
+      "native_launch_window_median_ms": 0.018949849531054497,
+      "prepared_update_invoke_read_samples_ms": [
+        0.40921159088611603,
+        0.43663778342306614,
+        0.4102111794054508,
+        0.40825377218425274,
+        0.3970944322645664
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40921159088611603,
+      "program_sha256": "58d00f51a4376f73f6d8abc457d2b62deca71924b957e1b1d32b3f5847e6b61c",
+      "images_sha256": [
+        "e1465c71f8ce4eb93416b2cb73d4ea9a1915d39a0e094f7988e380a8e492884e"
+      ]
+    },
+    {
+      "mask": 3,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9253212250769138,
+        0.9270666167140007,
+        0.8685566019266844,
+        0.9233914315700531,
+        0.8958566002547741
+      ],
+      "public_warm_median_ms": 0.9233914315700531,
+      "native_launch_window_samples_ms": [
+        0.018933851271867752,
+        0.018933851271867752,
+        0.018893849104642868,
+        0.018859850242733955,
+        0.018949849531054497
+      ],
+      "native_launch_window_median_ms": 0.018933851271867752,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38887662813067436,
+        0.4339948296546936,
+        0.4025927744805813,
+        0.40461281314492226,
+        0.4191705957055092
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40461281314492226,
+      "program_sha256": "dad119de5aa5ccf0ab5396b63a3d94e81061c92bcb5e4a61a11f423a43177cf2",
+      "images_sha256": [
+        "b15317ac0ed50b18c29233c40c8aca15316d170b02b1d7733416113822e89474"
+      ]
+    },
+    {
+      "mask": 3,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.733845386326266e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9110540151596069,
+        0.8955262135714293,
+        0.8592871949076653,
+        0.9102804120630026,
+        0.8629640098661184
+      ],
+      "public_warm_median_ms": 0.8955262135714293,
+      "native_launch_window_samples_ms": [
+        0.017951849848031998,
+        0.017963850870728493,
+        0.017951900139451027,
+        0.017931850627064705,
+        0.017955850809812546
+      ],
+      "native_launch_window_median_ms": 0.017951900139451027,
+      "prepared_update_invoke_read_samples_ms": [
+        0.39071417413651943,
+        0.4060775972902775,
+        0.4010859876871109,
+        0.4225107841193676,
+        0.42639635503292084
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4060775972902775,
+      "program_sha256": "46ea5d920ec5c42e6f9dabb75751d7d10e798baf2d6a389f373be7869ec3001d",
+      "images_sha256": [
+        "0da0ed9e9fd7aa9ea3e8c38e67cd5dd2f5887abd1b25d7cc4549374e98b4d8d1"
+      ]
+    },
+    {
+      "mask": 3,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9747755713760853,
+        0.9236518293619156,
+        0.8990410249680281,
+        0.908456789329648,
+        0.8482079952955246
+      ],
+      "public_warm_median_ms": 0.908456789329648,
+      "native_launch_window_samples_ms": [
+        0.010177900083363056,
+        0.010229899547994137,
+        0.010145950131118298,
+        0.010191950015723705,
+        0.010147900320589542
+      ],
+      "native_launch_window_median_ms": 0.010177900083363056,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3630092367529869,
+        0.39811241440474987,
+        0.38196337409317493,
+        0.3979380242526531,
+        0.36308737471699715
+      ],
+      "prepared_update_invoke_read_median_ms": 0.38196337409317493,
+      "program_sha256": "b6302b3095b5e6bc1d88d98d834aba6beda3b8efa5d7df2b7b01bfd0d80a8cdc",
+      "images_sha256": [
+        "81f7838c45a410646007387c375c9d00a95eafdf866887e44507100db73819be"
+      ]
+    },
+    {
+      "mask": 4,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.9676266838075662e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9128009900450706,
+        0.8620823733508587,
+        0.8112912066280842,
+        0.893414206802845,
+        0.8857755921781063
+      ],
+      "public_warm_median_ms": 0.8857755921781063,
+      "native_launch_window_samples_ms": [
+        0.019183900207281113,
+        0.019259899854660034,
+        0.019227899610996246,
+        0.019175900146365166,
+        0.019221900030970573
+      ],
+      "native_launch_window_median_ms": 0.019221900030970573,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38504539988934994,
+        0.42017041705548763,
+        0.41134958155453205,
+        0.42434041388332844,
+        0.39841081015765667
+      ],
+      "prepared_update_invoke_read_median_ms": 0.41134958155453205,
+      "program_sha256": "2e0324e6413ef0be9225421390cb56c7a017d34e5ea91c8306e27e237afca671",
+      "images_sha256": [
+        "1ff01b3ac522ac6aacaee27bc77a2d95164fcd7b416cabcdd36e17978191fd73"
+      ]
+    },
+    {
+      "mask": 4,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.937191816046834,
+        0.8975979872047901,
+        0.9250003844499588,
+        0.8773715700954199,
+        0.943864369764924
+      ],
+      "public_warm_median_ms": 0.9250003844499588,
+      "native_launch_window_samples_ms": [
+        0.018783900886774063,
+        0.018699850887060165,
+        0.018811849877238274,
+        0.018825849518179893,
+        0.018793849274516106
+      ],
+      "native_launch_window_median_ms": 0.018793849274516106,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3945013973861933,
+        0.4594093654304743,
+        0.42563099414110184,
+        0.4262822214514017,
+        0.4321994259953499
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4262822214514017,
+      "program_sha256": "de124a7f37a94f9da0a843904fb6c2932faccdff227ba2a498bb33ee1897d6da",
+      "images_sha256": [
+        "d015c2ccfdf86ad92d52dce5541eb9a7680ebbddbd0c752892ad965c79b96e6c"
+      ]
+    },
+    {
+      "mask": 4,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 4.9284794911841345e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9245795663446188,
+        0.9150051977485418,
+        0.8571329992264509,
+        0.8834450040012598,
+        0.8847556076943874
+      ],
+      "public_warm_median_ms": 0.8847556076943874,
+      "native_launch_window_samples_ms": [
+        0.017521899193525314,
+        0.01752990111708641,
+        0.01762389950454235,
+        0.017579849809408188,
+        0.01751985028386116
+      ],
+      "native_launch_window_median_ms": 0.01752990111708641,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4070696420967579,
+        0.38805101066827774,
+        0.4082378000020981,
+        0.42903139255940914,
+        0.38903700187802315
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4070696420967579,
+      "program_sha256": "36aa44993225330808d009e8c63687fec240c94f25a8510c130818a32578b8d6",
+      "images_sha256": [
+        "3eed99390146b6744892e3f54383cc5f0d3dc3ae7e75c9c1e7e7455e4375c271"
+      ]
+    },
+    {
+      "mask": 4,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9337331634014845,
+        0.8975001983344555,
+        0.899289408698678,
+        0.8679996244609356,
+        0.8978223893791437
+      ],
+      "public_warm_median_ms": 0.8978223893791437,
+      "native_launch_window_samples_ms": [
+        0.01766989938914776,
+        0.017645899206399918,
+        0.017537899315357208,
+        0.017657900229096413,
+        0.01764785125851631
+      ],
+      "native_launch_window_median_ms": 0.01764785125851631,
+      "prepared_update_invoke_read_samples_ms": [
+        0.40170522406697273,
+        0.4117022268474102,
+        0.3867285791784525,
+        0.41865562088787556,
+        0.4119024146348238
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4117022268474102,
+      "program_sha256": "73961a8df06b941fbbd131709938e4490cc40116c5f7de2469368e2199eaac00",
+      "images_sha256": [
+        "2bb0831772794c30d239eafe1b460ddc69c9c9b50d51139a092ffce411a0d499"
+      ]
+    },
+    {
+      "mask": 5,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.0500835911919637e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9123204275965691,
+        0.8655949961394072,
+        0.8860041853040457,
+        0.862463004887104,
+        0.8924263995140791
+      ],
+      "public_warm_median_ms": 0.8860041853040457,
+      "native_launch_window_samples_ms": [
+        0.01865984871983528,
+        0.01869785040616989,
+        0.01877785101532936,
+        0.018703849986195564,
+        0.018723849207162857
+      ],
+      "native_launch_window_median_ms": 0.018703849986195564,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4309109877794981,
+        0.38906498812139034,
+        0.41692820377647877,
+        0.4507667850703001,
+        0.4048192407935858
+      ],
+      "prepared_update_invoke_read_median_ms": 0.41692820377647877,
+      "program_sha256": "ff334d8f7fb144edd5c58fbcac6bddc95d4474210e32ea43f88ca0dc9e37b4a5",
+      "images_sha256": [
+        "794d148cb71d9ff473fc6d3f95343b601b901b61dd4d860661038d22b0b84119"
+      ]
+    },
+    {
+      "mask": 5,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.935787009075284,
+        0.8714844007045031,
+        0.9109155740588903,
+        0.8952517993748188,
+        0.9054389782249928
+      ],
+      "public_warm_median_ms": 0.9054389782249928,
+      "native_launch_window_samples_ms": [
+        0.01985989883542061,
+        0.01988385058939457,
+        0.01991789974272251,
+        0.019833849743008614,
+        0.019939899444580078
+      ],
+      "native_launch_window_median_ms": 0.01988385058939457,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4390066023916006,
+        0.42985081672668457,
+        0.40700542740523815,
+        0.4375997930765152,
+        0.41527519933879375
+      ],
+      "prepared_update_invoke_read_median_ms": 0.42985081672668457,
+      "program_sha256": "d9ac03257a814ac6ea195e6428d9af065e7251649c6b0b0d1e7661f883641352",
+      "images_sha256": [
+        "3dffe6a86dd6653d53c705af17dfdb1fc705691152515443dc7cf2252561e385"
+      ]
+    },
+    {
+      "mask": 5,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 5.588824292246386e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8840121794492006,
+        0.8719651959836483,
+        0.8633887860924006,
+        0.92224539257586,
+        0.8607738185673952
+      ],
+      "public_warm_median_ms": 0.8719651959836483,
+      "native_launch_window_samples_ms": [
+        0.013585899956524372,
+        0.01361790020018816,
+        0.013609950430691242,
+        0.013555949553847313,
+        0.01361989974975586
+      ],
+      "native_launch_window_median_ms": 0.013609950430691242,
+      "prepared_update_invoke_read_samples_ms": [
+        0.38640801794826984,
+        0.410223426297307,
+        0.41813040152192116,
+        0.4083256237208843,
+        0.38326196372509
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4083256237208843,
+      "program_sha256": "982b30aae213090fe38a384eac751d1213577f8aec41c126366e7a0a42c9aba0",
+      "images_sha256": [
+        "6fee85e15c8bfd63397dd6b566a658f764667606c62aeea0155826eb43f3da04"
+      ]
+    },
+    {
+      "mask": 5,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9198346175253391,
+        0.9435879997909069,
+        0.8778927847743034,
+        0.9390152059495449,
+        0.9189229924231768
+      ],
+      "public_warm_median_ms": 0.9198346175253391,
+      "native_launch_window_samples_ms": [
+        0.014191900379955769,
+        0.014363899827003479,
+        0.01431989949196577,
+        0.01412190031260252,
+        0.014247899875044823
+      ],
+      "native_launch_window_median_ms": 0.014247899875044823,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3917782101780176,
+        0.4020680207759142,
+        0.4098126199096441,
+        0.40925759822130203,
+        0.3912069834768772
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4020680207759142,
+      "program_sha256": "301a40b2a45a25a6c500339b07b37d22812c721a5a6d395b19972ed00854a0d1",
+      "images_sha256": [
+        "3badb6e3a9524d1a4df16e769a3823fd5b61b25abccca83e1abc0fe77862bd29"
+      ]
+    },
+    {
+      "mask": 6,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 6.182979095381569e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9308576118201017,
+        0.9052308276295662,
+        0.8696508128196001,
+        0.9261188097298145,
+        0.8482439909130335
+      ],
+      "public_warm_median_ms": 0.9052308276295662,
+      "native_launch_window_samples_ms": [
+        0.018529850989580154,
+        0.018573850393295288,
+        0.01855984888970852,
+        0.018521849066019058,
+        0.01851784996688366
+      ],
+      "native_launch_window_median_ms": 0.018529850989580154,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4157499875873327,
+        0.38908300921320915,
+        0.4174069967120886,
+        0.40929364040493965,
+        0.3998576197773218
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40929364040493965,
+      "program_sha256": "61c40ce00b0c58ed2a7dc6b6a8d311eee51aafe8696bd22c9ebcb5b3a42268c4",
+      "images_sha256": [
+        "129e8124dbded00eefbac8c7c74e79f783dd0870f16d1749442b1e76976a708a"
+      ]
+    },
+    {
+      "mask": 6,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9142300114035606,
+        0.920143211260438,
+        0.8748409803956747,
+        0.9129935875535011,
+        0.9363240096718073
+      ],
+      "public_warm_median_ms": 0.9142300114035606,
+      "native_launch_window_samples_ms": [
+        0.0189558994024992,
+        0.018977899104356766,
+        0.019119899719953537,
+        0.01904585026204586,
+        0.019039900973439217
+      ],
+      "native_launch_window_median_ms": 0.019039900973439217,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3797209821641445,
+        0.4251838196069002,
+        0.39866939187049866,
+        0.40513360872864723,
+        0.3866222221404314
+      ],
+      "prepared_update_invoke_read_median_ms": 0.39866939187049866,
+      "program_sha256": "f3cff284f0150ce73ac6e2cd1e3aa552b687056114ab1f7a80a99b517a53f7fc",
+      "images_sha256": [
+        "359894950d5b137f3dfec79078e12b90d65f1f12d0894d4a7c8ab2b0fa3d8e3f"
+      ]
+    },
+    {
+      "mask": 6,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.744260999142938e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8913221769034863,
+        0.9069742169231176,
+        0.860200822353363,
+        0.8708529639989138,
+        0.860902201384306
+      ],
+      "public_warm_median_ms": 0.8708529639989138,
+      "native_launch_window_samples_ms": [
+        0.017489850521087646,
+        0.017471900209784508,
+        0.01753384992480278,
+        0.017503850162029266,
+        0.017435850575566292
+      ],
+      "native_launch_window_median_ms": 0.017489850521087646,
+      "prepared_update_invoke_read_samples_ms": [
+        0.40116417221724987,
+        0.41729300282895565,
+        0.40560257621109486,
+        0.4291615914553404,
+        0.40483917109668255
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40560257621109486,
+      "program_sha256": "df6b867fa82391d519495daa612905dcf1c3f72830bd4aa311da35a79077364d",
+      "images_sha256": [
+        "d6a7420e99f362151d41f0d2c68fe5effecb17663d006c51dfb2849404a4e115"
+      ]
+    },
+    {
+      "mask": 6,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8755662012845278,
+        0.8996921591460705,
+        0.8853247854858637,
+        0.8657894097268581,
+        0.8724181912839413
+      ],
+      "public_warm_median_ms": 0.8755662012845278,
+      "native_launch_window_samples_ms": [
+        0.018123898655176163,
+        0.018069900572299957,
+        0.01799190044403076,
+        0.01804189942777157,
+        0.01807989925146103
+      ],
+      "native_launch_window_median_ms": 0.018069900572299957,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4106182139366865,
+        0.4139905795454979,
+        0.40465062484145164,
+        0.4293140023946762,
+        0.4107181914150715
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4107181914150715,
+      "program_sha256": "a8cdcae61e32550c1dcaa5e063f6e3d4f4712d9d8a8812532bac08f0cd0a4ae7",
+      "images_sha256": [
+        "8e595ada05d28451db386746ad4e0c730756000e408722cf73962b1840234ae0"
+      ]
+    },
+    {
+      "mask": 7,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.0720735943436921e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9072686079889536,
+        0.880619790405035,
+        0.8982494007796049,
+        0.8866591844707727,
+        0.882537430152297
+      ],
+      "public_warm_median_ms": 0.8866591844707727,
+      "native_launch_window_samples_ms": [
+        0.01851389929652214,
+        0.01845189929008484,
+        0.01844790019094944,
+        0.018473898991942406,
+        0.018493900075554848
+      ],
+      "native_launch_window_median_ms": 0.018473898991942406,
+      "prepared_update_invoke_read_samples_ms": [
+        0.42415796779096127,
+        0.43708677403628826,
+        0.4035905934870243,
+        0.3895900212228298,
+        0.43251817114651203
+      ],
+      "prepared_update_invoke_read_median_ms": 0.42415796779096127,
+      "program_sha256": "e15665dfd4793cab88dd7b3d54afcfa4581928bf61796554cb54e4ef20dd0229",
+      "images_sha256": [
+        "a3574a8cdc0d38e7ad1b3437a4075ee7c38a48bac1c3598954a5849fb5b59cd0"
+      ]
+    },
+    {
+      "mask": 7,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9533786214888096,
+        0.8959030266851187,
+        0.9008022025227547,
+        0.8692379575222731,
+        0.9257177822291851
+      ],
+      "public_warm_median_ms": 0.9008022025227547,
+      "native_launch_window_samples_ms": [
+        0.01896989904344082,
+        0.018953900784254074,
+        0.018973900005221367,
+        0.018873900175094604,
+        0.019011899828910828
+      ],
+      "native_launch_window_median_ms": 0.01896989904344082,
+      "prepared_update_invoke_read_samples_ms": [
+        0.39806622080504894,
+        0.41060023941099644,
+        0.3757535945624113,
+        0.4007074050605297,
+        0.39393818005919456
+      ],
+      "prepared_update_invoke_read_median_ms": 0.39806622080504894,
+      "program_sha256": "f421c50245bc7b38f7e4b9afb08b63cb14956065464aa186b10a174fbcadf0b7",
+      "images_sha256": [
+        "6824c38d2f79717ad97cc0e2411779448be767ae41cdc374d282224d06e8a497"
+      ]
+    },
+    {
+      "mask": 7,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.3635709295023446e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8944381959736347,
+        0.8846573997288942,
+        0.9377350099384785,
+        0.9197063744068146,
+        0.9045675862580538
+      ],
+      "public_warm_median_ms": 0.9045675862580538,
+      "native_launch_window_samples_ms": [
+        0.017789900302886963,
+        0.017775900661945343,
+        0.01774590089917183,
+        0.01775594986975193,
+        0.01774594932794571
+      ],
+      "native_launch_window_median_ms": 0.01775594986975193,
+      "prepared_update_invoke_read_samples_ms": [
+        0.411409605294466,
+        0.4043702036142349,
+        0.41445535607635975,
+        0.43703862465918064,
+        0.40016816928982735
+      ],
+      "prepared_update_invoke_read_median_ms": 0.411409605294466,
+      "program_sha256": "1d2a747f0721d1e2d943401250e63f2e973ac6882697a36e59f21fe74b1d5176",
+      "images_sha256": [
+        "02ba4930583b7403be94c16c8874db80475b4d74ffb8b1d96cd6e489239c8ca8"
+      ]
+    },
+    {
+      "mask": 7,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9415700100362301,
+        0.879317382350564,
+        0.9138032328337431,
+        0.8956264238804579,
+        0.9102002251893282
+      ],
+      "public_warm_median_ms": 0.9102002251893282,
+      "native_launch_window_samples_ms": [
+        0.017581898719072342,
+        0.017645899206399918,
+        0.017611900344491005,
+        0.017629900947213173,
+        0.017601899802684784
+      ],
+      "native_launch_window_median_ms": 0.017611900344491005,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4055364057421684,
+        0.38840780034661293,
+        0.4211102146655321,
+        0.4300934262573719,
+        0.4042239859700203
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4055364057421684,
+      "program_sha256": "d677dbb050223d6fa1d8cd739c082a69dbfdaf1e0a3e7b1b139fb46ffe02564b",
+      "images_sha256": [
+        "7a66308383db564b1a2098c0aadf759f1840fa2de026ca9accebf2d7d180c5b4"
+      ]
+    },
+    {
+      "mask": 8,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.7130479612603722e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.974432984367013,
+        0.902637792751193,
+        0.9431772399693727,
+        0.961971003562212,
+        0.9613419882953167
+      ],
+      "public_warm_median_ms": 0.9613419882953167,
+      "native_launch_window_samples_ms": [
+        0.018977899104356766,
+        0.019081899896264076,
+        0.019075900316238403,
+        0.01902789995074272,
+        0.019057899713516235
+      ],
+      "native_launch_window_median_ms": 0.019057899713516235,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4324618261307478,
+        0.4542174283415079,
+        0.45162858441472054,
+        0.4331090021878481,
+        0.4658795893192291
+      ],
+      "prepared_update_invoke_read_median_ms": 0.45162858441472054,
+      "program_sha256": "1777241e7beeb876430bf5c643adef2e07ab8bb48b8e670802bef87761785c67",
+      "images_sha256": [
+        "5be8b2aa278dce52c12e07e9e9b00d9b596a37b363a85a82711b0520256da206"
+      ]
+    },
+    {
+      "mask": 8,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9670627769082785,
+        0.9874440263956785,
+        0.956658972427249,
+        0.9752806276082993,
+        0.9621873963624239
+      ],
+      "public_warm_median_ms": 0.9670627769082785,
+      "native_launch_window_samples_ms": [
+        0.01872589997947216,
+        0.018689900636672974,
+        0.018755899742245674,
+        0.01871589943766594,
+        0.01872989907860756
+      ],
+      "native_launch_window_median_ms": 0.01872589997947216,
+      "prepared_update_invoke_read_samples_ms": [
+        0.46003861352801323,
+        0.46176579780876637,
+        0.46206838451325893,
+        0.44054342433810234,
+        0.46995957382023335
+      ],
+      "prepared_update_invoke_read_median_ms": 0.46176579780876637,
+      "program_sha256": "fbfbf7e250448db27408df49a605e63fc827cb34a28d9c0a9c8045168c998487",
+      "images_sha256": [
+        "32dd8ac7c2bc0f4718bbe0d990933b987ca2ef2363c437a569cef0d1411ae5ba"
+      ]
+    },
+    {
+      "mask": 8,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 8.29150358372388e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.0437071789056063,
+        1.0141267906874418,
+        1.0767986066639423,
+        1.0188518092036247,
+        1.0325819719582796
+      ],
+      "public_warm_median_ms": 1.0325819719582796,
+      "native_launch_window_samples_ms": [
+        0.01808590069413185,
+        0.018101898953318596,
+        0.01814590021967888,
+        0.018135899677872658,
+        0.01813795045018196
+      ],
+      "native_launch_window_median_ms": 0.018135899677872658,
+      "prepared_update_invoke_read_samples_ms": [
+        0.597312580794096,
+        0.5666041746735573,
+        0.5691844038665295,
+        0.5710285622626543,
+        0.568686006590724
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5691844038665295,
+      "program_sha256": "ff29f05b80a923e0e8caf0190e2abbcc2e865d6f2860f2df80d632086aeba378",
+      "images_sha256": [
+        "4f0105e421d17060b0e15dddbf831ea429b66d9f598d8e2ab480310b72cbe340"
+      ]
+    },
+    {
+      "mask": 8,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8914824109524488,
+        0.9646682068705559,
+        0.9280082304030657,
+        0.8507045917212963,
+        0.90896375477314
+      ],
+      "public_warm_median_ms": 0.90896375477314,
+      "native_launch_window_samples_ms": [
+        0.01783989928662777,
+        0.017747899517416954,
+        0.01773190125823021,
+        0.0177558995783329,
+        0.01878190040588379
+      ],
+      "native_launch_window_median_ms": 0.0177558995783329,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4510955885052681,
+        0.46997759491205215,
+        0.44544083066284657,
+        0.4457291681319475,
+        0.4716545809060335
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4510955885052681,
+      "program_sha256": "dfdddfc026b9fd37aa8a2c2cb6cd71f812d8c6712006111d8e1ce49e7c5fdec3",
+      "images_sha256": [
+        "902324005c4b3b8e33e3271879650c4a604a7baff5b9cd41e2bc0144748745cb"
+      ]
+    },
+    {
+      "mask": 9,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 9.438169978892574e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.935911200940609,
+        0.9082787670195103,
+        0.8689494337886572,
+        0.8815555833280087,
+        0.8873365819454193
+      ],
+      "public_warm_median_ms": 0.8873365819454193,
+      "native_launch_window_samples_ms": [
+        0.019277900457382202,
+        0.019179899245500565,
+        0.019231850281357765,
+        0.019287900999188423,
+        0.019265849143266678
+      ],
+      "native_launch_window_median_ms": 0.019265849143266678,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4517950117588043,
+        0.43375040404498577,
+        0.4460777621716261,
+        0.43931701220571995,
+        0.43774000369012356
+      ],
+      "prepared_update_invoke_read_median_ms": 0.43931701220571995,
+      "program_sha256": "7b4a4728912a928d0d2c32acff530d1b50c426e49176ffff2452b7c2ec58ae81",
+      "images_sha256": [
+        "6dc0bde4d9d152b2b6fac536a3713e86919e258861537a061b1e38ea0b102127"
+      ]
+    },
+    {
+      "mask": 9,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9872955735772848,
+        0.9332122281193733,
+        0.9434155654162169,
+        0.8614493999630213,
+        0.8943141903728247
+      ],
+      "public_warm_median_ms": 0.9332122281193733,
+      "native_launch_window_samples_ms": [
+        0.019235899671912193,
+        0.0191679485142231,
+        0.019193898886442184,
+        0.019143899902701378,
+        0.01922990009188652
+      ],
+      "native_launch_window_median_ms": 0.019193898886442184,
+      "prepared_update_invoke_read_samples_ms": [
+        0.42789322324097157,
+        0.44329059310257435,
+        0.4164373967796564,
+        0.45976201072335243,
+        0.48181223683059216
+      ],
+      "prepared_update_invoke_read_median_ms": 0.44329059310257435,
+      "program_sha256": "eea91ac9ab038fcc2955507c88a26bc27e901f768d84e7130a48819b1e051e92",
+      "images_sha256": [
+        "e4ed0d6d2d07acac3268bfb2609a25d616446ecb988b4d1d723d650da11ead2d"
+      ]
+    },
+    {
+      "mask": 9,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 6.884257164330165e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9757013991475105,
+        0.9517475962638855,
+        0.89186723344028,
+        0.9609771892428398,
+        0.9487960021942854
+      ],
+      "public_warm_median_ms": 0.9517475962638855,
+      "native_launch_window_samples_ms": [
+        0.017427900806069374,
+        0.017451900988817215,
+        0.01741189882159233,
+        0.01740190014243126,
+        0.017459850758314133
+      ],
+      "native_launch_window_median_ms": 0.017427900806069374,
+      "prepared_update_invoke_read_samples_ms": [
+        0.44322842732071877,
+        0.4435370210558176,
+        0.4520412068814039,
+        0.44757258147001266,
+        0.45426739379763603
+      ],
+      "prepared_update_invoke_read_median_ms": 0.44757258147001266,
+      "program_sha256": "6eb4585e0a5e45076ca5ff5d85c12ce0c027320d49873f55696682451a64afd3",
+      "images_sha256": [
+        "fd85f60a39a4689108acceae11e66d431cb6c8712035ea5066b88a01bf99f39b"
+      ]
+    },
+    {
+      "mask": 9,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9055553935468197,
+        0.9328476153314114,
+        0.8652084041386843,
+        0.9267497807741165,
+        0.9017420001327991
+      ],
+      "public_warm_median_ms": 0.9055553935468197,
+      "native_launch_window_samples_ms": [
+        0.01765589974820614,
+        0.017643900588154793,
+        0.017663899809122086,
+        0.017611900344491005,
+        0.017591899260878563
+      ],
+      "native_launch_window_median_ms": 0.017643900588154793,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4399782046675682,
+        0.42036077938973904,
+        0.45023979619145393,
+        0.4202946089208126,
+        0.45091500505805016
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4399782046675682,
+      "program_sha256": "f928d2d43084e66237f5731e812ad23c128d941ffa6203b62811522fd5dac063",
+      "images_sha256": [
+        "6fe5fcd62b5c8ca3d8a1ae04a7e563d044070ce83f990f84da6c6b6ace3bbb1f"
+      ]
+    },
+    {
+      "mask": 10,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.630055387508605e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9288520086556673,
+        0.8874387945979834,
+        0.8919814135879278,
+        0.8662641979753971,
+        0.9070202242583036
+      ],
+      "public_warm_median_ms": 0.8919814135879278,
+      "native_launch_window_samples_ms": [
+        0.019965849816799164,
+        0.01898385025560856,
+        0.01895585097372532,
+        0.01890384964644909,
+        0.018945898860692978
+      ],
+      "native_launch_window_median_ms": 0.01895585097372532,
+      "prepared_update_invoke_read_samples_ms": [
+        0.41529317386448383,
+        0.39134141989052296,
+        0.40834778919816017,
+        0.40246262215077877,
+        0.41584200225770473
+      ],
+      "prepared_update_invoke_read_median_ms": 0.40834778919816017,
+      "program_sha256": "7ee7609e789abb26b17af2720d4297d56274394082b6b102be7a59379df93f4f",
+      "images_sha256": [
+        "1dfc09178148bf94acba240e9dd8281b78754393a803e6503916935b0d5ddd94"
+      ]
+    },
+    {
+      "mask": 10,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9500164072960615,
+        0.9390334133058786,
+        0.8751030080020428,
+        0.913528585806489,
+        0.8822347968816757
+      ],
+      "public_warm_median_ms": 0.913528585806489,
+      "native_launch_window_samples_ms": [
+        0.019241899251937866,
+        0.019171899184584618,
+        0.019279900938272476,
+        0.019255900755524635,
+        0.019237900152802467
+      ],
+      "native_launch_window_median_ms": 0.019241899251937866,
+      "prepared_update_invoke_read_samples_ms": [
+        0.440084608271718,
+        0.4298850428313017,
+        0.43748142197728157,
+        0.4427233710885048,
+        0.4675949923694134
+      ],
+      "prepared_update_invoke_read_median_ms": 0.440084608271718,
+      "program_sha256": "a779c876d7f5bd5b8364d5978abcd81766955863d37cb869b7f0d2641a4baf8b",
+      "images_sha256": [
+        "991bd5ae2db8de757ed0ab2346ee96d017942f24537899a21a806570adf06d7b"
+      ]
+    },
+    {
+      "mask": 10,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.058649342805978e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9284812025725842,
+        0.9363762103021145,
+        0.880407402291894,
+        0.8631363976746798,
+        0.8622348308563232
+      ],
+      "public_warm_median_ms": 0.880407402291894,
+      "native_launch_window_samples_ms": [
+        0.019161898642778397,
+        0.019099900498986244,
+        0.019171949476003647,
+        0.019143899902701378,
+        0.019137950614094734
+      ],
+      "native_launch_window_median_ms": 0.019143899902701378,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4271116107702255,
+        0.4263902083039284,
+        0.46372762881219387,
+        0.4241017624735832,
+        0.4377140197902918
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4271116107702255,
+      "program_sha256": "5dad0bd74f93f0b5797aab5ee184213b58e09363c6192bb9d6c3d98adb6d24c7",
+      "images_sha256": [
+        "6a6a5026e5754d714547e3333a042f53c18f230a3a6e16b3321334aff67c64c1"
+      ]
+    },
+    {
+      "mask": 10,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9578872006386518,
+        0.9293127804994583,
+        0.9610231965780258,
+        0.9635942056775093,
+        0.9754507802426815
+      ],
+      "public_warm_median_ms": 0.9610231965780258,
+      "native_launch_window_samples_ms": [
+        0.019133899360895157,
+        0.019109901040792465,
+        0.01910189911723137,
+        0.01911189965903759,
+        0.019155900925397873
+      ],
+      "native_launch_window_median_ms": 0.01911189965903759,
+      "prepared_update_invoke_read_samples_ms": [
+        0.43046819046139717,
+        0.45353397727012634,
+        0.4582952242344618,
+        0.4311815835535526,
+        0.43602860532701015
+      ],
+      "prepared_update_invoke_read_median_ms": 0.43602860532701015,
+      "program_sha256": "092a17fc43c18fc68945566d697ef8af2c801d8e0d7487fc7dfc01558620af62",
+      "images_sha256": [
+        "9bbad9f80456340de4cd79a10ba1233511e3cd75c7182cee7a6d86ef0986bb79"
+      ]
+    },
+    {
+      "mask": 11,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 1.296049843002578e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9570757858455181,
+        0.9671390056610107,
+        0.9676400106400251,
+        1.0966184083372355,
+        1.1400751769542694
+      ],
+      "public_warm_median_ms": 0.9676400106400251,
+      "native_launch_window_samples_ms": [
+        0.010051949881017208,
+        0.009435949847102165,
+        0.009519950486719608,
+        0.00950194988399744,
+        0.009493949823081493
+      ],
+      "native_launch_window_median_ms": 0.00950194988399744,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6600044202059507,
+        0.6669516209512949,
+        0.453970767557621,
+        0.42046718299388885,
+        0.41930079460144043
+      ],
+      "prepared_update_invoke_read_median_ms": 0.453970767557621,
+      "program_sha256": "819efbc45d69da61a3eb4dabfac4dda131d95ebf7473059ef15dd0f0b44b5c38",
+      "images_sha256": [
+        "335e8c58fa152035152e7ff28f2599e162e16e7f0a6889c47e3d75bd077113b8"
+      ]
+    },
+    {
+      "mask": 11,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.986611982807517,
+        0.9241869673132896,
+        0.948765967041254,
+        0.962345814332366,
+        0.9492507670074701
+      ],
+      "public_warm_median_ms": 0.9492507670074701,
+      "native_launch_window_samples_ms": [
+        0.018487900495529175,
+        0.01843789964914322,
+        0.018479900434613228,
+        0.018389899283647537,
+        0.018455948680639267
+      ],
+      "native_launch_window_median_ms": 0.018455948680639267,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4284503869712353,
+        0.4226190038025379,
+        0.4428258165717125,
+        0.42148279026150703,
+        0.4017591942101717
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4226190038025379,
+      "program_sha256": "a37c1158c72a0d3806b0d8eab1d6af173938c5cfd16a457ce72637a480377b69",
+      "images_sha256": [
+        "630fdad81afd67232ca16a616aad040e8bf644a0eaaa8c34f2aa1d4e11b90b98"
+      ]
+    },
+    {
+      "mask": 11,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 8.393324302247152e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9974069893360138,
+        0.9507937822490931,
+        0.9543143678456545,
+        0.9574785828590393,
+        0.940327811986208
+      ],
+      "public_warm_median_ms": 0.9543143678456545,
+      "native_launch_window_samples_ms": [
+        0.018087899312376976,
+        0.01807190105319023,
+        0.018049899488687515,
+        0.01803389936685562,
+        0.01807989925146103
+      ],
+      "native_launch_window_median_ms": 0.01807190105319023,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4151287954300642,
+        0.42880899272859097,
+        0.5006922408938408,
+        0.488651217892766,
+        0.4666352178901434
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4666352178901434,
+      "program_sha256": "05cd251ba405a314df0efbdccbe151ac0ebd4d01df4b42c34b92a9ea118b692c",
+      "images_sha256": [
+        "caa8745b4041d0d9b7d969ae079300d0ca096597a878a32e8cc2e37d321a6ad7"
+      ]
+    },
+    {
+      "mask": 11,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9751243982464075,
+        0.9054309688508511,
+        0.9465496055781841,
+        0.9433918166905642,
+        0.9623358026146889
+      ],
+      "public_warm_median_ms": 0.9465496055781841,
+      "native_launch_window_samples_ms": [
+        0.01811389997601509,
+        0.017895950004458427,
+        0.017933901399374008,
+        0.017875898629426956,
+        0.01788794994354248
+      ],
+      "native_launch_window_median_ms": 0.017895950004458427,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3941708244383335,
+        0.4387380089610815,
+        0.4047487862408161,
+        0.43015358969569206,
+        0.485154427587986
+      ],
+      "prepared_update_invoke_read_median_ms": 0.43015358969569206,
+      "program_sha256": "5695b461905783d6285c5da69d5aa0d0c8da42511d493a4aa855ca64d850260c",
+      "images_sha256": [
+        "a2e3d6a7c4692244d491978530cd3ca50ed7f76d1bca0a9614c38442b739e989"
+      ]
+    },
+    {
+      "mask": 12,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 2.7016246173516834e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9597328025847673,
+        0.972248800098896,
+        0.9644399862736464,
+        0.9352921973913908,
+        0.9229608345776796
+      ],
+      "public_warm_median_ms": 0.9597328025847673,
+      "native_launch_window_samples_ms": [
+        0.019443899393081665,
+        0.019311901181936264,
+        0.019249899312853813,
+        0.019197899848222733,
+        0.019203899428248405
+      ],
+      "native_launch_window_median_ms": 0.019249899312853813,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5587852094322443,
+        0.5482229869812727,
+        0.5582602228969336,
+        0.5805326160043478,
+        0.47093341127038
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5582602228969336,
+      "program_sha256": "6ad407007bb4fa16e374e3c825c11eda7d2482215f425bb7a582e5a9a4902dbd",
+      "images_sha256": [
+        "da135778213fd9bc525a850e1ddd0175b849e33577990d3f1adfa00365467e81"
+      ]
+    },
+    {
+      "mask": 12,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9229484014213085,
+        0.9302486199885607,
+        0.8838640060275793,
+        0.9056175593286753,
+        0.8877172134816647
+      ],
+      "public_warm_median_ms": 0.9056175593286753,
+      "native_launch_window_samples_ms": [
+        0.019023898988962173,
+        0.018999900668859482,
+        0.019085900858044624,
+        0.019089899957180023,
+        0.019057899713516235
+      ],
+      "native_launch_window_median_ms": 0.019057899713516235,
+      "prepared_update_invoke_read_samples_ms": [
+        0.3965814132243395,
+        0.3958200104534626,
+        0.42551858350634575,
+        0.3762646112591028,
+        0.3870531916618347
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3958200104534626,
+      "program_sha256": "ef853cb830f4f7f7a1dedd126edcf1493655c35289a7537761d627cb1a8e8b33",
+      "images_sha256": [
+        "1b5fe20e69037552a6f60e5693eb21529f0d3fe788a877f23b945a90a38c43fc"
+      ]
+    },
+    {
+      "mask": 12,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.202904284131506e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9028241969645023,
+        0.9043953847140074,
+        0.8603290189057589,
+        0.866841385141015,
+        0.8724259678274393
+      ],
+      "public_warm_median_ms": 0.8724259678274393,
+      "native_launch_window_samples_ms": [
+        0.01742194965481758,
+        0.01717595010995865,
+        0.017179900780320168,
+        0.017229950055480003,
+        0.017209898680448532
+      ],
+      "native_launch_window_median_ms": 0.017209898680448532,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5807110108435154,
+        0.570964440703392,
+        0.5717699881643057,
+        0.5575348157435656,
+        0.558057613670826
+      ],
+      "prepared_update_invoke_read_median_ms": 0.570964440703392,
+      "program_sha256": "18ce54f8e4408513c934fe243503faae12b7cd76cd4d522b362b92b756f385a5",
+      "images_sha256": [
+        "8b0c72e2173963aa2d77a9c81b8d2ac9129921044cd35bf6148939f39bfc17e5"
+      ]
+    },
+    {
+      "mask": 12,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9265914093703032,
+        0.8889578282833099,
+        0.8785679936408997,
+        0.8762054145336151,
+        0.8878854103386402
+      ],
+      "public_warm_median_ms": 0.8878854103386402,
+      "native_launch_window_samples_ms": [
+        0.017591899260878563,
+        0.017527900636196136,
+        0.01751990057528019,
+        0.01749590039253235,
+        0.01754390075802803
+      ],
+      "native_launch_window_median_ms": 0.017527900636196136,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5718342028558254,
+        0.5446122027933598,
+        0.5538294091820717,
+        0.5604404024779797,
+        0.574911804869771
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5604404024779797,
+      "program_sha256": "10ad844c67db3399168cbf5d8468f8b0c85b963523733afd2ca1a163faecdade",
+      "images_sha256": [
+        "bcfee96e37df27fbc7cc5aa73be72cf6eaac3ff1859f4d1683a71fd0b26a13fe"
+      ]
+    },
+    {
+      "mask": 13,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 8.140438068071632e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9093265980482101,
+        0.9125570300966501,
+        0.8759589865803719,
+        0.9028400294482708,
+        0.8625431917607784
+      ],
+      "public_warm_median_ms": 0.9028400294482708,
+      "native_launch_window_samples_ms": [
+        0.01861790008842945,
+        0.018567901104688644,
+        0.018549900501966476,
+        0.018553899601101875,
+        0.01860390044748783
+      ],
+      "native_launch_window_median_ms": 0.018567901104688644,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5841296166181564,
+        0.5435540340840816,
+        0.5536473821848631,
+        0.5769418086856604,
+        0.558294216170907
+      ],
+      "prepared_update_invoke_read_median_ms": 0.558294216170907,
+      "program_sha256": "4fd491d03f195383b5ab167022a5e2634dc9899c83e227112592396efba96a05",
+      "images_sha256": [
+        "6c44f94963fb1335bf5ab937258ff63cfe0e621e0a6c3c13e93e4c218a8fd4cb"
+      ]
+    },
+    {
+      "mask": 13,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.0995859745889902,
+        1.065867580473423,
+        1.0182986035943031,
+        1.0731236077845097,
+        1.0417154058814049
+      ],
+      "public_warm_median_ms": 1.065867580473423,
+      "native_launch_window_samples_ms": [
+        0.01929990015923977,
+        0.018991950899362564,
+        0.01902789995074272,
+        0.018903950229287148,
+        0.01905195042490959
+      ],
+      "native_launch_window_median_ms": 0.01902789995074272,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5853577982634306,
+        0.49003520980477333,
+        0.42269742116332054,
+        0.39211479015648365,
+        0.39593419060111046
+      ],
+      "prepared_update_invoke_read_median_ms": 0.42269742116332054,
+      "program_sha256": "412359a8e483b652dba489bcc8fe5e9ee7573fdffdf1f5d70f359ac0378fa397",
+      "images_sha256": [
+        "de831d6d5edd7ef9d2f051b00c0d0c85c8e865477f549504fefca0b97de815d5"
+      ]
+    },
+    {
+      "mask": 13,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 8.892289216078098e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9094047825783491,
+        0.8686690125614405,
+        0.8709453977644444,
+        0.8561689872294664,
+        0.8714943658560514
+      ],
+      "public_warm_median_ms": 0.8709453977644444,
+      "native_launch_window_samples_ms": [
+        0.017941899597644806,
+        0.01790190115571022,
+        0.017911849543452263,
+        0.017879899591207504,
+        0.017963899299502373
+      ],
+      "native_launch_window_median_ms": 0.017911849543452263,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4142352379858494,
+        0.39213276468217373,
+        0.39537115953862667,
+        0.3974070306867361,
+        0.3960681613534689
+      ],
+      "prepared_update_invoke_read_median_ms": 0.3960681613534689,
+      "program_sha256": "feebac91ec47280244146a2533f1c8921b37cab430da53367bd3eaa8a71e19fe",
+      "images_sha256": [
+        "c6fceffb1601b237e3a28742c29339393ea38da6930aee575fe1e8d63eeabd72"
+      ]
+    },
+    {
+      "mask": 13,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.0368093848228455,
+        1.0755161754786968,
+        1.1218684259802103,
+        1.1055790353566408,
+        1.1104431934654713
+      ],
+      "public_warm_median_ms": 1.1055790353566408,
+      "native_launch_window_samples_ms": [
+        0.018177900463342667,
+        0.0179578997194767,
+        0.017975900322198868,
+        0.017959900200366974,
+        0.01787790097296238
+      ],
+      "native_launch_window_median_ms": 0.017959900200366974,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5891492124646902,
+        0.5722007714211941,
+        0.5733330268412828,
+        0.5031775683164597,
+        0.5639290437102318
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5722007714211941,
+      "program_sha256": "86e0aa124553a171da5b6478a1dc2fe12f08d497f1ebbe07adae23655d957eb4",
+      "images_sha256": [
+        "f94db236377e9925b8a41df12638b28f88d8f64ce4c3d9c97131dfef86e267da"
+      ]
+    },
+    {
+      "mask": 14,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 2.0753832119524418e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9620511904358864,
+        0.8903583977371454,
+        0.9374843910336494,
+        0.9122741874307394,
+        0.8826498407870531
+      ],
+      "public_warm_median_ms": 0.9122741874307394,
+      "native_launch_window_samples_ms": [
+        0.018365900963544846,
+        0.018387900665402412,
+        0.018467899411916733,
+        0.018385950475931168,
+        0.018459899351000786
+      ],
+      "native_launch_window_median_ms": 0.018387900665402412,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4191786050796509,
+        0.4278590437024832,
+        0.3962105605751276,
+        0.45872218906879425,
+        0.41244360618293285
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4191786050796509,
+      "program_sha256": "bd133cbee1471fe6a716974f8b6ac6569612b804593473ed68b8049dd9f91907",
+      "images_sha256": [
+        "1d16436b3aba65cbd283904dc73c851ac1f58fa910ddc29a678748fb7c364050"
+      ]
+    },
+    {
+      "mask": 14,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9254212025552988,
+        0.9357893839478493,
+        0.9155225940048695,
+        0.898814620450139,
+        0.9281364269554615
+      ],
+      "public_warm_median_ms": 0.9254212025552988,
+      "native_launch_window_samples_ms": [
+        0.018479900434613228,
+        0.0184239000082016,
+        0.018449898809194565,
+        0.0184199009090662,
+        0.01844790019094944
+      ],
+      "native_launch_window_median_ms": 0.01844790019094944,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5663755815476179,
+        0.5859892349690199,
+        0.5803541745990515,
+        0.5922249983996153,
+        0.4176556132733822
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5803541745990515,
+      "program_sha256": "835db4264606f5f246909ac451e430a7f0b44692cbe1928a9974f271eab6ab97",
+      "images_sha256": [
+        "c1e883024139c27a10242778e83a658a1f5363ed051f91cfa2512921cc463261"
+      ]
+    },
+    {
+      "mask": 14,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 6.725961010367598e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8904905989766121,
+        0.9231170173734426,
+        0.9149051737040281,
+        0.8562131784856319,
+        0.8845672011375427
+      ],
+      "public_warm_median_ms": 0.8904905989766121,
+      "native_launch_window_samples_ms": [
+        0.01764794997870922,
+        0.01740190014243126,
+        0.01748189888894558,
+        0.017413949593901634,
+        0.01740190014243126
+      ],
+      "native_launch_window_median_ms": 0.017413949593901634,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5682914052158594,
+        0.563161401078105,
+        0.555010000243783,
+        0.5326807964593172,
+        0.467828381806612
+      ],
+      "prepared_update_invoke_read_median_ms": 0.555010000243783,
+      "program_sha256": "6ad5af3ea5bbb63bddf0d45a13b4c3e2324836979a27aa726d81beaad3c667dc",
+      "images_sha256": [
+        "0bc1e4a9bcc548133435ad528d0cfc7ff37177b2c0d483a33465ae07edfd768c"
+      ]
+    },
+    {
+      "mask": 14,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9282428305596113,
+        0.89592095464468,
+        0.8916750084608793,
+        0.9259361773729324,
+        0.8699133992195129
+      ],
+      "public_warm_median_ms": 0.89592095464468,
+      "native_launch_window_samples_ms": [
+        0.01837794855237007,
+        0.01808989979326725,
+        0.018035899847745895,
+        0.018087899312376976,
+        0.01807590015232563
+      ],
+      "native_launch_window_median_ms": 0.018087899312376976,
+      "prepared_update_invoke_read_samples_ms": [
+        0.613844208419323,
+        0.5771081894636154,
+        0.5469806026667356,
+        0.5616463720798492,
+        0.5789156071841717
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5771081894636154,
+      "program_sha256": "443f28f53084a288fb2c0a54e3831b635a4bc61b1b6359decb87df2a774c4fed",
+      "images_sha256": [
+        "90a1d961c7ccb0d24b6152db545ca1f09805d9dde9d93d781138237035ed585e"
+      ]
+    },
+    {
+      "mask": 15,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.499739773653147e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9234716184437275,
+        0.9036495815962553,
+        0.9097293950617313,
+        0.8636991959065199,
+        0.9313147980719805
+      ],
+      "public_warm_median_ms": 0.9097293950617313,
+      "native_launch_window_samples_ms": [
+        0.018693899735808372,
+        0.018577899783849716,
+        0.018637899309396744,
+        0.01867390051484108,
+        0.0186939500272274
+      ],
+      "native_launch_window_median_ms": 0.01867390051484108,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5795554257929325,
+        0.5082225892692804,
+        0.4361549858003855,
+        0.3896521870046854,
+        0.43758959509432316
+      ],
+      "prepared_update_invoke_read_median_ms": 0.43758959509432316,
+      "program_sha256": "12dc3c868ddfcc0fa40352cb2206e355049eebff2baa7249c608409f59b49bca",
+      "images_sha256": [
+        "8a98a4986e1425bbc2b61b58b7ef498951fc66225511a428913ef3596d10ceab"
+      ]
+    },
+    {
+      "mask": 15,
+      "transposeB": false,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9112962055951357,
+        0.8960114326328039,
+        0.8522536139935255,
+        0.8518567774444818,
+        0.8815918117761612
+      ],
+      "public_warm_median_ms": 0.8815918117761612,
+      "native_launch_window_samples_ms": [
+        0.019377900287508965,
+        0.01940390095114708,
+        0.019395899027585983,
+        0.01935194991528988,
+        0.019461899995803833
+      ],
+      "native_launch_window_median_ms": 0.019395899027585983,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4196231719106436,
+        0.38783662021160126,
+        0.4134136252105236,
+        0.41527501307427883,
+        0.4281776025891304
+      ],
+      "prepared_update_invoke_read_median_ms": 0.41527501307427883,
+      "program_sha256": "e09fd660d86aaf3a4857d6235c4bff4de9e30db7acc1bf835b060fe3f6b94d79",
+      "images_sha256": [
+        "bbc8396e414f6db562f33fe0375d5631781651120660e3d08c6a0779021b108a"
+      ]
+    },
+    {
+      "mask": 15,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "primal",
+      "max_abs_error": 7.382267053213099e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.8993516210466623,
+        0.9134124033153057,
+        0.8670879993587732,
+        0.925675593316555,
+        0.9010348003357649
+      ],
+      "public_warm_median_ms": 0.9010348003357649,
+      "native_launch_window_samples_ms": [
+        0.01976190134882927,
+        0.01973390020430088,
+        0.01970590092241764,
+        0.0196858998388052,
+        0.019805898889899254
+      ],
+      "native_launch_window_median_ms": 0.01973390020430088,
+      "prepared_update_invoke_read_samples_ms": [
+        0.4432505927979946,
+        0.4150405991822481,
+        0.42644040659070015,
+        0.4116462077945471,
+        0.40456242859363556
+      ],
+      "prepared_update_invoke_read_median_ms": 0.4150405991822481,
+      "program_sha256": "afd2cbdd4f53f4441d23b75b9e6b6f3a8ef8c3490cffe5239649f65c130f67f8",
+      "images_sha256": [
+        "e0b452ef1b0436d65813ecce7cb4a7bc815d5efe64beb046eca6c78b2897a34f"
+      ]
+    },
+    {
+      "mask": 15,
+      "transposeB": true,
+      "encoded": true,
+      "kind": "primal",
+      "max_abs_error": 0.0,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        0.9578393772244453,
+        0.8577141910791397,
+        0.9017200209200382,
+        0.8780268020927906,
+        0.9176843799650669
+      ],
+      "public_warm_median_ms": 0.9017200209200382,
+      "native_launch_window_samples_ms": [
+        0.018807899206876755,
+        0.018813900649547577,
+        0.018863899633288383,
+        0.018835898488759995,
+        0.01877789944410324
+      ],
+      "native_launch_window_median_ms": 0.018813900649547577,
+      "prepared_update_invoke_read_samples_ms": [
+        0.42519401758909225,
+        0.40558259934186935,
+        0.4292798228561878,
+        0.42040301486849785,
+        0.4008074291050434
+      ],
+      "prepared_update_invoke_read_median_ms": 0.42040301486849785,
+      "program_sha256": "1ccf1edc9e79a1a026a5fcb329484b17a997ba88a111d3da100fbf4f7d5f3921",
+      "images_sha256": [
+        "38270a84a83bcae61ca1659c136af15036bdeab0ed08c2b70e1a7db6fada1731"
+      ]
+    },
+    {
+      "mask": 1,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 7.223396125688453e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5008823946118355,
+        1.6087984200567007,
+        1.4676408376544714,
+        1.575541216880083,
+        1.4936646446585655
+      ],
+      "public_warm_median_ms": 1.5008823946118355,
+      "native_launch_window_samples_ms": [
+        0.06155375391244888,
+        0.06084369868040085,
+        0.06000570207834244,
+        0.060987699776887894,
+        0.06097574904561043
+      ],
+      "native_launch_window_median_ms": 0.06097574904561043,
+      "prepared_update_invoke_read_samples_ms": [
+        0.8155519608408213,
+        0.7326009683310986,
+        0.8506543934345245,
+        0.7853579707443714,
+        0.8154913783073425
+      ],
+      "prepared_update_invoke_read_median_ms": 0.8154913783073425,
+      "program_sha256": "b45613afcb0aa73c34a8d8fb5db026a6aa38a787df02581d0f1c06e849b68ad5",
+      "images_sha256": [
+        "018a1493d4fc077a462311357b038759a1bd8069e14ce67687ab33b6701a479c",
+        "25f6175f5baa1c4b1858da0f5dc68d6c1781e2ad35b8d442e850db9d999e3780",
+        "ca44f3779b4297a7c2b765ba3eba9749873c172aba9cb4377a209c9e5d63b54d",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 1,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 7.589375528027631e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.3974207919090986,
+        1.4781489968299866,
+        1.4397875871509314,
+        1.4231858309358358,
+        1.4568483922630548
+      ],
+      "public_warm_median_ms": 1.4397875871509314,
+      "native_launch_window_samples_ms": [
+        0.056513696908950806,
+        0.05673519894480705,
+        0.056703198701143265,
+        0.05665569752454758,
+        0.05667619779706001
+      ],
+      "native_launch_window_median_ms": 0.05667619779706001,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5768295843154192,
+        0.6139705888926983,
+        0.6236849818378687,
+        0.6374233867973089,
+        0.6919953972101212
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6236849818378687,
+      "program_sha256": "423bfa23f4a03800ae27d7d509eb0ec33eac8cfb38457ba2075ff7c2f66519cf",
+      "images_sha256": [
+        "befc0287b4d9f32514ed368810a6a669593821e6b707f0701228de177bb91ff8",
+        "862a24370bd3a6adf14000c23851163390dc0d93cd606445a4f0f7586f0da6a4",
+        "da7fa28163d6a03194c4bcc2f41625c9512ea4936ec9e1b90310572a294b83be",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 2,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 9.435448489192311e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.6385111957788467,
+        1.48245501331985,
+        1.484977826476097,
+        1.4694144017994404,
+        1.5317993704229593
+      ],
+      "public_warm_median_ms": 1.484977826476097,
+      "native_launch_window_samples_ms": [
+        0.05993170291185379,
+        0.060250699520111084,
+        0.059913747012615204,
+        0.05892174690961838,
+        0.05988575145602226
+      ],
+      "native_launch_window_median_ms": 0.059913747012615204,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5816207733005285,
+        0.6417036056518555,
+        0.6577301770448685,
+        0.628241803497076,
+        0.6238332018256187
+      ],
+      "prepared_update_invoke_read_median_ms": 0.628241803497076,
+      "program_sha256": "8665daf4b4f82167e41c2f78e4b89667c7e91acc67e2c6d60ba08aa4d6249144",
+      "images_sha256": [
+        "78b4bf127b94b5bc52bdd7ded9fb22ed3a79cecdb6ededddbd09103d9b08597a",
+        "153da975e2c0b1c8a3ea16a098a9908a58b9e1a759f1c5a56842a20977236c7c",
+        "5d507a288b5a925232479e671cfaa933a554596e1b1c8ae4dfdd5060d9059782",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 2,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.3834284051661427e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.714639412239194,
+        1.7880907747894526,
+        1.4697588048875332,
+        1.4509291853755713,
+        1.4690173789858818
+      ],
+      "public_warm_median_ms": 1.4697588048875332,
+      "native_launch_window_samples_ms": [
+        0.05710174888372421,
+        0.05688275024294853,
+        0.0565437488257885,
+        0.05548974871635437,
+        0.056499749422073364
+      ],
+      "native_launch_window_median_ms": 0.0565437488257885,
+      "prepared_update_invoke_read_samples_ms": [
+        0.602416368201375,
+        0.6300472188740969,
+        0.6101894192397594,
+        0.6446129642426968,
+        0.6616638042032719
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6300472188740969,
+      "program_sha256": "aa68d84780016faaa57d44349865da0b37d0aae95ef4914880c8d4ff73692a66",
+      "images_sha256": [
+        "7f46d17179ed8e45242704ed4c0f67deee9a22c26551d4d774dfda68b104fe31",
+        "b5526c90286d12395205053842597414182f01b0e1ed1a17ee5c99315fb6102a",
+        "f4769f3361cc627126aea434b13dc62eab8010d4f6ab8a8856e2aebd028ea954",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 3,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.2754693723415755e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.6069747973233461,
+        1.5295471996068954,
+        1.5726553741842508,
+        1.618402637541294,
+        1.6665288247168064
+      ],
+      "public_warm_median_ms": 1.6069747973233461,
+      "native_launch_window_samples_ms": [
+        0.05998520180583,
+        0.05946074798703194,
+        0.058467697352170944,
+        0.058453697711229324,
+        0.059433698654174805
+      ],
+      "native_launch_window_median_ms": 0.059433698654174805,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6721595767885447,
+        0.6646533962339163,
+        0.6399542093276978,
+        0.6677151657640934,
+        0.6635251920670271
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6646533962339163,
+      "program_sha256": "ce3c465e2be96c86dad6ee1f285f2577962ffcdf72bee771b13206e53012623c",
+      "images_sha256": [
+        "44ebc17759fb689ddc607480b1083d2c726838f0a10cbf582d16e38dcf1d2207",
+        "ee51319df97996d7768864e2756991687a530c1636489c64ddd986b5e69c977d",
+        "083d897363d2c11d94effd980943d9c749712db4b566578e581effb30a249d60",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 3,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 8.418267338772267e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4978446066379547,
+        1.5350835863500834,
+        1.5187385957688093,
+        1.5171494334936142,
+        1.5413996297866106
+      ],
+      "public_warm_median_ms": 1.5187385957688093,
+      "native_launch_window_samples_ms": [
+        0.058326251804828644,
+        0.05732575058937073,
+        0.057413749396800995,
+        0.05850224941968918,
+        0.05730374902486801
+      ],
+      "native_launch_window_median_ms": 0.057413749396800995,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6213505752384663,
+        0.6369141861796379,
+        0.6307425908744335,
+        0.6163811776787043,
+        0.6350107956677675
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6307425908744335,
+      "program_sha256": "d3786a15b6d8c89259b290de023796d4752cec8b580fa18418851706c63d1f29",
+      "images_sha256": [
+        "e429f7d67272bf2ed7cc525b6aeb7ca7884133983f33c5570dc199b3f377ca8c",
+        "59f7e3641c8a3cd25dbb2d202c8a5614e558c5b3c32a29108fb1da726d93bf95",
+        "0a46a6675b8caaf522ff3dbcb1ee96ecee15b281b4ef9d7655a1f2c8afe11ba5",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 4,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.9676266838075662e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.536846999078989,
+        1.4850400388240814,
+        1.542311580851674,
+        1.8161424435675144,
+        1.5838226303458214
+      ],
+      "public_warm_median_ms": 1.542311580851674,
+      "native_launch_window_samples_ms": [
+        0.03891735151410103,
+        0.03565584868192673,
+        0.03878135234117508,
+        0.03871079906821251,
+        0.03569180145859718
+      ],
+      "native_launch_window_median_ms": 0.03871079906821251,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5791361909359694,
+        0.5880007985979319,
+        0.5801881663501263,
+        0.5830234382301569,
+        0.5872194189578295
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5830234382301569,
+      "program_sha256": "3ddb346a0913033d2c67c189e098fc7ec4e185aa6809f67443b455ac9baf1f80",
+      "images_sha256": [
+        "2aae481016195b552d3aa301fde32a3617a12cb705110204ccedd3bb0ab46a92",
+        "0e2bfc5ef72bb82545ce775ffff3432cb8c166dacc5f454c2eb51f0e77840dc5",
+        "430dbcd18862f4e33a11c40581911a545057b622805e2d49d6e0f3f3ef390dc6",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 4,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 5.139148995247922e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4929711818695068,
+        1.4795655850321054,
+        1.4876771718263626,
+        1.4200720004737377,
+        1.3963670004159212
+      ],
+      "public_warm_median_ms": 1.4795655850321054,
+      "native_launch_window_samples_ms": [
+        0.060907699167728424,
+        0.05752374976873398,
+        0.05856974795460701,
+        0.0584556981921196,
+        0.05878869816660881
+      ],
+      "native_launch_window_median_ms": 0.05856974795460701,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5756273865699768,
+        0.5641655996441841,
+        0.5744869820773602,
+        0.595573429018259,
+        0.5740061867982149
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5744869820773602,
+      "program_sha256": "a71dfc4631b3e0588950f8a29e8a33bc0dfb819331957b706ee94ac00838d0c8",
+      "images_sha256": [
+        "94ab84b9be820d4cdf6959f161477f56683b001482a2eae8c23a0364b1f4a0ca",
+        "b9f283fdb5efe872c36e42bd2f9e4c280b1aaa027c8ae94c27d4e6951a45bd99",
+        "d1c99e45940c3c6b6f416d7389a7d5fa7280e6d310817aaa19c6c3ce0273bbb6",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 5,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.0500835911919637e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.528593199327588,
+        1.4942395966500044,
+        1.5239063650369644,
+        1.468686806038022,
+        1.4977283775806427
+      ],
+      "public_warm_median_ms": 1.4977283775806427,
+      "native_launch_window_samples_ms": [
+        0.061097800731658936,
+        0.06172580271959305,
+        0.06102979928255081,
+        0.06194180250167847,
+        0.06169375032186508
+      ],
+      "native_launch_window_median_ms": 0.06169375032186508,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5655120126903057,
+        0.5638148169964552,
+        0.589433591812849,
+        0.590962590649724,
+        0.5950502119958401
+      ],
+      "prepared_update_invoke_read_median_ms": 0.589433591812849,
+      "program_sha256": "547a534e6ba5cfeb524fdc9fb58b29a00226af5d8bcafcf46bc70ef915d544e2",
+      "images_sha256": [
+        "81c2755c5a6f2e9a3d3697e0d63f10272d552833029c82eb547e825cd937dac9",
+        "9ed370c29f4a8a28a3e8ca5d7d8da47ed9637784e14625f2c3e5145702845644",
+        "3a6a94cd9e89a5b7ce1996c57e5e7ae02ed2784fb6cb10c7fbd355d6d5fbb91c",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 5,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 6.137519736881814e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.460234820842743,
+        1.425251830369234,
+        1.473291777074337,
+        1.4979608356952667,
+        1.4855029992759228
+      ],
+      "public_warm_median_ms": 1.473291777074337,
+      "native_launch_window_samples_ms": [
+        0.05858974903821945,
+        0.059668250381946564,
+        0.05988774821162224,
+        0.05960620194673538,
+        0.0597212016582489
+      ],
+      "native_launch_window_median_ms": 0.059668250381946564,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6368482019752264,
+        0.6848579738289118,
+        0.6658195983618498,
+        0.6500273942947388,
+        0.640639616176486
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6500273942947388,
+      "program_sha256": "6c496d2e4687e928acd2a629d22953e9f51bac4c1a8cccd7a2797b15eb530879",
+      "images_sha256": [
+        "3e8d55ef45e7d57e04b6af69f53216ed54dbebf2c2a7651396cbf094a959d7e2",
+        "436b1eae00560ae7ff4b03975005b540693b4a27716d9c1c93ccc6d9d2a9440e",
+        "d6f457a6fe1543a2a68045fe808679badf78d1c2495d88e65ec1892e9aac2406",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 6,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 6.75876670186426e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5764305833727121,
+        1.6573372296988964,
+        1.521157007664442,
+        1.5538673847913742,
+        1.5262587927281857
+      ],
+      "public_warm_median_ms": 1.5538673847913742,
+      "native_launch_window_samples_ms": [
+        0.06003574654459953,
+        0.059794701635837555,
+        0.059772245585918427,
+        0.05958769842982292,
+        0.05865975096821785
+      ],
+      "native_launch_window_median_ms": 0.059772245585918427,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6868297699838877,
+        0.6518007721751928,
+        0.667719217017293,
+        0.6670159753412008,
+        0.6618797779083252
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6670159753412008,
+      "program_sha256": "aecbaa4220c4e30d4f381f5af5c35ef22e04e76b4fc61e2f1f7a291587cbabf2",
+      "images_sha256": [
+        "02fd29c27eaa9fb4b56f5e409d0cab8d3114617bf6ead118ae3581745b5c0bf3",
+        "810c93a3f70359282d30730cea534dd22bccbf43a47a15e386ad2d955575451d",
+        "2bf7e73b23614c0954161dd6e57c3eebc5e7462ab5f643ab6f4ef55cf99726c2",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 6,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.0917517512254449e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.414655800908804,
+        1.4381424058228731,
+        1.4863206073641777,
+        1.4728690031915903,
+        1.425953209400177
+      ],
+      "public_warm_median_ms": 1.4381424058228731,
+      "native_launch_window_samples_ms": [
+        0.056985802948474884,
+        0.057937800884246826,
+        0.056923747062683105,
+        0.05804380029439926,
+        0.056877799332141876
+      ],
+      "native_launch_window_median_ms": 0.056985802948474884,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5774830002337694,
+        0.5849369801580906,
+        0.575661426410079,
+        0.6020720116794109,
+        0.5960000213235617
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5849369801580906,
+      "program_sha256": "52c025f0f76fe2b8a89532a5f421913b00587cd2398bb18d172fdd32128809cb",
+      "images_sha256": [
+        "4e2d1db5951e964db721dbb45d74ffa2f51afd67532b57457583e8fec10d3eda",
+        "706e04c7808f523e9d1f5e34da7534e081113c3c282753b4573e7750bb1a4fae",
+        "5fd1e392741dac1b7c9a2349c355f8adfb7e924a6329bf8a47f39b9b61a3e484",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 7,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.0720735943436921e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5595504082739353,
+        1.4259571675211191,
+        1.5290763694792986,
+        1.5631171874701977,
+        1.5894495882093906
+      ],
+      "public_warm_median_ms": 1.5595504082739353,
+      "native_launch_window_samples_ms": [
+        0.06034625321626663,
+        0.05851774662733078,
+        0.0596577525138855,
+        0.05941374972462654,
+        0.059095751494169235
+      ],
+      "native_launch_window_median_ms": 0.05941374972462654,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5765029694885015,
+        0.6114137824624777,
+        0.6062356289476156,
+        0.611249404028058,
+        0.6134095601737499
+      ],
+      "prepared_update_invoke_read_median_ms": 0.611249404028058,
+      "program_sha256": "cb92d5e361fb2029f9aaa9678d25eb29a3b1a676dd33f82e973752a2d609473a",
+      "images_sha256": [
+        "f4c723f7cf8dfb15b77bca00a135cf2f4c9cccac39c1f8a9bb7ab2e0e8ee291f",
+        "3eb90e9a36f4a978414771f6c1db797574892aa06b9e56dfcc7c9d92b27325a2",
+        "273d6b6558a3d5b076b2a7b8d74371ca87c757aa2b0c9afaff858c0d1946485e",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 7,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.3635709295023446e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4865547884255648,
+        1.4641562011092901,
+        1.455896394327283,
+        1.443204190582037,
+        1.47682661190629
+      ],
+      "public_warm_median_ms": 1.4641562011092901,
+      "native_launch_window_samples_ms": [
+        0.05808975175023079,
+        0.057583700865507126,
+        0.057375747710466385,
+        0.0565357506275177,
+        0.05753974989056587
+      ],
+      "native_launch_window_median_ms": 0.05753974989056587,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5777733866125345,
+        0.6049896124750376,
+        0.5850751884281635,
+        0.5723749753087759,
+        0.6180683616548777
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5850751884281635,
+      "program_sha256": "079942e298aa6c91b7f86286107fd50a0debc7dbfc45e0b6d246d77645598aa8",
+      "images_sha256": [
+        "1f5f63dcb5c90b0dc1b8268cd0cae041eedd8bdddcecc775cea31d4bdb064efe",
+        "b58a9620b4598e33d3c5ffaa2e31e1cc2427b39392f5a7abbdcee5e11bc6a30a",
+        "70bd8f25408236093006908f3d7022618b3fe64063f383e9ea0f613dfaf3bf79",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 8,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.7130479612603722e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.485414756461978,
+        1.556302374228835,
+        1.4999606180936098,
+        1.5121900010854006,
+        1.7016258090734482
+      ],
+      "public_warm_median_ms": 1.5121900010854006,
+      "native_launch_window_samples_ms": [
+        0.05975375324487686,
+        0.05940970033407211,
+        0.06038974970579147,
+        0.06047769635915756,
+        0.0604577474296093
+      ],
+      "native_launch_window_median_ms": 0.06038974970579147,
+      "prepared_update_invoke_read_samples_ms": [
+        0.9039803873747587,
+        0.7528538350015879,
+        0.5689626093953848,
+        0.6255125626921654,
+        0.5867244210094213
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6255125626921654,
+      "program_sha256": "ede9f80697a6797b537225d26e9d85982dd0d087f5ff297a2a8b04abf2b22ee5",
+      "images_sha256": [
+        "82a381651b91f71d8a8b38f581ad80315add15ebf6bcf0a7f2e33027c149eb60",
+        "6e1d21627915a8846ba33bbeb56c01c7b32a786200c79587a3726e2e9a359784",
+        "5a865e5d79a53377b6293cb2de3b4f9e8f75b5943db8e4453db674f59cffe597",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 8,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 8.29150358372388e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4152729883790016,
+        1.5059258323162794,
+        1.4278287999331951,
+        1.428405987098813,
+        1.4776640105992556
+      ],
+      "public_warm_median_ms": 1.428405987098813,
+      "native_launch_window_samples_ms": [
+        0.058928750455379486,
+        0.0583076998591423,
+        0.058431752026081085,
+        0.05737174674868584,
+        0.05731769651174545
+      ],
+      "native_launch_window_median_ms": 0.0583076998591423,
+      "prepared_update_invoke_read_samples_ms": [
+        0.593613600358367,
+        0.558386417105794,
+        0.5705316085368395,
+        0.6060173735022545,
+        0.5923732183873653
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5923732183873653,
+      "program_sha256": "a083f6d74fa2eb2ab37303af7e49741767376796642a8a8a193b31b2b2dba5c2",
+      "images_sha256": [
+        "e3580d82a3ea993fafe97cb459319df9c04a7b2939861ed68110e248169230fe",
+        "8f2e82fb447aa8c23bff58d9bb1a00639eabe166ecae5fecc70d005f5d0c205c",
+        "2484720d66a62446b30caec23d35d8541029e452300edb8894e1713375e48ba7",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 9,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 9.438169978892574e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5389732085168362,
+        1.6049231868237257,
+        1.514977402985096,
+        1.6160004306584597,
+        1.5458523761481047
+      ],
+      "public_warm_median_ms": 1.5458523761481047,
+      "native_launch_window_samples_ms": [
+        0.06287019699811935,
+        0.061195749789476395,
+        0.06122570112347603,
+        0.06235774606466293,
+        0.06220174953341484
+      ],
+      "native_launch_window_median_ms": 0.06220174953341484,
+      "prepared_update_invoke_read_samples_ms": [
+        0.636565824970603,
+        0.6501296069473028,
+        0.6697872187942266,
+        0.6618400104343891,
+        0.6594134029000998
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6594134029000998,
+      "program_sha256": "8067950042b0eceb3db29a7c50c439d95e70daaed0a5e2f8d96a8c0aa0fcc02d",
+      "images_sha256": [
+        "e3c3747d3db3246b270ff304d002eb53d68aa8dd18d2f997ba922cee72698d05",
+        "76c9bea439fa386b96daf92d7f3fec33ba3ecaa0e78d665ff79c71eb899422c4",
+        "93c796052d1b44a7407d8b543fecab807d1b469b386efef99012972b4bc09424",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 9,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 6.884257164330165e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.583509799093008,
+        1.6900542192161083,
+        1.49573078379035,
+        1.4727807603776455,
+        1.4083073940128088
+      ],
+      "public_warm_median_ms": 1.49573078379035,
+      "native_launch_window_samples_ms": [
+        0.05794075131416321,
+        0.05710174888372421,
+        0.05755374953150749,
+        0.05656775087118149,
+        0.05707575008273125
+      ],
+      "native_launch_window_median_ms": 0.05710174888372421,
+      "prepared_update_invoke_read_samples_ms": [
+        0.7980884052813053,
+        0.7957598194479942,
+        0.7752892095595598,
+        0.6161188241094351,
+        0.6050356198102236
+      ],
+      "prepared_update_invoke_read_median_ms": 0.7752892095595598,
+      "program_sha256": "ab5dded2e3f7f29bb078351357df89b52ad50acabfbeab978b14d217ac930b7a",
+      "images_sha256": [
+        "029f5cee41a150fa6b3f5365999cef260372061373a43df7d3de9393662c0393",
+        "6a6c1fe83e65ea613c7e6d3a1b8d715a4d29278f9bad8ab7ddf6e0ffe2d54e6a",
+        "ba37e57a0b6610b394c4b3861cb5868f1b2b6c68794c3db427ca9165177d7475",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 10,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 7.630055387508605e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4876351691782475,
+        1.4965862035751343,
+        1.499263383448124,
+        1.6554738394916058,
+        1.4748048037290573
+      ],
+      "public_warm_median_ms": 1.4965862035751343,
+      "native_launch_window_samples_ms": [
+        0.05993574857711792,
+        0.059449702501297,
+        0.059321701526641846,
+        0.05940374732017517,
+        0.05936170369386673
+      ],
+      "native_launch_window_median_ms": 0.05940374732017517,
+      "prepared_update_invoke_read_samples_ms": [
+        0.59840502217412,
+        0.6215088069438934,
+        0.619206391274929,
+        0.6315702106803656,
+        0.6054864265024662
+      ],
+      "prepared_update_invoke_read_median_ms": 0.619206391274929,
+      "program_sha256": "e98b16bdf921e92ce079c9ca3028879f8daedc99e8db52e916807ac5e10d4b57",
+      "images_sha256": [
+        "2518be180a04dece4a5ad0da988fcd14f3036cc04964d7536a856713b94b353f",
+        "94d8f60937621c18e89acf35f5d6779e16c62eb27f57fba3e34affedb0f6f397",
+        "62452c9a5aebea4e7918637ab23aacea57b2b071ebda4d844aed0a3f1edd15da",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 10,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 7.058649342805978e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5631493646651506,
+        1.4993396122008562,
+        1.6223423648625612,
+        1.5019404236227274,
+        1.5321382321417332
+      ],
+      "public_warm_median_ms": 1.5321382321417332,
+      "native_launch_window_samples_ms": [
+        0.05895419791340828,
+        0.058446746319532394,
+        0.05889274924993515,
+        0.05732569843530655,
+        0.057287752628326416
+      ],
+      "native_launch_window_median_ms": 0.058446746319532394,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6626718211919069,
+        0.6578263826668262,
+        0.6531334016472101,
+        0.6385216023772955,
+        0.6738148164004087
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6578263826668262,
+      "program_sha256": "f7c1db42b695358e174c44fcd1e29f80c3dd4204a997a56c51eb4515ee20df96",
+      "images_sha256": [
+        "18b4af70427abe934f2702357118c3ab2d0262eeb0999fe5b35f4540697d85a7",
+        "3e1694f6d92a90f97bb131e8bf5d53120b4076c089af2de2837be8fb4bb43947",
+        "632032a5b28bb93df07358e3572c06eac1a3551be464012aebe28f4654522856",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 11,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 1.296049843002578e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5332161914557219,
+        1.5900347847491503,
+        1.5446742065250874,
+        1.6280634328722954,
+        1.5955051872879267
+      ],
+      "public_warm_median_ms": 1.5900347847491503,
+      "native_launch_window_samples_ms": [
+        0.05916975066065788,
+        0.05843370035290718,
+        0.05949925258755684,
+        0.058946751058101654,
+        0.05882570147514343
+      ],
+      "native_launch_window_median_ms": 0.058946751058101654,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6525503937155008,
+        0.6374973803758621,
+        0.6378001999109983,
+        0.6873185746371746,
+        0.6480095908045769
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6480095908045769,
+      "program_sha256": "39bf16a180de8301340dd1288748849a7d97152683e36ca5978cd7563a6c61b8",
+      "images_sha256": [
+        "3ea58ee2bc35bb891d28c15d48a87089de03d3988b5c3e1fb68b12f81140af0c",
+        "62ea9a414f9256cb74bcfadc27c5c4ce5c835550e9a3fa495657abbbac7a8dee",
+        "f426fa12f58b2c782bf11416b2f993774a47cd2512af5274b50a721ef69d68d2",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 11,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 8.393324302247152e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5056355856359005,
+        1.4362870249897242,
+        1.5033409930765629,
+        1.4428937807679176,
+        1.4460538048297167
+      ],
+      "public_warm_median_ms": 1.4460538048297167,
+      "native_launch_window_samples_ms": [
+        0.05801774933934212,
+        0.05846074968576431,
+        0.057685695588588715,
+        0.05814870074391365,
+        0.058024752885103226
+      ],
+      "native_launch_window_median_ms": 0.058024752885103226,
+      "prepared_update_invoke_read_samples_ms": [
+        0.8078007958829403,
+        0.7358553819358349,
+        0.7938656024634838,
+        0.7856144104152918,
+        0.8378682192414999
+      ],
+      "prepared_update_invoke_read_median_ms": 0.7938656024634838,
+      "program_sha256": "ab49b23de26d89a448f41c58890df8fdad9d112063941e45a84e640f5eaab93e",
+      "images_sha256": [
+        "2466660ecb7ce3a222f08c5b61b8d77dac038a5b30b95a7ff847aa23ab083a02",
+        "344002d81c9db12dc8858137f6aae03def723eb51ead93e1ad94b1bc9834b986",
+        "09e4132846d849b680b2e02cb38da597cb59c3e8d879034a54d3418938b16bad",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 12,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 2.7016246173516834e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.568760210648179,
+        1.5863658394664526,
+        1.5684033744037151,
+        1.4818599913269281,
+        1.6367739997804165
+      ],
+      "public_warm_median_ms": 1.568760210648179,
+      "native_launch_window_samples_ms": [
+        0.06288369745016098,
+        0.062367700040340424,
+        0.06247770041227341,
+        0.06347820162773132,
+        0.06090974807739258
+      ],
+      "native_launch_window_median_ms": 0.06247770041227341,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6015288177877665,
+        0.6425632163882256,
+        0.6331312004476786,
+        0.8240377996116877,
+        1.0028412099927664
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6425632163882256,
+      "program_sha256": "37b1998e07bc106cf64c2db71d2d29f85d3c904ab990c6cac1e7e89701dc2904",
+      "images_sha256": [
+        "e2ca2e67595b079083963c692d90ccaa75c1289bdc39ea7927df5a78affa2b30",
+        "78f7c62eefda56eeff02104d445cc4163c54dea484a90c76ff7d266b2bff2fcb",
+        "f30349b41db44d4a847232f1ae0cf2e77057bdd44092791ad8016dfc4a869d2f",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 12,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 8.68512237683916e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4275163877755404,
+        1.4877234119921923,
+        1.4728530310094357,
+        1.4673723839223385,
+        1.5003633685410023
+      ],
+      "public_warm_median_ms": 1.4728530310094357,
+      "native_launch_window_samples_ms": [
+        0.05524175241589546,
+        0.05631574988365173,
+        0.05615975335240364,
+        0.056203752756118774,
+        0.056235700845718384
+      ],
+      "native_launch_window_median_ms": 0.056203752756118774,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5696740001440048,
+        0.6293497979640961,
+        0.5875542294234037,
+        0.6157079711556435,
+        0.648466357961297
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6157079711556435,
+      "program_sha256": "64c10530d9d6177cd8a42f728ec13fed15f35abd7a95180040139296604f2513",
+      "images_sha256": [
+        "6c03c687c4dcad6137ed3535e2736c6f8299f6d872245b9a817e46b5f0694c20",
+        "333611fc0e4d96ee05f233263c1ecf686c412837ca8cedd61d14e54a8fdfd746",
+        "c14b5a74c7e6c6a73418b401075a24e35b92c6d909ac09d4ecb838ab4b02b81f",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 13,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 8.140438068071632e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5932710375636816,
+        1.5473391860723495,
+        1.578564802184701,
+        1.5486335847526789,
+        1.567613985389471
+      ],
+      "public_warm_median_ms": 1.567613985389471,
+      "native_launch_window_samples_ms": [
+        0.060726750642061234,
+        0.06027374789118767,
+        0.06026570126414299,
+        0.05985569953918457,
+        0.05987774580717087
+      ],
+      "native_launch_window_median_ms": 0.06026570126414299,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5754310172051191,
+        0.583434198051691,
+        0.5610493943095207,
+        0.5553728435188532,
+        0.5808231886476278
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5754310172051191,
+      "program_sha256": "13c911869447cc4a5c8b5c3b11bacff4fcfa3b27a2ff914c2a598a0e2bc32679",
+      "images_sha256": [
+        "0189d4ab486350976bda986268ebd32f689f6ba0e2d88ddc9e9c645cfd44e44b",
+        "58b1d644176238a1741fd4ffb16c8856c14b3ef80021cc93a471eb787cd38b43",
+        "1a7d611df686d29c9b042002c16efadf9d686f7b32c04b0a1f25140d267d0f94",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 13,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 8.892289216078098e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.421773387119174,
+        1.5060184057801962,
+        1.468354370445013,
+        1.4545320067554712,
+        1.486154180020094
+      ],
+      "public_warm_median_ms": 1.468354370445013,
+      "native_launch_window_samples_ms": [
+        0.05744575336575508,
+        0.057357750833034515,
+        0.05734174698591232,
+        0.05701775103807449,
+        0.057854700833559036
+      ],
+      "native_launch_window_median_ms": 0.057357750833034515,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5610316060483456,
+        0.5747695919126272,
+        0.5819433834403753,
+        0.5753147881478071,
+        0.575849786400795
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5753147881478071,
+      "program_sha256": "662a846d097c690cb4208ae6b6cc9e9d08dea503daeec894acb3ed7603f4d96d",
+      "images_sha256": [
+        "815b9486988212f919a69ecdb73493e2e0df2ed44ad4f3f2c73c18bdd0d1b5c7",
+        "c14f5b562cdd2bb092d22869b5d06d8be0d5ecc83a5998e6ace1c799cf6fa8b0",
+        "13b357795bb596b1315fe53bffa9701d0d2de0842c1806a201076aec32ae2a05",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 14,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 2.0753832119524418e-07,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.5362140256911516,
+        1.450141565874219,
+        1.5551541931927204,
+        1.6200379934161901,
+        1.4988165814429522
+      ],
+      "public_warm_median_ms": 1.5362140256911516,
+      "native_launch_window_samples_ms": [
+        0.05992574617266655,
+        0.060559749603271484,
+        0.05966375023126602,
+        0.06080775335431099,
+        0.06061970070004463
+      ],
+      "native_launch_window_median_ms": 0.060559749603271484,
+      "prepared_update_invoke_read_samples_ms": [
+        0.6174072157591581,
+        0.5763006396591663,
+        0.5978618282824755,
+        0.6030577700585127,
+        0.6094640120863914
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6030577700585127,
+      "program_sha256": "17b23f9f461e6fa236527c465c0616f63446590ed616ba50bfd2d8c296321579",
+      "images_sha256": [
+        "00f52166de02d2fe5297ec0ef78a58ce767baf9b7ed945e5954130f8c07933d7",
+        "7980916bb7507f16365d37be77c0461dd59bde00320736c13dfe4751764dde92",
+        "d4a20b755ae2d55bebe71ecf4e0cff6eb4646ff2774a64e4a837faafef0c191e",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 14,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 6.725961010367598e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4172305818647146,
+        1.4182988088577986,
+        1.3732646126300097,
+        1.4195632189512253,
+        1.4015967957675457
+      ],
+      "public_warm_median_ms": 1.4172305818647146,
+      "native_launch_window_samples_ms": [
+        0.03584334999322891,
+        0.034796349704265594,
+        0.033733852207660675,
+        0.03369084745645523,
+        0.032343849539756775
+      ],
+      "native_launch_window_median_ms": 0.033733852207660675,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5206161644309759,
+        0.547786196693778,
+        0.5455879960209131,
+        0.4887394141405821,
+        0.5486458074301481
+      ],
+      "prepared_update_invoke_read_median_ms": 0.5455879960209131,
+      "program_sha256": "2e3a512a999dcae13344831807408f6df6026cc40ada11b9d43f760237227c80",
+      "images_sha256": [
+        "4ea3276fac025cb44b6d4acbf8aacf5e87d958568c4a3f4b590758012e9effa5",
+        "2b2e3607084f9aa4056edc963e328b0c93a4d9b2514a0362594a601540a7ea47",
+        "9d47152d62474bc56e5544c170c971f11da845028c3c1616c6dfe88d9599c113",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 15,
+      "transposeB": false,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 8.775273574457287e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4774175826460123,
+        1.5468564350157976,
+        1.5371855814009905,
+        1.499128993600607,
+        1.4941977802664042
+      ],
+      "public_warm_median_ms": 1.499128993600607,
+      "native_launch_window_samples_ms": [
+        0.06018124893307686,
+        0.05975174903869629,
+        0.06034719944000244,
+        0.059477753937244415,
+        0.05939774960279465
+      ],
+      "native_launch_window_median_ms": 0.05975174903869629,
+      "prepared_update_invoke_read_samples_ms": [
+        0.5975591950118542,
+        0.5794268101453781,
+        0.6280975881963968,
+        0.6240337621420622,
+        0.6366075947880745
+      ],
+      "prepared_update_invoke_read_median_ms": 0.6240337621420622,
+      "program_sha256": "cd4ae1af4e7f0ea51fa333009feeb2c87dd98e573f9510608c8b0031f75f07aa",
+      "images_sha256": [
+        "8244408e5de4fd105822d59521b629827b0a2935dba8d6a2197c6d35271a02bb",
+        "c12c0e7f9573ed354ee2938e89ff2dd579f50023b8e1676191435a07fb425f5e",
+        "5db54c77bed375df29ee1a73fc7d24696731d67d9d635587ba9efe359bb823ea",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    },
+    {
+      "mask": 15,
+      "transposeB": true,
+      "encoded": false,
+      "kind": "paired_jvp",
+      "max_abs_error": 7.835586657289895e-08,
+      "compiler_free_changed_input_replay": true,
+      "stale_generation": "rejected",
+      "public_warm_samples_ms": [
+        1.4840802177786827,
+        1.5160673763602972,
+        1.5304349828511477,
+        1.4850521925836802,
+        1.5497637912631035
+      ],
+      "public_warm_median_ms": 1.5160673763602972,
+      "native_launch_window_samples_ms": [
+        0.05827375128865242,
+        0.05760575085878372,
+        0.059661753475666046,
+        0.05869374796748161,
+        0.058685749769210815
+      ],
+      "native_launch_window_median_ms": 0.058685749769210815,
+      "prepared_update_invoke_read_samples_ms": [
+        0.7888223975896835,
+        0.7742913905531168,
+        0.7217586040496826,
+        0.7063529919832945,
+        0.7593220099806786
+      ],
+      "prepared_update_invoke_read_median_ms": 0.7593220099806786,
+      "program_sha256": "99315fdfd96927a5eedeab8f1c8faec26311a952b9675ae2530c101137f492d8",
+      "images_sha256": [
+        "6047f3dcabc5b61822402554504dd2746f6347c36b6638ba613fc6feecf5dd44",
+        "7663dccdbac37ce3b5cd16f80951e71527e1c001b34cb70ad770a0116ed8fe07",
+        "949941c5ad27544e024fdd1cf426dab8c58fd076ac928f07ab24498837af6e46",
+        "b492861cadd067a6d2795a3ff5fede2d68b20b50ef1317b6ee8a3f9cdacf71e5"
+      ]
+    }
+  ]
+}

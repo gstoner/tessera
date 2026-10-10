@@ -1,0 +1,1 @@
+144 generated-stage rows (72 forward, 72 backward), 720 event + 720 end-to-end numerical windows; source/compiler/runtime hashes verified.

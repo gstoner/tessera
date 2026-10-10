@@ -253,3 +253,23 @@ def test_via_tile_matches_the_production_lane_on_hardware(monkeypatch):
         assert float(np.max(np.abs(base["output"] - tiled["output"]))) == 0.0, (
             f"via-tile diverged from production at ragged shape {m}x{n}x{k}"
         )
+
+@pytest.mark.parametrize("architecture", ["gfx1151", "gfx1201"])
+def test_lds_target_directive_requires_portable_tile_abi(architecture):
+    pipeline = ROCMExecutablePipeline(
+        family="matmul", arch=architecture, input_level=ROCMInputLevel.DIRECTIVE,
+        staging="lds").pass_pipeline()
+    result = _run_opt(pipeline)
+    assert result.returncode != 0
+    assert "takes the portable Tile ABI" in result.stderr
+
+@pytest.mark.parametrize("attributes,message", [
+    ('split_k = 8 : i64, split_k_reduction = "ordered"', "requires positive problem_k"),
+    ('split_k = 8 : i64, split_k_reduction = "ordered", problem_k = 0 : i64', "requires positive problem_k"),
+    ('k_blocks = 0 : i64', "k_blocks must be positive"),
+])
+def test_target_matmul_rejects_missing_partition_or_macro_k(attributes,message):
+    source = _GEMM_DIRECTIVE.replace('dtype = "f16"', 'dtype = "f16", '+attributes)
+    result = _run_opt("builtin.module(canonicalize)",source)
+    assert result.returncode != 0
+    assert message in result.stderr

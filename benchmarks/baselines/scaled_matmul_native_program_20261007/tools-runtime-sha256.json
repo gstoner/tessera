@@ -1,0 +1,18 @@
+{
+  "TESSERA_OPT": {
+    "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+    "sha256": "d6740797ead39d2144c48dfc08683d08f23e4d2bc171e737ee1d65a18e953c7a"
+  },
+  "TESSERA_NVIDIA_OPT": {
+    "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+    "sha256": "fe331f0d3ea962bbd1c797b53ed76e9ca6533f2e2b9d96f4ef406cf01f2b942c"
+  },
+  "TESSERA_NVIDIA_PTX_LAUNCH_LIB": {
+    "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so",
+    "sha256": "d27db8b3ac6d34d58271b03b2d591347998310e355c79bd717232d587af51c10"
+  },
+  "TESSERA_NVIDIA_GEMM_LIB": {
+    "path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so",
+    "sha256": "102d6e95ba7c10575a59bd53317c7f2d03fa3330b7e97456cd02aed06b2fe40c"
+  }
+}

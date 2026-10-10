@@ -42,7 +42,7 @@ class InputDesc:
     param: Any  # Parameter | None — typed loosely to avoid import cycle
     array_id: int
     array: Any  # np.ndarray, or list[np.ndarray] for a sequence operand
-    is_literal: bool = False  # True for python-scalar operands (non-differentiable)
+    is_literal: bool = False  # Python scalar/opaque operands without array gradients.
     # Sequence operand (`cat`/`stack` take a *list* of arrays as ONE slot):
     # per-element descriptors so backward can fan the rule's list-valued
     # gradient out to each element's own producer link. `None` for ordinary
@@ -860,6 +860,13 @@ def _route_positional(name: str, original: Callable, args: tuple, vjp_fn: Callab
             # whose binding contract we cannot read — keep the legacy handling.
             if d is _NON_ARRAY:
                 forward_args.append(a)
+                if claimed:
+                    # An opaque operand claimed by the rule (for example a
+                    # DispatchPlan) must survive replay even though it has no
+                    # differentiable array buffer. Preserve its literal slot.
+                    array_descs.append(InputDesc(
+                        param=None, array_id=id(a), array=a, is_literal=True))
+                    groups.append(None)
             else:
                 forward_args.append(d.array)
                 array_descs.append(d)

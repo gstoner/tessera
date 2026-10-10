@@ -1,0 +1,1 @@
+PASS: 36 paired cases; source, both compiler and bridge fingerprints match current files.

@@ -1,0 +1,4848 @@
+{
+  "baseline_compiler_sha256": "400b7cf73cfc23431af60acc82a6e9a3bfc26f4bad34ee5d6d0798cec8c1f2b2",
+  "bridge_sha256": "b39bb672ebcaeed8263b3b38fadf719c1ee391ab678c3ddf930feccd9310c6cc",
+  "compiler_sha256": "ba81c547d71faac9eec6135653bbfce17b1f0eb139e33ff85fe4ef56266466d8",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "nvidia_opt_sha256": "cfd9b0c5c58239965e657ace244304053f9dae7cd050c8af20b6103fd0d9405e",
+  "rows": [
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.459854,
+        "baseline_serial": 0.490885,
+        "candidate_cooperative_128": 0.467863,
+        "candidate_serial": 0.478934
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.481814,
+          0.440772,
+          0.440072,
+          0.492625,
+          0.459854
+        ],
+        "baseline_serial": [
+          0.493135,
+          0.432872,
+          0.426441,
+          0.515456,
+          0.490885
+        ],
+        "candidate_cooperative_128": [
+          0.466614,
+          0.518576,
+          0.443612,
+          0.502295,
+          0.467863
+        ],
+        "candidate_serial": [
+          0.440552,
+          0.504855,
+          0.433022,
+          0.478934,
+          0.491225
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9836135748397826,
+        "serial": 0.9359722216425016
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "d28281555c48242fca81f963b7e23a40d7625f754cd15621a9e855ffc4af9457",
+        "baseline_serial": "5eae5b2338a3405f97c25f57510b27d56876607765345aa25ec32a0cc5e1a57e",
+        "candidate_cooperative_128": "abee481f897d6792a9a2888561652f21ea3c1c00e3b34aadfdc7daeb40dadd19",
+        "candidate_serial": "64eeb9a19ecf58dd1404fd57357dff3e9f13d415b83afa1732abcbedd1ef2168"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009546560235321522,
+        "baseline_serial": 0.009397760033607483,
+        "candidate_cooperative_128": 0.009705600328743458,
+        "candidate_serial": 0.010040639899671078
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009150399826467037,
+          0.009270720183849335,
+          0.009926400147378445,
+          0.010873599909245968,
+          0.009546560235321522
+        ],
+        "baseline_serial": [
+          0.009029760025441647,
+          0.00994080025702715,
+          0.009397760033607483,
+          0.01396447978913784,
+          0.009101119823753834
+        ],
+        "candidate_cooperative_128": [
+          0.009427839890122414,
+          0.009924160316586494,
+          0.009705600328743458,
+          0.009378240443766117,
+          0.01016863901168108
+        ],
+        "candidate_serial": [
+          0.008696000091731548,
+          0.01045151986181736,
+          0.01001023966819048,
+          0.010080959647893906,
+          0.010040639899671078
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "df6591052cb41a23884a286d087dcf7865da1a5f9adc96f04a96ea3e8622e4a5",
+        "baseline_serial": "a96fe1999dce6bbd2c5b5f50d0ff85e0adfb404f39a74c2fce4dd22ee1fa5ea6",
+        "candidate_cooperative_128": "df6591052cb41a23884a286d087dcf7865da1a5f9adc96f04a96ea3e8622e4a5",
+        "candidate_serial": "a96fe1999dce6bbd2c5b5f50d0ff85e0adfb404f39a74c2fce4dd22ee1fa5ea6"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.452552,
+        "baseline_serial": 0.448403,
+        "candidate_cooperative_128": 0.478974,
+        "candidate_serial": 0.469734
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.449133,
+          0.445233,
+          0.452552,
+          0.481885,
+          0.494695
+        ],
+        "baseline_serial": [
+          0.448403,
+          0.430942,
+          0.426482,
+          0.499785,
+          0.479014
+        ],
+        "candidate_cooperative_128": [
+          0.462023,
+          0.478974,
+          0.59051,
+          0.463753,
+          0.513576
+        ],
+        "candidate_serial": [
+          0.433072,
+          0.469734,
+          0.427112,
+          0.478194,
+          0.515986
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0677959909904158,
+        "serial": 0.9218644239682436
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "6033a9df6f0e0d2451b12f95a1fd3a3ac3ae34efdd8fc8d75a3cdf2cb523e252",
+        "baseline_serial": "23a68890f5d078ab3e1fda7613a09c0e9d775e1c78b1e62ce1131fca8f4fd1d0",
+        "candidate_cooperative_128": "66fe169d53827f2f9fa90f44a0cb1b14bf058e7b0b18a6ac94fc3282e77f7be8",
+        "candidate_serial": "2ade5d0d1ae0129e691d63551ca729b430ab9867be52b92525639ff1a525b3ee"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009500480256974697,
+        "baseline_serial": 0.009151679463684559,
+        "candidate_cooperative_128": 0.00889728032052517,
+        "candidate_serial": 0.009927359409630299
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008257600478827953,
+          0.009354880079627037,
+          0.009500480256974697,
+          0.009931200183928013,
+          0.009672319516539574
+        ],
+        "baseline_serial": [
+          0.010267200879752636,
+          0.008495359681546688,
+          0.009151679463684559,
+          0.010580799542367458,
+          0.008743680082261562
+        ],
+        "candidate_cooperative_128": [
+          0.009265599772334099,
+          0.008327039889991283,
+          0.00889728032052517,
+          0.009237440302968025,
+          0.008184319362044334
+        ],
+        "candidate_serial": [
+          0.010231039486825466,
+          0.009927359409630299,
+          0.008695360273122787,
+          0.010232320055365562,
+          0.009383040480315685
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "8b8a306a0bbd2a97c4b94369a2d24072661ce9d4ffe6543f7ab7316ba037dd86",
+        "baseline_serial": "715d41677006d1d7b6ed13a7f8c1645be268bc7343c0e6664c6cf6f404424780",
+        "candidate_cooperative_128": "8b8a306a0bbd2a97c4b94369a2d24072661ce9d4ffe6543f7ab7316ba037dd86",
+        "candidate_serial": "715d41677006d1d7b6ed13a7f8c1645be268bc7343c0e6664c6cf6f404424780"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.501255,
+        "baseline_serial": 0.546458,
+        "candidate_cooperative_128": 0.503096,
+        "candidate_serial": 0.559748
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.515806,
+          0.508106,
+          0.496645,
+          0.501255,
+          0.499195
+        ],
+        "baseline_serial": [
+          0.60138,
+          0.841042,
+          0.546458,
+          0.520316,
+          0.524437
+        ],
+        "candidate_cooperative_128": [
+          0.517586,
+          0.498285,
+          0.59862,
+          0.493505,
+          0.503096
+        ],
+        "candidate_serial": [
+          0.567668,
+          0.738217,
+          0.559408,
+          0.559748,
+          0.543538
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0367775789877784,
+        "serial": 0.8558929853162628
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "e025cc12cdb75fd6dc4614d24a3e2bec96132b317bd3f0060b345637b36a84b9",
+        "baseline_serial": "9a86db7d28d415c28d4232b6338d6ce4c7782452b8f5ab00463ca82f6ece599e",
+        "candidate_cooperative_128": "91e0df9238c317cc3946e3cba67ca2f510806a14b7d646143f4612cc2f25568b",
+        "candidate_serial": "2a6a4638a05608c81eb8e4a86ba2d4d6435bd4b802066eafb52a3886587a605d"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.00048828125,
+        "baseline_serial": 0.0009765625,
+        "candidate_cooperative_128": 0.0009765625,
+        "candidate_serial": 0.00048828125
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008858559653162956,
+        "baseline_serial": 0.045110076665878296,
+        "candidate_cooperative_128": 0.008544320240616798,
+        "candidate_serial": 0.052705276757478714
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008977599442005157,
+          0.008858559653162956,
+          0.008234240114688873,
+          0.0097936000674963,
+          0.008578559383749962
+        ],
+        "baseline_serial": [
+          0.045110076665878296,
+          0.04508255794644356,
+          0.045165758579969406,
+          0.045108161866664886,
+          0.0451209582388401
+        ],
+        "candidate_cooperative_128": [
+          0.008544320240616798,
+          0.008796799927949905,
+          0.008358719758689404,
+          0.00791999977082014,
+          0.009817919693887234
+        ],
+        "candidate_serial": [
+          0.052421122789382935,
+          0.05281119793653488,
+          0.05291168391704559,
+          0.05226336047053337,
+          0.052705276757478714
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "a8761e06128e085e2912ad18ed5cb3fb1666a0aa1415f1f94a8e3eb7dc3b930b",
+        "baseline_serial": "9cfaeab38825bae94365ad4de843abccee81d497ab5d2279606c73ed908dc189",
+        "candidate_cooperative_128": "a8761e06128e085e2912ad18ed5cb3fb1666a0aa1415f1f94a8e3eb7dc3b930b",
+        "candidate_serial": "9cfaeab38825bae94365ad4de843abccee81d497ab5d2279606c73ed908dc189"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.566908,
+        "baseline_serial": 0.818621,
+        "candidate_cooperative_128": 0.569009,
+        "candidate_serial": 0.79227
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.558868,
+          0.566908,
+          0.571029,
+          0.571969,
+          0.565508
+        ],
+        "baseline_serial": [
+          1.176408,
+          0.813781,
+          0.818621,
+          0.79744,
+          0.819742
+        ],
+        "candidate_cooperative_128": [
+          0.547797,
+          0.551648,
+          0.569009,
+          0.58771,
+          0.576959
+        ],
+        "candidate_serial": [
+          0.852372,
+          0.788219,
+          0.79227,
+          0.899175,
+          0.79161
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0738482446018787,
+        "serial": 1.027639069898595
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "2f35245ea5371ca2ad16656624ae2b158a70e49ea41c7b351c4514429666fe36",
+        "baseline_serial": "17d9a226f6216e935878147acce5a12378f17793afa24ab1f0019ed218055764",
+        "candidate_cooperative_128": "c4e0b688fd2e643a32780fc397cf5ddbce2857fea155c7a84fe0df4a62bd4971",
+        "candidate_serial": "02caea9678f427406c980f715305ff692fb32f5dca83ba7988800e54109817e9"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0009765625,
+        "baseline_serial": 0.001953125,
+        "candidate_cooperative_128": 0.0009765625,
+        "candidate_serial": 0.0009765625
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009190079756081104,
+        "baseline_serial": 0.20766399800777435,
+        "candidate_cooperative_128": 0.008558080531656742,
+        "candidate_serial": 0.20207872986793518
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009190079756081104,
+          0.00788608007133007,
+          0.009634559974074364,
+          0.008940800093114376,
+          0.010568959638476372
+        ],
+        "baseline_serial": [
+          0.20777150988578796,
+          0.20766399800777435,
+          0.20752479135990143,
+          0.2075827270746231,
+          0.20775999128818512
+        ],
+        "candidate_cooperative_128": [
+          0.008294399827718735,
+          0.008558080531656742,
+          0.008967679925262928,
+          0.007996159605681896,
+          0.009093440137803555
+        ],
+        "candidate_serial": [
+          0.20207872986793518,
+          0.20213599503040314,
+          0.2024860829114914,
+          0.201957106590271,
+          0.20204831659793854
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "baseline_serial": "c2e66acb3795505b1e56af4acaab18937d1a123b20fa8fa8d6a6be3fb5318ef9",
+        "candidate_cooperative_128": "142c3b737fcae29e397a699165bc4081bcac328620c674449e10bc4b78cd3430",
+        "candidate_serial": "c2e66acb3795505b1e56af4acaab18937d1a123b20fa8fa8d6a6be3fb5318ef9"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 2.218033,
+        "baseline_serial": 3.809501,
+        "candidate_cooperative_128": 2.105286,
+        "candidate_serial": 3.808702
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          2.218033,
+          2.017972,
+          2.423897,
+          2.368704,
+          2.133628
+        ],
+        "baseline_serial": [
+          3.902071,
+          3.713312,
+          3.953039,
+          3.809501,
+          3.808482
+        ],
+        "candidate_cooperative_128": [
+          2.105286,
+          2.011112,
+          2.190985,
+          2.107546,
+          2.070284
+        ],
+        "candidate_serial": [
+          3.808702,
+          3.856195,
+          3.602951,
+          3.624032,
+          3.824432
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.1064237267073833,
+        "serial": 1.0063656646845298
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "2f57887fede32a0a48023099420778f2f030b437d81a3e7d86ae6ef55969e71c",
+        "baseline_serial": "f0d1f4832bea62deff8cc9f4f0d9931066a4e7d01564289675f9589e8087d414",
+        "candidate_cooperative_128": "3bf9d35872a69d90f30b2f869e3c33705d89c3d3fe862ca1918b67f71fbef9fc",
+        "candidate_serial": "fc0e765452af72ec630952010167a91b44b796e34fd787f79cd10e74fd3e3548"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.001953125,
+        "baseline_serial": 0.001953125,
+        "candidate_cooperative_128": 0.001953125,
+        "candidate_serial": 0.001953125
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.011111680418252945,
+        "baseline_serial": 0.9365583658218384,
+        "candidate_cooperative_128": 0.010042879730463028,
+        "candidate_serial": 0.9306342601776123
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.012753920629620552,
+          0.009951360523700714,
+          0.011540479958057404,
+          0.011111680418252945,
+          0.010990079492330551
+        ],
+        "baseline_serial": [
+          0.9364476799964905,
+          0.9364492893218994,
+          0.9365741014480591,
+          0.9366099834442139,
+          0.9365583658218384
+        ],
+        "candidate_cooperative_128": [
+          0.009449919685721397,
+          0.009475200437009335,
+          0.011186880059540272,
+          0.010042879730463028,
+          0.01082272082567215
+        ],
+        "candidate_serial": [
+          0.9308362007141113,
+          0.9306342601776123,
+          0.930490255355835,
+          0.9307321906089783,
+          0.9305423498153687
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "61f49518badd2474e15509e2983d700dc8f87ef768870363693857d5ad70f8db",
+        "baseline_serial": "19b2b2b2148f2b385be6f12df3d5de85be592b83ae6bdb43286b33cc68ad9b80",
+        "candidate_cooperative_128": "61f49518badd2474e15509e2983d700dc8f87ef768870363693857d5ad70f8db",
+        "candidate_serial": "19b2b2b2148f2b385be6f12df3d5de85be592b83ae6bdb43286b33cc68ad9b80"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.461203,
+        "baseline_serial": 0.661153,
+        "candidate_cooperative_128": 0.452283,
+        "candidate_serial": 0.838412
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.461203,
+          0.452973,
+          0.463373,
+          0.470354,
+          0.454003
+        ],
+        "baseline_serial": [
+          0.708805,
+          0.888975,
+          0.637542,
+          0.661153,
+          0.653603
+        ],
+        "candidate_cooperative_128": [
+          0.467333,
+          0.449443,
+          0.454883,
+          0.452283,
+          0.446352
+        ],
+        "candidate_serial": [
+          0.78188,
+          1.097566,
+          0.78655,
+          0.838412,
+          0.868934
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.8514075935361478,
+        "serial": 0.646604940971182
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "5cfc695095dbeee4247b39c05903671f3fcfcbc931e83a68d562a61b44271229",
+        "baseline_serial": "f4448b147b73a4472537d0e59671f68dcd076ac1fd503ea03e1fa138043ea0d8",
+        "candidate_cooperative_128": "7b04198fc2679f4ceac4140629ebdd7d41806a85a2126fcf751af74084d2c820",
+        "candidate_serial": "01ddc0cae4dd60519546a1430f4700f6ac2d485def1297c98feccd3c017a6381"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.001953125,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008700159378349781,
+        "baseline_serial": 0.17625375092029572,
+        "candidate_cooperative_128": 0.010218559764325619,
+        "candidate_serial": 0.27258336544036865
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008344000205397606,
+          0.009462079964578152,
+          0.00869887974113226,
+          0.008700159378349781,
+          0.009965119883418083
+        ],
+        "baseline_serial": [
+          0.17629823088645935,
+          0.17625343799591064,
+          0.17622335255146027,
+          0.17625375092029572,
+          0.17630143463611603
+        ],
+        "candidate_cooperative_128": [
+          0.010149120353162289,
+          0.009708160534501076,
+          0.010470720939338207,
+          0.010910079814493656,
+          0.010218559764325619
+        ],
+        "candidate_serial": [
+          0.2726284861564636,
+          0.2726137638092041,
+          0.2725692689418793,
+          0.27257823944091797,
+          0.27258336544036865
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "2e473faf4064c3a6dccbcb9db1742017b2da9126bcee48e949258482a45b6944",
+        "baseline_serial": "539c3c6e5c6c372782e23bfb256e9f63f8470237a40cfe8f9c67f4307fc744f1",
+        "candidate_cooperative_128": "2e473faf4064c3a6dccbcb9db1742017b2da9126bcee48e949258482a45b6944",
+        "candidate_serial": "539c3c6e5c6c372782e23bfb256e9f63f8470237a40cfe8f9c67f4307fc744f1"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.485245,
+        "baseline_serial": 0.462064,
+        "candidate_cooperative_128": 0.475054,
+        "candidate_serial": 0.448042
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.628301,
+          0.493225,
+          0.457513,
+          0.485245,
+          0.466303
+        ],
+        "baseline_serial": [
+          0.462064,
+          0.467303,
+          0.421171,
+          0.497115,
+          0.457603
+        ],
+        "candidate_cooperative_128": [
+          0.475054,
+          0.466593,
+          0.479124,
+          0.464303,
+          0.59505
+        ],
+        "candidate_serial": [
+          0.448042,
+          0.507846,
+          0.435932,
+          0.452423,
+          0.441153
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9626764952930736,
+        "serial": 0.9904431387990292
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "fca904f7ed6fc01e7c35d710bf25c1a7f80ef245dad5864ba2d3846bcf7ef2d6",
+        "baseline_serial": "2591046f33d9854585e17a010ef2ca478f04d2090489e39671db9b32c7c87a42",
+        "candidate_cooperative_128": "69c82896aa6676f12f255bba8a144c833ad9f25afc812ae10b5beb8fb46a31d1",
+        "candidate_serial": "6f2488c0fba2b22eec068c26f7915bf8773b2c28b657a5558bf361b404b894ab"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008922239765524864,
+        "baseline_serial": 0.00931903999298811,
+        "candidate_cooperative_128": 0.009268159978091717,
+        "candidate_serial": 0.009408960118889809
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009728639386594296,
+          0.008922239765524864,
+          0.009049919433891773,
+          0.008072960190474987,
+          0.008760320022702217
+        ],
+        "baseline_serial": [
+          0.010624959133565426,
+          0.010566400364041328,
+          0.007772799581289291,
+          0.00931903999298811,
+          0.008885759860277176
+        ],
+        "candidate_cooperative_128": [
+          0.009268159978091717,
+          0.008231679908931255,
+          0.00857280008494854,
+          0.009724799543619156,
+          0.009364159777760506
+        ],
+        "candidate_serial": [
+          0.009560960344970226,
+          0.008823360316455364,
+          0.008224960416555405,
+          0.009534720331430435,
+          0.009408960118889809
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "f0fd7b1b291a2d35ed03ffde0ccb5c77df417c8b8b8c2e3d6870b75271a0ee70",
+        "baseline_serial": "8340640d7ce8c2318439b1fb433d3ad4262f0c4712cd3f0f0f7d4db9512920f4",
+        "candidate_cooperative_128": "f0fd7b1b291a2d35ed03ffde0ccb5c77df417c8b8b8c2e3d6870b75271a0ee70",
+        "candidate_serial": "8340640d7ce8c2318439b1fb433d3ad4262f0c4712cd3f0f0f7d4db9512920f4"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.480644,
+        "baseline_serial": 0.441832,
+        "candidate_cooperative_128": 0.487624,
+        "candidate_serial": 0.438932
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.480644,
+          0.497275,
+          0.471334,
+          0.481304,
+          0.464423
+        ],
+        "baseline_serial": [
+          0.548778,
+          0.429571,
+          0.441832,
+          0.444662,
+          0.425452
+        ],
+        "candidate_cooperative_128": [
+          0.519316,
+          0.481134,
+          0.467703,
+          0.542967,
+          0.487624
+        ],
+        "candidate_serial": [
+          0.543297,
+          0.430412,
+          0.575119,
+          0.425671,
+          0.438932
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.1904241822234671,
+        "serial": 0.9862664184143782
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "d8c4afa136f45e41254eda68797b14abfbef628ad24c8e04df207e6fa0649be1",
+        "baseline_serial": "f86a02e94cc5b8cc4d9ca23dabcdcebc6e005c9687b4c7b222deddb52b11ec6d",
+        "candidate_cooperative_128": "8afa4bd7db6d02efac64d90e76568ce7ae740350ea4343b9cfd456957701dfd3",
+        "candidate_serial": "3d9938cfdbc64c9584fa344e0cf21af6b5f29f128b0149c748c9df5fbe1240c6"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009420160204172134,
+        "baseline_serial": 0.009123200550675392,
+        "candidate_cooperative_128": 0.00791328027844429,
+        "candidate_serial": 0.009250239469110966
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.010218880139291286,
+          0.009749439544975758,
+          0.008392639458179474,
+          0.008617600426077843,
+          0.009420160204172134
+        ],
+        "baseline_serial": [
+          0.010064320638775826,
+          0.008294399827718735,
+          0.009123200550675392,
+          0.009125120006501675,
+          0.00884064007550478
+        ],
+        "candidate_cooperative_128": [
+          0.007690879516303539,
+          0.010061119683086872,
+          0.00791328027844429,
+          0.0090812798589468,
+          0.007587839849293232
+        ],
+        "candidate_serial": [
+          0.010054719634354115,
+          0.008963200263679028,
+          0.00965183973312378,
+          0.008976960554718971,
+          0.009250239469110966
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "95f813f592e70edb0dae355c44f5ce5bdc2e8a0da80aea8c590e0514d335d990",
+        "baseline_serial": "cc3d8851a207daabc9d51cfdd09f1b6bef3c25e28a38bd6860d9195fce16805c",
+        "candidate_cooperative_128": "95f813f592e70edb0dae355c44f5ce5bdc2e8a0da80aea8c590e0514d335d990",
+        "candidate_serial": "cc3d8851a207daabc9d51cfdd09f1b6bef3c25e28a38bd6860d9195fce16805c"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.526547,
+        "baseline_serial": 0.60463,
+        "candidate_cooperative_128": 0.528447,
+        "candidate_serial": 0.556298
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.549318,
+          0.518726,
+          0.536117,
+          0.519036,
+          0.526547
+        ],
+        "baseline_serial": [
+          0.60463,
+          0.539557,
+          0.545987,
+          0.810491,
+          0.779589
+        ],
+        "candidate_cooperative_128": [
+          0.59712,
+          0.530586,
+          0.524027,
+          0.514606,
+          0.528447
+        ],
+        "candidate_serial": [
+          0.585499,
+          0.535227,
+          0.59289,
+          0.556298,
+          0.551958
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0146090369002854,
+        "serial": 0.884246721390148
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "d1bc83d619a849071d5cb07b4323dc8e18e086234e6aef857ce0930897497132",
+        "baseline_serial": "54e2360e1bb1705e8ad65f0c1d5152c3f8f6819f9583e047b7dce5eb87487bd1",
+        "candidate_cooperative_128": "3be807ea7c63322f91b95e0c42fe1f7a888422ea84be33f516c3fe940145441e",
+        "candidate_serial": "1e9ceafb60b03cec03dff5259b9dde1de61d75e1139037c4a9c5930ebad0104e"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.00048828125,
+        "baseline_serial": 0.0009765625,
+        "candidate_cooperative_128": 0.0009765625,
+        "candidate_serial": 0.0009765625
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009511999785900116,
+        "baseline_serial": 0.048322878777980804,
+        "candidate_cooperative_128": 0.009375039488077164,
+        "candidate_serial": 0.054648637771606445
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008740480057895184,
+          0.00874176062643528,
+          0.010679359547793865,
+          0.009511999785900116,
+          0.01029600016772747
+        ],
+        "baseline_serial": [
+          0.04823135957121849,
+          0.048322878777980804,
+          0.04839712008833885,
+          0.0483478419482708,
+          0.04817567765712738
+        ],
+        "candidate_cooperative_128": [
+          0.010024960152804852,
+          0.010335680097341537,
+          0.007814399898052216,
+          0.00895232055336237,
+          0.009375039488077164
+        ],
+        "candidate_serial": [
+          0.054577600210905075,
+          0.054648637771606445,
+          0.05483967810869217,
+          0.054673921316862106,
+          0.05459584295749664
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "a7333ca565fa1298c37670278ba4fb5df8a8be012e2f5b546482ffab6b5ff412",
+        "baseline_serial": "a756cf17e2c22bad23d8d6703e0b359964094d596ff8b6db7b9a4b3f780fb882",
+        "candidate_cooperative_128": "a7333ca565fa1298c37670278ba4fb5df8a8be012e2f5b546482ffab6b5ff412",
+        "candidate_serial": "a756cf17e2c22bad23d8d6703e0b359964094d596ff8b6db7b9a4b3f780fb882"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.616301,
+        "baseline_serial": 0.923417,
+        "candidate_cooperative_128": 0.58113,
+        "candidate_serial": 0.910076
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.620061,
+          0.676464,
+          0.5936,
+          0.58319,
+          0.616301
+        ],
+        "baseline_serial": [
+          1.141338,
+          0.923246,
+          0.923417,
+          0.878274,
+          1.083165
+        ],
+        "candidate_cooperative_128": [
+          0.60544,
+          0.586239,
+          0.58113,
+          0.578829,
+          0.580579
+        ],
+        "candidate_serial": [
+          0.910076,
+          1.215001,
+          0.989219,
+          0.844252,
+          0.867134
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.051724760998107,
+        "serial": 1.0223993145982708
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "313f40d8ba5d57546d4ca1c7757813210a373616c0b3faf46a9705aae2a80ae4",
+        "baseline_serial": "fc0db4203579898bb30226ffe875564e9656be165c07a028f1effd204067dbc6",
+        "candidate_cooperative_128": "a7706a3235db3b7f606d2f2121b408836c69b6c7538f57b04b0699b92f256ba5",
+        "candidate_serial": "11cf58221101f3deca0a6436af659dac0ea8eb0f53d812d6aed9ca9c977112bf"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0009765625,
+        "baseline_serial": 0.0009765625,
+        "candidate_cooperative_128": 0.0009765625,
+        "candidate_serial": 0.0009765625
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009161279536783695,
+        "baseline_serial": 0.2550678551197052,
+        "candidate_cooperative_128": 0.008710719645023346,
+        "candidate_serial": 0.24947968125343323
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009161279536783695,
+          0.008923199959099293,
+          0.008676480501890182,
+          0.009312639944255352,
+          0.010580480098724365
+        ],
+        "baseline_serial": [
+          0.2550678551197052,
+          0.25525280833244324,
+          0.2545929551124573,
+          0.2550905644893646,
+          0.254888653755188
+        ],
+        "candidate_cooperative_128": [
+          0.00862944032996893,
+          0.008861759677529335,
+          0.008509119972586632,
+          0.008871359750628471,
+          0.008710719645023346
+        ],
+        "candidate_serial": [
+          0.24921375513076782,
+          0.2495177686214447,
+          0.24947968125343323,
+          0.2492547184228897,
+          0.24953247606754303
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "baseline_serial": "63e41f119592248ac8a931eedc5560562eb1dd5ad666d121282b2a0cd9de4c1e",
+        "candidate_cooperative_128": "91af0be74644b9fc6b94866c4092781592a17de22b292ae6f303c18643c15859",
+        "candidate_serial": "63e41f119592248ac8a931eedc5560562eb1dd5ad666d121282b2a0cd9de4c1e"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 2.340618,
+        "baseline_serial": 4.195821,
+        "candidate_cooperative_128": 2.153988,
+        "candidate_serial": 3.968699
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          2.18768,
+          2.109146,
+          2.340618,
+          2.342568,
+          2.385809
+        ],
+        "baseline_serial": [
+          4.58651,
+          4.098326,
+          4.040903,
+          4.203512,
+          4.195821
+        ],
+        "candidate_cooperative_128": [
+          2.445223,
+          2.150518,
+          2.153988,
+          2.047592,
+          2.155769
+        ],
+        "candidate_serial": [
+          3.968699,
+          3.949479,
+          4.258934,
+          4.16357,
+          3.890966
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.020770060628981,
+        "serial": 1.0029693515714386
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "a9edefe901d903867fe1d1cd9e2e01ebebc9e9ecd0d851d102d6f75da260c152",
+        "baseline_serial": "390240899117059b7f46cff18d52a347a689bbcea5f8a0fe4e72b83bc26efc1a",
+        "candidate_cooperative_128": "08dc5f53007364d45a1f694045cfe9883194ef0d238d481eaa04f2546419cc97",
+        "candidate_serial": "3d172e8c7caf59f7cadb91cfc42c3ebedaeddf99a0ccf8c8422685cbb9c977f2"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.001953125,
+        "baseline_serial": 0.001953125,
+        "candidate_cooperative_128": 0.001953125,
+        "candidate_serial": 0.001953125
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.011291840113699436,
+        "baseline_serial": 1.1246232986450195,
+        "candidate_cooperative_128": 0.011062080040574074,
+        "candidate_serial": 1.1212937831878662
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.01167615968734026,
+          0.011264639906585217,
+          0.011978880502283573,
+          0.01114047970622778,
+          0.011291840113699436
+        ],
+        "baseline_serial": [
+          1.1249397993087769,
+          1.1246435642242432,
+          1.1244663000106812,
+          1.1245408058166504,
+          1.1246232986450195
+        ],
+        "candidate_cooperative_128": [
+          0.011736960150301456,
+          0.01240416057407856,
+          0.011062080040574074,
+          0.010989760048687458,
+          0.0110384002327919
+        ],
+        "candidate_serial": [
+          1.1211936473846436,
+          1.1212937831878662,
+          1.1212937831878662,
+          1.121120572090149,
+          1.1213910579681396
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "7a8cbb442975b1a17a6f9efe7b41c5300ba562c3c2a65553fd2a38794b4b89b6",
+        "baseline_serial": "13f5cd4b63f03af8fef49e6cd63fc0347f91276893f95f7e3532379183d45f0f",
+        "candidate_cooperative_128": "7a8cbb442975b1a17a6f9efe7b41c5300ba562c3c2a65553fd2a38794b4b89b6",
+        "candidate_serial": "13f5cd4b63f03af8fef49e6cd63fc0347f91276893f95f7e3532379183d45f0f"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.501645,
+        "baseline_serial": 1.124477,
+        "candidate_cooperative_128": 0.488524,
+        "candidate_serial": 0.847942
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.497395,
+          0.514666,
+          0.489445,
+          0.501645,
+          0.529916
+        ],
+        "baseline_serial": [
+          1.124477,
+          0.693255,
+          1.152468,
+          0.679554,
+          1.228722
+        ],
+        "candidate_cooperative_128": [
+          0.474494,
+          0.501125,
+          0.485124,
+          0.513566,
+          0.488524
+        ],
+        "candidate_serial": [
+          1.262823,
+          0.847942,
+          0.825562,
+          0.832582,
+          0.947668
+        ]
+      },
+      "dtype": "fp16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.06740195761344,
+        "serial": 0.6352745739901347
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "5b694b2bd8b22534c2e292eeeee18531e8d5653d51acbaf573dfacc138503d76",
+        "baseline_serial": "3fb0956885d59b865baec2ea97dea0488008ea9b23d9d86678f3c660dce04b81",
+        "candidate_cooperative_128": "ff037739e01e85723001979772f939c6bfe4539069aede775555c74335752267",
+        "candidate_serial": "d5e659833ce93e23cdf4f85ba0a40ff7e8643498d63df1f2f4e5a1a8f85a1f68"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.000244140625,
+        "baseline_serial": 0.001953125,
+        "candidate_cooperative_128": 0.000244140625,
+        "candidate_serial": 0.000244140625
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.010373439639806747,
+        "baseline_serial": 0.1950351893901825,
+        "candidate_cooperative_128": 0.009718400426208973,
+        "candidate_serial": 0.3070092797279358
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008696960285305977,
+          0.009208640083670616,
+          0.010984640568494797,
+          0.010373439639806747,
+          0.01092991977930069
+        ],
+        "baseline_serial": [
+          0.19505567848682404,
+          0.195032000541687,
+          0.195079043507576,
+          0.1950351893901825,
+          0.19497087597846985
+        ],
+        "candidate_cooperative_128": [
+          0.009451199322938919,
+          0.010220160707831383,
+          0.009718400426208973,
+          0.01023808028548956,
+          0.009334079921245575
+        ],
+        "candidate_serial": [
+          0.3070092797279358,
+          0.307025283575058,
+          0.30702367424964905,
+          0.3069862425327301,
+          0.30699869990348816
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "daa5f5faf9ab1ed354951fc8bbfdda7a25c8a457d389b2e61c8f9f2b166ab304",
+        "baseline_serial": "2734d7d5ef2af3c0d24d5dc08b74fefc93c946507807f22819aa940bc0584719",
+        "candidate_cooperative_128": "daa5f5faf9ab1ed354951fc8bbfdda7a25c8a457d389b2e61c8f9f2b166ab304",
+        "candidate_serial": "2734d7d5ef2af3c0d24d5dc08b74fefc93c946507807f22819aa940bc0584719"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.456253,
+        "baseline_serial": 0.445873,
+        "candidate_cooperative_128": 0.463363,
+        "candidate_serial": 0.443142
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.470423,
+          0.460053,
+          0.456253,
+          0.454293,
+          0.430952
+        ],
+        "baseline_serial": [
+          0.445873,
+          0.487825,
+          0.427522,
+          0.428491,
+          0.481954
+        ],
+        "candidate_cooperative_128": [
+          0.453903,
+          0.459863,
+          0.463363,
+          0.472884,
+          0.464763
+        ],
+        "candidate_serial": [
+          0.438562,
+          0.443142,
+          0.423891,
+          0.497045,
+          0.454292
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.943563982496983,
+        "serial": 1.0647874000801467
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "ddc299897c48721ba0fa5d5ff0c7b443a688c2a82ae427452c6a3e97b0065b8c",
+        "baseline_serial": "2dca5f6ee4b0db9091e1dd02d08634ecc7ca82b4e58f44f6c08ff2f535bc8365",
+        "candidate_cooperative_128": "c013a947c7b4fee77d48fcf5d828d30b63a590f696b86babe032376c2b0e2ddc",
+        "candidate_serial": "2b6e182c11f78c67465a6a0c430ffb54bc64aa67db4c98bcb76f1192410162a2"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008934720419347286,
+        "baseline_serial": 0.00940352026373148,
+        "candidate_cooperative_128": 0.00946911983191967,
+        "candidate_serial": 0.008831359446048737
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009114880114793777,
+          0.007989440113306046,
+          0.008339520543813705,
+          0.009697919711470604,
+          0.008934720419347286
+        ],
+        "baseline_serial": [
+          0.00940352026373148,
+          0.010136320255696774,
+          0.00889952015131712,
+          0.010443520732223988,
+          0.00831327959895134
+        ],
+        "candidate_cooperative_128": [
+          0.008550720289349556,
+          0.008157439529895782,
+          0.009895360097289085,
+          0.00997695978730917,
+          0.00946911983191967
+        ],
+        "candidate_serial": [
+          0.008831359446048737,
+          0.009098240174353123,
+          0.008879680186510086,
+          0.007947839796543121,
+          0.008078720420598984
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "c5d9a7de67f0b11bf5c07be6b0804974f1cafe91beaecb59cbfe3bccea1762da",
+        "baseline_serial": "71a762e359638549984bd32ecdf988d65958f88f0e42cc25194726ef11b14fb6",
+        "candidate_cooperative_128": "c5d9a7de67f0b11bf5c07be6b0804974f1cafe91beaecb59cbfe3bccea1762da",
+        "candidate_serial": "71a762e359638549984bd32ecdf988d65958f88f0e42cc25194726ef11b14fb6"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.490224,
+        "baseline_serial": 0.445572,
+        "candidate_cooperative_128": 0.451973,
+        "candidate_serial": 0.464444
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.490224,
+          0.475074,
+          0.513226,
+          0.444172,
+          0.497115
+        ],
+        "baseline_serial": [
+          0.461883,
+          0.443072,
+          0.431121,
+          0.445572,
+          0.494775
+        ],
+        "candidate_cooperative_128": [
+          0.446963,
+          0.451973,
+          0.485714,
+          0.431822,
+          0.527876
+        ],
+        "candidate_serial": [
+          0.525416,
+          0.464444,
+          0.436002,
+          0.434852,
+          0.518907
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0504714455121984,
+        "serial": 0.8226218162665905
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "6a561164519d917211fc286ad319220c866b2bdb4ad9c33de69b85a8bdf42957",
+        "baseline_serial": "f94a0f68512fa41330def4643792c81f8bdc9616433d901d90618fb5e96247fa",
+        "candidate_cooperative_128": "cc6e0bfeea8ab604a8bc8663ca3cf59ce83d5190a537f0426729e8c17352f5fc",
+        "candidate_serial": "73b2e4724b74de65ad34e129aea27aee4efb86a85ff0a3036f390e101e532ede"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008664960041642189,
+        "baseline_serial": 0.008871680125594139,
+        "candidate_cooperative_128": 0.008248639293015003,
+        "candidate_serial": 0.010784639976918697
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008664960041642189,
+          0.009759359993040562,
+          0.008474240079522133,
+          0.009609599597752094,
+          0.008616319857537746
+        ],
+        "baseline_serial": [
+          0.008751999586820602,
+          0.008119040168821812,
+          0.008979519829154015,
+          0.008871680125594139,
+          0.009508799761533737
+        ],
+        "candidate_cooperative_128": [
+          0.00896447990089655,
+          0.008232960477471352,
+          0.008953919634222984,
+          0.008191999979317188,
+          0.008248639293015003
+        ],
+        "candidate_serial": [
+          0.012088320218026638,
+          0.011130880564451218,
+          0.0092902397736907,
+          0.010405760258436203,
+          0.010784639976918697
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "57c2738ca41340f6476f48836a1312c7ab74808d91f4bafce2455708fa7fe0ab",
+        "baseline_serial": "39a59cedded7e2eb62a170bc16502a012588e6ea84840c5f9d9936a2b9683b1b",
+        "candidate_cooperative_128": "57c2738ca41340f6476f48836a1312c7ab74808d91f4bafce2455708fa7fe0ab",
+        "candidate_serial": "39a59cedded7e2eb62a170bc16502a012588e6ea84840c5f9d9936a2b9683b1b"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.523637,
+        "baseline_serial": 0.554968,
+        "candidate_cooperative_128": 0.513016,
+        "candidate_serial": 0.588029
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.618261,
+          0.507605,
+          0.523637,
+          0.525207,
+          0.508106
+        ],
+        "baseline_serial": [
+          0.677064,
+          0.639552,
+          0.523726,
+          0.554968,
+          0.523167
+        ],
+        "candidate_cooperative_128": [
+          0.506565,
+          0.522736,
+          0.513016,
+          0.533217,
+          0.503186
+        ],
+        "candidate_serial": [
+          0.884435,
+          0.588029,
+          0.559459,
+          0.561919,
+          0.58848
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0263069889328005,
+        "serial": 0.8531505775299852
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "f4689da85319506cb09f8dfede1d8573dcbb72848c31abf880a22921123ea8a0",
+        "baseline_serial": "82866312dbb3dfc2ff4d4076b979cc4625f3d6de49c2f5a75d72ca5aa8dad5b6",
+        "candidate_cooperative_128": "6a43fc239cd38777ac1588b666464fe53eb12cf0c3f556281be2cd18c2aeda8b",
+        "candidate_serial": "ba0bd4ce0c9b7785dc74305f55c638f210c96623e2ba4e4b3bc171b4b2458561"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.00390625,
+        "baseline_serial": 0.00390625,
+        "candidate_cooperative_128": 0.00390625,
+        "candidate_serial": 0.00390625
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008788799867033958,
+        "baseline_serial": 0.04494751989841461,
+        "candidate_cooperative_128": 0.008563519455492496,
+        "candidate_serial": 0.05268415808677673
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008788799867033958,
+          0.00870495941489935,
+          0.008784960024058819,
+          0.01005920022726059,
+          0.010679999366402626
+        ],
+        "baseline_serial": [
+          0.04494751989841461,
+          0.04506080225110054,
+          0.04490528255701065,
+          0.0449356809258461,
+          0.044986557215452194
+        ],
+        "candidate_cooperative_128": [
+          0.010039999149739742,
+          0.008512640371918678,
+          0.008563519455492496,
+          0.008078720420598984,
+          0.010136639699339867
+        ],
+        "candidate_serial": [
+          0.05265408009290695,
+          0.052656322717666626,
+          0.053038403391838074,
+          0.05268415808677673,
+          0.05270559713244438
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "84cfcd3839df695a6b3dd601bfc7aa95caf78ee8094992cd05c0e4dc676488df",
+        "baseline_serial": "2c95329c7bd8c44c4dbf3f4c4f3fc735a5defb8af884ae6ab5a7379763043322",
+        "candidate_cooperative_128": "84cfcd3839df695a6b3dd601bfc7aa95caf78ee8094992cd05c0e4dc676488df",
+        "candidate_serial": "2c95329c7bd8c44c4dbf3f4c4f3fc735a5defb8af884ae6ab5a7379763043322"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.568958,
+        "baseline_serial": 0.836702,
+        "candidate_cooperative_128": 0.552288,
+        "candidate_serial": 0.818381
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.565878,
+          0.569499,
+          0.567519,
+          0.60125,
+          0.568958
+        ],
+        "baseline_serial": [
+          1.00536,
+          0.847533,
+          0.834832,
+          0.836702,
+          0.778789
+        ],
+        "candidate_cooperative_128": [
+          0.552288,
+          0.548208,
+          0.555627,
+          0.59929,
+          0.549327
+        ],
+        "candidate_serial": [
+          0.828152,
+          0.817811,
+          0.830682,
+          0.818381,
+          0.80108
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9500601707075088,
+        "serial": 1.0294912264201228
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "9c3ee849e6e8c7ee6b7a401f97fc023550b05386b725419c4e2430191a1354f4",
+        "baseline_serial": "a9bf95f5051f0d4ddcb800eb6cbfb2c3f76c94a019c36d461e484a1c72e37ff7",
+        "candidate_cooperative_128": "7a1591c8dbb22ea9ca8e6fc776c6a4a1592b9e002232690f6da6e9d8fb1e49e0",
+        "candidate_serial": "ffd6e6b1c3ef535f0b4c53d6db3c58e6cc2a2086b95156c6a6060c8b8dde7807"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0078125,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008334079757332802,
+        "baseline_serial": 0.2077971249818802,
+        "candidate_cooperative_128": 0.008772159926593304,
+        "candidate_serial": 0.2018444836139679
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008205119520425797,
+          0.008334079757332802,
+          0.007601280231028795,
+          0.009515520185232162,
+          0.0097936000674963
+        ],
+        "baseline_serial": [
+          0.20808865129947662,
+          0.20769505202770233,
+          0.207781121134758,
+          0.2077971249818802,
+          0.20796672999858856
+        ],
+        "candidate_cooperative_128": [
+          0.008772159926593304,
+          0.008270720019936562,
+          0.00851168017834425,
+          0.009104319848120213,
+          0.009625280275940895
+        ],
+        "candidate_serial": [
+          0.20200799405574799,
+          0.20164352655410767,
+          0.2020726352930069,
+          0.20178815722465515,
+          0.2018444836139679
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "baseline_serial": "dae8b2b99fbc7ddb899caad04cfdf9fa18a6e0aa55afff522170a2521356c09f",
+        "candidate_cooperative_128": "3a16fcd4d8f0232d1d567cd663934c2148f46aa3cf85ca4a7ef8857ddfa098e8",
+        "candidate_serial": "dae8b2b99fbc7ddb899caad04cfdf9fa18a6e0aa55afff522170a2521356c09f"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 2.182359,
+        "baseline_serial": 3.79608,
+        "candidate_cooperative_128": 2.112251,
+        "candidate_serial": 3.868024
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          2.182359,
+          2.071814,
+          2.155818,
+          2.325697,
+          2.227613
+        ],
+        "baseline_serial": [
+          3.79608,
+          3.825543,
+          3.726308,
+          3.627382,
+          3.892235
+        ],
+        "candidate_cooperative_128": [
+          2.100565,
+          2.362149,
+          2.097685,
+          2.112251,
+          2.447363
+        ],
+        "candidate_serial": [
+          3.877135,
+          3.868024,
+          3.612336,
+          3.886495,
+          3.485655
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.1754130474475855,
+        "serial": 1.0069156682453628
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "345edcec0009facac4b507c69a6026e0c62c89e0c186eac3bec7bdb2cc3fd86d",
+        "baseline_serial": "9d68afe524305d7afb6dd9de4507da65659ca4902fc0ef5fb22903eb8e5b54db",
+        "candidate_cooperative_128": "a9e239e0e2999f014ec5add4a2dae2e21b6b4362c58cc78f29e9e98392014442",
+        "candidate_serial": "5e63c621c32d3f32b9df4f9ab6f18bfdea941db3854d40c04ff777a5983e04f1"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.015625,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.011403199285268784,
+        "baseline_serial": 0.9362505078315735,
+        "candidate_cooperative_128": 0.00970144011080265,
+        "candidate_serial": 0.92982017993927
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.011086720041930676,
+          0.011514879763126373,
+          0.012080959975719452,
+          0.010373439639806747,
+          0.011403199285268784
+        ],
+        "baseline_serial": [
+          0.9362505078315735,
+          0.9362470507621765,
+          0.9363673329353333,
+          0.9363523125648499,
+          0.9362147450447083
+        ],
+        "candidate_cooperative_128": [
+          0.00943360012024641,
+          0.011189759708940983,
+          0.00970144011080265,
+          0.008847040124237537,
+          0.010551040060818195
+        ],
+        "candidate_serial": [
+          0.9299174547195435,
+          0.9298300743103027,
+          0.92982017993927,
+          0.9296371340751648,
+          0.9295664429664612
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "8152519ee7e76958eddc7ad26aa6eb098e6c34140b20cf44d41c33f4201accb5",
+        "baseline_serial": "a139a476590415507f8aa15a0ed48fbb99a6fe81a493743f423b8c13e7df47b7",
+        "candidate_cooperative_128": "8152519ee7e76958eddc7ad26aa6eb098e6c34140b20cf44d41c33f4201accb5",
+        "candidate_serial": "a139a476590415507f8aa15a0ed48fbb99a6fe81a493743f423b8c13e7df47b7"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.468834,
+        "baseline_serial": 0.845852,
+        "candidate_cooperative_128": 0.461103,
+        "candidate_serial": 0.787409
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.468834,
+          0.506736,
+          0.452083,
+          0.452593,
+          0.571469
+        ],
+        "baseline_serial": [
+          0.99397,
+          0.654673,
+          0.668703,
+          0.845852,
+          1.046362
+        ],
+        "candidate_cooperative_128": [
+          0.461103,
+          0.455713,
+          0.502916,
+          0.447242,
+          0.470393
+        ],
+        "candidate_serial": [
+          0.774289,
+          1.063403,
+          0.81012,
+          0.738917,
+          0.787409
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9281343313736091,
+        "serial": 0.6401803577702714
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "bc97d4bb2a2991509eef88b72c6aa8b974426ae53e065819eefeafa68d2c443d",
+        "baseline_serial": "3a8863f2fbd01d84f699650d1a23e4c70d6997836dc8151341b9507cc6c04c0d",
+        "candidate_cooperative_128": "0600c397ca50d3add9e658898b1fdc725c95da120127f94b4d67fe8a3ad23682",
+        "candidate_serial": "c151578265d0564bed4ef260899b1fdbb4adc54906c78e93c4868cdf48020f28"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0078125,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.00922016054391861,
+        "baseline_serial": 0.17425279319286346,
+        "candidate_cooperative_128": 0.009934079833328724,
+        "candidate_serial": 0.2721932828426361
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008485119789838791,
+          0.009725119918584824,
+          0.007789760362356901,
+          0.009305600076913834,
+          0.00922016054391861
+        ],
+        "baseline_serial": [
+          0.17425855994224548,
+          0.1741945594549179,
+          0.17425279319286346,
+          0.1743392050266266,
+          0.17423711717128754
+        ],
+        "candidate_cooperative_128": [
+          0.009652160108089447,
+          0.009934079833328724,
+          0.01063039992004633,
+          0.009730559773743153,
+          0.010903039947152138
+        ],
+        "candidate_serial": [
+          0.27222591638565063,
+          0.2721932828426361,
+          0.2722169756889343,
+          0.2721782624721527,
+          0.27217984199523926
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "2c31157d897b67a6032115c2c91aaf0d0ad33e36083c2a32f43d8d3210b66654",
+        "baseline_serial": "dd935bfb4161925dbddf28ab8cdd9694d7a0ec03f95874d868665be0f04ef668",
+        "candidate_cooperative_128": "2c31157d897b67a6032115c2c91aaf0d0ad33e36083c2a32f43d8d3210b66654",
+        "candidate_serial": "dd935bfb4161925dbddf28ab8cdd9694d7a0ec03f95874d868665be0f04ef668"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.472004,
+        "baseline_serial": 0.467834,
+        "candidate_cooperative_128": 0.474404,
+        "candidate_serial": 0.453143
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.484634,
+          0.470303,
+          0.466524,
+          0.472004,
+          0.963838
+        ],
+        "baseline_serial": [
+          0.550948,
+          0.480935,
+          0.422271,
+          0.448833,
+          0.467834
+        ],
+        "candidate_cooperative_128": [
+          0.473434,
+          0.474404,
+          0.481364,
+          0.464194,
+          0.60095
+        ],
+        "candidate_serial": [
+          0.438212,
+          0.453143,
+          0.454523,
+          0.443893,
+          0.483074
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.97170705197773,
+        "serial": 1.0415618755922595
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "0bbd586bd12b0551848a6886ee7489340a0c49499c0806e3de6a2c953b5f3aae",
+        "baseline_serial": "70e2b885316b9939e6805455788ba8d1b957c32774b0f8e0108da2980f165e41",
+        "candidate_cooperative_128": "5be76200bf8a3f9f80f6146d0776994de410e9c9012264ea50e29d73fbaa3bb3",
+        "candidate_serial": "dfe9f811011046bb5c3ad2f8f8fc751858e1dfe6cbf02a4db249c4a8908dae59"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008869119919836521,
+        "baseline_serial": 0.009278399869799614,
+        "candidate_cooperative_128": 0.009127359837293625,
+        "candidate_serial": 0.008908160030841827
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008984959684312344,
+          0.008869119919836521,
+          0.008323200047016144,
+          0.008465600199997425,
+          0.0096486397087574
+        ],
+        "baseline_serial": [
+          0.009278399869799614,
+          0.008676160126924515,
+          0.010429439134895802,
+          0.00958144012838602,
+          0.00806719996035099
+        ],
+        "candidate_cooperative_128": [
+          0.008938560262322426,
+          0.0099519994109869,
+          0.009127359837293625,
+          0.008471679873764515,
+          0.01023200061172247
+        ],
+        "candidate_serial": [
+          0.00875839963555336,
+          0.008460800163447857,
+          0.009827840141952038,
+          0.010357759892940521,
+          0.008908160030841827
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "e4e9a769088039c7aa3278a67a562d55c1366263cff619714b29eb6e3502d40a",
+        "baseline_serial": "30c5db2fdfef33b36b74d097b465116c404c37c72c16059783d75057eb493f6f",
+        "candidate_cooperative_128": "e4e9a769088039c7aa3278a67a562d55c1366263cff619714b29eb6e3502d40a",
+        "candidate_serial": "30c5db2fdfef33b36b74d097b465116c404c37c72c16059783d75057eb493f6f"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.506026,
+        "baseline_serial": 0.447313,
+        "candidate_cooperative_128": 0.528267,
+        "candidate_serial": 0.459163
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.510076,
+          0.506026,
+          0.486995,
+          0.482354,
+          0.509206
+        ],
+        "baseline_serial": [
+          0.477784,
+          0.455173,
+          0.434962,
+          0.447313,
+          0.442872
+        ],
+        "candidate_cooperative_128": [
+          0.528267,
+          0.546848,
+          0.535637,
+          0.472923,
+          0.485734
+        ],
+        "candidate_serial": [
+          0.461313,
+          0.421191,
+          0.495745,
+          0.459163,
+          0.434552
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.035919863200864,
+        "serial": 0.8796566737682346
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "1dde05026c3e23237ac806064a5298b0806adac33b145b8687fe5486240cb9ae",
+        "baseline_serial": "5854a49c67297fa50b2121555c5b885c36324fffa040186d465ef27266a780b9",
+        "candidate_cooperative_128": "0aa2b22d6c22a291ad67b2addc22e80c5bb463edac0378db2b777a357eddbffd",
+        "candidate_serial": "99228c50b62c14ae5e5bc3e9a013d57ca10cd8afc62a841c519ce1a27ab5e123"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009274880401790142,
+        "baseline_serial": 0.008757439441978931,
+        "candidate_cooperative_128": 0.008953279815614223,
+        "candidate_serial": 0.009955519810318947
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.010035200044512749,
+          0.009510400705039501,
+          0.008087039925158024,
+          0.008517120033502579,
+          0.009274880401790142
+        ],
+        "baseline_serial": [
+          0.009317759424448013,
+          0.008641280233860016,
+          0.009779520332813263,
+          0.008757439441978931,
+          0.008747519925236702
+        ],
+        "candidate_cooperative_128": [
+          0.008887680247426033,
+          0.008107840083539486,
+          0.010094399563968182,
+          0.008953279815614223,
+          0.009978880174458027
+        ],
+        "candidate_serial": [
+          0.009926400147378445,
+          0.009997120127081871,
+          0.009670720435678959,
+          0.010482239536941051,
+          0.009955519810318947
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "7a20e64b415d4a2493f25cc5ed9c0ac3356a664a1efd602f21eb504d252ec8e4",
+        "baseline_serial": "be4de8fa0bda4216a684d980a967aa81902905efece09264427c2d1c7193479c",
+        "candidate_cooperative_128": "7a20e64b415d4a2493f25cc5ed9c0ac3356a664a1efd602f21eb504d252ec8e4",
+        "candidate_serial": "be4de8fa0bda4216a684d980a967aa81902905efece09264427c2d1c7193479c"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.521457,
+        "baseline_serial": 0.538217,
+        "candidate_cooperative_128": 0.520756,
+        "candidate_serial": 0.564018
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.564268,
+          0.521457,
+          0.519046,
+          0.515737,
+          0.553928
+        ],
+        "baseline_serial": [
+          0.615821,
+          0.554258,
+          0.525916,
+          0.531017,
+          0.538217
+        ],
+        "candidate_cooperative_128": [
+          0.551358,
+          0.518286,
+          0.519636,
+          0.520756,
+          0.558638
+        ],
+        "candidate_serial": [
+          0.548927,
+          0.534817,
+          0.568019,
+          0.606961,
+          0.564018
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9871357729242587,
+        "serial": 0.886032549200534
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "483e4f847e7caeb931584330a09299269905a87de3e2222d2f0b3724eeb085c0",
+        "baseline_serial": "79e4f54996692a3fc1477933a619806c47ca80bee57631f1ea6ed6b95fffc645",
+        "candidate_cooperative_128": "901164243449aa5c26d97c88c04ea134613c258221a31814ad90c8eff4540455",
+        "candidate_serial": "876361be2376f178379bb5f11c9cbc7972f325fbb485054c190f8b97cb736339"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009183679707348347,
+        "baseline_serial": 0.04836319759488106,
+        "candidate_cooperative_128": 0.009303360246121883,
+        "candidate_serial": 0.054583996534347534
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.010045439936220646,
+          0.008952639997005463,
+          0.008765759877860546,
+          0.009183679707348347,
+          0.009279999881982803
+        ],
+        "baseline_serial": [
+          0.048413440585136414,
+          0.04832383990287781,
+          0.04841247946023941,
+          0.04828479886054993,
+          0.04836319759488106
+        ],
+        "candidate_cooperative_128": [
+          0.008917760103940964,
+          0.00982144009321928,
+          0.009303360246121883,
+          0.010035200044512749,
+          0.009039360098540783
+        ],
+        "candidate_serial": [
+          0.054281920194625854,
+          0.054640959948301315,
+          0.055071040987968445,
+          0.054583996534347534,
+          0.05428127944469452
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "b0206224f767217eccd14e8d42495fccc59479e009b553a8ca3344c63a178767",
+        "baseline_serial": "1a484f0041a9bb562f2b9d1a68cf8c2d0722b1b979154069505b752dc1713b0b",
+        "candidate_cooperative_128": "b0206224f767217eccd14e8d42495fccc59479e009b553a8ca3344c63a178767",
+        "candidate_serial": "1a484f0041a9bb562f2b9d1a68cf8c2d0722b1b979154069505b752dc1713b0b"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.594531,
+        "baseline_serial": 0.885525,
+        "candidate_cooperative_128": 0.571509,
+        "candidate_serial": 0.927216
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.621981,
+          0.583799,
+          0.60161,
+          0.560939,
+          0.594531
+        ],
+        "baseline_serial": [
+          1.169119,
+          0.880805,
+          0.885164,
+          0.907325,
+          0.885525
+        ],
+        "candidate_cooperative_128": [
+          0.573659,
+          0.598611,
+          0.571509,
+          0.570128,
+          0.568619
+        ],
+        "candidate_serial": [
+          0.927216,
+          0.857403,
+          1.608741,
+          0.922936,
+          1.297685
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9895090869758335,
+        "serial": 1.022009149900161
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "83d51493877aeb15dbdcccd8d73e4658abf641ead2aa8d6ef469884483636f6e",
+        "baseline_serial": "158e28ae591acbe14669fad234c1f5f82e1b931061cb1be7f4a8ac215f487072",
+        "candidate_cooperative_128": "ca1460f4817b2e3fcc9820e2dac2a8b6ac68506a2414a285847d76a43ca90955",
+        "candidate_serial": "c232e5257cc63262867299e1f2dd1e1993f5ae12396144fe54223433dcb4dfca"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.015625,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 0.0
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.00920575950294733,
+        "baseline_serial": 0.2550032138824463,
+        "candidate_cooperative_128": 0.009303360246121883,
+        "candidate_serial": 0.24951167404651642
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009672319516539574,
+          0.00863455981016159,
+          0.009757759980857372,
+          0.009198400191962719,
+          0.00920575950294733
+        ],
+        "baseline_serial": [
+          0.2550707161426544,
+          0.25495776534080505,
+          0.25491583347320557,
+          0.25502657890319824,
+          0.2550032138824463
+        ],
+        "candidate_cooperative_128": [
+          0.009960640221834183,
+          0.00875071994960308,
+          0.009303360246121883,
+          0.009306239895522594,
+          0.008379200473427773
+        ],
+        "candidate_serial": [
+          0.24951167404651642,
+          0.24961663782596588,
+          0.24962560832500458,
+          0.24943168461322784,
+          0.24945440888404846
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "baseline_serial": "acec7d30743273e01c738d6bdef87be5903772f35e98b7fc5113b2edc3c5c06d",
+        "candidate_cooperative_128": "59d432314ec3c2ef1ad0d4e609266b3e99cddd0b7e76253f30a1646aae518f8c",
+        "candidate_serial": "acec7d30743273e01c738d6bdef87be5903772f35e98b7fc5113b2edc3c5c06d"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 2.222632,
+        "baseline_serial": 4.077304,
+        "candidate_cooperative_128": 2.110536,
+        "candidate_serial": 4.125869
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          2.274174,
+          2.102576,
+          2.408271,
+          2.147458,
+          2.222632
+        ],
+        "baseline_serial": [
+          4.023593,
+          4.077304,
+          4.440824,
+          3.854594,
+          4.104367
+        ],
+        "candidate_cooperative_128": [
+          2.247963,
+          2.110536,
+          2.18592,
+          2.088105,
+          2.099455
+        ],
+        "candidate_serial": [
+          4.14641,
+          3.97124,
+          4.17665,
+          4.125869,
+          3.844793
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.036406484762295,
+        "serial": 1.0029900788579609
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "30b5ebe75cd9724a0e0988b0a9ae1e9b1a9f4a06695e4368b0fffdb94b93702f",
+        "baseline_serial": "6cd1d26cd6092cc6463c9dfa249a2bd3002e93611370e8e4ce8dc36222add380",
+        "candidate_cooperative_128": "01a262935a0d8b4062a05cf51979ae408fb7cfb30da3dee64bc38efe2eef4752",
+        "candidate_serial": "97ca8d8a657dda912c8221443e10cb0f91ad253610fc1b9507e2653b0b30ece0"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0009765625,
+        "baseline_serial": 0.015625,
+        "candidate_cooperative_128": 0.0009765625,
+        "candidate_serial": 0.00390625
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.011532800272107124,
+        "baseline_serial": 1.124608039855957,
+        "candidate_cooperative_128": 0.011127680540084839,
+        "candidate_serial": 1.1212553977966309
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.011808319948613644,
+          0.011532800272107124,
+          0.012154560536146164,
+          0.011039359495043755,
+          0.011401599273085594
+        ],
+        "baseline_serial": [
+          1.124403476715088,
+          1.1246169805526733,
+          1.124608039855957,
+          1.1246355772018433,
+          1.124608039855957
+        ],
+        "candidate_cooperative_128": [
+          0.011084799654781818,
+          0.011127680540084839,
+          0.010664960369467735,
+          0.01143679954111576,
+          0.012068480253219604
+        ],
+        "candidate_serial": [
+          1.1212553977966309,
+          1.1212140321731567,
+          1.1212886571884155,
+          1.1213388442993164,
+          1.1212092638015747
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "8bd967958ac183c3cc3ac0ed76d3baed1829eef95de96696a03b6b1c04916529",
+        "baseline_serial": "1e590c859c136608278d00e111f739d7494b2fbbae31760395d52f35c23b5f0e",
+        "candidate_cooperative_128": "8bd967958ac183c3cc3ac0ed76d3baed1829eef95de96696a03b6b1c04916529",
+        "candidate_serial": "1e590c859c136608278d00e111f739d7494b2fbbae31760395d52f35c23b5f0e"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.490715,
+        "baseline_serial": 0.717857,
+        "candidate_cooperative_128": 0.483604,
+        "candidate_serial": 0.828991
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.490715,
+          0.507606,
+          0.506486,
+          0.485764,
+          0.482184
+        ],
+        "baseline_serial": [
+          0.735718,
+          0.735377,
+          0.661773,
+          0.717857,
+          0.697165
+        ],
+        "candidate_cooperative_128": [
+          0.478875,
+          0.479134,
+          0.483604,
+          0.499925,
+          0.493094
+        ],
+        "candidate_serial": [
+          0.828991,
+          0.825662,
+          0.860534,
+          1.468264,
+          0.806051
+        ]
+      },
+      "dtype": "bf16",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9290727872796458,
+        "serial": 0.6352293762321553
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "6292c958e26fc32e108a8ba36bba97e9070fef8a497f8da55005efff806ad7c8",
+        "baseline_serial": "ddd9c01e3836102ad4deb0ab8800e1ca2793f01578e24b808df09c7ae1602120",
+        "candidate_cooperative_128": "48d965959a5807f1302112f3da4a2267c5cca35cb3ba4b5132e97cf955d967d8",
+        "candidate_serial": "d2504b4d988d732ac9054612fbccb63582b502582cc9c391c8dc1532546f7f39"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 0.0,
+        "baseline_serial": 0.0,
+        "candidate_cooperative_128": 0.0,
+        "candidate_serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009276160039007664,
+        "baseline_serial": 0.19503168761730194,
+        "candidate_cooperative_128": 0.009984320029616356,
+        "candidate_serial": 0.30702561140060425
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008378559723496437,
+          0.009276160039007664,
+          0.010936959646642208,
+          0.009593600407242775,
+          0.009133759886026382
+        ],
+        "baseline_serial": [
+          0.1949513554573059,
+          0.1950569599866867,
+          0.1950342357158661,
+          0.19499008357524872,
+          0.19503168761730194
+        ],
+        "candidate_cooperative_128": [
+          0.010080000385642052,
+          0.00967423990368843,
+          0.009950079955160618,
+          0.010001599788665771,
+          0.009984320029616356
+        ],
+        "candidate_serial": [
+          0.3070451021194458,
+          0.30699679255485535,
+          0.30702561140060425,
+          0.30702880024909973,
+          0.30697664618492126
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "815afe6a56787ea2f78f8dc8e8441d8efcfdc893522f9e8b3bf1b5aec1761bac",
+        "baseline_serial": "043c6a5c7a0319302c1899e3671523fb9be38ccfd9583a5646c10d17e6314fb5",
+        "candidate_cooperative_128": "815afe6a56787ea2f78f8dc8e8441d8efcfdc893522f9e8b3bf1b5aec1761bac",
+        "candidate_serial": "043c6a5c7a0319302c1899e3671523fb9be38ccfd9583a5646c10d17e6314fb5"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.461323,
+        "baseline_serial": 0.451202,
+        "candidate_cooperative_128": 0.457213,
+        "candidate_serial": 0.442853
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.461323,
+          0.464573,
+          0.481275,
+          0.457843,
+          0.446702
+        ],
+        "baseline_serial": [
+          0.534907,
+          0.477444,
+          0.426421,
+          0.428272,
+          0.451202
+        ],
+        "candidate_cooperative_128": [
+          0.454763,
+          0.463613,
+          0.457213,
+          0.463313,
+          0.446663
+        ],
+        "candidate_serial": [
+          0.442853,
+          0.431712,
+          0.530937,
+          0.425542,
+          0.470054
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0136939970155727,
+        "serial": 0.8869662141444614
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "9c3a9847bfd769383f2f5c5bf4a6df6e395006956b07b5553dc2571a5fc0235f",
+        "baseline_serial": "ca374ad488658a9b0fbf2506987764ca2ee1416375c7893bfc16b6f1d60c56db",
+        "candidate_cooperative_128": "53e505ef1dc7633f3a4981a602b806cf030350512c56120df2e1d8c4b0342f8b",
+        "candidate_serial": "7ed5d7f3a2ff609540061fe7972fdec1d69485b4a1d27cf24228f6672ab52bbb"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 5.960464477539063e-08,
+        "baseline_serial": 5.960464477539063e-08,
+        "candidate_cooperative_128": 2.384185791015625e-07,
+        "candidate_serial": 1.1920928955078125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009498880244791508,
+        "baseline_serial": 0.008906560018658638,
+        "candidate_cooperative_128": 0.009370559826493263,
+        "candidate_serial": 0.010041600093245506
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.007914239540696144,
+          0.008297920227050781,
+          0.009498880244791508,
+          0.011120320297777653,
+          0.01021535973995924
+        ],
+        "baseline_serial": [
+          0.009023680351674557,
+          0.009560000151395798,
+          0.008906560018658638,
+          0.008435839787125587,
+          0.00804319977760315
+        ],
+        "candidate_cooperative_128": [
+          0.008772799745202065,
+          0.00955583993345499,
+          0.008873599581420422,
+          0.010427840054035187,
+          0.009370559826493263
+        ],
+        "candidate_serial": [
+          0.00829728040844202,
+          0.008896639570593834,
+          0.011581439524888992,
+          0.010634560137987137,
+          0.010041600093245506
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "84bb0ca007a76d27eae2fcc1a35d69a644d95bd8d1a96d3955e09576a178538b",
+        "baseline_serial": "1baa054d14b5f2de07dab2bc5aeb065bc4a958e59b8dd16fb99223b7d3890005",
+        "candidate_cooperative_128": "84bb0ca007a76d27eae2fcc1a35d69a644d95bd8d1a96d3955e09576a178538b",
+        "candidate_serial": "1baa054d14b5f2de07dab2bc5aeb065bc4a958e59b8dd16fb99223b7d3890005"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.477454,
+        "baseline_serial": 0.455713,
+        "candidate_cooperative_128": 0.470183,
+        "candidate_serial": 0.442613
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.519926,
+          0.477454,
+          0.509876,
+          0.465444,
+          0.437453
+        ],
+        "baseline_serial": [
+          0.510866,
+          0.445902,
+          0.472143,
+          0.455713,
+          0.437142
+        ],
+        "candidate_cooperative_128": [
+          0.480724,
+          0.460043,
+          0.470183,
+          0.445882,
+          0.516626
+        ],
+        "candidate_serial": [
+          0.519986,
+          0.442202,
+          0.437042,
+          0.442613,
+          0.457503
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9097323024285462,
+        "serial": 0.9492060535809898
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "38577e9b981cac9c05f17760216a4af72216d7b2d70af52d47e91cb8cb59580c",
+        "baseline_serial": "54722b74b3aede966c043c599e1eb907b78275888a5c2d9de43fb6ef2c48ac5c",
+        "candidate_cooperative_128": "5a5630091a20baf03714807f93e2966e799a9b21e617eb53ebfc9e6b55c85cf2",
+        "candidate_serial": "d73b923e575ce723ac6465f80d8958db3dd98af4a516caa1eaa6faf6f4ce0e58"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 2.384185791015625e-07,
+        "baseline_serial": 2.384185791015625e-07,
+        "candidate_cooperative_128": 2.384185791015625e-07,
+        "candidate_serial": 2.384185791015625e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008375359699130058,
+        "baseline_serial": 0.008952000178396702,
+        "candidate_cooperative_128": 0.009206400252878666,
+        "candidate_serial": 0.009431039914488792
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009339519776403904,
+          0.008441280573606491,
+          0.008216320537030697,
+          0.008375359699130058,
+          0.007568320259451866
+        ],
+        "baseline_serial": [
+          0.009126080200076103,
+          0.008688639849424362,
+          0.008952000178396702,
+          0.010181119665503502,
+          0.008638720028102398
+        ],
+        "candidate_cooperative_128": [
+          0.010509120300412178,
+          0.0086284801363945,
+          0.009301760233938694,
+          0.009206400252878666,
+          0.008558719418942928
+        ],
+        "candidate_serial": [
+          0.009431039914488792,
+          0.010247680358588696,
+          0.008668479509651661,
+          0.010306240059435368,
+          0.009379520080983639
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "864a2cb82f291b17eca3266a1cb0c96f26be714d85336f6e5d98329b3e782238",
+        "baseline_serial": "41695aaf206e88daf206be7b6bd7307b9d88603b2c2047f2e309691bc01cf55f",
+        "candidate_cooperative_128": "864a2cb82f291b17eca3266a1cb0c96f26be714d85336f6e5d98329b3e782238",
+        "candidate_serial": "41695aaf206e88daf206be7b6bd7307b9d88603b2c2047f2e309691bc01cf55f"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.527876,
+        "baseline_serial": 0.577219,
+        "candidate_cooperative_128": 0.562778,
+        "candidate_serial": 0.564808
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.527876,
+          0.559348,
+          0.533597,
+          0.516786,
+          0.511386
+        ],
+        "baseline_serial": [
+          0.614961,
+          0.702655,
+          0.561888,
+          0.577219,
+          0.575169
+        ],
+        "candidate_cooperative_128": [
+          0.630072,
+          0.626881,
+          0.553138,
+          0.562778,
+          0.527116
+        ],
+        "candidate_serial": [
+          0.564808,
+          0.583519,
+          0.566959,
+          0.554498,
+          0.554448
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0085059821612028,
+        "serial": 0.8916830914496578
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "49095f71a958f35e47bea83d2957f6c8a9f83636d978b0ef66b65a74ec44eb2e",
+        "baseline_serial": "f81437c3d69e1097363ceab04e25e33a90eb434ea8769614913b13f227ac0ad2",
+        "candidate_cooperative_128": "075468db64093e1ee1e7cab93f0a69aacde7476b271995b582c325565e1adba2",
+        "candidate_serial": "45ee7ebf62346f473099d865ff9b894ea350276330afc26a5ac36f882d572c7e"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 4.76837158203125e-07,
+        "baseline_serial": 1.1920928955078125e-06,
+        "candidate_cooperative_128": 4.76837158203125e-07,
+        "candidate_serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008726400323212147,
+        "baseline_serial": 0.04925600066781044,
+        "candidate_cooperative_128": 0.008652799762785435,
+        "candidate_serial": 0.05523935705423355
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008709120564162731,
+          0.009513279423117638,
+          0.009323840029537678,
+          0.007876160554587841,
+          0.008726400323212147
+        ],
+        "baseline_serial": [
+          0.04923008009791374,
+          0.049188800156116486,
+          0.04926976189017296,
+          0.049279361963272095,
+          0.04925600066781044
+        ],
+        "candidate_cooperative_128": [
+          0.009848319925367832,
+          0.00889952015131712,
+          0.008607040159404278,
+          0.008555199950933456,
+          0.008652799762785435
+        ],
+        "candidate_serial": [
+          0.05522879958152771,
+          0.05529952049255371,
+          0.05523935705423355,
+          0.05522528290748596,
+          0.05535231903195381
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "aaf48bdee8da876eda70684eb49b0ef9c8bd5c111ff7172e2a711f9410b75101",
+        "baseline_serial": "5cd600393926c9ca0f59c19490e0bee1097caf67b9e8054c6b0e81a83cc90fd5",
+        "candidate_cooperative_128": "aaf48bdee8da876eda70684eb49b0ef9c8bd5c111ff7172e2a711f9410b75101",
+        "candidate_serial": "5cd600393926c9ca0f59c19490e0bee1097caf67b9e8054c6b0e81a83cc90fd5"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.622801,
+        "baseline_serial": 0.805611,
+        "candidate_cooperative_128": 0.614831,
+        "candidate_serial": 0.840833
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.622801,
+          0.643742,
+          0.642102,
+          0.606741,
+          0.616861
+        ],
+        "baseline_serial": [
+          1.068634,
+          0.805611,
+          0.795391,
+          0.818901,
+          0.80134
+        ],
+        "candidate_cooperative_128": [
+          0.671894,
+          0.626961,
+          0.60447,
+          0.614831,
+          0.610011
+        ],
+        "candidate_serial": [
+          0.853493,
+          0.80088,
+          1.221441,
+          0.840833,
+          0.829822
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9581498186238872,
+        "serial": 0.9551195251309379
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "2e700c9cf91dec012260c1a848e3f848b36266a3019461c589a38fde3090c2e9",
+        "baseline_serial": "50c0afb768f206ef8ca745f1a971311ac026a941ce804516e91f6666a4f10830",
+        "candidate_cooperative_128": "c9c69f24f83cc7e50ea3a7059914aa00220c123f04c708f081479c3f242679d7",
+        "candidate_serial": "1cd36771ce98b1c2992b0021565847696e5ca31001b0dae37bccd2c5c5f07281"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 4.76837158203125e-07,
+        "baseline_serial": 2.6226043701171875e-06,
+        "candidate_cooperative_128": 4.76837158203125e-07,
+        "candidate_serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008491200394928455,
+        "baseline_serial": 0.15529631078243256,
+        "candidate_cooperative_128": 0.008862080052495003,
+        "candidate_serial": 0.16259358823299408
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009695679880678654,
+          0.009188800118863583,
+          0.008491200394928455,
+          0.00830112025141716,
+          0.008414720185101032
+        ],
+        "baseline_serial": [
+          0.15534208714962006,
+          0.15527360141277313,
+          0.1554681658744812,
+          0.1552649587392807,
+          0.15529631078243256
+        ],
+        "candidate_cooperative_128": [
+          0.008756480179727077,
+          0.008362879976630211,
+          0.008862080052495003,
+          0.010548160411417484,
+          0.009138240478932858
+        ],
+        "candidate_serial": [
+          0.1625804752111435,
+          0.16259358823299408,
+          0.1626073718070984,
+          0.16260704398155212,
+          0.1624569445848465
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "779ec85707996962748b2726cbf5124c69ad99a2457af8543b3bdbc354ad9eaa",
+        "baseline_serial": "dfcdebbea5c10917b93dbcb20be3ddb956507d1a63772c5b72e801e3b20b10d0",
+        "candidate_cooperative_128": "779ec85707996962748b2726cbf5124c69ad99a2457af8543b3bdbc354ad9eaa",
+        "candidate_serial": "dfcdebbea5c10917b93dbcb20be3ddb956507d1a63772c5b72e801e3b20b10d0"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 2.671334,
+        "baseline_serial": 4.018732,
+        "candidate_cooperative_128": 2.670534,
+        "candidate_serial": 4.013583
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          2.739828,
+          3.159735,
+          2.564259,
+          2.581581,
+          2.671334
+        ],
+        "baseline_serial": [
+          4.450409,
+          3.779696,
+          4.018732,
+          4.135838,
+          3.860673
+        ],
+        "candidate_cooperative_128": [
+          2.670534,
+          2.592985,
+          2.96456,
+          2.727246,
+          2.644404
+        ],
+        "candidate_serial": [
+          4.013583,
+          4.073815,
+          4.141619,
+          3.896516,
+          3.905427
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.8748987425596674,
+        "serial": 0.943509446222007
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "59025c1de3e8bc51d6164c171cf312d5b24585db05b748f9d8abe3492e6006b2",
+        "baseline_serial": "f923f29f0c7be871745de12181ab273ec7e192089c893f8d7ec2331197a71a6f",
+        "candidate_cooperative_128": "5a317ea1382b669e86efa9a47f5785519839d6dbdfb50a398ea037e5c29d26c2",
+        "candidate_serial": "46b0d2fdc4a1e9edf4cbdab1925592453a6f6624b3310a890313a6ebd26f2fc8"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 4.76837158203125e-07,
+        "baseline_serial": 6.67572021484375e-06,
+        "candidate_cooperative_128": 4.76837158203125e-07,
+        "candidate_serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.011066559702157974,
+        "baseline_serial": 0.6181430220603943,
+        "candidate_cooperative_128": 0.012648960575461388,
+        "candidate_serial": 0.6551529765129089
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.011066559702157974,
+          0.011332159861922264,
+          0.010526079684495926,
+          0.012373759411275387,
+          0.010982399806380272
+        ],
+        "baseline_serial": [
+          0.6174829006195068,
+          0.6183638572692871,
+          0.6172604560852051,
+          0.6184051036834717,
+          0.6181430220603943
+        ],
+        "candidate_cooperative_128": [
+          0.013556480407714844,
+          0.01194015983492136,
+          0.012907199561595917,
+          0.012368320487439632,
+          0.012648960575461388
+        ],
+        "candidate_serial": [
+          0.6552178859710693,
+          0.6551529765129089,
+          0.6550064086914062,
+          0.655089259147644,
+          0.6552876830101013
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "0953fea58a8f695634ba25055e2bca06ef5b263d933dbca38c2109987a95db9d",
+        "baseline_serial": "7930d248b633a33b6ca273855db1a744b372e6c95df9b5629a52400bae6adc72",
+        "candidate_cooperative_128": "0953fea58a8f695634ba25055e2bca06ef5b263d933dbca38c2109987a95db9d",
+        "candidate_serial": "7930d248b633a33b6ca273855db1a744b372e6c95df9b5629a52400bae6adc72"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.468863,
+        "baseline_serial": 0.729307,
+        "candidate_cooperative_128": 0.478704,
+        "candidate_serial": 0.941327
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.456593,
+          0.491995,
+          0.491065,
+          0.452772,
+          0.468863
+        ],
+        "baseline_serial": [
+          0.716146,
+          0.729307,
+          1.016751,
+          1.19116,
+          0.704166
+        ],
+        "candidate_cooperative_128": [
+          0.478484,
+          0.461834,
+          0.480624,
+          0.505785,
+          0.478704
+        ],
+        "candidate_serial": [
+          0.833012,
+          0.99991,
+          0.941327,
+          0.781989,
+          1.040323
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9332324048105021,
+        "serial": 0.6723593105548091
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "83dc0a9c9c57666ce8272bfda83bec9d979cd2a580a27c08478d804a871eb013",
+        "baseline_serial": "724b54286cfa1c96214c6acd78965385d135deccfbc75f71173e4546449c04ec",
+        "candidate_cooperative_128": "fff03aacb1fd6a5556296a7c32987704ab654b13976d975ba6d1ed974b106ed0",
+        "candidate_serial": "bcd6ba81cb582d5a805f73cc7c4c3e6c1e9f9c9993a701e6559188f84cf38e24"
+      },
+      "kind": "rmsnorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 2.384185791015625e-07,
+        "baseline_serial": 1.1920928955078125e-06,
+        "candidate_cooperative_128": 2.384185791015625e-07,
+        "candidate_serial": 2.384185791015625e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.00887839961796999,
+        "baseline_serial": 0.20671424269676208,
+        "candidate_cooperative_128": 0.009513599798083305,
+        "candidate_serial": 0.30744609236717224
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008542079478502274,
+          0.00943680014461279,
+          0.008604159578680992,
+          0.00887839961796999,
+          0.009362559765577316
+        ],
+        "baseline_serial": [
+          0.2066812664270401,
+          0.20672607421875,
+          0.20668096840381622,
+          0.2067728042602539,
+          0.20671424269676208
+        ],
+        "candidate_cooperative_128": [
+          0.010386879555881023,
+          0.009288320317864418,
+          0.009170879609882832,
+          0.01009919960051775,
+          0.009513599798083305
+        ],
+        "candidate_serial": [
+          0.30740734934806824,
+          0.30744990706443787,
+          0.30744609236717224,
+          0.3074614405632019,
+          0.3074336051940918
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 18,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 23,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 19,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "176a61235d7018b3e29d0e64dc2f3dd1322fee484afd4063e0d98b52acb6cf4a",
+        "baseline_serial": "36796c2cd897c9c808436fc5ab5ea0ffce640f58415ea6d9639b0543bbdf9a17",
+        "candidate_cooperative_128": "176a61235d7018b3e29d0e64dc2f3dd1322fee484afd4063e0d98b52acb6cf4a",
+        "candidate_serial": "36796c2cd897c9c808436fc5ab5ea0ffce640f58415ea6d9639b0543bbdf9a17"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 9,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 9,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.472233,
+        "baseline_serial": 0.438762,
+        "candidate_cooperative_128": 0.478424,
+        "candidate_serial": 0.441682
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.474574,
+          0.481545,
+          0.472233,
+          0.466763,
+          0.468563
+        ],
+        "baseline_serial": [
+          0.480594,
+          0.448263,
+          0.432262,
+          0.438762,
+          0.416501
+        ],
+        "candidate_cooperative_128": [
+          0.470963,
+          0.478424,
+          0.471484,
+          0.518486,
+          0.487685
+        ],
+        "candidate_serial": [
+          0.484404,
+          0.456703,
+          0.439092,
+          0.430552,
+          0.441682
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.040529021325306,
+        "serial": 0.9582349761630881
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "488bc73efcb946c3cc82b9b035670a549850eb3eb7de152c618ede8163a9a0c7",
+        "baseline_serial": "9f917fa60f23fddeda06491e53b5e829dfbc7081a9cba6e16a1b68f9381dbda4",
+        "candidate_cooperative_128": "b1c045f8f4483c91e57fa7a66ff969ed2c2c6fb4e562d14dfd810cdb8374f67f",
+        "candidate_serial": "c7cc88cc9144d31c0e403a8a7d6e07c07cf2a70513ee95d2e1a04b6a72c2a885"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 2.384185791015625e-07,
+        "baseline_serial": 2.384185791015625e-07,
+        "candidate_cooperative_128": 2.384185791015625e-07,
+        "candidate_serial": 1.1920928955078125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.00906175933778286,
+        "baseline_serial": 0.008839679881930351,
+        "candidate_cooperative_128": 0.008708800189197063,
+        "candidate_serial": 0.009224960580468178
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009186239913105965,
+          0.0093452800065279,
+          0.008872640319168568,
+          0.00906175933778286,
+          0.007940799929201603
+        ],
+        "baseline_serial": [
+          0.008870400488376617,
+          0.009712319821119308,
+          0.00822047982364893,
+          0.007817280478775501,
+          0.008839679881930351
+        ],
+        "candidate_cooperative_128": [
+          0.00987200066447258,
+          0.008705919608473778,
+          0.009072639979422092,
+          0.008570880629122257,
+          0.008708800189197063
+        ],
+        "candidate_serial": [
+          0.010538239032030106,
+          0.009224960580468178,
+          0.010290879756212234,
+          0.009048320353031158,
+          0.008655999787151814
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "187e5e59de21603f5719a2f09a0cdd5a91c38b9b4a11cdc95dbd65c2a6af68c9",
+        "baseline_serial": "9df08369f72746bd90143e088aa69a8a7409123066e9c9e01cd9f87c57280a98",
+        "candidate_cooperative_128": "187e5e59de21603f5719a2f09a0cdd5a91c38b9b4a11cdc95dbd65c2a6af68c9",
+        "candidate_serial": "9df08369f72746bd90143e088aa69a8a7409123066e9c9e01cd9f87c57280a98"
+      },
+      "shape": [
+        1,
+        32
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.487504,
+        "baseline_serial": 0.450933,
+        "candidate_cooperative_128": 0.488275,
+        "candidate_serial": 0.454313
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.606291,
+          0.487504,
+          0.476673,
+          0.497685,
+          0.485914
+        ],
+        "baseline_serial": [
+          0.455483,
+          0.444343,
+          0.481154,
+          0.450933,
+          0.430372
+        ],
+        "candidate_cooperative_128": [
+          0.482105,
+          0.505545,
+          0.488275,
+          0.492925,
+          0.483924
+        ],
+        "candidate_serial": [
+          0.454313,
+          0.491615,
+          0.466774,
+          0.438182,
+          0.454033
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9827280557304982,
+        "serial": 0.9031609586008826
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "6705788cf4236d5aa6d2e05ba0f9353818f22a680863abe10be87be0714bbeba",
+        "baseline_serial": "5b8c482cdefce5e3e94e224911ebbeaa7785b6cf19b4cb75fea47c20b69ecad6",
+        "candidate_cooperative_128": "ee8514780f8882b5ea1d48dff9ffb21482df1d19ec5d631b7de77348b7d16460",
+        "candidate_serial": "d3578f2af430de7124af10e8e099bf23b708f6a9e09fde94d50400ce58afa614"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 2.384185791015625e-07,
+        "baseline_serial": 4.76837158203125e-07,
+        "candidate_cooperative_128": 2.384185791015625e-07,
+        "candidate_serial": 2.384185791015625e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.008539199829101562,
+        "baseline_serial": 0.008768320083618164,
+        "candidate_cooperative_128": 0.008689280599355698,
+        "candidate_serial": 0.009708479978144169
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008209600113332272,
+          0.008539199829101562,
+          0.008022080175578594,
+          0.00926175992935896,
+          0.009615039452910423
+        ],
+        "baseline_serial": [
+          0.008146240375936031,
+          0.008940160274505615,
+          0.010952960699796677,
+          0.008356800302863121,
+          0.008768320083618164
+        ],
+        "candidate_cooperative_128": [
+          0.008689280599355698,
+          0.008225920610129833,
+          0.009005759842693806,
+          0.007722880225628614,
+          0.009771520271897316
+        ],
+        "candidate_serial": [
+          0.010298880748450756,
+          0.00889632012695074,
+          0.009857919998466969,
+          0.009415999986231327,
+          0.009708479978144169
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "ce2f7b1afc3475cfb56cf8899553337c55302c17acce12c41b3f4c80c381faf2",
+        "baseline_serial": "0aafd20ccaae925d43d8839499e8dcc7ee7d17d46a9bf3af28597c8f2305f7d1",
+        "candidate_cooperative_128": "ce2f7b1afc3475cfb56cf8899553337c55302c17acce12c41b3f4c80c381faf2",
+        "candidate_serial": "0aafd20ccaae925d43d8839499e8dcc7ee7d17d46a9bf3af28597c8f2305f7d1"
+      },
+      "shape": [
+        17,
+        35
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.557768,
+        "baseline_serial": 0.578679,
+        "candidate_cooperative_128": 0.539547,
+        "candidate_serial": 0.58999
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.557768,
+          0.6013,
+          0.544408,
+          0.530497,
+          0.562528
+        ],
+        "baseline_serial": [
+          0.632572,
+          0.578679,
+          0.574939,
+          0.586079,
+          0.557298
+        ],
+        "candidate_cooperative_128": [
+          0.538787,
+          0.539547,
+          0.560839,
+          0.533367,
+          0.557368
+        ],
+        "candidate_serial": [
+          0.679124,
+          0.58999,
+          0.567659,
+          0.579999,
+          0.624671
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.1287208736204388,
+        "serial": 0.9062511842101221
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "997d6bfe5f321dae069c1b68a1f53c22c2bb051e79d0c7b6660d52fdef0c5f85",
+        "baseline_serial": "08ad0a0a46539fd13ee42e35076445b5acbd4f1d913b18b6790af92942aa413a",
+        "candidate_cooperative_128": "8599e47260a796fc220d59eaa512a180697cb29905414c38e61e73436dedff9b",
+        "candidate_serial": "8c4a51507bfc9a05eb136fff19e8c78deded7f1efa03e5db8788d1e0a0961e6c"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 4.76837158203125e-07,
+        "baseline_serial": 1.9073486328125e-06,
+        "candidate_cooperative_128": 4.76837158203125e-07,
+        "candidate_serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009731199592351913,
+        "baseline_serial": 0.059334076941013336,
+        "candidate_cooperative_128": 0.008621440269052982,
+        "candidate_serial": 0.06547199934720993
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.010261760093271732,
+          0.009354239329695702,
+          0.009731199592351913,
+          0.010029120370745659,
+          0.009565119631588459
+        ],
+        "baseline_serial": [
+          0.05942527949810028,
+          0.059334076941013336,
+          0.05930880084633827,
+          0.05932736024260521,
+          0.05938303843140602
+        ],
+        "candidate_cooperative_128": [
+          0.009902399964630604,
+          0.0108800008893013,
+          0.008415039628744125,
+          0.008621440269052982,
+          0.008255359716713428
+        ],
+        "candidate_serial": [
+          0.06546976417303085,
+          0.06547552347183228,
+          0.06547199934720993,
+          0.06542783975601196,
+          0.06553152203559875
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "f40fe2372bf4e6a92c7d0fdd9f88877e25a80ffde83c2652d8fede62458dcd5a",
+        "baseline_serial": "364dc94e162c86b78edc950df113114d13c7c6093272446fd83834d41fde38e3",
+        "candidate_cooperative_128": "f40fe2372bf4e6a92c7d0fdd9f88877e25a80ffde83c2652d8fede62458dcd5a",
+        "candidate_serial": "364dc94e162c86b78edc950df113114d13c7c6093272446fd83834d41fde38e3"
+      },
+      "shape": [
+        129,
+        257
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.667144,
+        "baseline_serial": 0.904026,
+        "candidate_cooperative_128": 0.640572,
+        "candidate_serial": 0.960618
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.687375,
+          0.669244,
+          0.632602,
+          0.645743,
+          0.667144
+        ],
+        "baseline_serial": [
+          1.147888,
+          0.907886,
+          0.904026,
+          0.902455,
+          0.861684
+        ],
+        "candidate_cooperative_128": [
+          0.639792,
+          0.652303,
+          0.640572,
+          0.626972,
+          0.763139
+        ],
+        "candidate_serial": [
+          0.960618,
+          1.102295,
+          0.921256,
+          0.937352,
+          1.303485
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 1.0164596581554377,
+        "serial": 0.9601770271959504
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "b0e45b8836d2c2e60eb835b156aa281fd6c23d2a746023986315dfb17564d512",
+        "baseline_serial": "7eb3b76f8a8e954842583c7fd0db7ebb38376169866160db957c807a3746541c",
+        "candidate_cooperative_128": "45eb5d9034f437f2c1618c58d06443733e6ac0da19c4b319c71e025fcd52ea28",
+        "candidate_serial": "8433ce014beea5611d52323a66a1928e3a37f3963ff691b64c534db1fc222d48"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 4.76837158203125e-07,
+        "baseline_serial": 2.384185791015625e-06,
+        "candidate_cooperative_128": 4.76837158203125e-07,
+        "candidate_serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.00877408031374216,
+        "baseline_serial": 0.20373696088790894,
+        "candidate_cooperative_128": 0.008632000535726547,
+        "candidate_serial": 0.21218687295913696
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.008971840143203735,
+          0.009200959466397762,
+          0.008504640311002731,
+          0.00779904006049037,
+          0.00877408031374216
+        ],
+        "baseline_serial": [
+          0.2037583887577057,
+          0.20376448333263397,
+          0.20373696088790894,
+          0.2036873698234558,
+          0.2036576122045517
+        ],
+        "candidate_cooperative_128": [
+          0.008515840396285057,
+          0.007965760305523872,
+          0.009498239494860172,
+          0.008632000535726547,
+          0.009052800014615059
+        ],
+        "candidate_serial": [
+          0.21216991543769836,
+          0.21241024136543274,
+          0.21227103471755981,
+          0.21218687295913696,
+          0.21215872466564178
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "3e13b0fbc4ab48b8dfe8f319c37de9daf75ffd5068ba3317321e64e6f412c5aa",
+        "baseline_serial": "5b412d17fd9dd419a76e99db5d50bb1e4c45f549a662e68d5bc5c1a171550f4b",
+        "candidate_cooperative_128": "3e13b0fbc4ab48b8dfe8f319c37de9daf75ffd5068ba3317321e64e6f412c5aa",
+        "candidate_serial": "5b412d17fd9dd419a76e99db5d50bb1e4c45f549a662e68d5bc5c1a171550f4b"
+      },
+      "shape": [
+        128,
+        1024
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 2.696305,
+        "baseline_serial": 4.17253,
+        "candidate_cooperative_128": 2.546078,
+        "candidate_serial": 4.228973
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          2.747573,
+          2.696305,
+          2.742378,
+          2.679504,
+          2.57937
+        ],
+        "baseline_serial": [
+          4.263905,
+          4.303037,
+          3.922868,
+          3.990501,
+          4.17253
+        ],
+        "candidate_cooperative_128": [
+          2.546078,
+          2.499706,
+          2.576879,
+          2.535758,
+          2.757458
+        ],
+        "candidate_serial": [
+          3.902697,
+          4.228973,
+          4.303597,
+          4.246344,
+          4.118657
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9838672850715598,
+        "serial": 0.9516480990381457
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "b9f9b1d0cfe08a858af4219c297dfa553ebc259a5d597981d23ead92bc138a6f",
+        "baseline_serial": "e11c8593f96ffe663c1dab25863b916cd687dde837a4283b0be98f628cc3bec7",
+        "candidate_cooperative_128": "eb03a1fb2aa1c1e50929b0a96dd13a8a842e8c7d4c6d530ea1d7b3380afd8364",
+        "candidate_serial": "74562f0fbddcf9cfaca7a1b1a4ba6b14e965f9f0b5dcf626eb8aa890ba377a1e"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 7.152557373046875e-07,
+        "baseline_serial": 6.67572021484375e-06,
+        "candidate_cooperative_128": 4.76837158203125e-07,
+        "candidate_serial": 4.76837158203125e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.012528959661722183,
+        "baseline_serial": 0.8128076791763306,
+        "candidate_cooperative_128": 0.012734400108456612,
+        "candidate_serial": 0.8541052937507629
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.012521919794380665,
+          0.01291488017886877,
+          0.013113600201904774,
+          0.012528959661722183,
+          0.012495039962232113
+        ],
+        "baseline_serial": [
+          0.8113994002342224,
+          0.8125804662704468,
+          0.8128076791763306,
+          0.8128572702407837,
+          0.8137852549552917
+        ],
+        "candidate_cooperative_128": [
+          0.012237119488418102,
+          0.012968640774488449,
+          0.012300800532102585,
+          0.012734400108456612,
+          0.013983040116727352
+        ],
+        "candidate_serial": [
+          0.8518390655517578,
+          0.8540486097335815,
+          0.8541410565376282,
+          0.8541052937507629,
+          0.8545353412628174
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "6a1435e1dd537ac2124ccdb03d6764cad75ef9901b85f6eb85b60298ae2a99fb",
+        "baseline_serial": "5f7b8c0707c8cfd7fc7f4e61dd284bbef772291afded8bc55ce91681abffb1ba",
+        "candidate_cooperative_128": "6a1435e1dd537ac2124ccdb03d6764cad75ef9901b85f6eb85b60298ae2a99fb",
+        "candidate_serial": "5f7b8c0707c8cfd7fc7f4e61dd284bbef772291afded8bc55ce91681abffb1ba"
+      },
+      "shape": [
+        256,
+        4096
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    },
+    {
+      "checked_host_wall_median_ms": {
+        "baseline_cooperative_128": 0.502165,
+        "baseline_serial": 0.779759,
+        "candidate_cooperative_128": 0.488155,
+        "candidate_serial": 1.244203
+      },
+      "checked_host_wall_samples_ms": {
+        "baseline_cooperative_128": [
+          0.520366,
+          0.483304,
+          0.502165,
+          0.503495,
+          0.491714
+        ],
+        "baseline_serial": [
+          0.793421,
+          0.779759,
+          0.77976,
+          0.753338,
+          0.704126
+        ],
+        "candidate_cooperative_128": [
+          0.506426,
+          0.475143,
+          0.488155,
+          0.482104,
+          0.497965
+        ],
+        "candidate_serial": [
+          1.244203,
+          0.929377,
+          1.446433,
+          1.285064,
+          0.935427
+        ]
+      },
+      "dtype": "fp32",
+      "event_speedup_baseline_over_candidate": {
+        "cooperative_128": 0.9899648112200519,
+        "serial": 0.6755556549830302
+      },
+      "image_digests": {
+        "baseline_cooperative_128": "f9981884002883be7d442937c6f1bb17e705be7d16b010cd5956506e7adebfda",
+        "baseline_serial": "c031217b8c57185e935c67e56aed10c2b35eb2f08912858b35cc03180374864a",
+        "candidate_cooperative_128": "20405a92e8d83c78299b6d0fcbb1278716de29853790e88296fc6a7395ca2165",
+        "candidate_serial": "39548253b85dc980dc5cb693253f58870f77016437b52153bb33c570e0c6727a"
+      },
+      "kind": "layernorm",
+      "max_abs_error": {
+        "baseline_cooperative_128": 2.384185791015625e-07,
+        "baseline_serial": 2.384185791015625e-06,
+        "candidate_cooperative_128": 2.384185791015625e-07,
+        "candidate_serial": 2.384185791015625e-07
+      },
+      "resident_event_dispatch_median_ms": {
+        "baseline_cooperative_128": 0.009722880087792873,
+        "baseline_serial": 0.23398911952972412,
+        "candidate_cooperative_128": 0.00982144009321928,
+        "candidate_serial": 0.34636542201042175
+      },
+      "resident_event_dispatch_samples_ms": {
+        "baseline_cooperative_128": [
+          0.009722880087792873,
+          0.00975744053721428,
+          0.009014400653541088,
+          0.009262080304324627,
+          0.009776639752089977
+        ],
+        "baseline_serial": [
+          0.23398911952972412,
+          0.2340591996908188,
+          0.23408639430999756,
+          0.23390206694602966,
+          0.2339216023683548
+        ],
+        "candidate_cooperative_128": [
+          0.01088608056306839,
+          0.010173439979553223,
+          0.00904736015945673,
+          0.008638080209493637,
+          0.00982144009321928
+        ],
+        "candidate_serial": [
+          0.3463801443576813,
+          0.34636542201042175,
+          0.34634751081466675,
+          0.34639424085617065,
+          0.34633567929267883
+        ]
+      },
+      "resources": {
+        "baseline_cooperative_128": {
+          "registers_per_thread": 29,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "baseline_serial": {
+          "registers_per_thread": 22,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        },
+        "candidate_cooperative_128": {
+          "registers_per_thread": 34,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 512
+        },
+        "candidate_serial": {
+          "registers_per_thread": 24,
+          "spill_load_bytes": 0,
+          "spill_store_bytes": 0,
+          "static_shared_memory_bytes": 0
+        }
+      },
+      "schedule_digests": {
+        "baseline_cooperative_128": "b6861afa5725013eb42c7b8b6ad12c61380b5d4b49bd00fc7429ee6a0688bd17",
+        "baseline_serial": "9400c7b1acff42be2e7643e1a7d67f892e2dd017dc6765b00e0d1a1f152b263f",
+        "candidate_cooperative_128": "b6861afa5725013eb42c7b8b6ad12c61380b5d4b49bd00fc7429ee6a0688bd17",
+        "candidate_serial": "9400c7b1acff42be2e7643e1a7d67f892e2dd017dc6765b00e0d1a1f152b263f"
+      },
+      "shape": [
+        2,
+        4097
+      ],
+      "static_barriers": {
+        "baseline_cooperative_128": 18,
+        "baseline_serial": 0,
+        "candidate_cooperative_128": 18,
+        "candidate_serial": 0
+      }
+    }
+  ],
+  "schema": "tessera.nvidia.norm_accuracy_performance.v1",
+  "scope": "Frozen rsqrt/simple-sum baseline versus sqrt/division and compensated serial FP32 sum, paired by schedule. Norm-only numerical gate; composed failures are retained in accuracy.json. No FP8/MXFP8/MXFP4 or sibling architecture inference.",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_norm_accuracy_performance.py": "b7e58483c7391ab44c3d282834c6a16bced3762ccfbb575d92023f1b47c92968",
+    "python/tessera/compiler/nvidia_native.py": "8e8eb089c3b74c4f1e6f38e17e919643ea5c5e4077b750d56dfc4d08575cfac5",
+    "python/tessera/compiler/scheduled_kernel.py": "8522ad10ba6bc9d50f02076a9044df8572428bc27cd4d291afd13fd23727a273",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "8a6df55121ed14d140ee6b7dac88350225f9a4e3fe2eea91209ea3fd4a5763d1",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "bf917ff27d6f52bbe8b05e3ca3582fab26a1d846ed472fecc836a402d7add7d3",
+    "src/compiler/ir/TileOps.cpp": "e1b2fa06a6d3e2fcf07d83f46cc7e1330fc594cc8372bf4cb6c7360de3e7886d",
+    "src/compiler/programming_model/ir/ScheduleDialect.cpp": "0b9fe1fbd590cd9f5547311561e07fde8db98aeab5216b5711d91f330b09465f",
+    "src/compiler/programming_model/ir/schedule/ScheduleMeshPipelineOps.td": "985e618d139899b6cc05e9d29e267cd9ce1061e4689cc291d26459bfa2d7141b",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "2db47663e9c7f122b05c5071ebc313aeb46a694475d705cdb46946e055693ebe",
+    "tests/device/nvidia/test_cooperative_norm.py": "59d423c753c294686db6c009e553c4d317b26201b08a15ccb2949032315fb40a"
+  },
+  "timing_scope": "Alternating schedule order over five trials. CUDA event windows include resident dispatch; checked host wall includes module loading, allocation, upload, launch, readback and cleanup."
+}

@@ -24,14 +24,14 @@ each row into a single E2E tier.
 
 | Tier | Count |
 |---|---:|
-| ``complete`` | 295 |
+| ``complete`` | 298 |
 | ``runnable_reference`` | 25 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **354** |
+| **total** | **357** |
 
-## complete (295)
+## complete (298)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -80,10 +80,10 @@ each row into a single E2E tier.
 | ``cos`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``cosh`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``digamma`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
-| ``div`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
+| ``div`` | elementwise | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``erf`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``erfc`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
-| ``exp`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
+| ``exp`` | elementwise | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``expm1`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``floor_div`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``gelu`` | elementwise | public | public | registered | fused | device_verified_abi | ready | none |
@@ -104,7 +104,7 @@ each row into a single E2E tier.
 | ``sinh`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``softcap`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``softplus`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
-| ``sqrt`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
+| ``sqrt`` | elementwise | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``sub`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``tan`` | elementwise | public | public | registered | fused | device_verified_jit | ready | none |
 | ``tanh`` | elementwise | public | public | registered | fused | device_verified_jit | ready | benchmarked |
@@ -165,6 +165,7 @@ each row into a single E2E tier.
 | ``chunk`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
 | ``flip`` | layout_transform | public | public | registered | fused | device_verified_jit | ready | none |
 | ``masked_fill`` | layout_transform | public | public | registered | fused | device_verified_jit | ready | none |
+| ``mxfp4_folded_storage`` | layout_transform | public | public | registered | fused | device_verified_jit | ready | none |
 | ``pack`` | layout_transform | public | public | registered | fused | device_verified_jit | ready | none |
 | ``pad`` | layout_transform | public | public | registered | fused | device_verified_jit | ready | none |
 | ``permute`` | layout_transform | public | public | registered | fused | fused | ready | benchmarked |
@@ -205,6 +206,7 @@ each row into a single E2E tier.
 | ``matmul`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | benchmarked |
 | ``moe_swiglu_block`` | loop_nest | public | public | registered | fused | fused | ready | benchmarked |
 | ``quantized_matmul`` | loop_nest | public | public | registered | fused | device_verified_abi | ready | none |
+| ``scaled_matmul`` | loop_nest | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``tridiagonal_solve`` | loop_nest | public | public | registered | fused | device_verified_jit | ready | none |
 | ``asymmetric_bce`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
 | ``binary_cross_entropy_loss`` | loss | public | public | registered | fused | device_verified_jit | ready | none |
@@ -259,6 +261,7 @@ each row into a single E2E tier.
 | ``dequantize_fp6`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dequantize_fp8`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``dequantize_nvfp4`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
+| ``nvfp4_requantize`` | quantize | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``quantize_fp4`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``quantize_fp6`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
 | ``quantize_fp8`` | quantize | public | public | registered | fused | device_verified_jit | ready | none |
@@ -273,10 +276,10 @@ each row into a single E2E tier.
 | ``argmax`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``argmin`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``count_nonzero`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
-| ``cummax`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
+| ``cummax`` | reduction | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``cummin`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``cumprod`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
-| ``cumsum`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
+| ``cumsum`` | reduction | public | public | registered | fused | device_verified_jit | ready | benchmarked |
 | ``max`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``mean`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |
 | ``min`` | reduction | public | public | registered | fused | device_verified_jit | ready | none |

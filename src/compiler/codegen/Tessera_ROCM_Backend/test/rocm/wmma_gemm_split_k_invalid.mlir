@@ -29,6 +29,11 @@ tessera_rocm.wmma_gemm {name = "d", m = 16 : i64, n = 16 : i64, k = 16 : i64, sp
 // -----
 
 // A consistent pair verifies; the directive adapter then refuses it (DIRECTIVE).
-tessera_rocm.wmma_gemm {name = "e", m = 16 : i64, n = 16 : i64, k = 16 : i64, split_k = 2 : i64, split_k_reduction = "ordered"}
+tessera_rocm.wmma_gemm {name = "e", m = 16 : i64, n = 16 : i64, k = 16 : i64, split_k = 2 : i64, split_k_reduction = "ordered", problem_k = 32 : i64}
 
-// DIRECTIVE: ROCM_SPLIT_K_{{UNSUPPORTED}}: the tessera_rocm.wmma_gemm directive adapter has no split-K body
+// DIRECTIVE: ROCM_SPLIT_K_{{UNSUPPORTED}}: split-K is emitted on the typed tile.matmul_kernel route only
+
+// -----
+
+// expected-error @+1 {{ROCM_WMMA_GEMM_SPLIT_K_BAD_CONTRACT: split-K requires positive problem_k}}
+tessera_rocm.wmma_gemm {name = "missing_problem_k", m = 16 : i64, n = 16 : i64, k = 16 : i64, split_k = 2 : i64, split_k_reduction = "ordered"}

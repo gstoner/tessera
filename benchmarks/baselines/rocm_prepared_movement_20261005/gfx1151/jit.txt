@@ -1,0 +1,12 @@
+...............ss...ss..                                                 [100%]
+=============================== warnings summary ===============================
+tests/unit/test_public_movement_frontend.py:88
+  /home/gstoner/scratch/rocm-native-movement-20261005/tests/unit/test_public_movement_frontend.py:88: PytestUnknownMarkWarning: Unknown pytest.mark.hardware_rocm - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.hardware_rocm
+
+tests/unit/test_public_movement_frontend.py:141
+  /home/gstoner/scratch/rocm-native-movement-20261005/tests/unit/test_public_movement_frontend.py:141: PytestUnknownMarkWarning: Unknown pytest.mark.hardware_rocm - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.hardware_rocm
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+20 passed, 4 skipped, 2 warnings in 7.12s

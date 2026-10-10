@@ -1,0 +1,164 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -1871,7 +1871,8 @@
+   const int64_t nbuf = prefetch == 2 ? 2 : 1;
+   auto ws = gpu::AddressSpaceAttr::get(ctx, gpu::AddressSpace::Workgroup);
+   Value ldsA = gpuFunc.addWorkgroupAttribution(
+-      MemRefType::get({nbuf * wgM * ldsStride}, T.store,
++      MemRefType::get({nbuf * wgM * ldsStride},
++                      foldedFullK ? Type(b.getI8Type()) : T.store,
+                       MemRefLayoutAttrInterface(), ws),
+       loc);
+   Value ldsB = gpuFunc.addWorkgroupAttribution(
+@@ -1901,6 +1902,12 @@
+   Value K = gpuFunc.getArgument(7);
+   auto ci = [&](int64_t v) { return b.create<arith::ConstantIndexOp>(loc, v); };
+   Value c0 = ci(0), c32 = ci(32);
++  Value rawLdsA = ldsA;
++  if (foldedFullK)
++    ldsA = b.create<memref::ViewOp>(loc,
++        MemRefType::get({nbuf * wgM * ldsStride}, T.store,
++                       MemRefLayoutAttrInterface(), ws),
++        rawLdsA, c0, ValueRange{});
+   Value cStride = ci(ldsStride);
+   const bool wholeM = runtimeMN ? wholeMContract : staticM % wgM == 0;
+   const bool wholeN = runtimeMN ? wholeNContract : staticN % wgN == 0;
+@@ -2279,6 +2286,92 @@
+       });
+ 
+   ValueRange accs = groupLoop.getResults();
++  if (foldedFullK && mt == 4 && nt == 2 && wavesM == 4 && wavesN == 2 &&
++      nbuf == 1 && nbuf * wgM * ldsStride >= 20480) {
++    auto cTy = MemRefType::get({5120}, b.getF32Type(),
++                              MemRefLayoutAttrInterface(), ws);
++    Value cSlab = b.create<memref::ViewOp>(loc, cTy, rawLdsA, c0, ValueRange{});
++    // The final loop slab has no remaining readers before this reuse.
++    barrier(b, loc);
++    for (int64_t mi = 0; mi < mt; ++mi) {
++      for (int64_t ni = 0; ni < nt; ++ni) {
++        OperationState scale(loc, "tile.fragment_folded_scale");
++        scale.addOperands({accs[mi * nt + ni], lhsScale, rhsScale,
++                           rowOrigin[mi], colOrigin[ni], M, N});
++        scale.addTypes(accFragmentTy);
++        scale.addAttribute("vector_scales", b.getBoolAttr(foldedVectorScales));
++        Value scaled = b.create(scale)->getResult(0);
++        OperationState unpack(loc, "tile.fragment_unpack");
++        unpack.addOperands(scaled); unpack.addTypes(tileValueTy);
++        unpack.addAttribute("tile.layout", tileLayout);
++        Value tile = b.create(unpack)->getResult(0);
++        OperationState store(loc, "tile.store");
++        store.addOperands({tile, cSlab,
++            b.create<arith::MulIOp>(loc, waveId, ci(16)), ci(ni * 16), ci(40)});
++        store.addAttribute("tile.layout", tileLayout);
++        store.addAttribute("tile.memory", ldsRowMajor);
++        b.create(store);
++      }
++      // Each wave consumes only its own LDS cells. All lanes participate,
++      // including inactive edge lanes; no other wave reads or overwrites them.
++      b.create<ROCDL::WaveBarrierOp>(loc);
++      for (int64_t trip = 0; trip < 2; ++trip) {
++        Value lane = b.create<arith::RemUIOp>(loc, tx, ci(32));
++        Value cell = b.create<arith::AddIOp>(loc,
++            b.create<arith::MulIOp>(loc, lane, ci(8)), ci(trip * 32 * 8));
++        Value localRow = b.create<arith::DivUIOp>(loc, cell, ci(32));
++        Value col = b.create<arith::RemUIOp>(loc, cell, ci(32));
++        Value wave = waveId;
++        Value row = b.create<arith::AddIOp>(loc,
++            b.create<arith::MulIOp>(loc, wave, ci(16)), localRow);
++        Value gr = b.create<arith::AddIOp>(loc, baseRow,
++            b.create<arith::AddIOp>(loc, localRow,
++                b.create<arith::MulIOp>(loc,
++                    b.create<arith::AddIOp>(loc,
++                        b.create<arith::MulIOp>(loc,
++                            b.create<arith::DivUIOp>(loc, wave, ci(wavesN)), ci(mt)),
++                        ci(mi)), ci(16))));
++        Value gc = b.create<arith::AddIOp>(loc, baseCol,
++            b.create<arith::AddIOp>(loc, col,
++                b.create<arith::MulIOp>(loc,
++                    b.create<arith::RemUIOp>(loc, wave, ci(wavesN)), ci(nt * 16))));
++        Value slabIndex = b.create<arith::AddIOp>(loc,
++            b.create<arith::MulIOp>(loc, row, ci(40)), col);
++        auto f32Vec = VectorType::get({8}, b.getF32Type());
++        Value values = b.create<vector::LoadOp>(loc, f32Vec, cSlab,
++            ValueRange{slabIndex}, false, llvm::MaybeAlign(16));
++        auto outVec = VectorType::get({8}, outputType);
++        if (outputType.isBF16())
++          values = b.create<arith::TruncFOp>(loc, outVec, values);
++        Value globalIndex = b.create<arith::AddIOp>(loc,
++            b.create<arith::MulIOp>(loc, gr, N), gc);
++        Value rowOk = b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult, gr, M);
++        Value complete = b.create<arith::AndIOp>(loc, rowOk,
++            b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult,
++                b.create<arith::AddIOp>(loc, gc, ci(7)), N));
++        auto branch = b.create<scf::IfOp>(loc, complete, true);
++        {
++          OpBuilder::InsertionGuard guard(b);
++          b.setInsertionPointToStart(branch.thenBlock());
++          // Dynamic N need not preserve output alignment; no alignment promise.
++          b.create<vector::StoreOp>(loc, values, D, ValueRange{globalIndex});
++          b.setInsertionPointToStart(branch.elseBlock());
++          for (int64_t i = 0; i < 8; ++i) {
++            Value valid = b.create<arith::AndIOp>(loc, rowOk,
++                b.create<arith::CmpIOp>(loc, arith::CmpIPredicate::ult,
++                    b.create<arith::AddIOp>(loc, gc, ci(i)), N));
++            auto scalar = b.create<scf::IfOp>(loc, valid, false);
++            OpBuilder::InsertionGuard scalarGuard(b);
++            b.setInsertionPointToStart(scalar.thenBlock());
++            b.create<memref::StoreOp>(loc,
++                b.create<vector::ExtractOp>(loc, values, ArrayRef<int64_t>{i}), D,
++                ValueRange{b.create<arith::AddIOp>(loc, globalIndex, ci(i))});
++          }
++        }
++      }
++      b.create<ROCDL::WaveBarrierOp>(loc);
++    }
++  } else {
+   const bool masked = !wholeM || !wholeN;
+   // A bf16 output is the fp32 accumulator rounded once, by the store's
+   // epilogue (the architecture consumer owns the element map and the cast).
+@@ -2313,6 +2406,7 @@
+       store.addAttribute("tile.memory", gmemRowMajor);
+       b.create(store);
+     }
++  }
+   b.create<gpu::ReturnOp>(loc);
+ }
+ 
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/TileToROCM.cpp
+@@ -530,19 +530,33 @@
+       store->getAttrOfType<tessera::tile::TileMemoryLayoutAttr>("tile.memory");
+   std::array<int64_t, 2> outputShape{16, 16};
+   if (!desc || !unpackLayout || !storeLayout || !memory ||
+-      memory.getSpace() != "gmem" ||
++      (memory.getSpace() != "gmem" && memory.getSpace() != "lds") ||
+       memory.getOrder() != "row_major" || unpackLayout.getSwizzle() ||
+       storeLayout.getSwizzle() ||
+       unpackLayout.getShardExtents() != ArrayRef<int64_t>(outputShape) ||
+       storeLayout.getShardExtents() != ArrayRef<int64_t>(outputShape)) {
+     op->emitError("ROCM_FRAGMENT_STORE_LAYOUT: architecture accumulator store "
+-                  "requires unswizzled 16x16 row-major gmem output with "
++                  "requires unswizzled 16x16 row-major gmem or lds output with "
+                   "matching declared accumulation");
+     return failure();
+   }
+   Value base = store.getInputs()[1];
+   auto memrefTy = dyn_cast<MemRefType>(base.getType());
++  const bool ldsOutput = memory.getSpace() == "lds";
++  const bool workgroupBuffer = memrefTy &&
++      memrefTy.getMemorySpace() ==
++          gpu::AddressSpaceAttr::get(builder.getContext(), gpu::AddressSpace::Workgroup);
++  if (ldsOutput != workgroupBuffer) {
++    op->emitError("ROCM_FRAGMENT_STORE_LAYOUT: tile memory space must match the destination memref");
++    return failure();
++  }
+   bool integer = desc.getAType() == "int8" || desc.getAType() == "int4";
++  if (ldsOutput && (integer || desc.getAccType() != "f32" ||
++                   store->hasAttr("tile.epilogue") ||
++                   store->hasAttr("tile.residual"))) {
++    op->emitError("ROCM_FRAGMENT_STORE_LAYOUT: LDS accumulator stores require f32 without a fused epilogue");
++    return failure();
++  }
+   // The fused epilogue (per-column bias, pointwise activation) is applied
+   // here, per element, after this routine has resolved the element's row and
+   // column for the architecture's own accumulator map -- the one place that

@@ -1,0 +1,42 @@
+........................................................................ [ 10%]
+........................................................................ [ 21%]
+........................................................................ [ 32%]
+........................................................................ [ 42%]
+........................................................................ [ 53%]
+..............F......................................................... [ 64%]
+........................................................................ [ 75%]
+........................................................................ [ 85%]
+........................................................................ [ 96%]
+......................                                                   [100%]
+=================================== FAILURES ===================================
+_ test_mxfp8_lds_native_identity_refuses_contract_drift[macro_k = 32-macro_k = 64] _
+
+old = 'macro_k = 32', new = 'macro_k = 64'
+
+    @pytest.mark.parametrize("old,new", [
+        ('scale_format = "e8m0"', 'scale_format = "fp32"'),
+        ("scale_k = 32", "scale_k = 16"),
+        ("scale_n = 1", "scale_n = 2"),
+        ("block_m = 128", "block_m = 64"),
+        ("warps = 8", "warps = 4"),
+        ("macro_k = 32", "macro_k = 64"),
+        ("pipeline_depth = 1", "pipeline_depth = 2"),
+        ('staging = "lds"', 'staging = "global"'),
+        ("k = 1024", "k = 1023"),
+    ])
+    def test_mxfp8_lds_native_identity_refuses_contract_drift(old, new):
+>       with pytest.raises(RuntimeError, match="ROCM_FP8_BLOCKSCALE_CONTRACT"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       Failed: DID NOT RAISE RuntimeError
+
+tests/unit/test_rocm_kernel_identity_native.py:244: Failed
+=============================== warnings summary ===============================
+.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464
+  /home/angstorms/scratch/next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_kernel_identity_native.py::test_mxfp8_lds_native_identity_refuses_contract_drift[macro_k = 32-macro_k = 64]
+1 failed, 669 passed, 1 warning in 124.22s (0:02:04)

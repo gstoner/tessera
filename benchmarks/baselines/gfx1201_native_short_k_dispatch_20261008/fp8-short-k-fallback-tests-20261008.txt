@@ -1,0 +1,13 @@
+...                                                                      [100%]
+=============================== warnings summary ===============================
+../next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464
+  /home/angstorms/scratch/next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/device/rocm/test_fp8_blockscale_w8a8.py::test_register_short_k_dispatch_and_fallback_reuse_image[nk-f32]
+  /home/angstorms/scratch/native-shared-gfx1201-20261008/python/tessera/compiler/rocm_native.py:1608: RuntimeWarning: /home/angstorms/scratch/fp8-short-k-candidate-20261008/tessera-opt is older than 1 generator source(s) -- newest src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp. It will compile the code that was in the tree when it was built, and the run will SUCCEED while measuring it. Rebuild every tree that resolves here (on Tajasarus TESSERA_OPT points at build-assertions, not build).
+    warn_if_generator_is_stale(tool)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+3 passed, 99 deselected, 2 warnings in 4.31s

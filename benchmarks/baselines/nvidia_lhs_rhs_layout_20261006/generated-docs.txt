@@ -1,0 +1,2 @@
+wrote compiler_progress: docs/audit/generated/compiler_progress.csv, docs/audit/generated/compiler_progress.md
+wrote docs_freshness: docs/audit/generated/docs_freshness.md

@@ -93,7 +93,8 @@ std::unique_ptr<mlir::Pass> createTrainingStepFusionPass();
 //   --tile-q   Q tile rows (default 64)
 //   --tile-kv  KV tile cols (default 64)
 //   --sm       target SM version (default 90)
-std::unique_ptr<mlir::Pass> createTileIRLoweringPass(int sm = 90);
+std::unique_ptr<mlir::Pass> createTileIRLoweringPass(int sm = 90,
+                                                    bool canonicalRecoveryOnly = false);
 
 // WarpSpecializationPass — assigns producer/consumer warp roles to tile IR ops
 // inside schedule.mesh.region bodies and threads `!tile.pipeline_state` +

@@ -1,0 +1,14 @@
+........................................................................ [ 83%]
+..............                                                           [100%]
+=============================== warnings summary ===============================
+tests/device/nvidia/test_scheduled_norm_attention.py::test_scheduled_attention_parity[False-True-fp16]
+tests/device/nvidia/test_scheduled_norm_attention.py::test_scheduled_attention_parity[False-True-bf16]
+tests/device/nvidia/test_scheduled_norm_attention.py::test_scheduled_attention_parity[False-True-fp32]
+tests/device/nvidia/test_scheduled_norm_attention.py::test_scheduled_attention_parity[True-True-fp16]
+tests/device/nvidia/test_scheduled_norm_attention.py::test_scheduled_attention_parity[True-True-bf16]
+tests/device/nvidia/test_scheduled_norm_attention.py::test_scheduled_attention_parity[True-True-fp32]
+  /home/angstorms/scratch/next-five-compiler-slices/tests/device/nvidia/test_flash_attention.py:53: RuntimeWarning: invalid value encountered in subtract
+    p = np.exp(s - np.max(s))
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+86 passed, 6 warnings in 61.70s (0:01:01)

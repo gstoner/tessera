@@ -1,0 +1,23 @@
+{
+  "compiler_sha256": "f0816cbb0439d6d69cc70259156b46e621bd3ead33ea9959a374be985ec94e79",
+  "packages": {
+    "fp8": {
+      "payload_sha256": "9472cdc7559a38b6ddb432856870dcb58dac9d4663aebf023efb6be7a9d437e2",
+      "tile_sha256": "70db62b1cda263e109262173e160cf76adac1923503982a578457a8ca891d72e",
+      "target_sha256": "6f7680880a6e80ab3682b6e66b83c8fa2c7b8c44fbbd8e955e0c1850cee5ba50",
+      "abi": "tessera.rocm.fp8_w8a8_blockscale.a_bnk_sa_sb_o_m_n_k.e4m3_e4m3_f32_bf16.wmma_exact.v1"
+    },
+    "mxfp8": {
+      "payload_sha256": "0cecb063223641fd071dff788f6416e47d85cfe0c11e1fc16da8c0c3eedeed65",
+      "tile_sha256": "526704efe71b7728da647e892769a6272f752566fa27b1b7de1d882ee2b6c4ab",
+      "target_sha256": "00fd6f7e74c3e9b7ab913a0308ccb91d892f3f47165e1787cf4aa55eb957942f",
+      "abi": "tessera.rocm.mxfp8_e4m3_e8m0_k32.a_bnk_sa_sb_o_m_n_k.bf16.wide_scale.v1"
+    },
+    "folded_mxfp4": {
+      "payload_sha256": "4eb8446ca40e022b7247d6ad639d60694f3e335b06a0a6cc7c1b4d246102fde6",
+      "tile_sha256": "afc1ae2253993eaa22690e10a3836e69415fa296bdcbf558f4393fcdefc3e58f",
+      "target_sha256": "1ab42d3e3dda344e44396bcd14bd4a5043d5d68ad483e965429f983e915aeb58",
+      "abi": "tessera.rocm.mxfp4_w4a8.a_bfold_sa_rowref_o_m_n_k.e4m3_e4m3_e8m0_bf16.approx_bm256_tm4.v1"
+    }
+  }
+}

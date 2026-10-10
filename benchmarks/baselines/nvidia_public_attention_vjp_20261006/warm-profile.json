@@ -1,0 +1,246 @@
+{
+  "calls": 25,
+  "scope": "cProfile attribution of warm synchronous host calls; overlapping cumulative values, instrumentation overhead, no device timing",
+  "rows": [
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/jit.py",
+      "line": 2341,
+      "function": "native_backward",
+      "calls": 25,
+      "self_seconds": 0.000790744,
+      "cumulative_seconds": 0.42726215900000003
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_vjp_plugins.py",
+      "line": 1610,
+      "function": "execute_native_vjp_family",
+      "calls": 25,
+      "self_seconds": 0.000145871,
+      "cumulative_seconds": 0.414876071
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_vjp_plugins.py",
+      "line": 1103,
+      "function": "_execute_attention",
+      "calls": 25,
+      "self_seconds": 0.0005248130000000001,
+      "cumulative_seconds": 0.41054475500000004
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_vjp_runtime.py",
+      "line": 52,
+      "function": "execute_family",
+      "calls": 25,
+      "self_seconds": 0.001067786,
+      "cumulative_seconds": 0.41000315000000004
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 35494,
+      "function": "launch",
+      "calls": 25,
+      "self_seconds": 0.0006249620000000001,
+      "cumulative_seconds": 0.294544952
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/runtime.py",
+      "line": 15341,
+      "function": "_execute_nvidia_attention_vjp",
+      "calls": 25,
+      "self_seconds": 0.0007335740000000001,
+      "cumulative_seconds": 0.283448091
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_vjp_runtime.py",
+      "line": 15,
+      "function": "execute",
+      "calls": 25,
+      "self_seconds": 0.00099,
+      "cumulative_seconds": 0.282428834
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_program.py",
+      "line": 151,
+      "function": "from_json",
+      "calls": 50,
+      "self_seconds": 0.00045121100000000003,
+      "cumulative_seconds": 0.22896975400000003
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_vjp_artifact.py",
+      "line": 46,
+      "function": "from_json",
+      "calls": 50,
+      "self_seconds": 0.000919992,
+      "cumulative_seconds": 0.22849786300000002
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/resident_attention.py",
+      "line": 15,
+      "function": "checkpoint_shapes",
+      "calls": 100,
+      "self_seconds": 0.011165081,
+      "cumulative_seconds": 0.22272755400000002
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 901,
+      "function": "from_dict",
+      "calls": 300,
+      "self_seconds": 0.004667283,
+      "cumulative_seconds": 0.16854554100000002
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_vjp_artifact.py",
+      "line": 9,
+      "function": "payload",
+      "calls": 50,
+      "self_seconds": 0.000923305,
+      "cumulative_seconds": 0.133503328
+    },
+    {
+      "file": "/usr/lib/python3.14/json/__init__.py",
+      "line": 185,
+      "function": "dumps",
+      "calls": 2800,
+      "self_seconds": 0.0042512470000000005,
+      "cumulative_seconds": 0.092551013
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 879,
+      "function": "descriptor_digest",
+      "calls": 1200,
+      "self_seconds": 0.002112624,
+      "cumulative_seconds": 0.08909657800000001
+    },
+    {
+      "file": "/usr/lib/python3.14/json/encoder.py",
+      "line": 185,
+      "function": "encode",
+      "calls": 2800,
+      "self_seconds": 0.0034238000000000003,
+      "cumulative_seconds": 0.08748995300000001
+    },
+    {
+      "file": "/usr/lib/python3.14/json/encoder.py",
+      "line": 207,
+      "function": "iterencode",
+      "calls": 2775,
+      "self_seconds": 0.082706653,
+      "cumulative_seconds": 0.082706653
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 86,
+      "function": "_sha256_json",
+      "calls": 2400,
+      "self_seconds": 0.0019015190000000002,
+      "cumulative_seconds": 0.081834027
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_program.py",
+      "line": 156,
+      "function": "capture",
+      "calls": 25,
+      "self_seconds": 0.00020674700000000002,
+      "cumulative_seconds": 0.076801493
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/nvidia_native.py",
+      "line": 4276,
+      "function": "capture",
+      "calls": 25,
+      "self_seconds": 0.00014142,
+      "cumulative_seconds": 0.076561262
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/resident_attention.py",
+      "line": 162,
+      "function": "__init__",
+      "calls": 25,
+      "self_seconds": 0.011884398000000001,
+      "cumulative_seconds": 0.07639354100000001
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 82,
+      "function": "_canonical_json",
+      "calls": 2400,
+      "self_seconds": 0.0013289950000000001,
+      "cumulative_seconds": 0.072759379
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_attention_vjp_artifact.py",
+      "line": 60,
+      "function": "package",
+      "calls": 100,
+      "self_seconds": 0.000423907,
+      "cumulative_seconds": 0.069702392
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 891,
+      "function": "to_dict",
+      "calls": 300,
+      "self_seconds": 0.000415083,
+      "cumulative_seconds": 0.054977725000000005
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.isinstance>",
+      "calls": 263500,
+      "self_seconds": 0.024272389000000002,
+      "cumulative_seconds": 0.04482673
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 883,
+      "function": "cache_fingerprint",
+      "calls": 600,
+      "self_seconds": 0.000410283,
+      "cumulative_seconds": 0.04446005
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 415,
+      "function": "from_dict",
+      "calls": 300,
+      "self_seconds": 0.0030543840000000003,
+      "cumulative_seconds": 0.037827112
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 937,
+      "function": "<genexpr>",
+      "calls": 7200,
+      "self_seconds": 0.0020008770000000003,
+      "cumulative_seconds": 0.032183587
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 581,
+      "function": "from_dict",
+      "calls": 6900,
+      "self_seconds": 0.00850294,
+      "cumulative_seconds": 0.03018271
+    },
+    {
+      "file": "/home/angstorms/scratch/next-five-compiler-slices/python/tessera/compiler/native_artifact.py",
+      "line": 777,
+      "function": "__post_init__",
+      "calls": 300,
+      "self_seconds": 0.005341808,
+      "cumulative_seconds": 0.026475325
+    },
+    {
+      "file": "/usr/lib/python3.14/typing.py",
+      "line": 1292,
+      "function": "__instancecheck__",
+      "calls": 16650,
+      "self_seconds": 0.004724455000000001,
+      "cumulative_seconds": 0.023425519000000002
+    }
+  ]
+}

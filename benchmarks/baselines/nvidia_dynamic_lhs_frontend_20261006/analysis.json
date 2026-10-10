@@ -1,0 +1,106 @@
+{
+  "component_event_range_ms": {
+    "consumer": [
+      0.008446079678833485,
+      0.020638080313801765
+    ],
+    "producer": [
+      0.008454719558358192,
+      0.2506483197212219
+    ]
+  },
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "groups": [
+    {
+      "dtype": "fp16",
+      "fused": false,
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0010490721178939566,
+      "median_replay_wall_ms": 4.5917105
+    },
+    {
+      "dtype": "fp16",
+      "fused": true,
+      "kind": "rmsnorm",
+      "max_abs_error": 0.0078125,
+      "median_replay_wall_ms": 5.2276165
+    },
+    {
+      "dtype": "fp16",
+      "fused": false,
+      "kind": "layernorm",
+      "max_abs_error": 0.0005960400303592905,
+      "median_replay_wall_ms": 4.396251
+    },
+    {
+      "dtype": "fp16",
+      "fused": true,
+      "kind": "layernorm",
+      "max_abs_error": 0.015625,
+      "median_replay_wall_ms": 5.0130205
+    },
+    {
+      "dtype": "fp16",
+      "fused": false,
+      "kind": "softmax",
+      "max_abs_error": 1.330152940681728e-06,
+      "median_replay_wall_ms": 4.5477975
+    },
+    {
+      "dtype": "fp16",
+      "fused": true,
+      "kind": "softmax",
+      "max_abs_error": 3.814697265625e-06,
+      "median_replay_wall_ms": 4.593776999999999
+    },
+    {
+      "dtype": "bf16",
+      "fused": false,
+      "kind": "rmsnorm",
+      "max_abs_error": 3.2092444598674774e-05,
+      "median_replay_wall_ms": 4.440816
+    },
+    {
+      "dtype": "bf16",
+      "fused": true,
+      "kind": "rmsnorm",
+      "max_abs_error": 0.001953125,
+      "median_replay_wall_ms": 5.07181
+    },
+    {
+      "dtype": "bf16",
+      "fused": false,
+      "kind": "layernorm",
+      "max_abs_error": 0.0010070018470287323,
+      "median_replay_wall_ms": 4.4080585
+    },
+    {
+      "dtype": "bf16",
+      "fused": true,
+      "kind": "layernorm",
+      "max_abs_error": 0.0078125,
+      "median_replay_wall_ms": 4.8534535000000005
+    },
+    {
+      "dtype": "bf16",
+      "fused": false,
+      "kind": "softmax",
+      "max_abs_error": 1.1326555977575481e-05,
+      "median_replay_wall_ms": 4.203945
+    },
+    {
+      "dtype": "bf16",
+      "fused": true,
+      "kind": "softmax",
+      "max_abs_error": 6.103515625e-05,
+      "median_replay_wall_ms": 5.1032705
+    }
+  ],
+  "max_abs_error": 0.015625,
+  "replay_wall_range_ms": [
+    3.951108,
+    5.78753
+  ],
+  "rows": 48,
+  "scope": "Numerical/native bounded package reuse and separate component dispatch attribution; no performance promotion"
+}

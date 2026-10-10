@@ -1,0 +1,8 @@
+{
+  "python/tessera/compiler/native_scaled_program.py": "026c94fd71fa94b2e4cb6dfdcae1bff145594141faff5dc452cb8ca65eaef138",
+  "python/tessera/compiler/rocm_typed_scaled_native.py": "8aa056c2c81d9bab590cd85f709aab71b79f90091b4efeb51ccd07e8c1669089",
+  "python/tessera/compiler/native_vmap.py": "02c86506e20262b4e185aada5c4106cd0b8c5733d846f4b2b2129ec339be4246",
+  "tests/unit/test_public_independent_scaled_primal.py": "35b91a89fed0e29e8f38c255493e6605f511e2ea6abbcc105e50f0e475cb0757",
+  "tests/device/rocm/test_public_independent_scaled_primal.py": "8b87a1cd219257468dec7a2e6b1b789e537e5df7c50b537fb8f0e3ac32698dd3",
+  "benchmarks/rocm/record_public_independent_scaled_primal.py": "6a279db41f20db8894d757605f02f05d415334799cc36250efba91b9555b8f77"
+}

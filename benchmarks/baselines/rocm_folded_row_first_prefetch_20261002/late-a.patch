@@ -1,0 +1,23 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2221,10 +2221,19 @@
+       return compute(kb, l, Value(), std::move(partial));
+     }
+     Value kn = nextK(kb, l, k0);
+-    SmallVector<Value> nextA = issue(kb, l, planA, kn);
++    SmallVector<Value> nextA;
++    const bool lateA = foldedFullK && prefetch == 1;
++    if (!lateA)
++      nextA = issue(kb, l, planA, kn);
+     SmallVector<Value> nextB = issue(kb, l, planB, kn);
+     if (prefetch == 1) {
+       partial = compute(kb, l, Value(), std::move(partial));
++      if (lateA) {
++        // Keep only B global prefetch live during the row-first WMMA chain.
++        // The scheduling fence emits no hardware synchronization.
++        kb.create<ROCDL::SchedBarrier>(l, ROCDL::SchedGroupMask::none);
++        nextA = issue(kb, l, planA, kn);
++      }
+       barrier(kb, l);
+       drain(kb, l, planA, nextA, Value());
+       drain(kb, l, planB, nextB, Value());

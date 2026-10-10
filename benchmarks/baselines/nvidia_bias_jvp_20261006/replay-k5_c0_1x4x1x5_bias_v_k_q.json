@@ -1,0 +1,8 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "architecture": "sm_120",
+  "artifact_sha256": "33fa25b8e0f8bbb350238ce3bc00418664d6b02f644e56c04de67dcd5fde6f07",
+  "oracle_inputs_sha256": "15a5a0eb0c89120339a51279ba1d61ad8ab6ba5f6d95dd63252a91ae72b9e965",
+  "max_abs_error": 1.8816378927200006e-08,
+  "correctness": "compiler_free_fresh_process_common_runtime"
+}

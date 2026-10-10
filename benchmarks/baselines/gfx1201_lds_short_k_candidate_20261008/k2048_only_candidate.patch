@@ -1,0 +1,31 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -247,7 +247,7 @@
+ // native optimization. K is a uniform checked kernel argument, so every lane
+ // takes the same branch. Clone the actual generated body, preserving its
+ // accumulation order, masks and argument ownership; other K uses the original.
+-void specializeShortScaledK(gpu::GPUFuncOp fn) {
++void specializeShortScaledK(gpu::GPUFuncOp fn, bool only2048 = false) {
+   Block &body = fn.getBody().front();
+   SmallVector<Operation *> original;
+   for (Operation &op : body.without_terminator())
+@@ -263,6 +263,7 @@
+       b.clone(*op, mapping);
+   };
+   for (int64_t k : {1024, 1536, 2048}) {
++    if (only2048 && k != 2048) continue;
+     Value fixedK = arith::ConstantIndexOp::create(dispatch, loc, k);
+     Value selected = arith::CmpIOp::create(
+         dispatch, loc, arith::CmpIPredicate::eq, runtimeK, fixedK);
+@@ -4214,6 +4215,11 @@
+             outputTy, request.runtimeMN, request.wholeM, request.wholeN,
+             request.runtimeK, request.foldedFullK, request.foldedWaveGuard,
+             request.foldedVectorScales, request.scaleFormat, request.foldedPacked);
++        // K is a uniform ABI scalar, so the barrier-containing LDS body
++        // follows one workgroup-wide arm. Preserve every other K as fallback.
++        if (request.runtimeK && !request.foldedFullK && request.scaleK == 128 &&
++            request.scaleFormat == "fp32")
++          specializeShortScaledK(gpuFunc, true);
+       } else if (scaled) {
+         gpuFunc->setAttr("tessera.rocm.block_scale_contract",
+                          b.getStringAttr(

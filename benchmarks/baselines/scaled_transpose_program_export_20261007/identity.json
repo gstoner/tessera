@@ -1,0 +1,15 @@
+{
+  "sha256": {
+    "src/compiler/ir/LinearTransposeInterface.cpp": "647d3eb52560d2f14342e053162e7ea6b8ec3be44b9c98e96c88b32b1d25cb83",
+    "src/transforms/lib/AutodiffPairedPass.cpp": "2d81ab06233765c923cb72fa0b872046c27d383c47700babf7e201d04bb0f31e",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "fd66958d35395c95bf12cede4370e5f6bc473eee045a09877ba0573fcccc8797",
+    "python/tessera/compiler/pass_metadata.py": "7dbf4aa431389059ec9e3d9cabc53c0d0aeda26b6701c2f029583bab204e61cc",
+    "tests/unit/test_native_scaled_transpose_export.py": "e4661cdf9a5820c1e068aa7713125e00a167bff4ac10157d0fbacd379983620d",
+    ".build-sm120-w1-1/tools/tessera-opt/tessera-opt": "6d96769dba467c6362aa7366ef95600fd413c3c7580f4a8304e549a4dceed2a6"
+  },
+  "compiler": "LLVM/MLIR 23.1.1",
+  "physical_reverse_execution": false,
+  "sm120_regression_device": "NVIDIA GeForce RTX 5070",
+  "sm120_uuid": "GPU-cba12639-821a-7a10-4cd3-f918f9c0a545",
+  "cuda_toolchain": "13.3.73"
+}

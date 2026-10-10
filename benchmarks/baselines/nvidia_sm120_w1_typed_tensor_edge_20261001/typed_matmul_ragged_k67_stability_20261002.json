@@ -1,0 +1,401 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "method": {
+    "device_repetitions": 1000,
+    "end_to_end_repetitions": 10,
+    "samples": 11,
+    "selector_changed": false,
+    "timing_domains": [
+      "cuda_event",
+      "end_to_end"
+    ],
+    "warmup": 50
+  },
+  "rows": [
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "eb7450ba0c640a06e00bfce2488b96e2849f5049aa28eb809a4fbad8a73fa83b",
+        "schedule_digest": "a2b8fa5d02421545c380915e4d8ac958dd833fc1b44c685a8be30fd22cf8d423",
+        "schedule_ir_digest": "944a7f66eb20c26a4937e6ee9aa29b4a3b8832530447d5415f37fab58f0a6b17",
+        "tile_ir_digest": "b51ee8bc80ad72d7c9126a76e753ae8562310bd21f76194c94d6f5b74aedeec0"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 43.10425721802113,
+      "device_event_median_ms": 0.009532768279314041,
+      "device_event_samples_ms": [
+        0.009460960514843464,
+        0.009532768279314041,
+        0.008994784206151962,
+        0.012005855329334736,
+        0.02527795173227787,
+        0.009085791185498238,
+        0.009410431608557701,
+        0.009569120593369007,
+        0.008985407650470734,
+        0.020594367757439613,
+        0.010953408665955067
+      ],
+      "end_to_end_cv_percent": 6.986252220102629,
+      "end_to_end_median_ms": 0.30269299750216305,
+      "end_to_end_samples_ms": [
+        0.3633225045632571,
+        0.30532090459018946,
+        0.30269299750216305,
+        0.28381479787640274,
+        0.31740799895487726,
+        0.2844819042365998,
+        0.2847186988219619,
+        0.3012719040270895,
+        0.29671089723706245,
+        0.31408609938807786,
+        0.30902200378477573
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "88f3f3002969b9fdcf8ecddf4c01c0b553da4c9f78bb30811f0e5060a515f815",
+      "k_panels": 1,
+      "max_abs_error": 5.960464477539063e-08,
+      "package_build_ms": 349.26790598547086,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "target_ir_digest": "f88c090c60ee94453d6fa9b8a4f6f9872ed1c23783c8080dd23f42bfa83d9101",
+      "tolerance_rtol_atol": 0.0002
+    },
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "38523198b2c94b5e80b0b8fd8eae305d23057ff886979ab716e216a574e26884",
+        "schedule_digest": "0dd9b5d204044978611a5f6f72eee1b9f6d992f5544e37c922282cfe7fc8a302",
+        "schedule_ir_digest": "98922d3443a636f956044db830781f8a3edc8e32e0d335ad961436dcfd1f8d9c",
+        "tile_ir_digest": "f1edd2d54adde5ce60f4de9db7c9e360c409482209dd63d3f71fdfd36060d4c4"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 44.90227159638183,
+      "device_event_median_ms": 0.009707263670861721,
+      "device_event_samples_ms": [
+        0.023658432066440582,
+        0.009433024562895298,
+        0.009161887690424919,
+        0.009473055601119995,
+        0.010023008100688457,
+        0.009707263670861721,
+        0.007121696136891842,
+        0.02255292981863022,
+        0.010326944291591644,
+        0.009528127498924732,
+        0.009954912588000298
+      ],
+      "end_to_end_cv_percent": 83.75308728796342,
+      "end_to_end_median_ms": 0.3239840967580676,
+      "end_to_end_samples_ms": [
+        0.35780839971266687,
+        0.35251439549028873,
+        0.3078260982874781,
+        0.30304089887067676,
+        0.33218320459127426,
+        1.5888614987488836,
+        0.32431010040454566,
+        0.3070969018153846,
+        0.30547009664587677,
+        0.2922617946751416,
+        0.3239840967580676
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "12beb84fdf00db260fb51fd436ffb1fd1f0f44e9cf227ca5820076828784dd61",
+      "k_panels": 2,
+      "max_abs_error": 2.384185791015625e-07,
+      "package_build_ms": 356.1098609934561,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        16,
+        32,
+        8
+      ],
+      "target_ir_digest": "b7acdd857dd3f08863b24d982dd1ef49ae9b847e3f79c09e31d18e7c8c9aefab",
+      "tolerance_rtol_atol": 0.0002
+    },
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "39e710a65b0c0ce172525016f667b96ac9adcf3387d0cefc695c57648ed4a02c",
+        "schedule_digest": "2838296daa75ac01b8a1901c65bcaa7d449c26b9654d1ef64a96fe29c99f5c6b",
+        "schedule_ir_digest": "53f65431c52bd723fe83ce4f78de72f50cc6e7185607b900e1539357719b7f55",
+        "tile_ir_digest": "479aae310fe6b86bb07e3241be30f76f3eb5254896f374a4aa83ac6c8bce6a56"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 32.6838816433913,
+      "device_event_median_ms": 0.015448127873241901,
+      "device_event_samples_ms": [
+        0.014736800454556942,
+        0.014670208096504211,
+        0.015071040019392967,
+        0.029512129724025726,
+        0.015455232001841068,
+        0.01478294376283884,
+        0.028202272951602936,
+        0.015448127873241901,
+        0.02922678366303444,
+        0.015258527360856533,
+        0.015652479603886604
+      ],
+      "end_to_end_cv_percent": 84.81528397931082,
+      "end_to_end_median_ms": 0.3708955948241055,
+      "end_to_end_samples_ms": [
+        0.3799767990130931,
+        0.3708955948241055,
+        0.34733840147964656,
+        1.7894344055093825,
+        0.37210960290394723,
+        0.3517853969242424,
+        0.3549652989022434,
+        1.5844895038753748,
+        0.3630465012975037,
+        0.3434073005337268,
+        0.38876389735378325
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "ce4f0a03e5a64264ac6fdd1e0b60e484eef6eb2426025eb8b5f82848d0ea12c6",
+      "k_panels": 2,
+      "max_abs_error": 1.7881393432617188e-07,
+      "package_build_ms": 362.20483301440254,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        16,
+        32,
+        32
+      ],
+      "target_ir_digest": "bd6626a27be3e539fc3a226330095ef7fb8135588c20cea24a66f843dff6f359",
+      "tolerance_rtol_atol": 0.0002
+    },
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "2574cf567306a0d3eec0797c4b1c1a09a45ecaff14eb597349391e698a3dab17",
+        "schedule_digest": "98b5aaa3a9ce113b24458bf0dfdc6e2e58d3b0870a6a4f3d366124f9f4e98bf1",
+        "schedule_ir_digest": "d135b5fb6560d21f121d1521ed17903c958a8788ed1a38ac3ce4ae3d4ff83bbc",
+        "tile_ir_digest": "7dd5d80f2ac94f90228a8670f84a79d449ff133324a11d9d066b7d26df36f523"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 33.230695055634435,
+      "device_event_median_ms": 0.014013728126883507,
+      "device_event_samples_ms": [
+        0.015825247392058372,
+        0.013474656268954277,
+        0.014013728126883507,
+        0.020963359624147415,
+        0.013185343705117702,
+        0.015584671869874,
+        0.014879808761179447,
+        0.013739775866270065,
+        0.013169280253350735,
+        0.006767936050891876,
+        0.02826380729675293
+      ],
+      "end_to_end_cv_percent": 3.9898452729413947,
+      "end_to_end_median_ms": 0.3613976004999131,
+      "end_to_end_samples_ms": [
+        0.38206579629331827,
+        0.3417483007069677,
+        0.386527698719874,
+        0.3613976004999131,
+        0.3478363039903343,
+        0.3667435026727617,
+        0.36545160110108554,
+        0.3604595025535673,
+        0.3486333996988833,
+        0.3545394982211292,
+        0.38327869842760265
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "002f38096718dca1d2ed44edf7c58ab8cb9c4537275527c97366cf0a78719729",
+      "k_panels": 2,
+      "max_abs_error": 1.7881393432617188e-07,
+      "package_build_ms": 384.2834099777974,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        32,
+        32,
+        16
+      ],
+      "target_ir_digest": "8bc17bb470f063445c682375a18af2590f8c6a14fa4a2e2426f96ae568062d6a",
+      "tolerance_rtol_atol": 0.0002
+    },
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "0d7fb8c121a18ff86a3c43c49b2a2104b65067dcdb82d8ddcba16f0b4d8993d8",
+        "schedule_digest": "c40fd379cf5f5d01d032a180074f4d2bf461ab3893cd308dbc442606c794ca00",
+        "schedule_ir_digest": "b35bf9814dc7c6df923ea9f26aa9d6433b6667c429416784960e45e797ea7422",
+        "tile_ir_digest": "72e358dbff7efa1a9a3b9ae96df92ac62b320f1f7ba2fc596099eec5de8e12c2"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 46.08261935312361,
+      "device_event_median_ms": 0.01107641588896513,
+      "device_event_samples_ms": [
+        0.013774367980659008,
+        0.025107361376285553,
+        0.01107641588896513,
+        0.011367647908627987,
+        0.012584639713168144,
+        0.022396864369511604,
+        0.007899167947471142,
+        0.008081055246293545,
+        0.008135232143104076,
+        0.008263456635177135,
+        0.007931647822260857
+      ],
+      "end_to_end_cv_percent": 7.344252080874308,
+      "end_to_end_median_ms": 0.2903469023294747,
+      "end_to_end_samples_ms": [
+        0.34919840400107205,
+        0.29373380239121616,
+        0.28434270061552525,
+        0.2903469023294747,
+        0.3142111003398895,
+        0.2750096027739346,
+        0.30731800361536443,
+        0.2754206012468785,
+        0.28159390203654766,
+        0.29717079596593976,
+        0.2708056999836117
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "27b405dd16cd32901ea4957de6c89356a3d60ca9af1fe04aa907e4962314d812",
+      "k_panels": 4,
+      "max_abs_error": 4.76837158203125e-07,
+      "package_build_ms": 357.6014909776859,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        48,
+        64,
+        24
+      ],
+      "target_ir_digest": "141e10a91f82e30312e74f8851a357601939dc6a70a846d050a267e7ddf1ee20",
+      "tolerance_rtol_atol": 0.0002
+    },
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "45fc72d40530bf762ddb99e80fd1526b1326fa14abd22f331c812b14f9e65d36",
+        "schedule_digest": "c8f535f8ec2ef7c5ae7d50d0395760b2bc7a4fade2d87cfa59daa58ab13469a1",
+        "schedule_ir_digest": "6677fea1f42b5658224d49a376d07bc79beb3879e280c02bd54f0b74a0ab3a40",
+        "tile_ir_digest": "2758a73b29d30341cfe73332204327257ac94c766873c0a3781569230570adc9"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 33.58551456133783,
+      "device_event_median_ms": 0.015752160921692848,
+      "device_event_samples_ms": [
+        0.015056703239679337,
+        0.014987392351031303,
+        0.014274495653808117,
+        0.02902883104979992,
+        0.016348447650671005,
+        0.014429151080548763,
+        0.016045568510890007,
+        0.030167294666171074,
+        0.015464192256331444,
+        0.015752160921692848,
+        0.029974527657032013
+      ],
+      "end_to_end_cv_percent": 3.7816483826391534,
+      "end_to_end_median_ms": 0.36276450264267623,
+      "end_to_end_samples_ms": [
+        0.39796680212020874,
+        0.353773299138993,
+        0.3728996030986309,
+        0.3703897004015744,
+        0.3695695020724088,
+        0.3491253999527544,
+        0.36276450264267623,
+        0.377937697339803,
+        0.3567503998056054,
+        0.36077050026506186,
+        0.34860349842347205
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "2d46fe8c743102b487aeb21689f5b2f460fa51deb0c06d0bc13c3c53f6cb287f",
+      "k_panels": 5,
+      "max_abs_error": 5.960464477539062e-07,
+      "package_build_ms": 404.5732580125332,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        48,
+        67,
+        16
+      ],
+      "target_ir_digest": "7c24724689ac0fffaa8e36f036325583805b2e76e9e303d56b06f9de239896a2",
+      "tolerance_rtol_atol": 0.0002
+    },
+    {
+      "abi_id": "tessera.nvidia.matmul.a_b_d_m_n_k.v1",
+      "compiler_lineage": {
+        "graph_ir_digest": "4307b9cd4c3e7050a38eb8c6407a7b58791b3c64d9902bb9e363a7a4c35f82db",
+        "schedule_digest": "0f8574675b89b70aebd18d84133be243755feca00f29e07b7c0290cbf659720d",
+        "schedule_ir_digest": "11123f0b28972ac45eb4aca73cee993117b18c5bc4ba7be1cf3e94ebd4518b83",
+        "tile_ir_digest": "6a21e8437a0222b0392adf3ff69fd6a2082cf46da2e6c6c1f996cb5598537e59"
+      },
+      "correctness": "passed_before_timing",
+      "device_event_cv_percent": 49.758264638013124,
+      "device_event_median_ms": 0.010047104209661484,
+      "device_event_samples_ms": [
+        0.010047104209661484,
+        0.011184063740074635,
+        0.009209183976054192,
+        0.023376639932394028,
+        0.009081343188881874,
+        0.009943136014044285,
+        0.008523999713361263,
+        0.01020729634910822,
+        0.007556192111223936,
+        0.02838345617055893,
+        0.014887391589581966
+      ],
+      "end_to_end_cv_percent": 4.39949768392072,
+      "end_to_end_median_ms": 0.36508540506474674,
+      "end_to_end_samples_ms": [
+        0.4086219996679574,
+        0.3575524955522269,
+        0.367260497296229,
+        0.3821837017312646,
+        0.38077180506661534,
+        0.3537882992532104,
+        0.3506175009533763,
+        0.3760957042686641,
+        0.36508540506474674,
+        0.3568526008166373,
+        0.35906750126741827
+      ],
+      "entry": "nvidia_sm120_scheduled_matmul_nvidia_sm120_scheduled_matmul_kernel",
+      "image_digest": "a933a815f99f4975fe8bd1f0dff7c8de03bad5eec4610af427d8e26f2da9c4fc",
+      "k_panels": 16,
+      "max_abs_error": 2.86102294921875e-06,
+      "package_build_ms": 370.49216602463275,
+      "route": "GraphIR->ScheduleIR->TileIR->NVIDIA Target IR->PTX",
+      "shape_mkn": [
+        64,
+        256,
+        64
+      ],
+      "target_ir_digest": "0452aa2c750c75193a554723c51b6be8d2443e5414266ae2eae73a63b0f999ef",
+      "tolerance_rtol_atol": 0.0002
+    }
+  ],
+  "schema": "tessera.nvidia.sm120.typed_matmul_benchmark.v2",
+  "source_revision": "58b848ccbc7682db03d3b1e350a5421ded56984d",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_scheduled_typed_matmul.py": "03ca39373ce903ed54b48a5087017264aa756f324e06557dc6b08d6cdfe12350",
+    "python/tessera/compiler/driver.py": "4515e9efef31af3cae8a6838d42be3a35a8637e566029e4a32c61b0876ba36a5",
+    "python/tessera/compiler/nvidia_native.py": "9fa380c54f164c9ea29d49eb73fd1db48db6191422987eceaa557531487351b1",
+    "python/tessera/compiler/scheduled_matmul.py": "f0b6e427274b5efe351b59efd291014dcd10a46516a7443c190a26cf71f86d2a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "90c98d556fcf645daa872e55cef4fb515d6ccafa7825a6fbbde77714b25c0535",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "05e4ede8106dc84af8aa25c7c759638c93925ed86fe33427da05226c74e4682a",
+    "tests/unit/test_scheduled_matmul_consumers.py": "ca8073dac524b062aa55ab9654228548b48dd164c5c3f954a12055f414e32e82"
+  },
+  "source_worktree_dirty": true,
+  "target": "nvidia_sm120",
+  "work_item": "W1.1"
+}

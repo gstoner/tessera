@@ -79,6 +79,7 @@ add_mlir_dialect_library(TesseraIR
   LINK_LIBS PUBLIC
     tessera_layout_algebra
     MLIRIR
+    MLIRSCFDialect
     MLIRTensorDialect
     MLIRArithDialect
     MLIRInferTypeOpInterface

@@ -1,0 +1,31 @@
+--- a/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp
++++ b/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp
+@@ -818,12 +818,13 @@
+     const size_t elements = (size_t)rows * (size_t)K;
+     if (elementBytes == 0 || elements > SIZE_MAX / elementBytes) return 5;
+     const size_t bytes = elements * elementBytes;
+-    CUdeviceptr dx = 0, dout = 0;
+-    if (!cuOk(cuMemAlloc(&dx, bytes), "cuMemAlloc")) return 3;
+-    if (!cuOk(cuMemAlloc(&dout, bytes), "cuMemAlloc")) {
+-        cuMemFree(dx);
+-        return 3;
+-    }
++    // invokeImpl holds g_mu until synchronous completion, so the existing
++    // retained arena is leased exclusively for both compiler-owned bindings.
++    if (!buffers[0] || !buffers[1]) return 5;
++    const size_t sizes[] = {bytes, bytes};
++    CUdeviceptr device[2] = {};
++    if (!stagingPointersLocked(sizes, 2, device)) return 3;
++    CUdeviceptr dx = device[0], dout = device[1];
+     int rc = 0;
+     do {
+         if (!cuOk(cuMemcpyHtoD(dx, buffers[0], bytes), "cuMemcpyHtoD")) {
+@@ -837,8 +838,6 @@
+             !cuOk(cuMemcpyDtoH(buffers[1], dout, bytes), "cuMemcpyDtoH"))
+             rc = 3;
+     } while (0);
+-    cuMemFree(dx);
+-    cuMemFree(dout);
+     return rc;
+ }
+ 

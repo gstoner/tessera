@@ -1,0 +1,262 @@
+{
+  "architecture": "gfx1201",
+  "rocminfo": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "rows": [
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "cold_public_ms": 430.7707669213414,
+      "max_abs_error": [
+        1.0715108764713932e-06,
+        1.2852251529693604e-07
+      ],
+      "public_warm_ms": [
+        1.7592031974345446,
+        1.9128804793581367,
+        1.996559603139758,
+        1.902862684801221,
+        1.7056541983038187,
+        1.6129798954352736,
+        1.8019716022536159
+      ],
+      "public_warm_median_ms": 1.8019716022536159,
+      "native_event_sequence_ms": [
+        0.030392419546842575,
+        0.030571429058909416,
+        0.030287718400359154,
+        0.029986310750246048,
+        0.029051398858428,
+        0.02766699157655239,
+        0.026962079107761383,
+        0.027134280651807785,
+        0.028728311881422997,
+        0.028988800942897797,
+        0.029731910675764084
+      ],
+      "native_event_sequence_median_ms": 0.029051398858428,
+      "prepared_invoke_two_readbacks_ms": [
+        0.42795692570507526,
+        0.4365528002381325,
+        0.3867389168590307,
+        0.3055830020457506,
+        0.3394980449229479,
+        0.3499879967421293,
+        0.3287182189524174,
+        0.39805006235837936,
+        0.4943939857184887,
+        0.37832208909094334,
+        0.33055199310183525
+      ],
+      "prepared_invoke_two_readbacks_median_ms": 0.37832208909094334,
+      "prepared_update_invoke_two_readbacks_ms": [
+        0.5798269994556904,
+        0.4989330191165209,
+        0.42394991032779217,
+        0.5159860011190176,
+        0.5026499275118113,
+        0.4799170419573784,
+        0.43164403177797794,
+        0.4177379887551069,
+        0.45172288082540035,
+        0.42123510502278805,
+        0.6165481172502041
+      ],
+      "prepared_update_invoke_two_readbacks_median_ms": 0.4799170419573784,
+      "warm_compiler_subprocess_forbidden": true,
+      "warm_public_profile_20_calls": "         26921 function calls (26801 primitive calls) in 0.042 seconds\n\n   Ordered by: cumulative time\n   List reduced from 155 to 25 due to restriction <25>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n       20    0.001    0.000    0.042    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/jit.py:2474(native_jvp)\n       20    0.000    0.000    0.036    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:35721(launch)\n       20    0.000    0.000    0.031    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:15574(_execute_native_jvp)\n       20    0.000    0.000    0.024    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:15556(_execute_rocm_scaled_jvp_program)\n       20    0.004    0.000    0.009    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:182(__init__)\n      140    0.000    0.000    0.009    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:53(_digest)\n      180    0.000    0.000    0.008    0.000 /usr/lib/python3.14/json/__init__.py:185(dumps)\n      180    0.000    0.000    0.008    0.000 /usr/lib/python3.14/json/encoder.py:185(encode)\n      180    0.008    0.000    0.008    0.000 /usr/lib/python3.14/json/encoder.py:207(iterencode)\n       20    0.007    0.000    0.007    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:251(read)\n       40    0.000    0.000    0.007    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:67(validate)\n       40    0.001    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:55(validate)\n      140    0.000    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:45(_canonical_json)\n      480    0.000    0.000    0.004    0.000 /usr/lib/python3.14/json/__init__.py:304(loads)\n       20    0.000    0.000    0.004    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:45(from_manifest)\n      480    0.000    0.000    0.004    0.000 /usr/lib/python3.14/json/decoder.py:340(decode)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:121(runtime_metadata)\n       20    0.000    0.000    0.003    0.000 /usr/lib/python3.14/functools.py:1110(__get__)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:237(artifact_hash)\n      480    0.003    0.000    0.003    0.000 /usr/lib/python3.14/json/decoder.py:351(raw_decode)\n      180    0.003    0.000    0.003    0.000 {built-in method _hashlib.openssl_sha256}\n       20    0.003    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:243(invoke)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:215(child_digest)\n      140    0.000    0.000    0.002    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:49(_digest_text)\n       20    0.000    0.000    0.002    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:255(to_json)\n\n\n",
+      "execution": {
+        "compiler_path": "rocm_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201",
+        "artifact_hash": "37542b64ec43c1fb48e08be17465b89ecf5c6c40f9b84a5e2344b328f472b345",
+        "paired_jvp_ir_digest": "9a6c763dac2960a5899e00879e83c8c68d3164c00f417e95e4b5882122a794e0",
+        "source_graph_ir_digest": "0fecd7b1915ab4b11a99ad74ebec3de4eccb8658c54188352ee9f39ac16191c8",
+        "schedule_program_digest": "55e9f45a2c491cf85983add8b74896ac3bb6dc725a5e12001d3c6eca02860adc",
+        "tile_program_digest": "4bee6652392cf4d1f48a91d0a0e731ee0f69684bca698107144307c93630b4c9",
+        "frontend_authority": "tracer",
+        "family": "scaled_product_program"
+      },
+      "image_sha256": [
+        "26c2397bc5632db5e3e956101176718f0e7756fdba4690351f1277edb67acca9",
+        "d4acd39e189a5e93f2240d035af43ca8f5698c49936dbdba53fe1ac7dad31860",
+        "e97f7ba99551ef156c7aec589b7796c6440c298e7a274098f8b037233492fa90",
+        "5ece656e0bd1eb85439772687111159c38af4615c634e8d18afa239a390f7eb2"
+      ]
+    },
+    {
+      "shape_mnk": [
+        32,
+        32,
+        256
+      ],
+      "cold_public_ms": 494.9439759366214,
+      "max_abs_error": [
+        2.3713945225267707e-06,
+        3.096647560596466e-07
+      ],
+      "public_warm_ms": [
+        1.8950303085148335,
+        2.0086175994947553,
+        1.9344111904501915,
+        1.7134058056399226,
+        1.7051831120625138,
+        1.7876876052469015,
+        1.9205551128834486
+      ],
+      "public_warm_median_ms": 1.8950303085148335,
+      "native_event_sequence_ms": [
+        0.024307360872626305,
+        0.02441265992820263,
+        0.024477560073137283,
+        0.02439016103744507,
+        0.0243038609623909,
+        0.02437995932996273,
+        0.024252749979496002,
+        0.02499566040933132,
+        0.0245523601770401,
+        0.024401258677244186,
+        0.024455958977341652
+      ],
+      "native_event_sequence_median_ms": 0.024401258677244186,
+      "prepared_invoke_two_readbacks_ms": [
+        0.5996159743517637,
+        0.6668739952147007,
+        0.47759199514985085,
+        0.47128996811807156,
+        0.5540379788726568,
+        0.648699002340436,
+        0.4682638682425022,
+        0.5172279197722673,
+        0.5418749060481787,
+        0.5514130461961031,
+        0.3015459515154362
+      ],
+      "prepared_invoke_two_readbacks_median_ms": 0.5418749060481787,
+      "prepared_update_invoke_two_readbacks_ms": [
+        0.7141341920942068,
+        0.7841880433261395,
+        0.6507032085210085,
+        0.7796688005328178,
+        0.7145348936319351,
+        0.8030838798731565,
+        0.7450629491358995,
+        0.7168999873101711,
+        0.6372369825839996,
+        0.6147269159555435,
+        0.42688497342169285
+      ],
+      "prepared_update_invoke_two_readbacks_median_ms": 0.7145348936319351,
+      "warm_compiler_subprocess_forbidden": true,
+      "warm_public_profile_20_calls": "         26921 function calls (26801 primitive calls) in 0.041 seconds\n\n   Ordered by: cumulative time\n   List reduced from 155 to 25 due to restriction <25>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n       20    0.001    0.000    0.041    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/jit.py:2474(native_jvp)\n       20    0.000    0.000    0.035    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:35721(launch)\n       20    0.000    0.000    0.030    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:15574(_execute_native_jvp)\n       20    0.000    0.000    0.024    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:15556(_execute_rocm_scaled_jvp_program)\n       20    0.005    0.000    0.010    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:182(__init__)\n      140    0.000    0.000    0.009    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:53(_digest)\n      180    0.000    0.000    0.009    0.000 /usr/lib/python3.14/json/__init__.py:185(dumps)\n      180    0.000    0.000    0.008    0.000 /usr/lib/python3.14/json/encoder.py:185(encode)\n      180    0.008    0.000    0.008    0.000 /usr/lib/python3.14/json/encoder.py:207(iterencode)\n       40    0.000    0.000    0.007    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:67(validate)\n      140    0.000    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:45(_canonical_json)\n       40    0.001    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:55(validate)\n       20    0.006    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:251(read)\n       20    0.000    0.000    0.005    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:45(from_manifest)\n      480    0.000    0.000    0.005    0.000 /usr/lib/python3.14/json/__init__.py:304(loads)\n      480    0.000    0.000    0.004    0.000 /usr/lib/python3.14/json/decoder.py:340(decode)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:121(runtime_metadata)\n       20    0.000    0.000    0.003    0.000 /usr/lib/python3.14/functools.py:1110(__get__)\n      180    0.003    0.000    0.003    0.000 {built-in method _hashlib.openssl_sha256}\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:237(artifact_hash)\n      480    0.003    0.000    0.003    0.000 /usr/lib/python3.14/json/decoder.py:351(raw_decode)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:215(child_digest)\n      140    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:49(_digest_text)\n       20    0.000    0.000    0.002    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:255(to_json)\n       20    0.002    0.000    0.002    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:243(invoke)\n\n\n",
+      "execution": {
+        "compiler_path": "rocm_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201",
+        "artifact_hash": "57cc3830376586f3d31db4f7c0146b78158ca54e60ca0263535f8ec65baeb697",
+        "paired_jvp_ir_digest": "b73a8a54621a3a0f168855d6a417dd53277c44dcd20f0c81ffd6d8c4b113e1ab",
+        "source_graph_ir_digest": "27628e97ab5c4f9aa14522f69261be7b41f86565d88bbd6404229665f36ee974",
+        "schedule_program_digest": "55e9f45a2c491cf85983add8b74896ac3bb6dc725a5e12001d3c6eca02860adc",
+        "tile_program_digest": "062e7a424cbe9a442e88f9b1df981c6cd4ad9ee29d8468c335938d2786a54a9c",
+        "frontend_authority": "tracer",
+        "family": "scaled_product_program"
+      },
+      "image_sha256": [
+        "05597802b3acdc7c7fee07e862bdd3f4aa0f163323302ba6818624b1e139e8a4",
+        "c042116017860862b60e14672d463353bc01da3d8c9d5974e27dc0e958dfad73",
+        "0a359545f4bde9c71a533adccf4b46a015812b98784d941342771547dd84c62d",
+        "ffba5b7b8605bc17334eaa606b181dfbcb1b04d3032e2425d4c4725343eb7477"
+      ]
+    },
+    {
+      "shape_mnk": [
+        200,
+        19,
+        256
+      ],
+      "cold_public_ms": 399.0792471449822,
+      "max_abs_error": [
+        2.286221238989583e-06,
+        4.628673195838928e-07
+      ],
+      "public_warm_ms": [
+        2.03374729026109,
+        2.185849193483591,
+        1.9213994033634663,
+        2.005670708604157,
+        2.102438802830875,
+        2.0821521058678627,
+        2.053895010612905
+      ],
+      "public_warm_median_ms": 2.053895010612905,
+      "native_event_sequence_ms": [
+        0.0326693095266819,
+        0.03272311016917229,
+        0.032876111567020416,
+        0.03288530930876732,
+        0.03269391134381294,
+        0.03274241089820862,
+        0.03355501964688301,
+        0.032616108655929565,
+        0.03288460150361061,
+        0.03200690820813179,
+        0.02944820001721382
+      ],
+      "native_event_sequence_median_ms": 0.03272311016917229,
+      "prepared_invoke_two_readbacks_ms": [
+        0.533960061147809,
+        0.5997561383992434,
+        0.6899710278958082,
+        0.38302200846374035,
+        0.5967200268059969,
+        0.6627158727496862,
+        0.5126690957695246,
+        0.6407131440937519,
+        0.7263170555233955,
+        0.6941049359738827,
+        0.5726439412683249
+      ],
+      "prepared_invoke_two_readbacks_median_ms": 0.5997561383992434,
+      "prepared_update_invoke_two_readbacks_ms": [
+        1.1483109556138515,
+        1.0111010633409023,
+        0.6256150081753731,
+        0.9656520560383797,
+        1.0033771395683289,
+        1.0367101058363914,
+        0.822360860183835,
+        1.0133958421647549,
+        1.1235461570322514,
+        0.9514270350337029,
+        0.9134039282798767
+      ],
+      "prepared_update_invoke_two_readbacks_median_ms": 1.0033771395683289,
+      "warm_compiler_subprocess_forbidden": true,
+      "warm_public_profile_20_calls": "         26921 function calls (26801 primitive calls) in 0.046 seconds\n\n   Ordered by: cumulative time\n   List reduced from 155 to 25 due to restriction <25>\n\n   ncalls  tottime  percall  cumtime  percall filename:lineno(function)\n       20    0.001    0.000    0.046    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/jit.py:2474(native_jvp)\n       20    0.000    0.000    0.040    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:35721(launch)\n       20    0.000    0.000    0.036    0.002 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:15574(_execute_native_jvp)\n       20    0.000    0.000    0.029    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:15556(_execute_rocm_scaled_jvp_program)\n       20    0.008    0.000    0.013    0.001 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:182(__init__)\n      140    0.000    0.000    0.008    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:53(_digest)\n      180    0.000    0.000    0.008    0.000 /usr/lib/python3.14/json/__init__.py:185(dumps)\n      180    0.000    0.000    0.008    0.000 /usr/lib/python3.14/json/encoder.py:185(encode)\n      180    0.008    0.000    0.008    0.000 /usr/lib/python3.14/json/encoder.py:207(iterencode)\n       20    0.007    0.000    0.007    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:251(read)\n       40    0.000    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:67(validate)\n       40    0.002    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:55(validate)\n      140    0.000    0.000    0.006    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:45(_canonical_json)\n      480    0.000    0.000    0.004    0.000 /usr/lib/python3.14/json/__init__.py:304(loads)\n       20    0.000    0.000    0.004    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:45(from_manifest)\n       20    0.004    0.000    0.004    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_scaled_program.py:243(invoke)\n      480    0.000    0.000    0.004    0.000 /usr/lib/python3.14/json/decoder.py:340(decode)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:121(runtime_metadata)\n      480    0.003    0.000    0.003    0.000 /usr/lib/python3.14/json/decoder.py:351(raw_decode)\n      180    0.003    0.000    0.003    0.000 {built-in method _hashlib.openssl_sha256}\n       20    0.000    0.000    0.003    0.000 /usr/lib/python3.14/functools.py:1110(__get__)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:237(artifact_hash)\n       20    0.000    0.000    0.003    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:215(child_digest)\n      140    0.000    0.000    0.002    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/compiler/native_jvp.py:49(_digest_text)\n       20    0.000    0.000    0.002    0.000 /home/angstorms/scratch/next-five-compiler-slices-rocm/python/tessera/runtime.py:255(to_json)\n\n\n",
+      "execution": {
+        "compiler_path": "rocm_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "hip_runtime",
+        "evidence_target": "rocm_gfx1201",
+        "artifact_hash": "3b8da736ec414684fd06619539e8d651845e9d79cdb5b63496260b96cde5eede",
+        "paired_jvp_ir_digest": "bee1bca8ad76cb170e25566b88171efea43158019ecf83b7e3f1357ad646c7fd",
+        "source_graph_ir_digest": "c09dfaefd9aa21d4a5f99b9b2ede781454ddae755b13dd967aeff8d9dfa0ddab",
+        "schedule_program_digest": "55e9f45a2c491cf85983add8b74896ac3bb6dc725a5e12001d3c6eca02860adc",
+        "tile_program_digest": "3ff3e1a9eccef01610bbc4673116a8bd6c91ccebf43fd2d842a91b41b5847500",
+        "frontend_authority": "tracer",
+        "family": "scaled_product_program"
+      },
+      "image_sha256": [
+        "26c2397bc5632db5e3e956101176718f0e7756fdba4690351f1277edb67acca9",
+        "d4acd39e189a5e93f2240d035af43ca8f5698c49936dbdba53fe1ac7dad31860",
+        "e97f7ba99551ef156c7aec589b7796c6440c298e7a274098f8b037233492fa90",
+        "7f605bc565b3298e9937f8216c358ed619cd92aae61a70123f15bf159c68857b"
+      ]
+    }
+  ],
+  "timing_note": "Native events cover the four-member sequence including native enqueue gaps. Public warm calls include frontend/descriptor validation, native preparation/allocation, launch, readback and cleanup. No isolated-kernel or speedup claim."
+}

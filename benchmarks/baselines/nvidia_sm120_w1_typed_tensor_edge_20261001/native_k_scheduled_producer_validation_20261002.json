@@ -1,0 +1,46 @@
+{
+  "architecture": "sm_120",
+  "compiler_fixtures": [
+    "generic tiling T16/T32",
+    "generic fused epilogue tiling",
+    "SM80 Tile FileCheck",
+    "SM90 Tile FileCheck"
+  ],
+  "compiler_sha256": "e6ca1522545d745deef8908a7d3457359e69fbd80c7b34d0bc3dd175a401fc32",
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "failed": 0,
+  "fixture_evidence_boundary": "compiler artifact only; older device execution not claimed",
+  "native_launch_library_sha256": "0f16a5a904b6613ae4df6f9345eedf942c31c90db55ec90d55d3de2f33e23e93",
+  "passed": 508,
+  "skipped": 50,
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_scheduled_typed_matmul.py": "82bad63d6ca8831c908719660e2d431739af5584ba0d03d9060e37db93191961",
+    "python/tessera/compiler/driver.py": "d7b763d18616b30a2f7f2836c9977397ae0d6efba78217e2cb2706ef70bb31e8",
+    "python/tessera/compiler/emit/nvidia_cuda.py": "6f0ab46c6949a51b91dd7ac124ceb4250648d69fc2630e2ec26e8542f11f9758",
+    "python/tessera/compiler/native_artifact.py": "9ea3f6a4deea0b2d66047bf6f682394cbaff9520352cab6686b5614731892921",
+    "python/tessera/compiler/nvidia_native.py": "1ffd9b8054887c3d8ce7b5822d1fad3eaeb337ba44fd2323f09d1362ba66c560",
+    "python/tessera/compiler/pass_metadata.py": "9b711b6d9b9a7fe805730b8d37ec59cf566ed1d0d1ae0aca0e33dfb5c7d865d0",
+    "python/tessera/compiler/scheduled_matmul.py": "7916e5adb76d0fc4374cb1f16fa5bc8819965d8c1077262e220cacc6a3f648e7",
+    "python/tessera/runtime.py": "56ed5efd9cfb5be9020a55a5da37c8aeb277d6dd4f27d6664bf2f03b72d3a124",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "bb8e67783a10c87c210393844fbee5c8ae8bf7ebd7c3d2c0483719e339f12029",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.cpp": "323525a40bb8c7ae41daddfe630cca563d1e71edbeb0bee4c9f936a6235e2ec7",
+    "src/compiler/programming_model/include/tessera/ProgrammingModel/PMPasses.h": "73bde63467cdc748fa906501342ed9f02e13c775352a79fde2912319747a3ac0",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "33f33202f5911e3ae1aebecc898499d05d78d44545662ff26f6b4bd1b2ffd550",
+    "src/transforms/lib/TileIRLoweringPass.cpp": "3e066c5424dc8ec0854473523008da3db4551afc03e9152a2d1707dae898edf9",
+    "src/transforms/lib/TilingPass.cpp": "7bef22d6f209b54ccea8c2ccf4b3fc78255182b00ef80515bc281995de5adc24",
+    "tests/device/nvidia/test_scheduled_matmul_consumers.py": "063639112ac4569e4035b55db23ce39b7d5303c3a3d981ce97e807cd917dac8d",
+    "tests/unit/test_scheduled_matmul_consumers.py": "f7fc3052939f5260dbfc73afdf701a131846d0bed522fbcd854201ecdccaaadb",
+    "tests/unit/test_sm120_legacy_scheduled_producer.py": "5b59b01e0e67be1746d8cd98b082dd8a31c61f2bb95719c99807ef06e6151c24"
+  },
+  "sync": "W1.1-SM120-NATIVE-K-SCHEDULE-2026-10-02",
+  "test_modules": [
+    "test_sm120_legacy_scheduled_producer",
+    "test_scheduled_matmul_consumers (unit/device)",
+    "test_tiling_interface_matmul",
+    "test_tiling_matmul_epilogue",
+    "test_pass_metadata",
+    "test_diagnostic_code_registry",
+    "test_audit_docs"
+  ],
+  "work_item": "W1.1"
+}

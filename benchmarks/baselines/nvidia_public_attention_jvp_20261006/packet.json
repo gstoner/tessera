@@ -1,0 +1,2514 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "architecture": "sm120",
+  "rows": [
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.973035871991272e-10,
+      "compile_and_first_launch_ms": 1828.7236879987177,
+      "warm_checked_end_to_end_samples_ms": [
+        14.58496598934289,
+        13.606808992335573
+      ],
+      "warm_checked_end_to_end_median_ms": 14.095887490839232,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "71b1f99df87f8ce56e11f323a55912ff36736c45c77a5a9415b86721d8073b14",
+        "paired_jvp_ir_digest": "6b5e6b97b4cfefaad545e42486aa42f41d023528a29d70d4223457491d716dcf",
+        "source_graph_ir_digest": "f2ab5b7af8167e2ab84e924096d4b629144e57d7956870a32c2da259384aa2eb",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "b4f0ca7cae072a47c79ec1e2ddf39cc2553bd6f92f654bf5a469ae13d639d18f",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.813500709133223e-10,
+      "compile_and_first_launch_ms": 1408.3228460076498,
+      "warm_checked_end_to_end_samples_ms": [
+        13.682677992619574,
+        13.49737899727188
+      ],
+      "warm_checked_end_to_end_median_ms": 13.590028494945727,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "1b409295d49de312b1bea1634f33caac3cc1e2c6e949461ec79b01ae642b2803",
+        "paired_jvp_ir_digest": "8e68ad2657c371e3088487f4667463f13b2a1be903313d9ddb624ea3406ec097",
+        "source_graph_ir_digest": "8c181958545585259be83bb40921a49a2f58a1bb6d2734eb1e0d886020f987b5",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "0a3d69a073aa828122579cc918722b70c229204a2f36531a76a8d43c64d916ba",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 7.598023432642265e-09,
+      "compile_and_first_launch_ms": 1366.1269930016715,
+      "warm_checked_end_to_end_samples_ms": [
+        14.461133992881514,
+        13.622197991935536
+      ],
+      "warm_checked_end_to_end_median_ms": 14.041665992408525,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "34a52afe7441d02351f53355bedd8fa60acc81c42f275695fdbd1027a7afb971",
+        "paired_jvp_ir_digest": "3e5e3d8f35e2b22b07f340ca63741eae0cfcf440ac6d9ce4d76ab08c55ab773d",
+        "source_graph_ir_digest": "4c8755d418ed916793e68d40a5ac87609122bfbbbcdf01ebe7b7f49ecafe6883",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "ee4db35ac12a22374e621650731c2426141a706ae105d16d6e9648a8f64f9001",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 8.945897356227306e-10,
+      "compile_and_first_launch_ms": 1430.7627639936982,
+      "warm_checked_end_to_end_samples_ms": [
+        14.168320994940586,
+        13.923820995842107
+      ],
+      "warm_checked_end_to_end_median_ms": 14.046070995391347,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "31fe49381af288e7bbe05eb56e467a16120d5fb9bd4c13a333ea9634c4b5a93a",
+        "paired_jvp_ir_digest": "d6b8306291072400d436ca110091d44a486792760fbd982d5c06243901114285",
+        "source_graph_ir_digest": "5fc78d23a7917b61b09c3e6057d36edafc001cb100235d14a6b86647ed093057",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "8e659568520afc8475d545557d66bf5c4d366f4624a25b0ae7d400f0d8a7bb26",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 9.418297031160705e-09,
+      "compile_and_first_launch_ms": 1401.663444004953,
+      "warm_checked_end_to_end_samples_ms": [
+        13.904639999964274,
+        13.429989005089737
+      ],
+      "warm_checked_end_to_end_median_ms": 13.667314502527006,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "fa8a2410d2971768c8723f53f3edd60db6868a3c73d02f5d41cb8e08c4b3abea",
+        "paired_jvp_ir_digest": "572d5c213911a0b10c8e97b3b76bab88a9d9963136e7946a40e58f5eb546bf30",
+        "source_graph_ir_digest": "fd5bbe2564a05c7f7bb13a90bef3b90a05415e680d62c8270400d837e54d8d37",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "32f35c3580c08ca0565c583a90b1ef73ec853c23043a44b57f111b244483b425",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 1.1043568115542968e-08,
+      "compile_and_first_launch_ms": 1446.5939570072806,
+      "warm_checked_end_to_end_samples_ms": [
+        14.579795999452472,
+        14.15545100462623
+      ],
+      "warm_checked_end_to_end_median_ms": 14.36762350203935,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "5a903277dba6759aa0f098392864337865a80ad59040618b8be5ffdd9fe2f0f8",
+        "paired_jvp_ir_digest": "604c2946dd05e1143907c0c3f561bbae1fb803dbdb6ee24e70d9652d11ca9867",
+        "source_graph_ir_digest": "a84110b45f13b17481563d433b2a97a5110c988388d90d958d0cbc20d0bcc421",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "9e345d917c08858ed94ccfb21a9454e5cc59424985ad716cd7743fb016af12fb",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 2.2420171275072676e-10,
+      "compile_and_first_launch_ms": 1418.604051010334,
+      "warm_checked_end_to_end_samples_ms": [
+        14.956227998482063,
+        14.207674001227133
+      ],
+      "warm_checked_end_to_end_median_ms": 14.581950999854598,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "a50ec761c9753f5a501aca55b1e5515142c7cb03df7ff5cff1672a11f7883fb9",
+        "paired_jvp_ir_digest": "6b78cd2b628ce441ecf077597ba76e0265ba0eea23355b260e52dbda7547b697",
+        "source_graph_ir_digest": "be259b7b67b91c9d34eb13e2b4f655c31b9c21d4cefaafeeac81f3958988e68d",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "1f15674727cda05c253ea73bfd8b34c8a4e0b5690d5ec674c806cb822a3829d6",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 1.796693627209578e-10,
+      "compile_and_first_launch_ms": 1376.5784069983056,
+      "warm_checked_end_to_end_samples_ms": [
+        14.798667005379684,
+        15.2478709933348
+      ],
+      "warm_checked_end_to_end_median_ms": 15.023268999357242,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "9705506fbf7d4dc35d66a3a5ad9f4de9d42a8b6c64fc86db03c964e9276cb3d3",
+        "paired_jvp_ir_digest": "0c67c66a35ef30f8ffdc3f24025654a267660c9e47c1124348abdca746ddf022",
+        "source_graph_ir_digest": "63a4be5203413dc9acef6ff0311e2e26feddf32e78d975a24855f50c49abc450",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "46200ca11348569a670ff5b9c0a90eb783564ba69d74e8cfae237d784fc098f4",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 4.848729494300041e-09,
+      "compile_and_first_launch_ms": 1389.8947199922986,
+      "warm_checked_end_to_end_samples_ms": [
+        13.824649999151006,
+        13.86231099604629
+      ],
+      "warm_checked_end_to_end_median_ms": 13.843480497598648,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "00c7b278e946aa0acbf1adda693f7138eac3c20f3743b0ca85045ef774c64989",
+        "paired_jvp_ir_digest": "fe9f96eb47dbb6dba0a252bc901ab87ae962d51e80d0e8218328111f09219c38",
+        "source_graph_ir_digest": "d57d74b34e979daa84084e200f9e9c4243e8b2ef4a997948c43f9b5d82771bb7",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "9c2d66334800a01c1168002154369e6cf99056ce37c401fb936595729cdd0971",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.4477740107341504e-10,
+      "compile_and_first_launch_ms": 1362.7905509929406,
+      "warm_checked_end_to_end_samples_ms": [
+        14.60772599966731,
+        14.648796990513802
+      ],
+      "warm_checked_end_to_end_median_ms": 14.628261495090555,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "daa067ea609098ffff5ac4fcc4c73199f498edc55d0eac38c444fd33ca971c5b",
+        "paired_jvp_ir_digest": "b0b1f387c702e3ee8fbc76707b603bc47140fead09d5c12ca46cd26ccad30584",
+        "source_graph_ir_digest": "eb6beed9c19ea72c1379846156c5c09e1ea8a4114551b5af9421e575be932843",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "1dccb986dfa98d8b3b4686884f35b96708493c94a9108694aa1458a1e2ca2d9d",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.6048810742039805e-09,
+      "compile_and_first_launch_ms": 1370.015638996847,
+      "warm_checked_end_to_end_samples_ms": [
+        15.662233010516502,
+        15.013279000413604
+      ],
+      "warm_checked_end_to_end_median_ms": 15.337756005465053,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "1182dacdffd17a02b3c2cf448f36513d977dfa1b8efa2febec21b80831293a41",
+        "paired_jvp_ir_digest": "6c009f69c5a16ca7edc9bd5c476ec85e7d512c3309d3eee75ff067794998367b",
+        "source_graph_ir_digest": "5246f95b01a52b685999b711f0e02475f6e08bdd6428172de5c4d22d25c7ed04",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "eb7750fdba9eec2e97252b7ef3a5d45fd9e690c07e493ef22487f667a89ccb7f",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "k",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 5.554931875595415e-09,
+      "compile_and_first_launch_ms": 1365.6780990131665,
+      "warm_checked_end_to_end_samples_ms": [
+        14.890046004438773,
+        14.683895991765894
+      ],
+      "warm_checked_end_to_end_median_ms": 14.786970998102333,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "b042d46344f19b6a8b19dfdfdf6ab1d24aa826676e5d9ae7361c481b57fa88e8",
+        "paired_jvp_ir_digest": "062eb897f43f614fd931c441014b964b0881db110c583ba1f2737033764a6491",
+        "source_graph_ir_digest": "5ea24015959244bd8788cf460808f7be5d269b9f343edf31c08f9f520abd8313",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "b4f85eb9ee3b8a58a7c65d5efd826a8a6f238c21d5113da8af6c304c75053ee0",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.973035871991272e-10,
+      "compile_and_first_launch_ms": 1362.8287910105428,
+      "warm_checked_end_to_end_samples_ms": [
+        14.475454998319037,
+        14.092911005718634
+      ],
+      "warm_checked_end_to_end_median_ms": 14.284183002018835,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "5f254384e87efa52703c93ef731e47407dd166dd07facd5b79b5efeacb97a14b",
+        "paired_jvp_ir_digest": "79c5c21f891116a634211e380268b0189ca70338bb29308be349fe9a134daef9",
+        "source_graph_ir_digest": "2e90a04df5b561aa545dab20a2c84a3010b43f390b62fedcb43f68223fa6d37e",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "477ff5d4c25f1adb331e486bc313108563e9c3032c05f95959b8a805d09339f3",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.813500709133223e-10,
+      "compile_and_first_launch_ms": 1366.0101400018902,
+      "warm_checked_end_to_end_samples_ms": [
+        14.781028003199026,
+        15.639372999430634
+      ],
+      "warm_checked_end_to_end_median_ms": 15.21020050131483,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "11912b99a3df1ead72c0cee0b8875eb7c4c6800cc8aff6cfb0a2a76af52a8087",
+        "paired_jvp_ir_digest": "9b6717eaa989b8027e847c60f51583e8e4cf8b7e19b9f4f6ce28de87849f2045",
+        "source_graph_ir_digest": "7add4f52779a48be98f3095073c8af270ad17db6ff1a267273c628fb36f99343",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "3faed6517be1d61d9a8bce2028bd38735ff90238a74903ac111e0d70e268d459",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 7.598023432642265e-09,
+      "compile_and_first_launch_ms": 1376.8851519998861,
+      "warm_checked_end_to_end_samples_ms": [
+        14.846217003650963,
+        14.21027300239075
+      ],
+      "warm_checked_end_to_end_median_ms": 14.528245003020857,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "c599675d094eacd815330e5febd87d90d0a37a5e8f72e7563dd74f86e6a8666b",
+        "paired_jvp_ir_digest": "413386de914877aa1470e3c99053f65a8aed8a9e117028fa93b37868758b595a",
+        "source_graph_ir_digest": "1b5f5c5b8e51f8929dcc5eb6dd316efb5300bbab8a5d689211f438ec3e1e990f",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "bbfb9baec371f9581e97149bcc48f6ce234939b33d71628c7d06bb3f958d7116",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 8.945897356227306e-10,
+      "compile_and_first_launch_ms": 1383.9776590029942,
+      "warm_checked_end_to_end_samples_ms": [
+        15.174037995166145,
+        14.545836005709134
+      ],
+      "warm_checked_end_to_end_median_ms": 14.85993700043764,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "ce619042d1e46a62eb70a852e690db7a6b964880f4f8a4274bbb487c4141ba24",
+        "paired_jvp_ir_digest": "eef267dc368f7363ed51ca529c24e9731ecb962e12cd7e16698594bcac73bde8",
+        "source_graph_ir_digest": "69a1369e1915aa23395f7d2120a186cf78d2c8112b3e92bc4a3c380455688146",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "2e01511ea70504f3472aca23be6e517f689fee636b7269ff1f65fc9e7633704b",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 9.418297031160705e-09,
+      "compile_and_first_launch_ms": 1368.8584589981474,
+      "warm_checked_end_to_end_samples_ms": [
+        14.453804993536323,
+        14.298681999207474
+      ],
+      "warm_checked_end_to_end_median_ms": 14.376243496371899,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "52d678bb406ab975680f0a4cb2ee0511e91667e6f97e4abce522b6335642081d",
+        "paired_jvp_ir_digest": "552bdc8c33c4ae8ce7eb48ca5ea0a4deb35b19039090d47021399d2706ef4e3e",
+        "source_graph_ir_digest": "50f9314d27f46e4d9c3f90ceb4fd7d0b7a39cde6d8912344554d5380a3479987",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "2db847b4ca03a0287073861c835969a8d9af0eaf1c24be0dee1ecc0d72a818a9",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 1.1043568115542968e-08,
+      "compile_and_first_launch_ms": 1390.4447479872033,
+      "warm_checked_end_to_end_samples_ms": [
+        15.099269003258087,
+        15.170298996963538
+      ],
+      "warm_checked_end_to_end_median_ms": 15.134784000110812,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "9738af97ab13c26f3e854a91c6db3a4cdce8d9193477d32d3f4d6a339916bbf8",
+        "paired_jvp_ir_digest": "4b6a24bc86a0802b8037d173216a3cc10a98b52262328d9f7f4f24b412cd2aae",
+        "source_graph_ir_digest": "e1c0eae689d98f4056ef909a1944c6a17414bdd46f28e20cd24d96e2403d1b51",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "a3d914880fd99a15ecd45f519d97bb69449f3de22423b9a24fc40f041c7e8dc3",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 2.2420171275072676e-10,
+      "compile_and_first_launch_ms": 1371.6710669978056,
+      "warm_checked_end_to_end_samples_ms": [
+        14.338853987283073,
+        14.412303004064597
+      ],
+      "warm_checked_end_to_end_median_ms": 14.375578495673835,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "eb58939f99ed6915ca26b1341b5599ccad0ec481e6da1e300262d453c8cf2992",
+        "paired_jvp_ir_digest": "c24bd80883795cbd73b99b2f6d013e7efcb241ba1784f9df04b039415521fb99",
+        "source_graph_ir_digest": "acac7f4dfdd3537ddf889d252efedd8e1a957e5df7cdfbf5856f3ec4a6c3981a",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "3b366ec068e9ef60e34432f525ce42fcb876981cb12be30ea6fc934bdbf513af",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 1.796693627209578e-10,
+      "compile_and_first_launch_ms": 1367.8648290078854,
+      "warm_checked_end_to_end_samples_ms": [
+        14.569685008609667,
+        14.470224996330217
+      ],
+      "warm_checked_end_to_end_median_ms": 14.519955002469942,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "cc25de675a569d879a9166259f8a2878a58b5b60abb3ddd701ba7011359f4462",
+        "paired_jvp_ir_digest": "4c541f9faac934e3bd5d404c58015166a8ef8e7f78ffa9a9f3d0380305e97f37",
+        "source_graph_ir_digest": "9d11546b0d24d7cc9f940f95ce09b913a7317b107662283caa6c24ccf8694ac6",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "cb478f86a9a7e4411d3884590e5dd8d61f777f19cfcb6b0bed5959aea2f1d01d",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 4.848729494300041e-09,
+      "compile_and_first_launch_ms": 1365.9190199978184,
+      "warm_checked_end_to_end_samples_ms": [
+        13.886526008718647,
+        13.827138987835497
+      ],
+      "warm_checked_end_to_end_median_ms": 13.856832498277072,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "23737669fff4cb3c64154aa398afd99b9f423d8df73dfb5be1047af147bf3ece",
+        "paired_jvp_ir_digest": "efc6d790cd5370a936924a7e2f062c25bf2160ca162c7f9c2c9102280932b31a",
+        "source_graph_ir_digest": "aaebc1b9cf9d7c5c4d0645e8c07163e86d230311859696e94c214cc4df43c586",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "dd20bd3122d5254fcc3dad067183db40939863638f1e3f1ad49527af8a20e49d",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.4477740107341504e-10,
+      "compile_and_first_launch_ms": 1391.3877360027982,
+      "warm_checked_end_to_end_samples_ms": [
+        14.660033994005062,
+        14.423084998270497
+      ],
+      "warm_checked_end_to_end_median_ms": 14.54155949613778,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "0994ba71be7fdefeba5d43a1e89736e51ef5797ca519dd2343d5017531079f4f",
+        "paired_jvp_ir_digest": "99546cb1dfb819237f0d539f59a387e1fd2dfb0ba4116b9c9a0dc391d8a8e565",
+        "source_graph_ir_digest": "51e4bbcfdbfa07e1edad7e70c9e74fb9f3f84edb1a0fa711f87390ccc647ed7e",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "218702df553fa812a885639a9ccb7d50db745c5b12e567d0c2f8bc0dfa746d8a",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.6048810742039805e-09,
+      "compile_and_first_launch_ms": 1369.6931279991986,
+      "warm_checked_end_to_end_samples_ms": [
+        14.563386997906491,
+        14.3360060028499
+      ],
+      "warm_checked_end_to_end_median_ms": 14.449696500378195,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "dab75fb473c349b934d1243ed8a87fea5dfd2c5e2598abfb66f5cf6b2f7fda8c",
+        "paired_jvp_ir_digest": "825e5953104a3e6ccd7de56ba5163afa4c973aa25ed3a6f6d0e664b03b82310a",
+        "source_graph_ir_digest": "52239a56dd6a567200a7172162215647b3470453ffe934fc0610cbcf6dfaaf01",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "57d50bc85ef2dfae6de97fb9cf7eeb5e9cf74f944b10a8a1c0825f342ea328bb",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "q",
+        "v",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 5.554931875595415e-09,
+      "compile_and_first_launch_ms": 1373.3722059987485,
+      "warm_checked_end_to_end_samples_ms": [
+        14.559794988599606,
+        14.214313006959856
+      ],
+      "warm_checked_end_to_end_median_ms": 14.38705399777973,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "fc7603ed99f19decf6277f280ab0bf367307fd3345425f71ee83b0b2b1c34512",
+        "paired_jvp_ir_digest": "5cef71ee7fe1f3cd14ad3fc94f329386dc00b71260d33dd10ffd87174f7a2a1e",
+        "source_graph_ir_digest": "7f7fcb9756e7c248f8747add1811b67e28fecdeb5ec8bcabdc2afbd6dd4cbe64",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "4eb6b7c46849c205c82ed1d46dc9db24ecf2766063859eac1d5e62d1a0ab34aa",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.973035871991272e-10,
+      "compile_and_first_launch_ms": 1396.0813830053667,
+      "warm_checked_end_to_end_samples_ms": [
+        14.180094003677368,
+        14.218012991477735
+      ],
+      "warm_checked_end_to_end_median_ms": 14.199053497577552,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "e9de0c16a33ee50410d672d151eb7fc4e887c8d6fb057ca3e9804a30da74d1df",
+        "paired_jvp_ir_digest": "6f2f3c98de0b0650e3a30de342a87de2ba3975ddafeea742a5b25b1cf2f3c26d",
+        "source_graph_ir_digest": "564f4eedc5d1fc8b3d776d794395c1e3cb8b930d1fc3c2a9a93234d204447150",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "29197a77a9a09fdc8104fdf6f2f90ff4f2d485ca5602757dd723c7206ed8b451",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.813500709133223e-10,
+      "compile_and_first_launch_ms": 1414.5396649983013,
+      "warm_checked_end_to_end_samples_ms": [
+        14.767097993171774,
+        14.961669003241695
+      ],
+      "warm_checked_end_to_end_median_ms": 14.864383498206735,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "c6563157de5e2bada3a89df24f0417310be768b1f9f36653512ecc73bf9d1db9",
+        "paired_jvp_ir_digest": "1e82ab5269f1c4764f97a118446f2237e15a4ca61790a1c496cb8d3e017fd36d",
+        "source_graph_ir_digest": "4c6551c93c5c380000bb19aee9b58e956b3b86a9dd0b9f92bda1e621067e7ee4",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "a8339a44c38a88961104356b02de9d87b54d5ac571ec5470de3f7d96b3443d99",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 7.598023432642265e-09,
+      "compile_and_first_launch_ms": 1416.7195810005069,
+      "warm_checked_end_to_end_samples_ms": [
+        16.133297991473228,
+        15.394576999824494
+      ],
+      "warm_checked_end_to_end_median_ms": 15.763937495648861,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "742a17d0094fb040b9ad99f127ca884f48cd443f8a3ea7278e1dd4173bab035d",
+        "paired_jvp_ir_digest": "c1885df6b09b2da492e4d8418723bb2ecf37696fb1f4337746e8049d3533fc5f",
+        "source_graph_ir_digest": "cf58205cbd411af1fd16d30fe04144d255fad079f777954ed52b925a80066e0c",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "847cad903f849c405330472f26a5724e7e72d5d94f1a0ac4dfbe3f533cf82351",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 8.945897356227306e-10,
+      "compile_and_first_launch_ms": 1452.9037680040346,
+      "warm_checked_end_to_end_samples_ms": [
+        14.875717999530025,
+        15.040448008221574
+      ],
+      "warm_checked_end_to_end_median_ms": 14.9580830038758,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "f0fa5946124c7fc16d9adf141f37b148d0c27bab278c3350cba798e95e207f7c",
+        "paired_jvp_ir_digest": "9fee246562a138eeb447549fab43b2e81015fbd0c9f190074cc2833cabc2c3f8",
+        "source_graph_ir_digest": "a18ab960463bc93c73567c79a199f966fc1e81e2e3dc8cc716c8fd40b7dae8b1",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "a0e369e9b676149f4500a9a3298da67f6fa5e95b759ada4d91581b74e25ca21f",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 9.418297031160705e-09,
+      "compile_and_first_launch_ms": 1408.952740006498,
+      "warm_checked_end_to_end_samples_ms": [
+        23.824860996683128,
+        14.615476000471972
+      ],
+      "warm_checked_end_to_end_median_ms": 19.22016849857755,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "ecd421fd2f908898ca8a0fcf2bd1f2d2c8b32db4c49937f730425e728ffa48c7",
+        "paired_jvp_ir_digest": "f58eb6a8e0eec41088ae8fc289fe793594040868239623b6df7a6d544eddc9b5",
+        "source_graph_ir_digest": "64efd8f576c23a5dbc0d16fe09186b479ab8eebb72ed10bec499350139725d2d",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "42e732d5a9b017533f0671105146b06dba2f923f8a292c41547e68844bf4e474",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 1.1043568115542968e-08,
+      "compile_and_first_launch_ms": 1413.8249280076707,
+      "warm_checked_end_to_end_samples_ms": [
+        15.844374007428996,
+        15.162480005528778
+      ],
+      "warm_checked_end_to_end_median_ms": 15.503427006478887,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "48cfbced01ee5e31098844f069560214cdcdb0d5810cc1ec47b470d80ac25e1e",
+        "paired_jvp_ir_digest": "13c1128b0f5240a10548524b1022a1e5d5181b6c22cf0558f06b3a3ae8977eeb",
+        "source_graph_ir_digest": "3914a3d5f227224e0158910b0c6913b45c7c39715196440803752c61a77bc592",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "ab61cc6a4afabeb10fce3b4a3ef158db325a3635fdf35fe7332cd03fc6268948",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 2.2420171275072676e-10,
+      "compile_and_first_launch_ms": 1398.9843869931065,
+      "warm_checked_end_to_end_samples_ms": [
+        14.783575999899767,
+        14.88735800376162
+      ],
+      "warm_checked_end_to_end_median_ms": 14.835467001830693,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "fa40fed7e5743330676a0b8aec4cdaec56145412dce215c418ef2281005f504c",
+        "paired_jvp_ir_digest": "b6d3c686aa971cb6021b37071f8fa0757e7323cc9bbaad5c5245bc726b7267b3",
+        "source_graph_ir_digest": "f85643063aa821a42cafe2625d5a429c7bdea5a995ec8a32857f2533349deb7c",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "a4de825fb755438badd561ef1172f9883f28673da00dca92c0edb04f978691e8",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 1.796693627209578e-10,
+      "compile_and_first_launch_ms": 1393.096316998708,
+      "warm_checked_end_to_end_samples_ms": [
+        14.555756002664566,
+        14.653065998572856
+      ],
+      "warm_checked_end_to_end_median_ms": 14.604411000618711,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "ef803fa9bde95d74e965f291afa6beadb3bf05e1481e153d0124048ebb5a6aa6",
+        "paired_jvp_ir_digest": "6a383bf6755823b6d10c47cc9f8fad8c31aae62b979e4c27130f97320357f605",
+        "source_graph_ir_digest": "dd1abc2326d344c1239c50cf223e43a60b6ff5fc269a48858458cba5f24844b8",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "fe2390dbaf2bbeb9256dba5577dc14d2550cb1fcd65e26bbcdace11b604bba7a",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 4.848729494300041e-09,
+      "compile_and_first_launch_ms": 1382.8902899986133,
+      "warm_checked_end_to_end_samples_ms": [
+        14.198643999407068,
+        13.889131994801573
+      ],
+      "warm_checked_end_to_end_median_ms": 14.04388799710432,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "1d7b2fe4537c2186b7f20b62e9800ef31622eb84de5b3b5f895d626fb8e4e69a",
+        "paired_jvp_ir_digest": "f0f059b3d6293c4dc312a2dae799d5c9a26b4490ef5aed5a8dc0e5faa5f2a1cb",
+        "source_graph_ir_digest": "cc701ad24d208ed14632baf032d8fba9f7c4bfc678d79b85acc13cd05d2863f8",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "56729129a12cd7ad1a798982a6195e641658b500f268d79cd048ef9bffc0083d",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.4477740107341504e-10,
+      "compile_and_first_launch_ms": 1388.48685999983,
+      "warm_checked_end_to_end_samples_ms": [
+        14.35651900828816,
+        14.656146988272667
+      ],
+      "warm_checked_end_to_end_median_ms": 14.506332998280413,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "85e366fcac671c3a1b6536f08a01b226e570a5e5d895c9c63e1354aa033ea9ec",
+        "paired_jvp_ir_digest": "69439d09c8a682203fd8fb366a632a9b69a31641659cb70523bb6399132e9567",
+        "source_graph_ir_digest": "3680a13fa6a4faf9c980d8c5d72e8fadafa2c10a1885b041323077bcbe4dcc34",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "f3e968da786f69987df9e55a9356538e310ca81bb5553609b94fed8203bd7734",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.6048810742039805e-09,
+      "compile_and_first_launch_ms": 1401.1479530017823,
+      "warm_checked_end_to_end_samples_ms": [
+        15.067688989802264,
+        14.362185000209138
+      ],
+      "warm_checked_end_to_end_median_ms": 14.7149369950057,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "7016a83531aefb29ae9cb9db01540595529df78951359c91f9eb0cc0eb11cda9",
+        "paired_jvp_ir_digest": "23948a71761b5b749df9f1f0fd1452a887e4bdfd3c376acb624ece0b932f1b5f",
+        "source_graph_ir_digest": "4de68c1d645deb03974d63189e66984c6b0cdd6488e465c88e646cb670ac7824",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "457f212b033ff41a08db82b465f552a627a9e5fb60c57c7120b00d5f27bdee91",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "q",
+        "v"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 5.554931875595415e-09,
+      "compile_and_first_launch_ms": 1394.8162800079444,
+      "warm_checked_end_to_end_samples_ms": [
+        14.721557992743328,
+        14.493387003312819
+      ],
+      "warm_checked_end_to_end_median_ms": 14.607472498028073,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "4c5cdc17480c71cc43c56d4702b11c2a2fa6cc7174f5185f5d1da15bee575c21",
+        "paired_jvp_ir_digest": "f9dd04515b0c63820e253a30a64b922cc4942d34ea286f43c8a06fae4a9c631a",
+        "source_graph_ir_digest": "efe09b17adc9e81ddb7d6ac05cb7ac2c5a48a9285fb3bbaa579baa204bfb2058",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "964ea9c7d9f0cf238ebdf5a32e26fedb468f1a5fc1c8a7948f5a7531b1f7d21e",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.973035871991272e-10,
+      "compile_and_first_launch_ms": 1403.7340590002714,
+      "warm_checked_end_to_end_samples_ms": [
+        14.180365003994666,
+        14.40925600763876
+      ],
+      "warm_checked_end_to_end_median_ms": 14.294810505816713,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "29394bc844f52d952d5a247ff697546e92d9fa001dcf2476d53a0de8b83b5605",
+        "paired_jvp_ir_digest": "ecf6f777a2ff74ed2c904677445da6ec145341a206c13205d5b51369f7d6abe8",
+        "source_graph_ir_digest": "127fcfdc08a0552f2f594c1124da28a94d02f78e2e4f39dda25ca178b1fd85b0",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "73895bcd8c2f936712f4717c81acb724204d000bf492ec6ff31f32762ba7cf93",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.813500709133223e-10,
+      "compile_and_first_launch_ms": 1380.6040909985313,
+      "warm_checked_end_to_end_samples_ms": [
+        14.631155994720757,
+        14.476485011982732
+      ],
+      "warm_checked_end_to_end_median_ms": 14.553820503351744,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "baa2c6dd2fac9d29ac3ab7ffd6872a3d6b5a1348453737f097708936ca1ef14e",
+        "paired_jvp_ir_digest": "116958481cbd69c50df65c96849ce109ea20329ee826a15521b9c7d4b199831f",
+        "source_graph_ir_digest": "11d7bb441893ba30305f9efae865fb8271f67f1a23d63486eb42341a2080d237",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "b21855dc82ea9715a1394397a414a7b9b9e4b4d5dee1f8ae2c9ea4f8cb1ec973",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 7.598023432642265e-09,
+      "compile_and_first_launch_ms": 1392.3246540070977,
+      "warm_checked_end_to_end_samples_ms": [
+        13.982702002977021,
+        14.484952989732847
+      ],
+      "warm_checked_end_to_end_median_ms": 14.233827496354934,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "c4f0684d1fef0bc1b62ab2a69e92b8420644241276754e4e16d7f4a1f4ba463c",
+        "paired_jvp_ir_digest": "235c2a86c71cd0a650ad53543e8d4b5d65ab910df518a4083a0b3cde9c7059f1",
+        "source_graph_ir_digest": "3faa93e282488c1458eb4c405d6f21140c276ef9c2b81dea393ceceefdb3542c",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "5a6aae089453d91c49d99e52f4dcd8aeb8f5ef38ba44e1be232aef1a0c620d5f",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 8.945897356227306e-10,
+      "compile_and_first_launch_ms": 1409.4835349969799,
+      "warm_checked_end_to_end_samples_ms": [
+        15.010067989351228,
+        14.674691003165208
+      ],
+      "warm_checked_end_to_end_median_ms": 14.842379496258218,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "faf72bf122eda7e607a1394b9ee95cd6b3a4f2a85515c7decbe9714fa0358bcf",
+        "paired_jvp_ir_digest": "0fdd2f397f9e3270e9a6f5e1863d4d02511147b3f1703879fcd1ee6ec5fa7721",
+        "source_graph_ir_digest": "9b81d6a459b37ed0a338dbb429a92352ac10fd33830d898dc740be9b9ef51af5",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "60b3e7286d595f646c5c4ddd07bb8ca4b1548905c2e92b41f52c31141cc9cc17",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 9.418297031160705e-09,
+      "compile_and_first_launch_ms": 1382.217905993457,
+      "warm_checked_end_to_end_samples_ms": [
+        14.332294013001956,
+        14.350852987263352
+      ],
+      "warm_checked_end_to_end_median_ms": 14.341573500132654,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "cd7f52f4b6bb63c6d136eefedd9dc5ef5122de51c1ad6b47e8991bd43ee1e474",
+        "paired_jvp_ir_digest": "d853023993a907c894dcccf3ac58a6f2fe02cf8f95b83f1577b9443d5c5c4063",
+        "source_graph_ir_digest": "1bad96815dbe29c59744cfe9c96b20ca28a4064fb5aef9c5f821a9f50899b480",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "bdea00e0eaa95daf99df39323ebf82b10d40750c6fb3aca839100396a05af036",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 1.1043568115542968e-08,
+      "compile_and_first_launch_ms": 1409.566394999274,
+      "warm_checked_end_to_end_samples_ms": [
+        14.992918993812054,
+        14.901051996275783
+      ],
+      "warm_checked_end_to_end_median_ms": 14.946985495043918,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "96ef94db7a44a94a1b9026a1e8cc0955b984fee1c2b704ec2772266c191b5957",
+        "paired_jvp_ir_digest": "e106a6fe037a3c7b13e5b07aac4f8d73ed2b7634e74181725c16ac81b204a02c",
+        "source_graph_ir_digest": "a45a68f7027a962315de03354e09c56d8fb2e0b50049bcdc627d0aafe06f2d91",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "f64e9fa8876e9376762416c1ac2872f0219d0db498b6fd89b2d8f32891cf133c",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 2.2420171275072676e-10,
+      "compile_and_first_launch_ms": 1394.0411139919888,
+      "warm_checked_end_to_end_samples_ms": [
+        14.701635998790152,
+        14.451484006713144
+      ],
+      "warm_checked_end_to_end_median_ms": 14.576560002751648,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "c66221dcded3168001131ca2d17bf34e8b635a3b6f9fa312273eedb9ad4cbdd9",
+        "paired_jvp_ir_digest": "e62ab6c880a5952fe397437cf0a234e541d3e8fd1aa6a03a84de64e17063a514",
+        "source_graph_ir_digest": "2b24929435b112001a6c63c933cef6aaa9362756e212bf6306b3b0f4d5853463",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "74999bef70ce63cce02da9357be237d70ce34d2a567c1dfe38ec18db324c40a4",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 1.796693627209578e-10,
+      "compile_and_first_launch_ms": 1390.0913779943949,
+      "warm_checked_end_to_end_samples_ms": [
+        14.388477997272275,
+        14.907500997651368
+      ],
+      "warm_checked_end_to_end_median_ms": 14.647989497461822,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "46d7fd36769506bba393d8cd9582d1949f862a6f37a42777a857737e1fe164f6",
+        "paired_jvp_ir_digest": "fbb27cee4ac0ea48808f6d007e5e18a57f3ba85b403f981b733f843f8e099b1d",
+        "source_graph_ir_digest": "801759bda689f5d02dda6c5c217dc1cb3ea5fdd99729079148f8b68c8e05d3b6",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "04f38069b106a88487898fe2824d46b48d173b8a8554bfa7754372b1958bc819",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 4.848729494300041e-09,
+      "compile_and_first_launch_ms": 1380.1335360039957,
+      "warm_checked_end_to_end_samples_ms": [
+        14.701605003210716,
+        14.41951299784705
+      ],
+      "warm_checked_end_to_end_median_ms": 14.560559000528883,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "0ed31bdd0c2b571624d12a1be5fc62d2389812a0cef9d282351fe11013043231",
+        "paired_jvp_ir_digest": "beecb390db31ab3c51ba0ec48132598ab7fadebc5b94acad9900cf1957e86d70",
+        "source_graph_ir_digest": "322092f96e6f10f1847ff3423d99f5bf2f376d6e18987d297c5817bce3cf3625",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "f1ee94d56b784a5e808dcc7a67145f9df9582420230ca23eaceee3b5bf6c197f",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.4477740107341504e-10,
+      "compile_and_first_launch_ms": 1393.696271989029,
+      "warm_checked_end_to_end_samples_ms": [
+        14.79290600400418,
+        14.974988007452339
+      ],
+      "warm_checked_end_to_end_median_ms": 14.88394700572826,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "f44d373fb95845dfabc4dd38c9a42ee345adb127922fb2221dd7feec5f18e151",
+        "paired_jvp_ir_digest": "5a24075e3e0fba9e9452964aeb5cb4024b760254354bb62d188ac777c50f29cd",
+        "source_graph_ir_digest": "4dcdee7399ff2b272e12dc78d4ddb49b0410fb9eaa17ff39fedf2962f06856a2",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "968735583ce9f616daad46a2478b985b9aab4f75e033f089ada391351ef2c2f6",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.6048810742039805e-09,
+      "compile_and_first_launch_ms": 1417.8538489941275,
+      "warm_checked_end_to_end_samples_ms": [
+        14.52274399343878,
+        14.788025990128517
+      ],
+      "warm_checked_end_to_end_median_ms": 14.655384991783649,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "63144886f9e304264a5f60c82da874b4dba9c86af9b82de8bbe6f7751a83c640",
+        "paired_jvp_ir_digest": "ab24ab2557a697b209a5d537896bf767b730e3fff78c52407b8ca717089f7f5d",
+        "source_graph_ir_digest": "d26d60d35be79f6211b7f104f55f0a65b2a5cea3be123392cd77447cb1ec7d8e",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "8a901a43838b5e790689013d17dbcd2ec8aaf58d54984f74382779e86bc67387",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "k",
+        "v",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 5.554931875595415e-09,
+      "compile_and_first_launch_ms": 1384.7631940006977,
+      "warm_checked_end_to_end_samples_ms": [
+        15.274009987479076,
+        14.291031999164261
+      ],
+      "warm_checked_end_to_end_median_ms": 14.782520993321668,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "22a98ffc76e961d05003252b3cf97d559484c16f431a22bc0dfc4814451245cc",
+        "paired_jvp_ir_digest": "699ad1facc61069b79e54676ea2887185c2f4560b76791352c01724ad6e7a9bd",
+        "source_graph_ir_digest": "fa085032c6d1d68515b595eef9086e0c3e303e1a866be09e7f50cc4dc42ef0e7",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "0995403123c463654b21afee4e5aab6f5b3ffcf1ffa0693cece30cb3dd997ce5",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.973035871991272e-10,
+      "compile_and_first_launch_ms": 1382.457626008545,
+      "warm_checked_end_to_end_samples_ms": [
+        14.088001000345685,
+        13.962871991680004
+      ],
+      "warm_checked_end_to_end_median_ms": 14.025436496012844,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "aa9c3adc9da7399945227de34084cd75e57f1a51d4a2203af914759b80d1aea4",
+        "paired_jvp_ir_digest": "4bd8e7091a9419e1861d2fd6299411641e16e671c7c824e6ab7ec5e504ad38fd",
+        "source_graph_ir_digest": "746e2ae610827a8b55140fc45990f84e5b4e17106d19d86118a76e57ebdec24e",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "4be162777825429538fddeeb734ff2f1c7de7d2387e21705408041f4634891ad",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.813500709133223e-10,
+      "compile_and_first_launch_ms": 1409.398603005684,
+      "warm_checked_end_to_end_samples_ms": [
+        15.170844999374822,
+        13.946834995294921
+      ],
+      "warm_checked_end_to_end_median_ms": 14.558839997334871,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "b2a9bfa3e013ac4aab12c41035ce48b66cbc751c93092330774db1b6466bf72f",
+        "paired_jvp_ir_digest": "38b31d59be40cb92369021c16a7de2101ca0536d68fd82e9048b8c13737d3eba",
+        "source_graph_ir_digest": "e65431dfd2a1cfa146a283f12bc1e90acb5bbe7f8f97556780a38a9606a56b48",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "3e21842d326539892dbc2c7284672816bc893b0246315024cd5309bd8ad2133b",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 7.598023432642265e-09,
+      "compile_and_first_launch_ms": 1378.7859940057388,
+      "warm_checked_end_to_end_samples_ms": [
+        14.092797006014735,
+        14.423268003156409
+      ],
+      "warm_checked_end_to_end_median_ms": 14.258032504585572,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "05abec02a07bf5dfc98d5d4f3cbfab6af132c860cec38b19eac237cdc66f7ab0",
+        "paired_jvp_ir_digest": "acbbc9a4dd3be8d6f0073490c6a5eb7f5044b4a969d3c696c6b7bfa9a27118c4",
+        "source_graph_ir_digest": "8d223d5df6aa94c26933466361a40be8ee44d61ff280de958e29db4ee4bbaeb0",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "9f608dd4a5fbeb41ca8013b6a81fe0eeb1683060820e4326180a9a8bc5e07c0f",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 8.945897356227306e-10,
+      "compile_and_first_launch_ms": 1432.311957993079,
+      "warm_checked_end_to_end_samples_ms": [
+        14.707145004649647,
+        14.70459699339699
+      ],
+      "warm_checked_end_to_end_median_ms": 14.705870999023318,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "2b9cf5f6faa813f5c5bdc29efbf9ad5624311c0b4f22f4038a20fda2121baba3",
+        "paired_jvp_ir_digest": "42225b3c3e741828a9955aadabab9cea53d2075bb2268ad800d76b80c0e5b1ca",
+        "source_graph_ir_digest": "5c4ab5dbea5867ac845b00d387001878f223ffb4c64a94b4e86c095ed142e7d3",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "4972420e463252ba6636d5d7050276d94b28bef2ddfe57ea0a962c8a5c94652e",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 9.418297031160705e-09,
+      "compile_and_first_launch_ms": 1379.7892790025799,
+      "warm_checked_end_to_end_samples_ms": [
+        14.930917008314282,
+        15.145330005907454
+      ],
+      "warm_checked_end_to_end_median_ms": 15.038123507110868,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "37e44a14f695f9f3880c6923beff2e8a216c5ac81444c34a629a6d8f2d7a209e",
+        "paired_jvp_ir_digest": "6e0865629344166dde7d3df204d34c18e6f6ccc17ace5a409bf77b12a3b852b0",
+        "source_graph_ir_digest": "7fe33c966c846a699b2fccc8a19125ca8882165b98fe423e5306423176e8b5ab",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "11510ba338492a400dac01f59e28b5f405935e9c1eea53ebab443585d4827653",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 1.1043568115542968e-08,
+      "compile_and_first_launch_ms": 1411.693774003652,
+      "warm_checked_end_to_end_samples_ms": [
+        15.582419990096241,
+        14.753486990230158
+      ],
+      "warm_checked_end_to_end_median_ms": 15.1679534901632,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "a4617f3d87d93139fff548d491e35a614c6f1ffe5fb9de58e9a2d96f46ed3587",
+        "paired_jvp_ir_digest": "79b578221f35df605816fcbb64b765d16a117b39f8d3fdc99b35cd6d213c0fd5",
+        "source_graph_ir_digest": "991205caae9bc635058ecb3bc43c195c07b941a20ec76f583299b15b07251dc5",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "ef2c2c56d46c878ea5ab257535f53328ec18c0c9605d8ea0f3580f2d2d503cce",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 2.2420171275072676e-10,
+      "compile_and_first_launch_ms": 1402.2913499939023,
+      "warm_checked_end_to_end_samples_ms": [
+        14.468483001110144,
+        14.663895999547094
+      ],
+      "warm_checked_end_to_end_median_ms": 14.566189500328619,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "1d473eec5b51cd9da77a13b71f254e2c237d3f0834fb71152a55de299b8addcf",
+        "paired_jvp_ir_digest": "a7c41020f97caa108b76f12b5f9126519b400d251ba0953b87f91c2a74ccc70c",
+        "source_graph_ir_digest": "77482776c71e0ea63345128a6992bdd837ab8dc52e8b3f8ffe68128705269ef1",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "91130498abf3c5e29f55ff5ebe838c79c75785ab7fbc8033f1a57e0b07a618f2",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 1.796693627209578e-10,
+      "compile_and_first_launch_ms": 1400.4051079973578,
+      "warm_checked_end_to_end_samples_ms": [
+        14.61332500912249,
+        14.341192989377305
+      ],
+      "warm_checked_end_to_end_median_ms": 14.477258999249898,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "6db5f0af470e7e81fcca1d73e44a441ad48a8064351b20e3842fec0ed0f924f3",
+        "paired_jvp_ir_digest": "16a70d88fa9d84f7c3db8402b8493fcd10826ded3fec196791a745c6d27c1065",
+        "source_graph_ir_digest": "a538bc3c624daef2f7175670b0b4f7145cd29050a8225911381625b9aa7c7a88",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "0c9bb64539c5fdb2b0a4d825440fac7455f13c8a61806dddf1639379120f00a0",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 4.848729494300041e-09,
+      "compile_and_first_launch_ms": 1387.569023994729,
+      "warm_checked_end_to_end_samples_ms": [
+        14.785200997721404,
+        13.704515004064888
+      ],
+      "warm_checked_end_to_end_median_ms": 14.244858000893146,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "5d98ec1196e841e99183cbf0e2ebbff2f48de962d03b6a8ef93f205eaa3ba513",
+        "paired_jvp_ir_digest": "0b120bafba96ad906d0a4641449a194b5d4dc227cb3833ed7c0ab7a83c9f44e6",
+        "source_graph_ir_digest": "aed6f6dc0ff2001c14f5553fbe2892c586b739526d4719d7d7849623677033d4",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "f2d5868bbdef6321181a587016de13e5f338bc9fe5e35eb5327e8235dd8e0126",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.4477740107341504e-10,
+      "compile_and_first_launch_ms": 1381.737631993019,
+      "warm_checked_end_to_end_samples_ms": [
+        14.334497987874784,
+        15.436579997185618
+      ],
+      "warm_checked_end_to_end_median_ms": 14.8855389925302,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "9a71d654032093a8d8aa69bba00768ba27fba233292fb8f9a3bf6f84de6c2bbb",
+        "paired_jvp_ir_digest": "070dfa4b542862447a997f7cd31a3330036ba8833ddcf53100962b4e483c3757",
+        "source_graph_ir_digest": "60ffc06fcdc33036e2779ed0a080771f342d8460f079284aae0e8b5bcc2d0ea4",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "b92b8adf860ba56d5375fe474d73731f75834bcf4487b83d49820f42478793fe",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.6048810742039805e-09,
+      "compile_and_first_launch_ms": 1402.628141004243,
+      "warm_checked_end_to_end_samples_ms": [
+        15.088587999343872,
+        15.24624000012409
+      ],
+      "warm_checked_end_to_end_median_ms": 15.16741399973398,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "754209b3a03ae81b3aaf2cea3fa5561ee3844b842e2dd701c4d377e32c995558",
+        "paired_jvp_ir_digest": "351c6b72e660ad1062066eb97a3e7d45de31ed390834e7405b23a0843b7aa809",
+        "source_graph_ir_digest": "e0741e4f226648e9a8413c440cfa2c78a0b3f1064e160e6c647d386c9675d544",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "3dfd2e02fcc4f6fcf019e4f35bcf0a9d63d3fcf6d8d8f86818f921e882c2adc4",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "q",
+        "k"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 5.554931875595415e-09,
+      "compile_and_first_launch_ms": 1380.6619980023243,
+      "warm_checked_end_to_end_samples_ms": [
+        14.627469994593412,
+        14.574804998119362
+      ],
+      "warm_checked_end_to_end_median_ms": 14.601137496356387,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "f6e97ddd0aa9fe2f4fb4838134ec02290600c25759de36f3e7e810f44ee9205f",
+        "paired_jvp_ir_digest": "39cc0842c6c497076d8ccc4217f961a9434be120aff620f5ed46963d236e6b9f",
+        "source_graph_ir_digest": "ee697a29e00891b3782bf91cb1c951e8442cbbf9604e31e3726e1d07e0db0c16",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "d5ef85698a65fda54cc22f657983b8c326efb08b3236624861d6180ad539dd2a",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.973035871991272e-10,
+      "compile_and_first_launch_ms": 1375.995640992187,
+      "warm_checked_end_to_end_samples_ms": [
+        14.070473000174388,
+        14.400054991710931
+      ],
+      "warm_checked_end_to_end_median_ms": 14.23526399594266,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "36285a28952051e7f640e3551eeaf76574f1ba8a9788d005b384d0cc74b904aa",
+        "paired_jvp_ir_digest": "e36502c0c5caa8972aff699376c827a7bbea8a9320dc194acc133ee771ec3db6",
+        "source_graph_ir_digest": "4f220d89caaa1d1fca1f6fda5563bfc4ba09eac2de63ad7989c4d0f5c6384190",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "45d0b1538c311ac89f08b92e347c2c420ad51c93136682be6b8723d04808a37e",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 4.813500709133223e-10,
+      "compile_and_first_launch_ms": 1372.3393439868232,
+      "warm_checked_end_to_end_samples_ms": [
+        14.788609987590462,
+        14.421325002331287
+      ],
+      "warm_checked_end_to_end_median_ms": 14.604967494960874,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "b4f4ca887eea3e978304d1a6a926ee381c2cf366612215a6d2c14c28aca45607",
+        "paired_jvp_ir_digest": "3bcbc95c516da2d4c83900a333c0f90349dd96a31bf2799f2041b33ecd93f9b9",
+        "source_graph_ir_digest": "f613d8680ac9a3e8ec53e44a8e54e33e2469826daa17d464811a872846f3a2ac",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "64821eadc26c7482145d1613285c28fb274d1dfa81c4df8362b2c277b7317b62",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 7.598023432642265e-09,
+      "compile_and_first_launch_ms": 1386.179078996065,
+      "warm_checked_end_to_end_samples_ms": [
+        14.412074000574648,
+        15.526296992902644
+      ],
+      "warm_checked_end_to_end_median_ms": 14.969185496738646,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "6ced34b088037a98afb9a6f16c2dd0775e2f19d3f585bac8758ddea2bbdc376c",
+        "paired_jvp_ir_digest": "2982a7d72485981d1f27789800d2b63867a39d8b83a7714e3ecd8fb7161b82ca",
+        "source_graph_ir_digest": "2de621139b087c4dce058d319dfd9bc5e87e101ae1573d07d29a47f2f02da235",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "60c4f2311024836bfd1107bf11c47e33e82e8c939196cff038f5e5abab0f5f4a",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 8.945897356227306e-10,
+      "compile_and_first_launch_ms": 1410.8870679920074,
+      "warm_checked_end_to_end_samples_ms": [
+        15.374843991594389,
+        15.968240011716262
+      ],
+      "warm_checked_end_to_end_median_ms": 15.671542001655325,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "0182b919fd46839e4557acb4aa8317f77382ca8193a191b7cb0a34e67582ed55",
+        "paired_jvp_ir_digest": "56474c0de7ed79b80b4f96a5828bc5a8c8117a0e8a99f8ea8bc802c7a5443636",
+        "source_graph_ir_digest": "a42b5e924152c06df8b89026f7c3e986505023a93e6d5590852ab288b5216d14",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "506155e60fc5273011e868541a5d45c61b73bfd0bc764fe894271dc7a3e65051",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 9.418297031160705e-09,
+      "compile_and_first_launch_ms": 1399.7033820051001,
+      "warm_checked_end_to_end_samples_ms": [
+        16.275702000712045,
+        16.10038400394842
+      ],
+      "warm_checked_end_to_end_median_ms": 16.188043002330232,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "046733bbbfa804f573cf69de47fc2aab07ef9488d79c8913b8f29aed68be3abb",
+        "paired_jvp_ir_digest": "b6b0e6f96f660f637ed3e60b4cb63f268905708023b18275cdf643254b9f86c5",
+        "source_graph_ir_digest": "96f29c67729e4d559e442a08c2b2382032a3138da157dd45cac8d3279c977743",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "acf450523598945825e782ca5cf5862455d719d543edf8f07f6cb1489c6f0e22",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 5,
+      "causal": false,
+      "max_abs_error": 1.1043568115542968e-08,
+      "compile_and_first_launch_ms": 1499.4210270087933,
+      "warm_checked_end_to_end_samples_ms": [
+        15.41229100257624,
+        16.68449900171254
+      ],
+      "warm_checked_end_to_end_median_ms": 16.04839500214439,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "8675fa519ee8b47b46fbf6f47aa160f35c9360288b8c3393be2b1bc88a346392",
+        "paired_jvp_ir_digest": "8db1af58e3d1d3b5b0566401f58d123ed10a83851976d1d0354c6f26a27a838f",
+        "source_graph_ir_digest": "912324969d7b1c270bfe659217f1f6b1b443ce899a6281c3ae7fb2882b8d3eb9",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "0f0a2e9f066d92393bf0f1db8eeec7f2bde02618524692b4a5d29e58033c66fe",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 2.2420171275072676e-10,
+      "compile_and_first_launch_ms": 1446.9142599991756,
+      "warm_checked_end_to_end_samples_ms": [
+        15.241251006955281,
+        16.529197004274465
+      ],
+      "warm_checked_end_to_end_median_ms": 15.885224005614873,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "08d962720e13231bb1cb3a3b7f80e1f4b4d4eb7971dec5c3ca6512515ed8bf12",
+        "paired_jvp_ir_digest": "eb9b5a751cf5ecb94b86d42ee6a2c6c5cff293dff969afdc971fb5b83f4663e9",
+        "source_graph_ir_digest": "1ac915e185fe0f105af27ca8ba69388d7ec0e8ea7574363d04d48c3d012be9bb",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "04456b7d800c8a08dd4095b507900ed67d427500e333a6013320fded3c3be4ad",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 1.796693627209578e-10,
+      "compile_and_first_launch_ms": 1444.1880689992104,
+      "warm_checked_end_to_end_samples_ms": [
+        15.500150999287143,
+        14.736024997546338
+      ],
+      "warm_checked_end_to_end_median_ms": 15.11808799841674,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "4344791c055d2d0ffaf8bb3917d3eff4a3f66408698d016dfac1483d4477ac1c",
+        "paired_jvp_ir_digest": "82442799a72705574fbef00caab3bf58a0ce7ac11d27010df3244748e5710011",
+        "source_graph_ir_digest": "fb2505470cc477280508c5619c5cdbdd035d62c509044c6cf8c731e50a3af54a",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "0a51904ffce96fbd25bd3e102d6b237a50bf367098c9ab99fb2eaeac496a224b",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 4.848729494300041e-09,
+      "compile_and_first_launch_ms": 1464.5228599983966,
+      "warm_checked_end_to_end_samples_ms": [
+        15.003259002696723,
+        15.078647993505001
+      ],
+      "warm_checked_end_to_end_median_ms": 15.040953498100862,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "7c07de323a85613067a63875e00c5e6b9c050a1aade113fd623a5b815a385606",
+        "paired_jvp_ir_digest": "ac5c04344fed6dc9fa8f292569739926a4aa6067efa8df22c44850b2b13ec113",
+        "source_graph_ir_digest": "3ce7849477d1ab4a71d24e949e3334ce19a94fb165e2fd59027c0fa6f26dc78c",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "dcc04dd7a5c13fb6c03ca1521ffaf4ebb48c7557ff0da50fdc87382048de4ce3",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.4477740107341504e-10,
+      "compile_and_first_launch_ms": 1436.1250009969808,
+      "warm_checked_end_to_end_samples_ms": [
+        14.83685000857804,
+        14.794732007430866
+      ],
+      "warm_checked_end_to_end_median_ms": 14.815791008004453,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "1e26c80468ed8d8230143b020f0f4913fefd0a49c982c49efd106219ba5cdc33",
+        "paired_jvp_ir_digest": "b3733f1123cc23bed47974308f5659dda0ae8238df42bbbacb4d142be792fe5b",
+        "source_graph_ir_digest": "c8eabdc364b8752c8c853b8f34b52f3fcf73ed4ac8ea3254f2f16b24c9e80694",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "78232db70f476abf8f97d72c46491ad78e896aefdb52d4400da018e9ce1ef1d7",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 3.6048810742039805e-09,
+      "compile_and_first_launch_ms": 1414.2363319988362,
+      "warm_checked_end_to_end_samples_ms": [
+        14.362114001414739,
+        14.197141994372942
+      ],
+      "warm_checked_end_to_end_median_ms": 14.27962799789384,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "14b2e9d5b740e20e11a733461c9d89211612607fbab1f359217df0339cd17d0e",
+        "paired_jvp_ir_digest": "f31bac42597facdf291771001a47e661d2d4482a62b5ad57bf202a3cb0328bed",
+        "source_graph_ir_digest": "03c9a8f456844bd63d792c6a0a8df06b61b0425a7f552e412b594d5a75aa1194",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "cf898638ae5acadf1ffe2b7f00c3d737d8bd9aec0a6ccaf9d1b184d176258118",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    },
+    {
+      "order": [
+        "v",
+        "k",
+        "q"
+      ],
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "sk": 129,
+      "causal": true,
+      "max_abs_error": 5.554931875595415e-09,
+      "compile_and_first_launch_ms": 1415.565984993009,
+      "warm_checked_end_to_end_samples_ms": [
+        14.762507998966612,
+        14.449682988924906
+      ],
+      "warm_checked_end_to_end_median_ms": 14.606095493945759,
+      "compiler_subprocesses_on_warm_call": "forbidden",
+      "receipt": {
+        "compiler_path": "nvidia_sm120_jvp_compiled",
+        "execution_kind": "native_gpu",
+        "execution_mode": "cuda_runtime",
+        "evidence_target": "nvidia_sm120",
+        "artifact_hash": "2afa6c0559fca7a9dc780a035c2771ac0ff91c68be990f4baf052694922b0338",
+        "paired_jvp_ir_digest": "a6bcb79c1c008274e1409ff76139c983dd5103c1d42de92ba3708a88c4af3d57",
+        "source_graph_ir_digest": "33257a078dad343bd667e0c7d2301c035d61a98eae50252ef5475d599f00bfb8",
+        "schedule_program_digest": "850317867569144780738a1ec8d8d6901b0301488a98b8cf6fff89a718126303",
+        "tile_program_digest": "4e248c9d1331c7edbd97c10076ff399d7c5ce1999cfc3ee9a62bcc298a8a7d69",
+        "frontend_authority": "tracer",
+        "family": "attention_checkpoint"
+      },
+      "correctness": "passed_before_timing"
+    }
+  ],
+  "fingerprints": {
+    "python/tessera/compiler/graph_ir_cache.py": "3f5fa0ef45248502b52b4660975f53467c7f157c51261c97dde90d91931ac29d",
+    "python/tessera/compiler/jit.py": "5a22401c38d9ee347df3f69711f2f4fb8200fb23f465ff86d14899d4ec056b38",
+    "python/tessera/compiler/native_jvp_plugins.py": "8f9c44d061c6338737e9820e892fef6d02ff0f9773dc16c7a81fc298f7b8fbda",
+    "python/tessera/compiler/native_attention_jvp_runtime.py": "8c1612e585228af57b143cb881a1f30a6fb7546d56693b5fe9724d54baba706d",
+    "python/tessera/compiler/native_attention_program.py": "89d00779c42c0711706addeedc52b47db67552282f054dc144a5b49e464ea7a8",
+    "python/tessera/compiler/native_attention_jvp_artifact.py": "8a106cb163cbb9d27d59cf7ca63f35683707e516f516914bbff25a55f118dfab",
+    "python/tessera/compiler/execution_matrix.py": "70791b53aebda4abca49279df33850b3b1116f6a91fcb688b8b40ba567a1f989",
+    "python/tessera/runtime.py": "4b63b6b88a82b7ca9f11cdd19b5d6e0ccd141d084844f18d952526ada1af42d4",
+    "benchmarks/nvidia/benchmark_public_attention_jvp.py": "c2b9ce3d2b35e2ca0c65a50fbcc900c9d84e37defc3b9a5a484ffe3f613679dc"
+  },
+  "timing_scope": "first compile+launch and warm checked synchronous host end-to-end; no isolated kernel claim"
+}

@@ -139,6 +139,68 @@ class BackendCapability:
 
 
 @dataclass(frozen=True)
+class NativeProgramExecution:
+    output: Any
+    component_receipts: tuple[Mapping[str, Any], ...]
+
+
+
+def _execute_rocm_nvfp4_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.prepared_rocm_nvfp4_program import resolve_program
+    program=resolve_program(artifact)
+    if isinstance(args,Mapping):
+        output,receipts=program.execute(**args)
+    elif isinstance(args,(tuple,list)):
+        output,receipts=program.execute(*args)
+    else:
+        raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH","resident program requires explicit tensor inputs")
+    return NativeProgramExecution(output,receipts)
+
+
+def _execute_nvidia_lhs_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.prepared_nvidia_lhs import launch_portable_lhs
+    prepared = launch_portable_lhs(artifact,args)
+    if prepared is not None:
+        return NativeProgramExecution(prepared["output"],tuple(prepared["component_receipts"]))
+    from .compiler.nvidia_tensor_lhs import from_manifest
+    metadata=artifact.metadata or {}
+    program=from_manifest(metadata.get("native_program"))
+    if artifact.graph_ir!=program.graph_ir or metadata.get("arg_names")!=list(program.argument_names):
+        raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", "native program parent Graph/argument ABI mismatch")
+    if isinstance(args, Mapping):
+        result=program.execute_resident(**args)
+    elif isinstance(args,(tuple,list)):
+        result=program.execute_resident(*args)
+    else:
+        raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", "native program requires positional or named inputs")
+    with result:
+        output=result.device_session.download(result.output)
+        receipts=(result.producer_receipt,result.consumer_receipt)
+    return NativeProgramExecution(output,receipts)
+
+
+def _execute_nvidia_rhs_program_artifact(artifact: Any, args: Any) -> NativeProgramExecution:
+    from .compiler.nvidia_tensor_rhs import rhs_program_from_manifest
+    metadata=artifact.metadata or {}
+    manifest = metadata.get("native_program")
+    if not isinstance(manifest, dict):
+        raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", "native RHS program manifest must be a mapping")
+    program=rhs_program_from_manifest(manifest)
+    if artifact.graph_ir!=program.graph_ir or metadata.get("arg_names")!=list(program.argument_names):
+        raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", "native program parent Graph/argument ABI mismatch")
+    if isinstance(args, Mapping):
+        result=program.execute_resident(**args)
+    elif isinstance(args,(tuple,list)):
+        result=program.execute_resident(*args)
+    else:
+        raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", "native program requires positional or named inputs")
+    with result:
+        output=result.device_session.download(result.output)
+        receipts=(result.producer_receipt,result.consumer_receipt)
+    return NativeProgramExecution(output,receipts)
+
+
+@dataclass(frozen=True)
 class RuntimeArtifact:
     graph_ir: str = ""
     schedule_ir: str = ""
@@ -2980,6 +3042,51 @@ def _validate_nvidia_cuda_buffer_streams(
             )
 
 
+def _nvfp4_logical_batch_prefix(descriptor: LaunchDescriptor) -> tuple[int, ...]:
+    """Bind logical batch axes to the checked output guards before flattening."""
+    import math
+    row_policy=descriptor.provenance.get("batch_rows")
+    if (not isinstance(row_policy,(list,tuple)) or len(row_policy)!=2 or
+            any(type(x) is not int or x<=0 for x in row_policy)):
+        raise RuntimeError("NVFP4 logical batch rows are malformed")
+    batch,rows=row_policy
+    prefix=descriptor.provenance.get("logical_batch_shape",(batch,))
+    if (not isinstance(prefix,(list,tuple)) or not prefix or
+            any(type(x) is not int or x<=0 for x in prefix) or math.prod(prefix)!=batch):
+        raise RuntimeError("NVFP4 logical batch prefix differs from flattened count")
+    if "logical_batch_shape" in descriptor.provenance:
+        output=descriptor.buffers[4]
+        shape=descriptor.provenance.get("shape",())
+        expected=(*prefix,rows,shape[1]) if isinstance(shape,(list,tuple)) and len(shape)==3 else ()
+        guards={(g.dimension,g.predicate,g.value) for g in descriptor.shape_guards if g.binding==output.name}
+        if (output.rank!=len(expected) or
+                guards!={(i,"eq",extent) for i,extent in enumerate(expected)}):
+            raise RuntimeError("NVFP4 logical batch prefix differs from compiled output guards")
+    return tuple(prefix)
+
+
+def _validate_nvfp4_independent_batch_scalars(
+    descriptor: LaunchDescriptor, scalars: Mapping[str, object],
+) -> tuple[int, int]:
+    batch_rows = descriptor.provenance.get("batch_rows")
+    shape = descriptor.provenance.get("shape")
+    if (not isinstance(batch_rows, (list, tuple)) or len(batch_rows) != 2
+            or any(type(value) is not int or value <= 0 for value in batch_rows)
+            or not isinstance(shape, (list, tuple)) or len(shape) != 3
+            or any(type(value) is not int or value <= 0 for value in shape)
+            or descriptor.provenance.get("batching") not in {"independent_rhs", "shared_rhs_rows", "shared_lhs"}):
+        raise RuntimeError("NVFP4 independent batch metadata is malformed")
+    _nvfp4_logical_batch_prefix(descriptor)
+    batch, rows = cast(tuple[int, int], tuple(batch_rows))
+    m, n, k = cast(tuple[int, int, int], tuple(shape))
+    supplied = tuple(scalars[name] for name in ("M", "N", "K", "BatchRows", "BatchCount"))
+    if (batch * rows != m or supplied != (m, n, k, rows, batch)
+            or any(type(value) is not int for value in supplied)
+            or (rows // 16 + (rows % 16 != 0)) * batch > 65535):
+        raise RuntimeError("NVFP4 independent batch scalars differ from the compiled envelope")
+    return batch, rows
+
+
 def _submit_nvidia_sm120_native(
     image: NativeImageArtifact,
     descriptor: LaunchDescriptor,
@@ -3006,12 +3113,23 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_LSE_BIAS_F32_ABI,
+        SM120_ATTN_LSE_BCAST_F32_ABI,
         SM120_ATTN_BWD_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
         SM120_BF16_ABI,
+        SM120_ROW_B_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_REDUCED_OUTPUT_ABIS,
         SM120_F16_ABI,
+        SM120_ROW_B_F16_ABI,
         SM120_STRIDED_F16_ABI,
+        SM120_STRIDED_ROW_B_F16_ABI,
+        SM120_STRIDED_ROW_B_BF16_ABI,
         SM120_STRIDED_BF16_ABI,
         SM120_FP8_E4M3_ABI,
         SM120_FP8_E5M2_ABI,
@@ -3030,6 +3148,7 @@ def _submit_nvidia_sm120_native(
         SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
         SM120_NVFP4_ABI,
+        SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
@@ -3078,12 +3197,24 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_LSE_BIAS_F32_ABI,
+        SM120_ATTN_LSE_BCAST_F32_ABI,
         SM120_ATTN_BWD_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
         SM120_BF16_ABI,
+        SM120_ROW_B_BF16_ABI,
         SM120_F16_ABI,
+        SM120_ROW_B_F16_ABI,
         SM120_STRIDED_F16_ABI,
+        SM120_STRIDED_ROW_B_F16_ABI,
+        SM120_STRIDED_ROW_B_BF16_ABI,
         SM120_STRIDED_BF16_ABI,
         SM120_NVFP4_ABI,
+        SM120_NVFP4_BATCH_ABI,
         SM120_FP8_E4M3_ABI,
         SM120_FP8_E5M2_ABI,
         SM120_TF32_ABI,
@@ -3114,6 +3245,39 @@ def _submit_nvidia_sm120_native(
         SM120_DYNAMIC_EXPR_SMEM_ABI,
     }:
         raise RuntimeError(f"unsupported SM120 descriptor ABI {descriptor.abi_id!r}")
+    if descriptor.abi_id in {
+            SM120_ATTN_LSE_F32_ABI,SM120_ATTN_LSE_BIAS_F32_ABI,SM120_ATTN_LSE_BCAST_F32_ABI,
+            SM120_ATTN_BWD_LSE_F32_ABI,SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
+            SM120_ATTN_BWD_LSE_BCAST_F32_ABI,SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
+            SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,SM120_ATTN_BWD_LSE_COMPACT_F32_ABI,
+            SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI,
+    } and ("shape_bounds" in descriptor.provenance or "shape_policy" in descriptor.provenance):
+        from tessera.compiler.attention_shape_contract import descriptor_attention_shapes
+        actual_dims = tuple(scalars[name] for name in ("B","Hq","Hkv","Sq","Sk","D","Dv"))
+        _, runtime_shapes = descriptor_attention_shapes(descriptor,actual_dims)
+        if descriptor.provenance.get("bias_shape"):
+            from tessera.compiler.attention_shape_contract import physical_attention_bias_shape
+            supplied_bias = tuple(scalars[name] for name in ("BiasB","BiasH","BiasQ","BiasK"))
+            if any(type(x) is not int for x in supplied_bias) or supplied_bias != physical_attention_bias_shape(
+                    actual_dims,descriptor.provenance["bias_shape"]):
+                raise RuntimeError("bounded attention physical bias scalars disagree with runtime dimension roles")
+        for binding, expected_shape in zip(descriptor.buffers,runtime_shapes,strict=True):
+            value = buffers[binding.name]
+            interface = getattr(value,"__cuda_array_interface__",None)
+            actual_shape = interface.get("shape") if isinstance(interface,Mapping) else getattr(value,"shape",None)
+            if actual_shape is None or tuple(actual_shape) != expected_shape:
+                raise RuntimeError("bounded attention buffers disagree with runtime dimension roles")
+    if descriptor.abi_id in {SM120_NVFP4_ABI,SM120_NVFP4_BATCH_ABI} and descriptor.provenance.get("batch_rows") is not None:
+        _nvfp4_logical_batch_prefix(descriptor)
+    seeded_contract = None
+    if descriptor.abi_id == SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI:
+        from tessera.compiler.lse_cotangent_contract import lse_cotangent_contract, validate_lse_cotangent_invocation
+        seeded_contract = lse_cotangent_contract(descriptor,runtime_dims=tuple(scalars[name] for name in ("B","Hq","Hkv","Sq","Sk","D","Dv")) if descriptor.provenance.get("shape_bounds") else None)
+        validate_lse_cotangent_invocation(descriptor, buffers, scalars)
+    compact_contract = None
+    if descriptor.abi_id == SM120_ATTN_BWD_LSE_COMPACT_F32_ABI:
+        from tessera.compiler.compact_attention_contract import compact_attention_contract
+        compact_contract = compact_attention_contract(descriptor,runtime_dims=tuple(scalars[name] for name in ("B","Hq","Hkv","Sq","Sk","D","Dv")) if descriptor.provenance.get("shape_bounds") else None)
     lib = _load_nvidia_ptx_launch()
     if lib is None:
         raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
@@ -3122,6 +3286,29 @@ def _submit_nvidia_sm120_native(
     except UnicodeDecodeError as exc:
         raise RuntimeError("SM120 PTX native image is not ASCII") from exc
     entry = descriptor.entry_symbol
+    from tessera.compiler.native_artifact import LaunchGeometry
+    softmax_storage_abis = {
+        "f16": SM120_SOFTMAX_F16_ABI,
+        "bf16": SM120_SOFTMAX_BF16_ABI,
+        "f32": SM120_SOFTMAX_F32_ABI,
+    }
+    if descriptor.abi_id in softmax_storage_abis.values():
+        storage = descriptor.provenance.get("storage")
+        strategy = descriptor.provenance.get("schedule")
+        # Existing serialized serial softmax ABI packages name the physical
+        # strategy thread_per_row_128. Its symbol and geometry remain checked.
+        if strategy == "thread_per_row_128":
+            strategy = "serial"
+        cooperative = strategy == "cooperative_128"
+        expected_entry = f"tessera_tile_softmax_{storage}" + (
+            "_cooperative_128" if cooperative else "")
+        geometry = ("sm120_softmax_cooperative_128_rows" if cooperative
+                    else "sm120_softmax_thread_per_row_128")
+        if (storage not in softmax_storage_abis or strategy not in {"serial", "cooperative_128"}
+                or descriptor.abi_id != softmax_storage_abis[storage]
+                or entry != expected_entry
+                or descriptor.geometry != LaunchGeometry(policy=geometry)):
+            raise RuntimeError("SM120 softmax schedule/entry/geometry ABI mismatch")
     if _register_nvidia_ptx(lib, entry, ptx) != 0:
         raise RuntimeError(f"PTX register failed for {entry}")
 
@@ -3133,27 +3320,23 @@ def _submit_nvidia_sm120_native(
                 or stream is None):
             raise RuntimeError("resident SM120 packages require all CUDA buffers and an explicit stream")
         is_rmsnorm = entry.startswith("tessera_tile_norm_")
+        is_resident_softmax = descriptor.abi_id in softmax_storage_abis.values()
         epilogue = descriptor.provenance.get("epilogue", {})
-        has_fused_epilogue = isinstance(epilogue, Mapping) and (
-            bool(epilogue.get("bias"))
-            or bool(epilogue.get("residual"))
-            or epilogue.get("activation", "none") != "none"
-        )
+        if not isinstance(epilogue, Mapping):
+            raise RuntimeError("resident SM120 epilogue policy must be a mapping")
         is_matmul = (
             entry.startswith("nvidia_sm120_scheduled_matmul_")
-            and (("_fused_" not in entry) or
-                 (descriptor.abi_id in {
-                     SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI,
-                     *SM120_REDUCED_OUTPUT_ABIS,
-                 } and not has_fused_epilogue and len(raw) == 3))
+            and len(raw) == 3 + int(bool(epilogue.get("bias"))) + int(bool(epilogue.get("residual")))
         )
         is_native_attention = descriptor.abi_id in {
-            SM120_ATTN_F32_ABI, SM120_ATTN_LSE_F32_ABI,
+            SM120_ATTN_F32_ABI, SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI,
         }
-        if not (is_rmsnorm or is_matmul or is_native_attention):
+        is_saved_lse_backward = descriptor.abi_id in {SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI, SM120_ATTN_BWD_LSE_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI}
+        if not (is_rmsnorm or is_resident_softmax or is_matmul
+                or is_native_attention or is_saved_lse_backward):
             raise RuntimeError(
-                "resident SM120 launch is limited to RMSNorm, scheduled matmul, "
-                "and native f32 attention"
+                "resident SM120 launch is limited to RMSNorm, softmax, scheduled matmul, "
+                "native f32 attention, and saved-LSE f32 attention backward"
             )
         _validate_nvidia_cuda_buffer_streams(
             [cast(Mapping[str, Any], interface) for interface in cuda_interfaces],
@@ -3166,6 +3349,33 @@ def _submit_nvidia_sm120_native(
         c_buffers = (ctypes.c_void_p * len(addresses))(*addresses)
         ordered_scalars = sorted(descriptor.scalars, key=lambda item: item.ordinal)
         dimensions = tuple(int(cast(int, scalars[item.name])) for item in ordered_scalars)
+        if descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI,
+                                  SM120_STRIDED_ROW_B_F16_ABI, SM120_STRIDED_ROW_B_BF16_ABI}:
+            if len(dimensions) != 6 or min(dimensions) <= 0:
+                raise RuntimeError("SM120 strided dimensions require positive M/N/K/LDA/LDB/LDD")
+            m,n,k,lda,ldb,ldd = dimensions
+            row_b = descriptor.abi_id in {SM120_STRIDED_ROW_B_F16_ABI, SM120_STRIDED_ROW_B_BF16_ABI}
+            if descriptor.provenance.get("b_layout") != ("row_major" if row_b else "col_major"):
+                raise RuntimeError("SM120 strided RHS layout disagrees with its ABI")
+            for index,shape,pitch in ((0,(m,k),(lda,1)),(1,(k,n),(ldb,1) if row_b else (1,ldb)),
+                                     (len(raw)-1,(m,n),(ldd,1))):
+                interface = cast(Mapping[str, Any],cuda_interfaces[index])
+                if tuple(interface.get("shape",())) != shape:
+                    raise RuntimeError("SM120 strided resident shape disagrees with M/N/K")
+                import numpy as np
+                width = np.dtype(interface["typestr"]).itemsize
+                strides = interface.get("strides")
+                actual = (shape[1]*width,width) if strides is None else tuple(strides)
+                if len(actual)!=2 or any(shape[axis]>1 and actual[axis]!=pitch[axis]*width
+                                          for axis in range(2)):
+                    raise RuntimeError("SM120 strided resident storage disagrees with LDA/LDB/LDD scalars")
+        if descriptor.abi_id in {SM120_ATTN_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI}:
+            from tessera.compiler.attention_shape_contract import physical_attention_bias_shape
+            if len(dimensions) != 11 or tuple(dimensions[7:]) != physical_attention_bias_shape(
+                    dimensions[:7],descriptor.provenance.get("bias_shape",())):
+                raise RuntimeError("SM120 resident physical bias scalars disagree with compiled shape")
+        if compact_contract is not None and dimensions != compact_contract[0]:
+            raise RuntimeError("compact attention scalars disagree with the compiled envelope")
         dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
         rc = lib.tessera_nvidia_ptx_invoke_resident(
             entry.encode(), c_buffers, len(addresses), dims, len(dimensions),
@@ -3206,6 +3416,8 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BIAS_F32_ABI,
         SM120_ATTN_BCAST_F32_ABI,
         SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_LSE_BIAS_F32_ABI,
+        SM120_ATTN_LSE_BCAST_F32_ABI,
     }
     attention_backward_abis = {
         SM120_ATTN_BWD_F32_ABI,
@@ -3215,6 +3427,11 @@ def _submit_nvidia_sm120_native(
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_ATTN_BWD_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
     }
     unary_abis = softmax_abis | reduction_abis | norm_abis
     moe_abis = set(SM120_MOE_ABIS)
@@ -3387,23 +3604,55 @@ def _submit_nvidia_sm120_native(
             if tuple(value.shape) != expected_shape:
                 raise RuntimeError("SM120 fused training shapes disagree with descriptor scalar N")
         output = tuple(raw[4:6]) if descriptor.abi_id in SM120_FUSED_LOSS_SGD_ABIS.values() else tuple(raw[6:10])
+    elif descriptor.abi_id == SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI:
+        if seeded_contract is None:
+            raise RuntimeError("seeded attention requires its validated native contract")
+        dimensions, _, input_count = seeded_contract
+        output = tuple(raw[input_count:])
+    elif descriptor.abi_id == SM120_ATTN_BWD_LSE_COMPACT_F32_ABI:
+        if compact_contract is None:
+            raise RuntimeError("compact attention requires its validated contract")
+        dimensions, shapes, input_count = compact_contract
+        actual = tuple(int(cast(int, scalars[item.name])) for item in sorted(descriptor.scalars, key=lambda x: x.ordinal))
+        if actual != dimensions or len(raw) != len(shapes) or any(tuple(value.shape) != shape for value,shape in zip(raw,shapes,strict=True)):
+            raise RuntimeError("compact attention storage/scalars disagree with the compiled envelope")
+        output = tuple(raw[input_count:])
     elif descriptor.abi_id in attention_backward_abis:
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
-        if descriptor.abi_id == SM120_ATTN_BWD_LSE_F32_ABI:
-            do, q, key, value, row_lse, dq, dk, dvalue = raw
+        bias_storage: tuple[int, ...] = (b, hq, sq, sk)
+        if descriptor.abi_id in {SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI}:
+            bias_storage = tuple(int(cast(int, scalars[name])) for name in ("BiasB", "BiasH", "BiasQ", "BiasK"))
+            if any(extent not in (1, logical) for extent, logical in zip(bias_storage, (b, hq, sq, sk), strict=True)):
+                raise RuntimeError("SM120 saved-LSE broadcast bias dimensions disagree")
+            from tessera.compiler.attention_shape_contract import physical_attention_bias_shape
+            if bias_storage != physical_attention_bias_shape(dimensions,descriptor.provenance.get("bias_shape",())):
+                raise RuntimeError("SM120 saved-LSE physical bias scalars disagree with compiled shape")
+            dimensions += bias_storage
+        if descriptor.abi_id in {SM120_ATTN_BWD_LSE_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI}:
+            bias = raw[5] if descriptor.abi_id in {SM120_ATTN_BWD_LSE_BIAS_F32_ABI, SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI} else None
+            values = raw[:5] + raw[6:] if bias is not None else raw
+            dbias = values[-1] if descriptor.abi_id in {SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI, SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI} else None
+            if dbias is not None:
+                values = values[:-1]
+            do, q, key, value, output_saved, row_lse, dq, dk, dvalue = values
             if (
                 tuple(do.shape) != (b, hq, sq, dv)
                 or tuple(q.shape) != (b, hq, sq, d)
                 or tuple(key.shape) != (b, hkv, sk, d)
                 or tuple(value.shape) != (b, hkv, sk, dv)
+                or (bias is not None and tuple(bias.shape) != bias_storage)
+                or tuple(output_saved.shape) != (b, hq, sq, dv)
+                or (bias is not None and tuple(bias.shape) != bias_storage)
                 or tuple(row_lse.shape) != (b, hq, sq)
                 or tuple(dq.shape) != tuple(q.shape)
                 or tuple(dk.shape) != tuple(key.shape)
                 or tuple(dvalue.shape) != tuple(value.shape)
             ):
                 raise RuntimeError("SM120 saved-LSE attention backward shapes disagree with descriptor scalars")
-            output = (dq, dk, dvalue)
+            if dbias is not None and tuple(dbias.shape) != bias_storage:
+                raise RuntimeError("SM120 bias gradient shape disagrees with descriptor scalars")
+            output = (dq, dk, dvalue, dbias) if dbias is not None else (dq, dk, dvalue)
         else:
             has_bias = descriptor.abi_id in {
                 SM120_ATTN_BWD_BIAS_F32_ABI,
@@ -3422,7 +3671,7 @@ def _submit_nvidia_sm120_native(
                 or tuple(dq.shape) != tuple(q.shape)
                 or tuple(dk.shape) != tuple(key.shape)
                 or tuple(dvalue.shape) != tuple(value.shape)
-                or (bias is not None and tuple(bias.shape) != (b, hq, sq, sk))
+                or (bias is not None and tuple(bias.shape) != bias_storage)
             ):
                 raise RuntimeError("SM120 attention backward shapes disagree with descriptor scalars")
             output = (dq, dk, dvalue)
@@ -3471,19 +3720,27 @@ def _submit_nvidia_sm120_native(
         dimensions = tuple(int(cast(int, scalars[name])) for name in ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))
         b, hq, hkv, sq, sk, d, dv = dimensions
         bias_b, bias_h, bias_q, bias_k = b, hq, sq, sk
-        if descriptor.abi_id == SM120_ATTN_BCAST_F32_ABI:
+        if descriptor.abi_id in {SM120_ATTN_BCAST_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}:
             bias_b, bias_h, bias_q, bias_k = (
                 int(cast(int, scalars[name])) for name in ("BiasB", "BiasH", "BiasQ", "BiasK"))
             if bias_b not in (1, b) or bias_h not in (1, hq) or bias_q not in (1, sq) or bias_k not in (1, sk):
                 raise RuntimeError("SM120 broadcast bias dimensions disagree")
+            from tessera.compiler.attention_shape_contract import physical_attention_bias_shape
+            if descriptor.abi_id == SM120_ATTN_LSE_BCAST_F32_ABI and (
+                    (bias_b,bias_h,bias_q,bias_k) != physical_attention_bias_shape(
+                        dimensions,descriptor.provenance.get("bias_shape",()))):
+                raise RuntimeError("SM120 saved-LSE physical bias scalars disagree with compiled shape")
             dimensions += (bias_b, bias_h, bias_q, bias_k)
-        if descriptor.abi_id == SM120_ATTN_LSE_F32_ABI:
-            q, key, value, output, row_lse = raw
+        if descriptor.abi_id in {SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}:
+            bias = raw[3] if descriptor.abi_id in {SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI} else None
+            values = raw[:3] + raw[4:] if bias is not None else raw
+            q, key, value, output, row_lse = values
             if (
                 tuple(q.shape) != (b, hq, sq, d)
                 or tuple(key.shape) != (b, hkv, sk, d)
                 or tuple(value.shape) != (b, hkv, sk, dv)
                 or tuple(output.shape) != (b, hq, sq, dv)
+                or (bias is not None and tuple(bias.shape) != (bias_b, bias_h, bias_q, bias_k))
                 or tuple(row_lse.shape) != (b, hq, sq)
             ):
                 raise RuntimeError("SM120 saved-LSE attention shapes disagree with descriptor scalars")
@@ -3602,7 +3859,7 @@ def _submit_nvidia_sm120_native(
             if x.size != outer * axis_extent * inner or tuple(output.shape) != expected_output:
                 raise RuntimeError("SM120 reduction shapes disagree with Outer/AxisExtent/Inner scalars")
             dimensions = (outer, axis_extent, inner)
-    elif descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI}:
+    elif descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI, SM120_STRIDED_ROW_B_F16_ABI, SM120_STRIDED_ROW_B_BF16_ABI}:
         dimensions = tuple(
             int(cast(int, scalars[name]))
             for name in ("M", "N", "K", "LDA", "LDB", "LDD")
@@ -3611,7 +3868,7 @@ def _submit_nvidia_sm120_native(
     else:
         m, n, k = (int(cast(int, scalars[name])) for name in ("M", "N", "K"))
         dimensions = (m, n, k)
-    if descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI}:
+    if descriptor.abi_id in {SM120_STRIDED_F16_ABI, SM120_STRIDED_BF16_ABI, SM120_STRIDED_ROW_B_F16_ABI, SM120_STRIDED_ROW_B_BF16_ABI}:
         a, b = raw[:2]
         d = raw[-1]
         epilogue = descriptor.provenance.get("epilogue", {})
@@ -3629,7 +3886,10 @@ def _submit_nvidia_sm120_native(
         a_strides = tuple(int(value // a.itemsize) for value in a.strides)
         b_strides = tuple(int(value // b.itemsize) for value in b.strides)
         d_strides = tuple(int(value // d.itemsize) for value in d.strides)
-        if a_strides != (lda, 1) or b_strides != (1, ldb) or d_strides != (ldd, 1):
+        row_b = descriptor.abi_id in {SM120_STRIDED_ROW_B_F16_ABI, SM120_STRIDED_ROW_B_BF16_ABI}
+        if descriptor.provenance.get("b_layout") != ("row_major" if row_b else "col_major"):
+            raise RuntimeError("SM120 strided RHS layout disagrees with its ABI")
+        if a_strides != (lda, 1) or b_strides != ((ldb, 1) if row_b else (1, ldb)) or d_strides != (ldd, 1):
             raise RuntimeError(
                 "SM120 strided A/B/D storage disagrees with LDA/LDB/LDD scalars"
             )
@@ -3653,7 +3913,9 @@ def _submit_nvidia_sm120_native(
                 )
     elif descriptor.abi_id in {
         SM120_F16_ABI,
+        SM120_ROW_B_F16_ABI,
         SM120_BF16_ABI,
+        SM120_ROW_B_BF16_ABI,
         SM120_TF32_ABI,
         SM120_FP8_E4M3_ABI,
         SM120_FP8_E5M2_ABI,
@@ -3693,17 +3955,45 @@ def _submit_nvidia_sm120_native(
             or (residual is not None and tuple(residual.shape) != (m, n))
         ):
             raise RuntimeError("SM120 fused epilogue shapes disagree with M/N/K scalars")
-    elif descriptor.abi_id == SM120_NVFP4_ABI:
+    elif descriptor.abi_id in {SM120_NVFP4_ABI, SM120_NVFP4_BATCH_ABI}:
         a, b, scale_a, scale_b, d = raw
         packed_k = (k + 1) // 2
         scale_k = (k + 15) // 16
-        if (
-            tuple(a.shape) != (m, packed_k)
-            or tuple(b.shape) != (packed_k, n)
-            or tuple(scale_a.shape) != (m, scale_k)
-            or tuple(scale_b.shape) != (scale_k, n)
-            or tuple(d.shape) != (m, n)
-        ):
+        batch_aware = descriptor.abi_id == SM120_NVFP4_BATCH_ABI
+        independent_rhs = descriptor.provenance.get("batching") == "independent_rhs"
+        shared_lhs = descriptor.provenance.get("batching") == "shared_lhs"
+        rhs_batched = independent_rhs or shared_lhs
+        if rhs_batched and not batch_aware:
+            raise RuntimeError("NVFP4 independent RHS requires the batch-aware ABI")
+        if batch_aware:
+            batch, rows = _validate_nvfp4_independent_batch_scalars(descriptor, scalars)
+            dimensions = (m, n, k, rows, batch)
+        batch_rows = descriptor.provenance.get("batch_rows")
+        row_shape: tuple[int, ...] = (m,)
+        if batch_rows is not None:
+            if (not isinstance(batch_rows, (tuple, list)) or len(batch_rows) != 2
+                    or any(type(value) is not int or value <= 0 for value in batch_rows)):
+                raise RuntimeError("SM120 NVFP4 batch rows must be two positive integer dimensions")
+            batch, rows = cast(tuple[int, int], tuple(batch_rows))
+            if batch * rows != m:
+                raise RuntimeError("SM120 NVFP4 batch rows disagree with flattened M")
+            row_shape = (*_nvfp4_logical_batch_prefix(descriptor), rows)
+        ta, tb = (descriptor.provenance.get(name, False) for name in ("transposeA", "transposeB"))
+        if type(ta) is not bool or type(tb) is not bool or (ta and batch_rows is not None and not batch_aware):
+            raise RuntimeError("SM120 NVFP4 orientation contract is invalid")
+        a_rows = (row_shape[-1],) if shared_lhs else row_shape
+        a_shape, sa_shape = (*a_rows, packed_k), (*a_rows, scale_k)
+        b_shape = (*row_shape[:-1], packed_k, n) if rhs_batched else (packed_k, n)
+        sb_shape = (*row_shape[:-1], scale_k, n) if rhs_batched else (scale_k, n)
+        if ta:
+            a_shape = (*a_shape[:-2], a_shape[-1], a_shape[-2])
+            sa_shape = (*sa_shape[:-2], sa_shape[-1], sa_shape[-2])
+        if tb:
+            b_shape = (*b_shape[:-2], b_shape[-1], b_shape[-2])
+            sb_shape = (*sb_shape[:-2], sb_shape[-1], sb_shape[-2])
+        if (tuple(a.shape) != a_shape or tuple(b.shape) != b_shape
+                or tuple(scale_a.shape) != sa_shape or tuple(scale_b.shape) != sb_shape
+                or tuple(d.shape) != (*row_shape, n)):
             raise RuntimeError("SM120 NVFP4 packed/scale shapes disagree with M/N/K scalars")
     elif descriptor.abi_id in {
         SM120_FP6_E2M3_ABI,
@@ -4285,12 +4575,15 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI,
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
+    from tessera.compiler.rocm_mxfp8_blockscale import MXFP8_PACKAGE_ABIS
     from tessera.compiler.rocm_fp8_blockscale import (
         GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     )
 
+    from tessera.compiler.rocm_math_native import MATH_ABIS
     return frozenset({
+        *MATH_ABIS.values(),
         rn.GFX_SOFTMAX_F32_ABI, rn.GFX_REDUCE_F32_ABI,
         rn.GFX_NORM_F16_ABI, rn.GFX_NORM_BF16_ABI, rn.GFX_NORM_F32_ABI,
         rn.GFX_MATMUL_F16_F32_ABI, rn.GFX_MATMUL_F16_F32_FUSED_ABI,
@@ -4312,6 +4605,7 @@ def _gfx1201_proved_scheduled_abis() -> frozenset[str]:
         GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+        *MXFP8_PACKAGE_ABIS.values(),
     })
 
 
@@ -4347,12 +4641,6 @@ def _submit_rocm_mxfp4_w4a8(
 
     if image.target != "rocm_gfx1201" or image.architecture != "gfx1201":
         raise ValueError("MXFP4 W4A8 launch requires an exact gfx1201 image")
-    live = _rocm_live_arch()
-    if live != "gfx1201":
-        raise RuntimeError(
-            "MXFP4 W4A8 launch requires the selected gfx1201 device; "
-            f"live architecture is {live or 'unavailable'}"
-        )
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
     if len(ordered) != 5:
         raise RuntimeError("MXFP4 W4A8 descriptor requires five buffers")
@@ -4363,6 +4651,84 @@ def _submit_rocm_mxfp4_w4a8(
     safe_folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_SAFE_EPILOGUE_ABI
     folded = descriptor.abi_id == GFX_MXFP4_W4A8_FOLDED_PREFILL_ABI or safe_folded
     packed_folded = descriptor.abi_id == PACKED_FOLDED_TARGET_ABI_V1
+    native_folded = (folded or packed_folded) and descriptor.provenance.get("native_compiler_owned") is True
+    if packed_folded and native_folded:
+        provenance = descriptor.provenance
+        if (image.pipeline_name != "tessera-lower-to-rocm"
+                or provenance.get("kernel_argument_layout") != "expanded_memref"
+                or provenance.get("producer_kind") != "native_mlir_packed_lds"
+                or provenance.get("decode_policy") != "integer_rne_v1"
+                or m <= 0 or n <= 0 or n % 16 or k <= 0 or k % 64
+                or provenance.get("image_k") != k
+                or descriptor.geometry.grid != ((n + 63) // 64, (m + 255) // 256, 1)
+                or descriptor.geometry.workgroup != (256, 1, 1)):
+            raise RuntimeError("native packed folded MXFP4 requires its expanded memref contract")
+        shape_policy = provenance.get("image_shape_policy")
+        if shape_policy == "runtime_mn_fixed_k":
+            if (provenance.get("image_m") != 0 or provenance.get("image_n") != 0
+                    or type(provenance.get("image_whole_m")) is not bool
+                    or type(provenance.get("image_whole_n")) is not bool
+                    or provenance["image_whole_m"] != (m % 256 == 0)
+                    or provenance["image_whole_n"] != (n % 64 == 0)):
+                raise RuntimeError("native packed folded MXFP4 image edge classes disagree")
+        elif shape_policy == "static_mnk":
+            if provenance.get("image_m") != m or provenance.get("image_n") != n:
+                raise RuntimeError("native packed folded MXFP4 static image dimensions disagree")
+        else:
+            raise RuntimeError("native packed folded MXFP4 requires its image shape policy")
+    if packed_folded and not native_folded:
+        from tessera.compiler.native_artifact import HAND_EMITTED_HIP_PRODUCER
+        if image.pipeline_name != HAND_EMITTED_HIP_PRODUCER:
+            raise RuntimeError("packed folded MXFP4 image is missing its native argument-layout contract")
+    if folded:
+        from tessera.compiler.native_artifact import HAND_EMITTED_HIP_PRODUCER
+        layout = descriptor.provenance.get("kernel_argument_layout")
+        if native_folded:
+            if (safe_folded or layout != "expanded_memref"
+                    or image.pipeline_name != "tessera-lower-to-rocm"):
+                raise RuntimeError("native folded MXFP4 requires its expanded memref argument contract")
+            from tessera.compiler.rocm_mxfp4_folded import FoldedPrefillSchedule, folded_prefill_grid
+            provenance = descriptor.provenance
+            shape_policy = provenance.get("image_shape_policy")
+            expected_image_k = 0 if shape_policy == "runtime_mnk" else k
+            if (m <= 64 or n <= 0 or k <= 0 or k % 64
+                    or provenance.get("image_k") != expected_image_k):
+                raise RuntimeError("native folded MXFP4 runtime dimensions disagree with its image")
+            if shape_policy in {"runtime_mn_fixed_k", "runtime_mnk"}:
+                if (provenance.get("image_m") != 0 or provenance.get("image_n") != 0
+                        or type(provenance.get("image_whole_m")) is not bool
+                        or type(provenance.get("image_whole_n")) is not bool
+                        or provenance["image_whole_m"] != (m % 256 == 0)
+                        or provenance["image_whole_n"] != (n % 64 == 0)):
+                    raise RuntimeError("native folded MXFP4 whole/partial image classes disagree with runtime dimensions")
+            elif shape_policy == "static_mnk":
+                if provenance.get("image_m") != m or provenance.get("image_n") != n:
+                    raise RuntimeError("native folded MXFP4 static image dimensions disagree")
+            else:
+                raise RuntimeError("native folded MXFP4 requires its image shape policy")
+            raster_group = provenance["raster_group_m"]
+            workgroup_mode = provenance["workgroup_mode"]
+            staging_prefetch = provenance["staging_prefetch"]
+            epilogue_schedule = provenance["epilogue_schedule"]
+            row_guard = provenance["row_guard"]
+            if (type(raster_group) is not int or
+                    not isinstance(workgroup_mode, str) or
+                    not isinstance(staging_prefetch, str) or
+                    not isinstance(epilogue_schedule, str) or
+                    not isinstance(row_guard, str)):
+                raise RuntimeError("native folded MXFP4 schedule metadata types disagree")
+            schedule = FoldedPrefillSchedule(
+                raster_group_m=raster_group,
+                workgroup_mode=workgroup_mode,
+                staging_prefetch=staging_prefetch,
+                epilogue=epilogue_schedule,
+                row_guard=row_guard)
+            if (descriptor.geometry.grid != folded_prefill_grid(m, n, schedule)
+                    or descriptor.geometry.workgroup != (256, 1, 1)):
+                raise RuntimeError("native folded MXFP4 launch geometry disagrees with runtime dimensions")
+        elif layout is not None or image.pipeline_name != HAND_EMITTED_HIP_PRODUCER:
+            raise RuntimeError("folded MXFP4 image is missing its native argument-layout contract")
+
     packed_layout = str(descriptor.provenance.get("weight_layout", ""))
     from tessera.compiler.rocm_mxfp4 import (
         MXFP4_GFX12_FRAGMENT_LAYOUT_V1,
@@ -4455,6 +4821,14 @@ def _submit_rocm_mxfp4_w4a8(
     ]
     if not output.flags.c_contiguous:
         raise RuntimeError("MXFP4 W4A8 output must be contiguous")
+
+    live = _rocm_live_arch()
+    if live != "gfx1201":
+        raise RuntimeError(
+            "MXFP4 W4A8 launch requires the selected gfx1201 device; "
+            f"live architecture is {live or 'unavailable'}"
+        )
+
     hip = _load_hip_for_launch()
     if hip is None or hip.hipInit(0) != 0:
         raise RuntimeError("libamdhip64.so or a usable gfx1201 device is unavailable")
@@ -4476,10 +4850,16 @@ def _submit_rocm_mxfp4_w4a8(
                 pointer, array.ctypes.data_as(ctypes.c_void_p), int(array.nbytes), 1
             ) != 0:
                 raise RuntimeError("MXFP4 W4A8 host-to-device copy failed")
-        values: list[Any] = [
-            *(ctypes.c_void_p(pointer.value) for pointer in device),
-            ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k),
-        ]
+        values: list[Any] = []
+        if native_folded:
+            for pointer, array in zip(device, arrays, strict=True):
+                values.extend([
+                    ctypes.c_void_p(pointer.value), ctypes.c_void_p(pointer.value),
+                    ctypes.c_int64(0), ctypes.c_int64(array.size), ctypes.c_int64(1),
+                ])
+        else:
+            values.extend(ctypes.c_void_p(pointer.value) for pointer in device)
+        values.extend([ctypes.c_int64(m), ctypes.c_int64(n), ctypes.c_int64(k)])
         arguments = (ctypes.c_void_p * len(values))(
             *[ctypes.cast(ctypes.byref(value), ctypes.c_void_p) for value in values]
         )
@@ -4514,7 +4894,47 @@ def _submit_rocm_gfx1151_native(
     stream: Any,
 ) -> Any:
     """Submit compiler-owned gfx1151 typed softmax/reduction/movement HSACOs."""
-    del stream  # The pilot uses the HIP default stream and synchronizes completion.
+    provenance = getattr(descriptor, "provenance", {})
+    if "native_scaled_primal_program" in provenance:
+        from .compiler.native_scaled_program import NativeScaledProgram, PreparedScaledProgram
+        import json
+        import numpy as np
+        if stream not in (None, 0):
+            raise ValueError("native scaled primal uses its owned completion stream")
+        if (image.target != "rocm_gfx1201" or image.architecture != "gfx1201"
+                or _rocm_live_arch() != "gfx1201"):
+            raise ValueError("native scaled primal requires owning gfx1201")
+        package = NativeScaledProgram.from_manifest(
+            descriptor.provenance["native_scaled_primal_program"])
+        program = json.loads(package.program_json)
+        if program.get("kind") != "primal":
+            raise ValueError("native scaled primal descriptor has a non-primal program")
+        names = descriptor.provenance["native_program_arg_names"]
+        output_name = descriptor.provenance["native_program_output_name"]
+        if (not isinstance(names,(list,tuple)) or any(not isinstance(name,str) for name in names)
+                or not isinstance(output_name,str)):
+            raise ValueError("native scaled primal argument roles differ")
+        if len(names) != program["argument_count"] or len(set(names)) != len(names):
+            raise ValueError("native scaled primal argument roles differ")
+        if len(program["steps"]) != 1:
+            raise ValueError("typed primal descriptor requires one native scaled product")
+        primal_dimensions = json.loads(package.members_json[0])["scalars"]
+        if [int(cast(int,scalars[name])) for name in ("M", "N", "K")] != primal_dimensions:
+            raise ValueError("native primal scalar extents differ from compiler program")
+        lib = _load_rocm_native_movement_runtime()
+        if lib is None:
+            raise RuntimeError("native scaled primal requires prepared HIP runtime")
+        output = np.asarray(buffers[output_name])
+        expected = program["buffers"][program["outputs"][0]]
+        if output.dtype != np.dtype("float32") or list(output.shape) != expected["shape"]:
+            raise ValueError("native primal output storage differs")
+        with PreparedScaledProgram(package, [buffers[name] for name in names],
+                                   runtime_library=lib._name) as owner:
+            generation, _ = owner.invoke()
+            np.copyto(output, owner.read(generation)[0], casting="no")
+        return output
+    ingest_stream = stream  # Existing pilots use the default stream and completion.
+    from tessera.compiler.rocm_math_native import MATH_ABIS, runtime_projection
     import numpy as np
 
     from tessera.compiler.rocm_native import (
@@ -4556,10 +4976,19 @@ def _submit_rocm_gfx1151_native(
     from tessera.compiler.rocm_mxfp4_quark_native import (
         GFX1201_QUARK_W4A4_PROBE_ABI, submit_quark_w4a4_probe,
     )
+    from tessera.compiler.rocm_mxfp8_blockscale import MXFP8_PACKAGE_ABIS
     from tessera.compiler.rocm_fp8_blockscale import (
         GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
     )
+
+    from tessera.compiler.rocm_nvfp4_ingest_native import NVFP4_INGEST_ABI,submit_nvfp4_ingest
+    if descriptor.abi_id == NVFP4_INGEST_ABI:
+        return submit_nvfp4_ingest(image,descriptor,buffers,scalars,ingest_stream)
+    from tessera.compiler.rocm_mxfp4_storage_native import MXFP4_STORAGE_ABI,submit_mxfp4_storage
+    if descriptor.abi_id == MXFP4_STORAGE_ABI:
+        return submit_mxfp4_storage(image,descriptor,buffers,scalars,ingest_stream)
+
 
     if descriptor.abi_id == GFX1201_QUARK_W4A4_PROBE_ABI:
         return submit_quark_w4a4_probe(image, descriptor, buffers, scalars)
@@ -4586,6 +5015,7 @@ def _submit_rocm_gfx1151_native(
         raise ValueError("gfx1201 scheduled launch requires a proved unary, matmul, attention, depth-attention or paged-KV ABI")
 
     if descriptor.abi_id not in {
+        *MATH_ABIS.values(),
         GFX_SOFTMAX_F16_ABI,
         GFX_SOFTMAX_F32_ABI,
         GFX_REDUCE_F16_ABI,
@@ -4614,9 +5044,18 @@ def _submit_rocm_gfx1151_native(
         GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+        *MXFP8_PACKAGE_ABIS.values(),
     }:
         raise RuntimeError(f"unsupported ROCm descriptor ABI {descriptor.abi_id!r}")
     ordered = sorted(descriptor.buffers, key=lambda item: item.ordinal)
+    native_math = descriptor.abi_id in MATH_ABIS.values()
+    math_contract = descriptor.provenance.get("native_math", {})
+    if native_math and not isinstance(math_contract, Mapping):
+        raise RuntimeError("native ROCm math requires its checked family contract")
+    math_family = math_contract.get("family") if isinstance(math_contract, Mapping) else None
+    if native_math and math_family not in {"unary", "binary", "scan"}:
+        raise RuntimeError("native ROCm math family contract differs")
+    math_binary = native_math and math_family == "binary"
     paged_kv = descriptor.abi_id == GFX_PAGED_KV_F32_ABI
     moe_dispatch = descriptor.abi_id == GFX_MOE_DISPATCH_F32_ABI
     normalization = descriptor.abi_id in {GFX_NORM_F16_ABI, GFX_NORM_BF16_ABI, GFX_NORM_F32_ABI}
@@ -4633,17 +5072,21 @@ def _submit_rocm_gfx1151_native(
                                    GFX_FP8_W8A8_BLOCKSCALE_ABI,
                                    GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
                                    GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
-                                   GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
+                                   GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+                                   *MXFP8_PACKAGE_ABIS.values()}
     # ROCM-FP8-BLOCKSCALE-1: A, B, lhs_scale, rhs_scale, D, M, N, K; the _NK
     # ABIs' weight is [N, K]; the _BF16 ABIs store D as bf16.
     matmul_blockscale = descriptor.abi_id in {GFX_FP8_W8A8_BLOCKSCALE_ABI,
                                               GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
                                               GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
-                                              GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
-    matmul_b_nk = descriptor.abi_id in {GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
-                                        GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
-    matmul_bf16_out = descriptor.abi_id in {GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
-                                            GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI}
+                                              GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+                                   *MXFP8_PACKAGE_ABIS.values()}
+    matmul_b_nk = descriptor.abi_id in {
+        GFX_FP8_W8A8_BLOCKSCALE_NK_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+        MXFP8_PACKAGE_ABIS[("nk", "f32")], MXFP8_PACKAGE_ABIS[("nk", "bf16")]}
+    matmul_bf16_out = descriptor.abi_id in {
+        GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+        MXFP8_PACKAGE_ABIS[("kn", "bf16")], MXFP8_PACKAGE_ABIS[("nk", "bf16")]}
     matmul_integer = descriptor.abi_id in {GFX_MATMUL_I8_I32_ABI, GFX_MATMUL_I4_I32_ABI}
     matmul_bias = matmul and bool(descriptor.provenance.get("bias"))
     split_k = 1  # ROCM-SPLIT-K-1; read from the descriptor in the matmul branch
@@ -4656,7 +5099,7 @@ def _submit_rocm_gfx1151_native(
         else 4
         if attention or matmul_bias
         else 3
-        if paged_kv or moe_dispatch or matmul or depth_attention
+        if paged_kv or moe_dispatch or matmul or depth_attention or math_binary
         else 2
     )
     if len(ordered) != expected_buffers:
@@ -4669,7 +5112,14 @@ def _submit_rocm_gfx1151_native(
     reduction = descriptor.abi_id in reduction_abis
     dimensions: tuple[int, ...] = ()
     expected_dtype: Any = None
-    if depth_attention:
+    if native_math:
+        if stream is not None:
+            raise ValueError("native math uses synchronous completion on the default stream")
+        input_arrays, output, dimensions, grid_x = runtime_projection(image, descriptor, buffers, scalars)
+        if _rocm_live_arch() != image.architecture:
+            raise ValueError("native math image architecture differs from the live GPU")
+        grid_y = 1
+    elif depth_attention:
         query = buffers[ordered[0].name]
         sources = buffers[ordered[1].name]
         output = buffers[ordered[2].name]
@@ -4729,6 +5179,55 @@ def _submit_rocm_gfx1151_native(
         if bias is not None:
             input_arrays.append(np.ascontiguousarray(bias))
         if matmul_blockscale:
+            mxfp8 = descriptor.abi_id in MXFP8_PACKAGE_ABIS.values()
+            scale_dtype = np.uint8 if mxfp8 else np.float32
+            if mxfp8:
+                layout = "nk" if matmul_b_nk else "kn"
+                output_storage = "bf16" if matmul_bf16_out else "f32"
+                from tessera.compiler.rocm_mxfp8_blockscale import (
+                    MXFP8_CONTRACTS, mxfp8_schedule_is_supported,
+                )
+                panel = descriptor.provenance.get("macro_tile")
+                warps = descriptor.provenance.get("warps")
+                staging = descriptor.provenance.get("staging")
+                if type(warps) is not int:
+                    raise RuntimeError("MXFP8 descriptor warp count must be an integer")
+                profile_ok = isinstance(panel, list) and len(panel) == 2 and mxfp8_schedule_is_supported(
+                    layout=layout, staging=staging, block_m=panel[0], block_n=panel[1],
+                    macro_k=descriptor.provenance.get("macro_k"), warps=warps,
+                    pipeline_depth=descriptor.provenance.get("pipeline_depth"),
+                )
+                macro_k = descriptor.provenance.get("macro_k")
+                route = None
+                if profile_ok and isinstance(panel, list):
+                    route = (
+                        f"gfx1201_lds_wmma_blockscale_{layout}_{panel[0]}x{panel[1]}"
+                        f"_w{warps}_d1_k{macro_k}"
+                        if staging == "lds" else
+                        f"gfx1201_register_wmma_blockscale_{layout}_1x1_k{macro_k}"
+                    )
+                if (descriptor.abi_id != MXFP8_PACKAGE_ABIS[(layout, output_storage)]
+                    or descriptor.provenance.get("physical_contract") != MXFP8_CONTRACTS[layout]
+                    or descriptor.provenance.get("scale_format") != "e8m0"
+                    or descriptor.provenance.get("scale_k") != 32
+                    or descriptor.provenance.get("scale_n") != 1
+                    or not profile_ok
+                    or descriptor.provenance.get("physical_route") != route
+                    or (descriptor.provenance.get("macro_k") == 64 and k % 64)
+                    or descriptor.provenance.get("workgroup") != [32 * warps, 1, 1]
+                    or descriptor.provenance.get("accum") != "f32"
+                    or descriptor.provenance.get("numeric_policy") != {
+                        "storage": "e4m3", "accum": "f32", "execution_mode": "exact_per_block"}
+                    or descriptor.provenance.get("output_storage") != output_storage
+                    or descriptor.provenance.get("split_k", 1) != 1
+                    or (staging == "global" and descriptor.provenance.get("runtime_mn_image", False))
+                    or (staging == "lds" and descriptor.provenance.get("runtime_shape_image", False))
+                    or (not descriptor.provenance.get("runtime_mn_image", False)
+                        and not descriptor.provenance.get("runtime_shape_image", False)
+                        and descriptor.provenance.get("shape") != [m, n, k])
+                    or ordered[2].dtype != "uint8" or ordered[3].dtype != "uint8"):
+
+                    raise RuntimeError("ROCm MXFP8 descriptor disagrees with its E8M0 K32 ABI")
             # The scale layouts are the contract's, fixed at Graph->Schedule;
             # a wrong block count would run and scale every block wrongly, so
             # it is refused here rather than launched.
@@ -4739,18 +5238,33 @@ def _submit_rocm_gfx1151_native(
                 or scale_k <= 0 or scale_n <= 0 or k % scale_k
             ):
                 raise RuntimeError("ROCm W8A8 block-scale descriptor requires positive scale_k/scale_n dividing K")
+            if descriptor.provenance.get("runtime_mn_image"):
+                panel = descriptor.provenance.get("macro_tile")
+                edge_m = descriptor.provenance.get("lds_whole_m")
+                edge_n = descriptor.provenance.get("lds_whole_n")
+                expected_shape = descriptor.provenance.get("shape")
+                dynamic_k = descriptor.provenance.get("lds_runtime_k", False)
+                if (not isinstance(panel, list) or len(panel) != 2
+                    or any(not isinstance(v, int) or v <= 0 for v in panel)
+                    or not isinstance(edge_m, bool) or not isinstance(edge_n, bool)
+                    or not isinstance(expected_shape, list) or len(expected_shape) != 3
+                    or not isinstance(dynamic_k, bool) or k <= 0
+                    or (not dynamic_k and k != expected_shape[2]) or m <= 0 or n <= 0
+                    or edge_m != (m % panel[0] == 0)
+                    or edge_n != (n % panel[1] == 0)):
+                    raise RuntimeError("ROCm W8A8 runtime-M/N launch disagrees with its K policy or LDS edge class")
             a_scale = buffers[ordered[2].name]
             b_scale = buffers[ordered[3].name]
             groups = k // scale_k
             if (
                 tuple(a_scale.shape) != (m, groups)
                 or tuple(b_scale.shape) != (groups, (n + scale_n - 1) // scale_n)
-                or a_scale.dtype != np.float32
-                or b_scale.dtype != np.float32
+                or a_scale.dtype != scale_dtype
+                or b_scale.dtype != scale_dtype
             ):
                 raise RuntimeError(
-                    "ROCm W8A8 block-scale arrays must be fp32 [M, K/scale_k] and "
-                    "[K/scale_k, ceil(N/scale_n)]")
+                    "ROCm block-scale arrays require the ABI scale dtype, [M, K/scale_k] "
+                    "and [K/scale_k, ceil(N/scale_n)]")
             input_arrays.extend((np.ascontiguousarray(a_scale), np.ascontiguousarray(b_scale)))
         dimensions = (m, n, k)
         macro_tile = descriptor.provenance.get("macro_tile")
@@ -4934,7 +5448,7 @@ def _submit_rocm_gfx1151_native(
                 raise RuntimeError("gfx1151 bf16 reduction requires ml_dtypes")
         else:
             expected_dtype = np.float32
-    elif not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention and not normalization:
+    elif not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention and not normalization and not native_math:
         rows = int(cast(int, scalars["Rows"]))
         columns = int(cast(int, scalars["K"]))
         if x.size != rows * columns or tuple(output.shape) != tuple(x.shape):
@@ -4942,7 +5456,7 @@ def _submit_rocm_gfx1151_native(
         dimensions = (rows, columns)
         grid_x = rows
         expected_dtype = np.float16 if descriptor.abi_id == GFX_SOFTMAX_F16_ABI else np.float32
-    if not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention and not normalization:
+    if not attention and not paged_kv and not moe_dispatch and not matmul and not depth_attention and not normalization and not native_math:
         expected_output_dtype = np.float32 if reduction else expected_dtype
         if x.dtype != expected_dtype or output.dtype != expected_output_dtype:
             raise RuntimeError("gfx1151 native array dtype disagrees with descriptor ABI")
@@ -4952,13 +5466,59 @@ def _submit_rocm_gfx1151_native(
     hip = _load_hip_for_launch()
     if hip is None or hip.hipInit(0) != 0:
         raise RuntimeError("libamdhip64.so or a usable gfx1151 device is unavailable")
-    module = ctypes.c_void_p()
-    if hip.hipModuleLoadData(ctypes.byref(module), image.payload) != 0:
+    if native_math and os.environ.get("TESSERA_ROCM_NATIVE_MATH", "1").lower() not in {"0", "off", "false"}:
+        movement = _load_rocm_native_movement_runtime()
+        if movement is not None and hasattr(movement, "tessera_rocm_math_launch"):
+            dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
+            rhs = input_arrays[1] if math_binary else None
+            family = math_family
+            if not isinstance(family, str):
+                raise RuntimeError("native ROCm math family must be a string")
+            reuse = os.environ.get("TESSERA_ROCM_MATH_STAGING_REUSE", "1").lower() not in {"0", "off", "false"}
+            rc = movement.tessera_rocm_math_launch(
+                ctypes.cast(ctypes.c_char_p(image.payload), ctypes.c_void_p), len(image.payload),
+                descriptor.entry_symbol.encode(), image.architecture.encode(),
+                {"unary": 0, "binary": 1, "scan": 2}[family], int(input_arrays[0].dtype.itemsize),
+                input_arrays[0].ctypes.data_as(ctypes.c_void_p), int(input_arrays[0].nbytes),
+                rhs.ctypes.data_as(ctypes.c_void_p) if rhs is not None else None,
+                int(rhs.nbytes) if rhs is not None else 0,
+                output.ctypes.data_as(ctypes.c_void_p), int(output.nbytes),
+                dims, len(dimensions), int(reuse))
+            if rc:
+                raise RuntimeError(f"ROCm native math staging submission failed rc={rc}")
+            return output
+    if (paged_kv or moe_dispatch) and stream is None:
+        movement = _load_rocm_native_movement_runtime()
+        if movement is not None:
+            dims = (ctypes.c_int64 * len(dimensions))(*dimensions)
+            reuse = os.environ.get("TESSERA_ROCM_MOVEMENT_STAGING_REUSE", "1").lower() not in {"0", "off", "false"}
+            rc = movement.tessera_rocm_movement_launch(
+                ctypes.cast(ctypes.c_char_p(image.payload), ctypes.c_void_p), len(image.payload),
+                descriptor.entry_symbol.encode(), image.architecture.encode(),
+                0 if paged_kv else 1,
+                input_arrays[0].ctypes.data_as(ctypes.c_void_p), int(input_arrays[0].nbytes),
+                input_arrays[1].ctypes.data_as(ctypes.c_void_p), int(input_arrays[1].nbytes),
+                output.ctypes.data_as(ctypes.c_void_p), int(output.nbytes),
+                dims, len(dimensions), int(reuse))
+            if rc:
+                raise RuntimeError(f"ROCm native movement submission failed rc={rc}")
+            return output
+    native_loader = _load_rocm_native_image_runtime()
+    module, function, lease = ctypes.c_void_p(), ctypes.c_void_p(), ctypes.c_void_p()
+    if native_loader is not None:
+        hit = ctypes.c_int()
+        rc = native_loader.tessera_rocm_image_acquire(
+            ctypes.cast(ctypes.c_char_p(image.payload), ctypes.c_void_p), len(image.payload),
+            descriptor.entry_symbol.encode(), ctypes.byref(lease), ctypes.byref(module),
+            ctypes.byref(function), ctypes.byref(hit))
+        if rc:
+            raise RuntimeError(f"ROCm native image acquisition failed rc={rc}")
+    elif hip.hipModuleLoadData(ctypes.byref(module), image.payload) != 0:
         raise RuntimeError("gfx1151 native HSACO module load failed")
     device_buffers: list[ctypes.c_void_p] = []
     try:
-        function = ctypes.c_void_p()
-        if hip.hipModuleGetFunction(ctypes.byref(function), module, descriptor.entry_symbol.encode()) != 0:
+        if native_loader is None and hip.hipModuleGetFunction(
+                ctypes.byref(function), module, descriptor.entry_symbol.encode()) != 0:
             raise RuntimeError(f"gfx1151 native symbol {descriptor.entry_symbol!r} not found")
         output_byte_count = int(output.nbytes)
         device_o = ctypes.c_void_p()
@@ -4987,7 +5547,10 @@ def _submit_rocm_gfx1151_native(
             m_, n_, k_ = dimensions
             reduce_function = ctypes.c_void_p()
             reduce_entry = cast(str, descriptor.provenance["split_k_reduce_entry"])
-            if hip.hipModuleGetFunction(ctypes.byref(reduce_function), module, reduce_entry.encode()) != 0:
+            rc = (native_loader.tessera_rocm_image_lookup(lease, reduce_entry.encode(), ctypes.byref(reduce_function))
+                  if native_loader is not None else
+                  hip.hipModuleGetFunction(ctypes.byref(reduce_function), module, reduce_entry.encode()))
+            if rc:
                 raise RuntimeError(f"ROCm split-K reduce symbol {reduce_entry!r} not found")
             workspace = ctypes.c_void_p()
             workspace_elements = split_k * m_ * n_
@@ -5108,9 +5671,14 @@ def _submit_rocm_gfx1151_native(
     finally:
         for device in reversed(device_buffers):
             hip.hipFree(device)
-        unload = getattr(hip, "hipModuleUnload", None)
-        if unload is not None and module.value:
-            unload(module)
+        if native_loader is not None and lease.value:
+            rc = native_loader.tessera_rocm_image_release(lease)
+            if rc:
+                raise RuntimeError(f"ROCm native image release failed rc={rc}")
+        else:
+            unload = getattr(hip, "hipModuleUnload", None)
+            if unload is not None and module.value:
+                unload(module)
 
 
 _x86_native_image_libraries: dict[str, ctypes.CDLL] = {}
@@ -5942,6 +6510,21 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         )
         return
 
+    from tessera.compiler.rocm_math_native import MATH_ABIS
+    if target in {"rocm_gfx1151", "rocm_gfx1201"} and abi_id in MATH_ABIS.values():
+        if target not in _native_launchers:
+            register_native_launcher(target, binary_formats=("hsaco",),
+                                     submit=_submit_rocm_gfx1151_native)
+        return
+
+    from tessera.compiler.rocm_nvfp4_ingest_native import NVFP4_INGEST_ABI
+    from tessera.compiler.rocm_mxfp4_storage_native import MXFP4_STORAGE_ABI
+    if target == "rocm_gfx1201" and abi_id in {NVFP4_INGEST_ABI,MXFP4_STORAGE_ABI}:
+        if target not in _native_launchers:
+            register_native_launcher(target,binary_formats=("hsaco",),
+                submit=_submit_rocm_gfx1151_native)
+        return
+
     from tessera.compiler.rocm_native import (
         GFX_ATTN_F16_ABI,
         GFX_ATTN_BF16_ABI,
@@ -5979,6 +6562,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
     )
     from tessera.compiler.rocm_mxfp4_packed_folded import PACKED_FOLDED_TARGET_ABI_V1
     from tessera.compiler.rocm_mxfp4_quark_native import GFX1201_QUARK_W4A4_PROBE_ABI
+    from tessera.compiler.rocm_mxfp8_blockscale import MXFP8_PACKAGE_ABIS
     from tessera.compiler.rocm_fp8_blockscale import (
         GFX_FP8_W8A8_BLOCKSCALE_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
         GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI, GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
@@ -6028,6 +6612,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
             GFX_FP8_W8A8_BLOCKSCALE_NK_ABI,
             GFX_FP8_W8A8_BLOCKSCALE_BF16_ABI,
             GFX_FP8_W8A8_BLOCKSCALE_NK_BF16_ABI,
+            *MXFP8_PACKAGE_ABIS.values(),
         }
         and target not in _native_launchers
     ):
@@ -6119,12 +6704,23 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_LSE_BIAS_F32_ABI,
+        SM120_ATTN_LSE_BCAST_F32_ABI,
         SM120_ATTN_BWD_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
         SM120_BF16_ABI,
+        SM120_ROW_B_BF16_ABI,
         SM120_EPILOGUE_ABIS,
         SM120_REDUCED_OUTPUT_ABIS,
         SM120_F16_ABI,
+        SM120_ROW_B_F16_ABI,
         SM120_STRIDED_F16_ABI,
+        SM120_STRIDED_ROW_B_F16_ABI,
+        SM120_STRIDED_ROW_B_BF16_ABI,
         SM120_STRIDED_BF16_ABI,
         SM120_FP8_E4M3_ABI,
         SM120_FP8_E5M2_ABI,
@@ -6143,6 +6739,7 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_PAGED_ATTN_F32_ABI,
         SM120_PAGED_KV_F32_ABI,
         SM120_NVFP4_ABI,
+        SM120_NVFP4_BATCH_ABI,
         SM120_REDUCE_F16_ABI,
         SM120_REDUCE_BF16_ABI,
         SM120_REDUCE_F32_ABI,
@@ -6173,6 +6770,8 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
         SM120_ATTN_BIAS_F32_ABI,
         SM120_ATTN_BCAST_F32_ABI,
         SM120_ATTN_LSE_F32_ABI,
+        SM120_ATTN_LSE_BIAS_F32_ABI,
+        SM120_ATTN_LSE_BCAST_F32_ABI,
                 SM120_ATTN_BWD_F32_ABI,
                 SM120_ATTN_BWD_BIAS_F32_ABI,
                 SM120_ATTN_BWD_F16_ABI,
@@ -6180,11 +6779,21 @@ def _ensure_builtin_native_launcher(target: str, abi_id: str) -> None:
                 SM120_ATTN_BWD_BF16_ABI,
         SM120_ATTN_BWD_BIAS_BF16_ABI,
         SM120_ATTN_BWD_LSE_F32_ABI,
+        SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_F32_ABI,
+        SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI,
+        SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI,
                 SM120_BF16_ABI,
+                SM120_ROW_B_BF16_ABI,
                 SM120_F16_ABI,
+                SM120_ROW_B_F16_ABI,
                 SM120_STRIDED_F16_ABI,
+        SM120_STRIDED_ROW_B_F16_ABI,
+        SM120_STRIDED_ROW_B_BF16_ABI,
                 SM120_STRIDED_BF16_ABI,
                 SM120_NVFP4_ABI,
+                SM120_NVFP4_BATCH_ABI,
                 SM120_FP8_E4M3_ABI,
                 SM120_FP8_E5M2_ABI,
                 SM120_TF32_ABI,
@@ -7452,6 +8061,19 @@ def _nvidia_native_descriptor_device_latency(
     """CUDA-event latency for a benchmark-enabled compiler-owned descriptor."""
     values, contracts, scalars = _split_native_arguments(descriptor, args)
     descriptor.validate_invocation(image, contracts, scalars)
+    from tessera.compiler.nvidia_native import SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI
+    if descriptor.abi_id == SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI:
+        from tessera.compiler.lse_cotangent_contract import validate_lse_cotangent_invocation
+        validate_lse_cotangent_invocation(descriptor, values, scalars)
+    if descriptor.abi_id == SM120_ATTN_BWD_LSE_COMPACT_F32_ABI:
+        from tessera.compiler.compact_attention_contract import compact_attention_contract
+        dimensions, _, _ = compact_attention_contract(descriptor)
+        supplied = tuple(int(cast(int, scalars[item.name])) for item in sorted(descriptor.scalars, key=lambda x: x.ordinal))
+        if supplied != dimensions:
+            raise ValueError("compact benchmark scalars differ from the compiled envelope")
+    from tessera.compiler.nvidia_native import SM120_NVFP4_BATCH_ABI
+    if descriptor.abi_id == SM120_NVFP4_BATCH_ABI:
+        _validate_nvfp4_independent_batch_scalars(descriptor, scalars)
     dynamic_local_memory_bytes = (
         descriptor.resolve_dynamic_local_memory_bytes(scalars)
     )
@@ -7511,6 +8133,16 @@ def _nvidia_native_descriptor_resident_device_latency(
         raise ValueError("resident timing requires SM120, a CUDA stream, and positive repetitions")
     values, contracts, scalars = _split_native_arguments(descriptor, args)
     descriptor.validate_invocation(image, contracts, scalars)
+    from tessera.compiler.nvidia_native import SM120_ATTN_BWD_LSE_COMPACT_F32_ABI, SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI
+    if descriptor.abi_id == SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI:
+        from tessera.compiler.lse_cotangent_contract import validate_lse_cotangent_invocation
+        validate_lse_cotangent_invocation(descriptor, values, scalars)
+    if descriptor.abi_id == SM120_ATTN_BWD_LSE_COMPACT_F32_ABI:
+        from tessera.compiler.compact_attention_contract import compact_attention_contract
+        dimensions, _, _ = compact_attention_contract(descriptor)
+        supplied = tuple(int(cast(int, scalars[item.name])) for item in sorted(descriptor.scalars, key=lambda x: x.ordinal))
+        if supplied != dimensions:
+            raise ValueError("compact benchmark scalars differ from the compiled envelope")
     lib = _load_nvidia_ptx_launch()
     if lib is None:
         raise RuntimeError("libtessera_nvidia_ptx_launch.so not loadable")
@@ -7522,6 +8154,8 @@ def _nvidia_native_descriptor_resident_device_latency(
                   for item in ordered]
     if not all(isinstance(interface, Mapping) for interface in interfaces):
         raise ValueError("resident timing requires CUDA device buffers for every binding")
+    _validate_nvidia_cuda_buffer_streams(
+        [cast(Mapping[str, Any], interface) for interface in interfaces], stream)
     pointers = [
         int(cast(Mapping[str, Any], interface)["data"][0])
         for interface in interfaces
@@ -8160,6 +8794,141 @@ def _load_hip_from_toolkit() -> ctypes.CDLL | None:
         except OSError:
             continue
     return None
+
+
+
+_rocm_native_movement_runtime: ctypes.CDLL | None = None
+
+
+def _load_rocm_native_movement_runtime() -> ctypes.CDLL | None:
+    """Bind native synchronous movement; no Python staging-buffer ownership."""
+    global _rocm_native_movement_runtime
+    if os.environ.get("TESSERA_ROCM_NATIVE_MOVEMENT", "1").lower() in {"0", "off", "false"}:
+        return None
+    if _rocm_native_movement_runtime is not None:
+        return _rocm_native_movement_runtime
+    configured = os.environ.get("TESSERA_ROCM_NATIVE_MOVEMENT_LIB")
+    if configured and not Path(configured).expanduser().is_file():
+        raise RuntimeError("configured ROCm native movement library is missing")
+    root = Path(__file__).resolve().parents[2]
+    candidates = [Path(configured).expanduser()] if configured else []
+    if selected := os.environ.get("TESSERA_BUILD_DIR"):
+        build = Path(selected).expanduser()
+        candidates.append((build if build.is_absolute() else root / build) /
+            "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so")
+    if (compiler := os.environ.get("TESSERA_OPT")) and Path(compiler).is_file():
+        candidates.append(Path(compiler).resolve().parents[2] /
+            "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so")
+    candidates.append(root / "build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so")
+    path = next((p for p in candidates if p.is_file()), None)
+    if path is None:
+        if configured:
+            raise RuntimeError("configured ROCm native movement library is missing")
+        return None
+    lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_LOCAL)
+    lib.tessera_rocm_movement_launch.argtypes = [
+        ctypes.c_void_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int,
+        ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t,
+        ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_int64),
+        ctypes.c_size_t, ctypes.c_int]
+    lib.tessera_rocm_movement_launch.restype = ctypes.c_int
+    if hasattr(lib, "tessera_rocm_math_launch"):
+        lib.tessera_rocm_math_launch.argtypes = [
+            ctypes.c_void_p, ctypes.c_size_t, ctypes.c_char_p, ctypes.c_char_p,
+            ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_size_t,
+            ctypes.c_void_p, ctypes.c_size_t, ctypes.c_void_p, ctypes.c_size_t,
+            ctypes.POINTER(ctypes.c_int64), ctypes.c_size_t, ctypes.c_int]
+        lib.tessera_rocm_math_launch.restype = ctypes.c_int
+    lib.tessera_rocm_movement_clear_current.argtypes = []
+    lib.tessera_rocm_movement_clear_current.restype = ctypes.c_int
+    lib.tessera_rocm_movement_stats.argtypes = [ctypes.POINTER(ctypes.c_uint64)] * 4
+    lib.tessera_rocm_movement_stats.restype = ctypes.c_int
+    _rocm_native_movement_runtime = lib
+    return lib
+
+
+def _rocm_native_movement_stats() -> dict[str, int] | None:
+    lib = _load_rocm_native_movement_runtime()
+    if lib is None:
+        return None
+    values = [ctypes.c_uint64() for _ in range(4)]
+    rc = lib.tessera_rocm_movement_stats(*(ctypes.byref(value) for value in values))
+    if rc:
+        raise RuntimeError(f"ROCm native movement statistics failed rc={rc}")
+    return dict(zip(("allocations", "frees", "reuses", "launches"),
+                    (int(value.value) for value in values), strict=True))
+
+
+_rocm_native_image_runtime: ctypes.CDLL | None = None
+
+
+def _load_rocm_native_image_runtime() -> ctypes.CDLL | None:
+    """Bind native module leases; Python owns no module cache or identity."""
+    global _rocm_native_image_runtime
+    if os.environ.get("TESSERA_ROCM_NATIVE_IMAGE_CACHE", "1").lower() in {"0", "off", "false"}:
+        return None
+    if _rocm_native_image_runtime is not None:
+        return _rocm_native_image_runtime
+    configured = os.environ.get("TESSERA_ROCM_NATIVE_IMAGE_LIB")
+    root = Path(__file__).resolve().parents[2]
+    candidates = [Path(configured).expanduser()] if configured else []
+    if selected := os.environ.get("TESSERA_BUILD_DIR"):
+        build = Path(selected).expanduser()
+        candidates.append((build if build.is_absolute() else root / build) /
+                          "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_image.so")
+    if (compiler := os.environ.get("TESSERA_OPT")) and Path(compiler).is_file():
+        candidates.append(Path(compiler).resolve().parents[2] /
+                          "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_image.so")
+    candidates.append(root / "build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_image.so")
+    path = next((p for p in candidates if p.is_file()), None)
+    if path is None:
+        if configured:
+            raise RuntimeError("configured ROCm native image library is missing")
+        return None
+    lib = ctypes.CDLL(str(path), mode=ctypes.RTLD_LOCAL)
+    ptr = ctypes.POINTER(ctypes.c_void_p)
+    lib.tessera_rocm_image_acquire.argtypes = [
+        ctypes.c_void_p, ctypes.c_size_t, ctypes.c_char_p,
+        ptr, ptr, ptr, ctypes.POINTER(ctypes.c_int)]
+    lib.tessera_rocm_image_acquire.restype = ctypes.c_int
+    lib.tessera_rocm_image_lookup.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ptr]
+    lib.tessera_rocm_image_lookup.restype = ctypes.c_int
+    lib.tessera_rocm_image_release.argtypes = [ctypes.c_void_p]
+    lib.tessera_rocm_image_release.restype = ctypes.c_int
+    lib.tessera_rocm_image_clear_current.argtypes = []
+    lib.tessera_rocm_image_clear_current.restype = ctypes.c_int
+    lib.tessera_rocm_image_stats.argtypes = [ctypes.POINTER(ctypes.c_uint64)] * 4
+    lib.tessera_rocm_image_stats.restype = ctypes.c_int
+    _rocm_native_image_runtime = lib
+    return lib
+
+
+def _rocm_native_image_cache_stats() -> dict[str, int] | None:
+    lib = _load_rocm_native_image_runtime()
+    if lib is None:
+        return None
+    values = [ctypes.c_uint64() for _ in range(4)]
+    rc = lib.tessera_rocm_image_stats(*(ctypes.byref(v) for v in values))
+    if rc:
+        raise RuntimeError(f"ROCm native image statistics failed rc={rc}")
+    return dict(zip(("loads", "hits", "function_lookups", "unloads"),
+                    (int(v.value) for v in values), strict=True))
+
+
+def _clear_rocm_native_image_cache() -> None:
+    """Clear the current native context before an external reset/destruction."""
+    # Disabling acquisitions must not hide retained context-owned allocations.
+    movement = _rocm_native_movement_runtime or _load_rocm_native_movement_runtime()
+    if movement is not None:
+        rc = movement.tessera_rocm_movement_clear_current()
+        if rc:
+            raise RuntimeError(f"ROCm native movement clear failed rc={rc}")
+    # Disabling new cache acquisitions must not hide already retained modules.
+    lib = _rocm_native_image_runtime or _load_rocm_native_image_runtime()
+    if lib is not None:
+        rc = lib.tessera_rocm_image_clear_current()
+        if rc:
+            raise RuntimeError(f"ROCm native image cache clear failed rc={rc}")
 
 
 def _load_hip_for_launch() -> ctypes.CDLL | None:
@@ -14878,6 +15647,54 @@ def _execute_nvidia_compiled_spectral_jvp(
     artifact: RuntimeArtifact, args: Any
 ) -> Any:
     return _execute_compiled_spectral_jvp(artifact, args, target="nvidia_sm120")
+
+
+def _execute_nvidia_attention_vjp(artifact: RuntimeArtifact, args: Any) -> Any:
+    from .compiler.native_attention_vjp_runtime import execute
+    metadata=artifact.metadata or {}
+    values=_bind_launch_args(args,list(metadata.get("arg_names",[])))
+    return execute(metadata,tuple(values[n] for n in metadata["arg_names"]))
+
+
+def _execute_nvidia_attention_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
+    from .compiler.native_attention_jvp_runtime import execute
+    metadata=artifact.metadata or {}
+    values=_bind_launch_args(args,list(metadata.get("arg_names",[])))
+    return execute(metadata,tuple(values[n] for n in metadata["arg_names"]))
+
+
+def _execute_rocm_scaled_jvp_program(artifact: RuntimeArtifact, args: Any) -> Any:
+    """One compiler-owned SSA package executed by the native HIP owner."""
+    from .compiler.native_scaled_program import NativeScaledProgram, PreparedScaledProgram
+    metadata = artifact.metadata or {}
+    package = NativeScaledProgram.from_manifest(metadata.get("native_scaled_program"))
+    names = metadata.get("arg_names")
+    if not isinstance(names,list) or len(names)!=__import__("json").loads(package.program_json)["argument_count"]:
+        raise ValueError("native scaled JVP argument roles differ")
+    values = _bind_launch_args(args,names)
+    lib = _load_rocm_native_movement_runtime()
+    if lib is None:
+        raise RuntimeError("native scaled JVP requires the prepared HIP runtime")
+    with PreparedScaledProgram(package,[values[name] for name in names],
+                               runtime_library=lib._name) as owner:
+        generation,_=owner.invoke()
+        return owner.read(generation)
+
+
+
+def _execute_rocm_scaled_primal_program(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execute the checked compiler-owned primal SSA program on gfx1201."""
+    import json
+    from .compiler.native_scaled_program import NativeScaledProgram
+    metadata=artifact.metadata or {}
+    if _rocm_live_arch()!="gfx1201":
+        raise ValueError("native scaled primal program requires owning gfx1201")
+    package=NativeScaledProgram.from_manifest(metadata.get("native_scaled_program"))
+    if json.loads(package.program_json).get("kind")!="primal":
+        raise ValueError("native scaled primal route requires a primal program")
+    outputs=_execute_rocm_scaled_jvp_program(artifact,args)
+    if len(outputs)!=1:raise ValueError("native scaled primal program requires one owned output")
+    return outputs[0]
 
 
 def _execute_native_jvp(artifact: RuntimeArtifact, args: Any) -> Any:
@@ -34459,6 +35276,8 @@ def _executor_table():
         "nvidia_general_solver_compiled": _execute_nvidia_physical_general_solver,
         "nvidia_solver_graph_compiled": _execute_nvidia_solver_residual_program,
         "nvidia_sm120_jvp_compiled": _execute_native_jvp,
+        "nvidia_sm120_attention_jvp_compiled": _execute_nvidia_attention_jvp,
+        "nvidia_sm120_attention_vjp_compiled": _execute_nvidia_attention_vjp,
         "nvidia_sm120_spectral_backward_compiled": _execute_nvidia_compiled_spectral_backward,
         "nvidia_flash_attn_compiled": _execute_nvidia_flash_attn_compiled,
         "nvidia_flash_attn_bwd_compiled": _execute_nvidia_flash_attn_bwd_compiled,
@@ -34473,6 +35292,8 @@ def _executor_table():
         "rocm_norm_jvp_compiled": _execute_rocm_compiled_norm_jvp,
         "rocm_spectral_jvp_compiled": _execute_rocm_compiled_spectral_jvp,
         "rocm_jvp_compiled": _execute_native_jvp,
+        "rocm_scaled_jvp_program_compiled": _execute_rocm_scaled_jvp_program,
+        "rocm_scaled_primal_program_compiled": _execute_rocm_scaled_primal_program,
         "rocm_reduce_compiled": _execute_rocm_compiled_reduce,
         "rocm_argreduce_compiled": _execute_rocm_compiled_argreduce,
         "rocm_scan_compiled": _execute_rocm_compiled_scan,
@@ -34604,6 +35425,7 @@ def _executor_table():
         "rocm_sparse_compiled": _execute_rocm_compiled_sparse,
         "rocm_sparse_attn_compiled": _execute_rocm_compiled_sparse_attention,
         "rocm_moe_compiled": _execute_rocm_compiled_moe,
+        "rocm_native_descriptor": _execute_rocm_native_descriptor,
         "rocm_moe_transport_compiled": _execute_rocm_moe_transport,
         "rocm_optimizer_compiled": _execute_rocm_compiled_optimizer,
         "rocm_adafactor_compiled": _execute_rocm_compiled_adafactor,
@@ -34636,6 +35458,9 @@ def _executor_table():
         "x86_deltanet_compiled": _execute_x86_compiled_deltanet,
         "x86_deltanet_bwd_compiled": _execute_x86_compiled_deltanet_backward,
         "rocm_rope_compiled": _execute_rocm_compiled_rope,
+        "nvidia_lhs_program": _execute_nvidia_lhs_program_artifact,
+    "nvidia_rhs_program": _execute_nvidia_rhs_program_artifact,
+        "rocm_nvfp4_program": _execute_rocm_nvfp4_program_artifact,
         "nvidia_mma": _execute_nvidia_mma_artifact,
     }
 
@@ -34831,6 +35656,17 @@ def _split_native_arguments(
     return values, contracts, {str(name): value for name, value in scalar_source.items()}
 
 
+def _execute_rocm_native_descriptor(artifact: RuntimeArtifact, args: Any) -> Any:
+    """Execution-matrix adapter for the existing checked descriptor bridge."""
+    if (artifact.native_image is None or artifact.launch_descriptor is None
+            or artifact.native_image.target not in {"rocm_gfx1151", "rocm_gfx1201"}):
+        raise ValueError("ROCm descriptor executor requires an exact-target native image and descriptor")
+    result = _launch_native_descriptor(artifact, args, None, time.perf_counter_ns())
+    if not result.get("ok") or result.get("execution_kind") != "native_gpu":
+        raise RuntimeError(f"checked ROCm descriptor execution failed: {result}")
+    return result["output"], "native_gpu"
+
+
 def _launch_native_descriptor(
     artifact: RuntimeArtifact,
     args: Any,
@@ -34850,6 +35686,44 @@ def _launch_native_descriptor(
         )
     )
     try:
+        if isinstance(args, dict) and "resident_movement" in args:
+            from tessera.compiler.resident_rocm_movement import ResidentMovementCall
+            owner = args["resident_movement"]
+            if (set(args) - {"resident_movement", "download"} or stream is not None
+                    or not isinstance(owner, ResidentMovementCall)):
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    "resident movement requires its native owner and owned stream")
+            try:
+                descriptor.validate_image(image)
+                if artifact.artifact_hash != owner.artifact_hash:
+                    raise ValueError("resident movement artifact differs from its sealed package")
+                _, receipt = owner.execute(download=args.get("download", True))
+                return receipt
+            except (ValueError, TypeError, RuntimeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", str(exc)) from exc
+        from tessera.compiler.rocm_nvfp4_ingest_native import (
+            NVFP4_INGEST_ABI,validate_ingest_runtime_artifact)
+        if descriptor.abi_id == NVFP4_INGEST_ABI:
+            try:
+                validate_ingest_runtime_artifact(artifact)
+            except (ValueError,TypeError,KeyError,AttributeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    f"NVFP4 native artifact lineage differs: {exc}") from exc
+        from tessera.compiler.rocm_mxfp4_storage_native import (
+            MXFP4_STORAGE_ABI,validate_storage_runtime_artifact)
+        if descriptor.abi_id == MXFP4_STORAGE_ABI:
+            try:
+                validate_storage_runtime_artifact(artifact)
+            except (ValueError,TypeError,KeyError,AttributeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    f"MXFP4 storage artifact lineage differs: {exc}") from exc
+        from tessera.compiler.rocm_math_native import MATH_ABIS, validate_math_runtime_artifact
+        if descriptor.abi_id in MATH_ABIS.values():
+            try:
+                validate_math_runtime_artifact(artifact)
+            except (ValueError, TypeError, KeyError, AttributeError) as exc:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH",
+                    f"native math artifact lineage differs: {exc}") from exc
         values, contracts, scalars = _split_native_arguments(descriptor, args)
         descriptor.validate_invocation(image, contracts, scalars)
     except ArtifactContractError as exc:
@@ -34935,7 +35809,7 @@ def _physical_execution_attestation(
     if target == "x86" and execution_kind == "native_cpu":
         device_arch = "x86_avx512" if _x86_elementwise_available() else None
         expected_arch = "x86_avx512"
-    elif target == "rocm" and execution_kind == "native_gpu":
+    elif target in {"rocm", "rocm_gfx1151", "rocm_gfx1201"} and execution_kind == "native_gpu":
         # This function runs only after a physical launch completed. Query the
         # selected HIP device directly: `_rocm_device_name()` is an autotune
         # cache key helper whose legacy availability gate requires the shipped
@@ -34946,7 +35820,7 @@ def _physical_execution_attestation(
         device_arch = _rocm_live_arch()
         # The chip the launch was compiled for is the runtime pin; defaulting
         # to gfx1151 left every gfx1201 launch unattested (slice 2b).
-        expected_arch = expected_device_arch or _rocm_chip()
+        expected_arch = expected_device_arch or (target.removeprefix("rocm_") if target != "rocm" else _rocm_chip())
         if expected_arch not in {"gfx1151", "gfx1201"}:
             return None
     elif target == "nvidia_sm120" and execution_kind == "native_gpu":
@@ -34998,7 +35872,15 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
         arch = row.target
         kid = str(metadata.get("kernel_id", row.executor_id))
         try:
+            if row.owns_stream and stream is not None:
+                raise ArtifactContractError("E_LAUNCH_BINDING_MISMATCH", "native program owns its execution stream")
             output = executor(artifact, args)
+            components: tuple[Mapping[str, Any], ...] = ()
+            if isinstance(output, NativeProgramExecution):
+                components = output.component_receipts
+                if not components or any(r.get("ok") is not True or r.get("execution_kind") != row.execution_kind for r in components):
+                    raise ValueError("native program component did not complete natively")
+                output = output.output
         except Exception as exc:
             _last_profile = RuntimeProfile(launch_overhead_ms=0.0)
             telemetry = make_event(
@@ -35059,6 +35941,7 @@ def launch(kernel: RuntimeArtifact, args: Any, stream: Any = None) -> dict[str, 
             "execution_mode": row.execution_mode,
             "artifact_hash": artifact.artifact_hash,
             "physical_attestation": physical_attestation,
+            **({"component_receipts": components} if components else {}),
             "output": output,
             "telemetry": telemetry,
             "profile": {"cpu_wall_ms": elapsed_ms, "launch_overhead_ms": elapsed_ms},

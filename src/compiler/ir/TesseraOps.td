@@ -409,7 +409,9 @@ def Tessera_MoeSwigluBlockOp : Op<
 // admits packed gfx1201 W4A8 containers and binds them to the proved exact ABI;
 // the ordinary FP8 form remains a distinct logical W8A8 contract.
 def Tessera_ScaledMatmulOp : Op<
-  Tessera_Dialect, "scaled_matmul", [Pure]
+  Tessera_Dialect, "scaled_matmul",
+  [Pure, DeclareOpInterfaceMethods<Tessera_TangentInterface>,
+   DeclareOpInterfaceMethods<Tessera_LinearTransposeInterface, ["isLinearInOperand"]>]
 > {
   let summary = "Block-scaled matmul with isolated per-group fp32 partials";
   let description = [{
@@ -418,6 +420,28 @@ def Tessera_ScaledMatmulOp : Op<
     the scales are applied to the accumulator per K block rather than to the
     operands. `scale_layout` carries the block size, axis and scale element
     format; `numeric_policy` records the storage/accum coupling.
+
+    The named SM120 NVFP4 profile may declare `batching = "shared_rhs_rows"`:
+    logical A is [B,M,K], B is shared [K,N], A scales are [B,M,ceil(K/16)]
+    and B scales are shared [ceil(K/16),N]. The result is [B,M,N]. Static
+    batch/row axes flatten without copying only in native Schedule derivation;
+    Graph and runtime guards retain their separate dimensions.
+    `batching = "independent_rhs"` instead uses B[B,K,N] and B scales
+    [B,ceil(K/16),N]. Native batch scalars and whole M16 tiles per batch keep
+    ragged rows within their owning RHS.
+    `batching = "shared_lhs"` uses shared A[M,K] and its scales,
+    B[B,K,N] and B scales[B,ceil(K/16),N], with result[B,M,N]. Native
+    batch indexing reuses A/scales and offsets B/scales/output without
+    replication. The named NVFP4 modes honor both matrix and scale storage
+    orientations; dynamic batching and general batched AD are not implied.
+
+    Typed E4M3 may declare batching = "broadcast" to retain independent,
+    right-aligned static leading prefixes for both matrices and both scales.
+    Singleton and shared scale axes reduce in their own scale transpose.
+    The result prefix is the exact join of all four operand prefixes; matrix
+    and scale suffixes retain their declared block contract. This semantic
+    form requires independent native Schedule addressing before primal
+    execution; parser/verifier evidence alone does not establish a route.
 
     A consumer that cannot honour the scales must refuse this op rather than
     treating it as a plain matmul (Decision #21a) -- dropping a block scale is
@@ -429,6 +453,7 @@ def Tessera_ScaledMatmulOp : Op<
                         OptionalAttr<Tessera_ScaleLayoutAttr>:$scale_layout,
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
                         OptionalAttr<StrAttr>:$physical_contract,
+                        OptionalAttr<StrAttr>:$batching,
                         DefaultValuedAttr<BoolAttr, "false">:$transposeA,
                         DefaultValuedAttr<BoolAttr, "false">:$transposeB);
   let results = (outs TensorType:$result);
@@ -1146,7 +1171,18 @@ def Tessera_FlashAttnOp : Op<
                         OptionalAttr<Tessera_NumericPolicyAttr>:$numeric_policy,
                         OptionalAttr<F64Attr>:$dropout_p,
                         DefaultValuedAttr<BoolAttr, "false">:$causal);
-  let results = (outs TensorType:$o);
+  let results = (outs TensorType:$o, Optional<TensorType>:$row_lse);
+  let extraClassDeclaration = [{ mlir::Value getResult() { return getO(); } }];
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+// Explicit saved-LSE Graph consumer, admitted through the native checkpoint contract.
+def Tessera_FlashAttnBwdOp : Op<Tessera_Dialect, "flash_attn_bwd", [Pure]> {
+  let summary = "Attention gradients with recomputed or saved row LSE";
+  let arguments = (ins Variadic<AnyRankedTensor>:$inputs);
+  let results = (outs AnyRankedTensor:$d_query, AnyRankedTensor:$d_key,
+                      AnyRankedTensor:$d_value);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }
@@ -3699,6 +3735,27 @@ def Tessera_LogCoshLossOp : Op<Tessera_Dialect, "loss.log_cosh", [Pure]> {
   let arguments = (ins TensorType:$prediction, TensorType:$target,
                         DefaultValuedAttr<StrAttr, "\"mean\"">:$reduction);
   let results = (outs TensorType:$result);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+
+// Checkpoint conversion, not a cast: one declared joint scale/code loss,
+// independently supplied globals and measured per-block signal/error.
+def Tessera_NVFP4RequantizeOp : Op<Tessera_Dialect, "nvfp4_requantize", [Pure]> {
+  let summary = "Explicit joint-SSE NVFP4 K16 to packed MXFP4 K32 conversion";
+  let arguments = (ins TensorType:$codes, TensorType:$scales,
+      TensorType:$globals, I64ArrayAttr:$row_offsets, Tessera_NumericPolicyAttr:$numeric_policy);
+  let results = (outs TensorType:$packed_result, TensorType:$exponents,
+      TensorType:$error_stats);
+  let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
+  let hasVerifier = 1;
+}
+
+def Tessera_MXFP4FoldedStorageOp : Op<Tessera_Dialect, "mxfp4_folded_storage", [Pure]> {
+  let summary = "Lossless checkpoint-byte permutation and folded row-reference scale plane";
+  let arguments = (ins TensorType:$codes, TensorType:$exponents, StrAttr:$storage_contract);
+  let results = (outs TensorType:$fragment_bytes, TensorType:$scale_plane);
   let assemblyFormat = "operands attr-dict `:` functional-type(operands, results)";
   let hasVerifier = 1;
 }

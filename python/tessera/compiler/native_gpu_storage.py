@@ -9,6 +9,7 @@ from __future__ import annotations
 import base64
 import ctypes as ct
 from dataclasses import dataclass, asdict
+from .toolchain_identity import binary_content_digest
 import hashlib
 import json
 from pathlib import Path
@@ -183,8 +184,8 @@ def build_native_gpu_storage(source: str, *, compiler: Path, llvm_bin: Path,
         host_library = (directory / 'sizer.so').read_bytes()
     package = NativeGPUStoragePackage(backend, chip, entry, symbol[1],
         tuple('pointer' if t.startswith('!llvm.ptr') else 'index' for t in types),
-        arena, image, host_library, _sha(compiler.read_bytes()),
-        _sha(_resolve_tool(llvm_bin / 'mlir-opt').read_bytes()), '')
+        arena, image, host_library, binary_content_digest(compiler),
+        binary_content_digest(_resolve_tool(llvm_bin / 'mlir-opt')), '')
     return NativeGPUStoragePackage(**{**asdict(package), 'binding_digest': package._digest()})
 
 
@@ -200,11 +201,9 @@ def _reject_bodyless_image(image: bytes, backend: str, entry: str, llvm_bin: Pat
 
     Every kernel in this ABI writes at least one output buffer, so "the
     disassembly contains no global store" is a sound refusal rather than a
-    heuristic. Only the AMDGPU image is checked: `llvm-objdump` from the matched
-    LLVM disassembles amdgcn, and the NVIDIA cubin needs `nvdisasm`, which is not
-    a matched-LLVM tool -- so the NVVM route is *not* covered by this guard and
-    an equivalent silent loss there would still ship. That gap is named in
-    `docs/audit/backend/nvidia/todo.md` rather than papered over.
+    heuristic. AMDGPU images use the matched LLVM disassembler; CUDA images
+    use the toolkit's cuobjdump when available. Tool-identity reuse below the
+    frontend never bypasses this per-image validation.
     """
     if backend == 'nvidia':
         _reject_bodyless_cuda_image(image, entry)

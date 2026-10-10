@@ -7,6 +7,7 @@ class Pass;
 class OpPassManager;
 class DialectRegistry;
 namespace tessera_rocm {
+std::unique_ptr<mlir::Pass> createProjectROCMKernelIdentityPass();
 std::unique_ptr<mlir::Pass> createLowerTileToROCMImpl();
 std::unique_ptr<mlir::Pass> createLowerTileToROCMPass();
 std::unique_ptr<mlir::Pass> createROCMWaveLdsPipelinePass();

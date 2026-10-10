@@ -280,6 +280,10 @@ def stale_generator_sources(tool: Path | None = None) -> list[Path]:
         if not base.is_dir():
             continue
         for path in base.rglob("*"):
+            # HIP host-library edits require that library's build, not a
+            # tessera-opt rebuild. They do not change generated kernel IR.
+            if "runtime" in path.relative_to(base).parts:
+                continue
             if path.suffix not in (".cpp", ".h", ".td", ".inc"):
                 continue
             try:
@@ -331,7 +335,13 @@ def native_packaging_available() -> bool:
     `RuntimeError` out of `_driver_selected_device_libraries` — correct, but it
     reads as a broken test on any host without ROCm rather than an absent
     toolchain."""
-    return tools_available() and _rocm_clang(_rocm_path()) is not None
+    tool = _tessera_opt()
+    if tool is None or _rocm_clang(_rocm_path()) is None:
+        return False
+    # A NVIDIA-only or lean target tool may exist without this backend.
+    # Presence of a binary is not availability of the executable ROCm route.
+    result = subprocess.run([str(tool), "--help"], capture_output=True, text=True, check=False)
+    return result.returncode == 0 and "tessera-rocm-executable" in result.stdout
 
 
 def native_package_kind(module: GraphIRModule) -> str | None:
@@ -1116,6 +1126,8 @@ def _moe_dispatch_contract(
     op = function.body[0]
     if len(op.operands) != 2 or len(function.result_types) != 1:
         return None
+    if op.kwargs.get("transport") is not None:
+        return None
     x_name, token_name = (value.removeprefix("%") for value in op.operands)
     args = {arg.name: arg for arg in function.args}
     x, token = args.get(x_name), args.get(token_name)
@@ -1459,6 +1471,9 @@ def _check_target_boundary(target_ir: str, *, directive: str, schedule_kernel: b
 #: directive attribute before it may join this table -- then the key holds it
 #: by construction.
 _SHAPE_FREE_DIRECTIVES: dict[str, str] = {
+    "scalar_unary": "tessera_rocm.unary",
+    "scalar_binary": "tessera_rocm.binary",
+    "scan": "tessera_rocm.scan",
     "softmax": "tessera_rocm.softmax",
     "reduction": "tessera_rocm.reduce",
     "normalization": "tessera_rocm.norm",
@@ -1468,98 +1483,30 @@ _SHAPE_FREE_DIRECTIVES: dict[str, str] = {
     # The bounded gfx1151 register route uses runtime M/N/K. The WMMA
     # directive describes the fixed instruction tile and physical panel.
     "matmul": "tessera_rocm.wmma_gemm",
+    "scaled_matmul": "tessera_rocm.scaled_wmma_gemm",
+    "scaled_matmul_lds": "tessera_rocm.scaled_wmma_gemm",
+    "folded_matmul": "tessera_rocm.scaled_wmma_gemm",
 }
 
-#: Host-side scaffolding TileToROCM leaves around the directive in a scheduled
-#: Target IR module. None of it reaches the HSACO (the generator emits
-#: the kernel from the directive; the host function is not serialized). Any
-#: other operation fails closed: dropping an op we have not audited could drop
-#: something the binary depends on.
-_SHAPE_FREE_SCAFFOLD_OPS = frozenset({
-    "module", "func.func", "return", "func.return", "arith.constant",
-    "arith.index_cast", "bufferization.to_buffer", "bufferization.to_tensor",
-    "memref.alloc", "memref.extract_aligned_pointer_as_index", "llvm.inttoptr",
-})
-
-_OP_LINE_RE = re.compile(r'^\s*(?:%[^=\n]+=\s*)?"?([A-Za-z_][\w.]*)')
-_MODULE_HEADER_RE = re.compile(r"^module(?: attributes \{.*\})? \{$")
-_NAME_ATTR_RE = re.compile(r'(?:(?<=\{)|(?<=, ))name = "([^"\\]*)"')
-
-# Exact-Tile memo: one Tile text -> its shape-free Target IR module. Saves the
-# Tile -> Target run on an exact repeat; a new shape pays that run (~20 ms),
-# never the binary compile of an identity already in `_cache`.
+_NAME_ATTR_RE = re.compile(r'(?:(?<=\{)|(?<=, ))name = "([^"\\\\]*)"')
 _shape_free_targets: dict[str, str] = {}
 
 
-def _shape_free_target_ir(target_ir: str, *, family: str, directive: str) -> str:
-    """Project one audited ROCm Target IR module onto its kernel identity.
-
-    Returns a Target IR module holding only the module header and the one
-    directive, with the directive's ``name`` replaced by a symbol derived from
-    everything else in that module. Static extents live only in the host
-    scaffolding (the function signature and ``arith.constant`` launch
-    arguments), which this drops; every directive attribute -- storage,
-    accumulator, kind, axis, keepdims, layout, ``inner_is_one``, exp/ftz/NaN
-    policy, arch -- is kept verbatim, so each is in the cache key. The binary is
-    then compiled from exactly this text, so the key covers the binary's input
-    by construction rather than by an audit of what a generator reads.
-    """
-    lines = [line for line in target_ir.splitlines() if line.strip()]
-    if not lines or not _MODULE_HEADER_RE.match(lines[0].strip()):
-        raise RuntimeError("ROCm shape-free kernel identity requires a single top-level Target IR module")
-    header = lines[0].strip()
-    if family in {"paged_kv", "moe_dispatch"} and (
-        len(re.findall(r"(?m)^\s*llvm\.func @", target_ir)) != 1
-        or len(re.findall(r"(?m)^\s*llvm\.return\b", target_ir)) != 1
-    ):
-        raise RuntimeError(f"ROCm {family} Target IR needs one checked LLVM wrapper")
-    directive_lines: list[str] = []
-    for line in lines[1:]:
-        stripped = line.strip()
-        if stripped == "}":
-            continue
-        match = _OP_LINE_RE.match(line)
-        name = match.group(1) if match else ""
-        if name.startswith("tessera_rocm."):
-            directive_lines.append(stripped)
-        elif family in {"paged_kv", "moe_dispatch"} and name in {"llvm.func", "llvm.return"}:
-            # Native Schedule/Tile emits one host wrapper around the direct
-            # directive. Its shape-bound signature and replay contract do not
-            # enter the GPU image; the exact directive below is the code input.
-            continue
-        elif name not in _SHAPE_FREE_SCAFFOLD_OPS:
-            raise RuntimeError(
-                f"ROCm shape-free kernel identity cannot drop unaudited Target IR operation {name or stripped!r}"
-            )
-    if len(directive_lines) != 1:
-        raise RuntimeError(f"ROCm shape-free kernel identity requires exactly one {directive} directive")
-    line = directive_lines[0]
-    if family == "matmul":
-        # Schedule ancestry is checked against the replayed Tile artifact and
-        # remains in the launch descriptor. The generator does not read this
-        # provenance-only attribute; leaving it on the directive would make
-        # each runtime shape a distinct image despite identical GPU code.
-        schedule_hash = re.findall(
-            r', tessera\.schedule_hash = "([0-9a-f]{64})"', line
-        )
-        if len(schedule_hash) != 1:
-            raise RuntimeError(
-                "ROCm matmul shape-free identity requires one Schedule hash"
-            )
-        line = re.sub(
-            r', tessera\.schedule_hash = "[0-9a-f]{64}"', "", line
-        )
-    if not (line.startswith(directive + " {") and line.endswith("}")):
-        raise RuntimeError(f"ROCm shape-free kernel identity requires one attribute-only {directive} directive")
-    if len(_NAME_ATTR_RE.findall(line)) != 1:
-        raise RuntimeError(f"ROCm {directive} directive must carry exactly one kernel name")
-    anonymous = _NAME_ATTR_RE.sub('name = ""', line)
-    identity = hashlib.sha256(
-        "\x1f".join(("tessera.rocm_shape_free_kernel.v1", family, header, anonymous)).encode()
-    ).hexdigest()
-    symbol = f"tessera_rocm_{family}_{identity[:16]}"
-    named = _NAME_ATTR_RE.sub('name = "' + symbol + '"', line)
-    return header + "\n  " + named + "\n}\n"
+def _shape_free_target_ir(target_ir: str, *, family: str, directive: str,
+                          runtime_k: bool = False) -> str:
+    """Invoke the verified native MLIR physical image identity projection."""
+    if _SHAPE_FREE_DIRECTIVES.get(family) != directive:
+        raise ValueError("ROCm kernel identity family/directive mismatch")
+    if not isinstance(runtime_k, bool) or (runtime_k and family not in {"scaled_matmul_lds", "folded_matmul"}):
+        raise ValueError("runtime_k projection requires the LDS W8A8 or folded family and a bool")
+    tool = _tessera_opt()
+    if tool is None:
+        raise RuntimeError("tessera-opt is required for ROCm kernel identity")
+    return _run_opt(
+        tool, target_ir,
+        f"builtin.module(tessera-rocm-project-kernel-identity{{family={family}"
+        + (" runtime-k=true" if runtime_k else "") + "})",
+    )
 
 
 def _directive_symbol(target_ir: str, directive: str) -> str:
@@ -1720,7 +1667,9 @@ def _compile_reduction_tile_ir(tile_ir: str):
     )
 
 
-def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str):
+def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str,
+                                k_unroll: int = 1, staging: str = "register",
+                                lds_waves: tuple[int, int] = (2, 2)):
     """Compile an audited scheduled family by its shape-free kernel identity.
 
     The Tile IR is the replay of a Schedule record whose digest binds the static
@@ -1746,7 +1695,11 @@ def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str)
     tool = _tessera_opt()
     if tool is None:
         raise RuntimeError("tessera-opt is required for ROCm native packaging")
-    tile_config = ROCMExecutablePipeline(family=family, arch=architecture, input_level=ROCMInputLevel.TILE)
+    if family != "matmul" and (k_unroll != 1 or staging != "register" or lds_waves != (2, 2)):
+        raise ValueError("K-unroll image identity is a matmul physical recipe")
+    tile_config = ROCMExecutablePipeline(
+        family=family, arch=architecture, input_level=ROCMInputLevel.TILE,
+        k_unroll=k_unroll, staging=staging, lds_waves=lds_waves)
     # Tile -> Target is a function of the Tile text, the pipeline config and
     # the compiler binary; device libraries enter only at the binary step,
     # which `_compile_native_tile_ir` keys (and fingerprints) itself.
@@ -1770,6 +1723,7 @@ def _compile_shape_free_tile_ir(tile_ir: str, *, family: str, architecture: str)
         family=family,
         input_level=ROCMInputLevel.DIRECTIVE,
         architecture=architecture,
+        k_unroll=k_unroll, staging=staging, lds_waves=lds_waves,
     )
 
 
@@ -2032,10 +1986,8 @@ def package_scheduled_matmul(
     if staging == "lds" and k_unroll != 1:
         raise ValueError("ROCm LDS staging and K unrolling are separate physical schedules")
     shape_free_matmul = (
-        arch == "gfx1151" and staging == "register" and k_unroll == 1
-        and split_k == 1 and artifact.bias_name is None
-        and artifact.activation == "none"
-        and not (artifact.dynamic_m or artifact.dynamic_n or artifact.dynamic_k)
+        arch in {"gfx1151", "gfx1201"} and staging in {"register", "lds"}
+        and (split_k == 1 or (arch == "gfx1201" and staging == "register"))
         and artifact.a_dtype in {"fp16", "bf16"}
     )
     (
@@ -2046,7 +1998,8 @@ def package_scheduled_matmul(
         toolchain_fp,
         device_libraries,
         compile_state,
-    ) = (_compile_shape_free_tile_ir(artifact.tile_ir, family="matmul", architecture=arch)
+    ) = (_compile_shape_free_tile_ir(artifact.tile_ir, family="matmul", architecture=arch,
+                                     k_unroll=k_unroll, staging=staging, lds_waves=lds_waves)
          if shape_free_matmul else
          _compile_native_tile_ir(artifact.tile_ir, directive="tessera_rocm.wmma",
                                  family="matmul", architecture=arch, staging=staging,
@@ -2659,7 +2612,7 @@ def package_reduction(module: GraphIRModule, *, pipeline_name: str) -> ROCMNativ
     return package_scheduled_kernel(artifact, pipeline_name=pipeline_name)
 
 
-def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151") -> ROCMNativePackage:
+def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151", scheduled_artifact=None) -> ROCMNativePackage:
     contract = _paged_kv_contract(module)
     if contract is None:
         raise ValueError(
@@ -2668,8 +2621,14 @@ def package_paged_kv_read(module: GraphIRModule, *, pipeline_name: str, architec
         )
     pages_name, table_name, output_name, dims = contract
     physical_pages, logical_pages, page_size, heads, dim, start, tokens = dims
-    from .scheduled_paged_kv import lower_scheduled_paged_kv_graph
-    artifact = lower_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}")
+    from .scheduled_paged_kv import lower_scheduled_paged_kv_graph, project_scheduled_paged_kv_graph
+    if scheduled_artifact is None:
+        artifact = lower_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}")
+    else:
+        artifact = scheduled_artifact
+        if artifact.graph_ir != project_scheduled_paged_kv_graph(module, target=f"rocm_{architecture}"):
+            raise ValueError("paged Schedule artifact disagrees with the caller Graph or target")
+        artifact.validate()
     tile_ir = artifact.tile_ir
     (
         target_ir,
@@ -3397,7 +3356,7 @@ def package_scheduled_attention_backward(
     )
 
 
-def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151") -> ROCMNativePackage:
+def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architecture: str = "gfx1151", scheduled_artifact=None) -> ROCMNativePackage:
     contract = _moe_dispatch_contract(module)
     if contract is None:
         raise ValueError(
@@ -3406,8 +3365,14 @@ def package_moe_dispatch(module: GraphIRModule, *, pipeline_name: str, architect
         )
     x_name, token_name, output_name, dims = contract
     tokens, slots, hidden = dims
-    from .scheduled_moe_dispatch import lower_scheduled_moe_dispatch
-    artifact = lower_scheduled_moe_dispatch(module, target=f"rocm_{architecture}")
+    from .scheduled_moe_dispatch import lower_scheduled_moe_dispatch, project_scheduled_moe_dispatch_graph
+    if scheduled_artifact is None:
+        artifact = lower_scheduled_moe_dispatch(module, target=f"rocm_{architecture}")
+    else:
+        artifact = scheduled_artifact
+        if artifact.graph_ir != project_scheduled_moe_dispatch_graph(module, target=f"rocm_{architecture}"):
+            raise ValueError("MoE Schedule artifact disagrees with the caller Graph or target")
+        artifact.validate()
     tile_ir = artifact.tile_ir
     (
         target_ir,

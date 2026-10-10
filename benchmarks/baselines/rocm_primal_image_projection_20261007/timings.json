@@ -1,0 +1,1430 @@
+{
+  "architecture": "gfx1201",
+  "rocminfo": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "rows": [
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "rhs_layout": "KN",
+      "scale_format": "fp32",
+      "samples_ms": {
+        "projected": [
+          0.0437672883272171,
+          0.01929255947470665,
+          0.018985070288181305,
+          0.018925869837403297,
+          0.01895057037472725,
+          0.01919085904955864,
+          0.018720479682087898,
+          0.01905236952006817,
+          0.018946869298815727,
+          0.019011160358786583,
+          0.018621979281306267,
+          0.018647370859980583,
+          0.018798569217324257,
+          0.01902277022600174,
+          0.019048260524868965,
+          0.019266659393906593,
+          0.019340749830007553,
+          0.019294559955596924,
+          0.019317761063575745,
+          0.018925460055470467,
+          0.018843770027160645
+        ],
+        "static": [
+          0.017667219042778015,
+          0.008445230312645435,
+          0.008357740007340908,
+          0.008427630178630352,
+          0.008421930484473705,
+          0.008050450123846531,
+          0.008425029926002026,
+          0.008700019679963589,
+          0.008282640017569065,
+          0.008287539705634117,
+          0.008117100223898888,
+          0.008448690176010132,
+          0.008034300059080124,
+          0.008577889762818813,
+          0.008407600224018097,
+          0.008185889571905136,
+          0.007767300121486187,
+          0.008487500250339508,
+          0.008034099824726582,
+          0.008132499642670155,
+          0.0077039096504449844
+        ],
+        "projected_control": [
+          0.039557069540023804,
+          0.020604601129889488,
+          0.01906256005167961,
+          0.019080059602856636,
+          0.01902497000992298,
+          0.0190710611641407,
+          0.019189059734344482,
+          0.01915035955607891,
+          0.0190945602953434,
+          0.01908666081726551,
+          0.018691370263695717,
+          0.019198060035705566,
+          0.019134460017085075,
+          0.019093560054898262,
+          0.019224660471081734,
+          0.019417760893702507,
+          0.019342059269547462,
+          0.01934264972805977,
+          0.019398750737309456,
+          0.019386960193514824,
+          0.018981359899044037
+        ],
+        "static_control": [
+          0.009017599746584892,
+          0.009279990568757057,
+          0.008205940015614033,
+          0.008117140270769596,
+          0.008124039508402348,
+          0.008486419916152954,
+          0.00813044048845768,
+          0.008456929586827755,
+          0.008084049448370934,
+          0.008573519997298717,
+          0.008807189762592316,
+          0.008819890208542347,
+          0.008952880278229713,
+          0.00869349017739296,
+          0.008605889976024628,
+          0.008463489823043346,
+          0.007841200567781925,
+          0.00808349996805191,
+          0.008178799413144588,
+          0.007841899991035461,
+          0.00783270038664341
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.019011160358786583,
+        "static": 0.008357740007340908,
+        "projected_control": 0.01915035955607891,
+        "static_control": 0.008456929586827755
+      },
+      "paired_projected_over_static": 2.2875398735941426,
+      "paired_projected_control": 0.9948831229134997,
+      "paired_static_control": 0.9867026462082215,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_b8828f6aa725d0fd",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjU2LDE5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MzQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE3LDJdLCJzdG9yYWdlIjoiZjMyIn0seyJieXRlcyI6OCwiZWxlbWVudHMiOjIsImZpcnN0X3dyaXRlIjotMSwiaWQiOjMsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIsMV0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6InNjYWxlZCIsInJvb3RfaXIiOiJmdW5jLmZ1bmMgQHNjYWxlZCglYXJnMDogdGVuc29yPDE3eDI1NnhmOEU0TTNGTj4sICVhcmcxOiB0ZW5zb3I8MjU2eDE5eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwxN3gyeGYzMj4sICVhcmczOiB0ZW5zb3I8MngxeGYzMj4pIC0+IHRlbnNvcjwxN3gxOXhmMzI+IGF0dHJpYnV0ZXMge3Rlc3NlcmEuZnJvbnRlbmQuYXV0aG9yaXR5ID0gXCJ0cmFjZXJcIiwgdGVzc2VyYS5sb3dlcmluZy5kcm9wcGVkID0ge2RpbV9uYW1lcyA9IFwibm90X3lldF9jYXJyaWVkOkZST05URU5ELUlSLU1FRElVTS0xXCJ9LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmJsb2NrcyA9IDIgOiBpNjQsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuZGlnZXN0ID0gXCIwYzg4NTU3ZGRjODc0MTE0NWQ2MjQwZDkxZDg3YWM4M2NiZWYyMjhhY2FiNDIwNWFjMTAwNDMyMmMzMTJlZGJjXCIsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuc2NoZW1hID0gXCJ0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnYxXCJ9IHtcbiAgJTAgPSB0ZXNzZXJhLnNjYWxlZF9tYXRtdWwgJWFyZzAsICVhcmcxIHNjYWxlcyglYXJnMiwgJWFyZzMpIHtudW1lcmljX3BvbGljeSA9IHthY2N1bSA9IFwiZnAzMlwiLCBleGVjdXRpb25fbW9kZSA9IFwiZXhhY3RfcGVyX2Jsb2NrXCJ9LCBzY2FsZV9sYXlvdXQgPSB7YmxvY2sgPSBbMTI4LCAxMjhdLCBmb3JtYXQgPSBcImZwMzJcIiwgZ3JhbnVsYXJpdHkgPSBcImJsb2NrXCJ9LCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxN3gyNTZ4ZjhFNE0zRk4+LCB0ZW5zb3I8MjU2eDE5eGY4RTRNM0ZOPiwgdGVuc29yPDE3eDJ4ZjMyPiwgdGVuc29yPDJ4MXhmMzI+KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MTd4MTl4ZjMyPlxufSIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzAsMSwyLDNdLCJtZW1iZXIiOiJzY2FsZWRfX21lbWJlcl8wIiwib3BlcmF0aW9uIjoidGVzc2VyYS5zY2FsZWRfbWF0bXVsIiwib3V0cHV0Ijo0LCJzdGVwIjowfV19",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "scaled__member_0",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjU2LDE5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MzQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE3LDJdLCJzdG9yYWdlIjoiZjMyIn0seyJieXRlcyI6OCwiZWxlbWVudHMiOjIsImZpcnN0X3dyaXRlIjotMSwiaWQiOjMsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIsMV0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6InNjYWxlZCIsInJvb3RfaXIiOiJmdW5jLmZ1bmMgQHNjYWxlZCglYXJnMDogdGVuc29yPDE3eDI1NnhmOEU0TTNGTj4sICVhcmcxOiB0ZW5zb3I8MjU2eDE5eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwxN3gyeGYzMj4sICVhcmczOiB0ZW5zb3I8MngxeGYzMj4pIC0+IHRlbnNvcjwxN3gxOXhmMzI+IGF0dHJpYnV0ZXMge3Rlc3NlcmEuZnJvbnRlbmQuYXV0aG9yaXR5ID0gXCJ0cmFjZXJcIiwgdGVzc2VyYS5sb3dlcmluZy5kcm9wcGVkID0ge2RpbV9uYW1lcyA9IFwibm90X3lldF9jYXJyaWVkOkZST05URU5ELUlSLU1FRElVTS0xXCJ9LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmJsb2NrcyA9IDIgOiBpNjQsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuZGlnZXN0ID0gXCIwYzg4NTU3ZGRjODc0MTE0NWQ2MjQwZDkxZDg3YWM4M2NiZWYyMjhhY2FiNDIwNWFjMTAwNDMyMmMzMTJlZGJjXCIsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuc2NoZW1hID0gXCJ0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnYxXCJ9IHtcbiAgJTAgPSB0ZXNzZXJhLnNjYWxlZF9tYXRtdWwgJWFyZzAsICVhcmcxIHNjYWxlcyglYXJnMiwgJWFyZzMpIHtudW1lcmljX3BvbGljeSA9IHthY2N1bSA9IFwiZnAzMlwiLCBleGVjdXRpb25fbW9kZSA9IFwiZXhhY3RfcGVyX2Jsb2NrXCJ9LCBzY2FsZV9sYXlvdXQgPSB7YmxvY2sgPSBbMTI4LCAxMjhdLCBmb3JtYXQgPSBcImZwMzJcIiwgZ3JhbnVsYXJpdHkgPSBcImJsb2NrXCJ9LCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCJ9IDogKHRlbnNvcjwxN3gyNTZ4ZjhFNE0zRk4+LCB0ZW5zb3I8MjU2eDE5eGY4RTRNM0ZOPiwgdGVuc29yPDE3eDJ4ZjMyPiwgdGVuc29yPDJ4MXhmMzI+KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MTd4MTl4ZjMyPlxufSIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzAsMSwyLDNdLCJtZW1iZXIiOiJzY2FsZWRfX21lbWJlcl8wIiwib3BlcmF0aW9uIjoidGVzc2VyYS5zY2FsZWRfbWF0bXVsIiwib3V0cHV0Ijo0LCJzdGVwIjowfV19",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "06249a90bc414e858495b3dc0809381ec9589c0255fddafd1dd34e9a072225ad",
+        "static": "09b198d0f3d60d749c5c08eb7790a831d8d8d1012e78b2ca70a02788d82ef8d4",
+        "projected_control": "06249a90bc414e858495b3dc0809381ec9589c0255fddafd1dd34e9a072225ad",
+        "static_control": "09b198d0f3d60d749c5c08eb7790a831d8d8d1012e78b2ca70a02788d82ef8d4"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    },
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "rhs_layout": "NK",
+      "scale_format": "fp32",
+      "samples_ms": {
+        "projected": [
+          0.04106499254703522,
+          0.022657690569758415,
+          0.019554531201720238,
+          0.018373610451817513,
+          0.018252409994602203,
+          0.017955901101231575,
+          0.018176808953285217,
+          0.017998790368437767,
+          0.017840400338172913,
+          0.01784238964319229,
+          0.017875589430332184,
+          0.017940789461135864,
+          0.018426978960633278,
+          0.018979670479893684,
+          0.019263669848442078,
+          0.018266979604959488,
+          0.018231190741062164,
+          0.01821278966963291,
+          0.01784680038690567,
+          0.0182338897138834,
+          0.01785840094089508
+        ],
+        "static": [
+          0.04056549072265625,
+          0.04080069065093994,
+          0.017606699839234352,
+          0.01817340962588787,
+          0.01797119900584221,
+          0.017903810366988182,
+          0.019329259172081947,
+          0.018055088818073273,
+          0.018053390085697174,
+          0.019011370837688446,
+          0.01764480024576187,
+          0.018138891085982323,
+          0.017537999898195267,
+          0.017593199387192726,
+          0.017577199265360832,
+          0.017975591123104095,
+          0.017983390018343925,
+          0.017908290028572083,
+          0.017616398632526398,
+          0.017859000712633133,
+          0.01766440086066723
+        ],
+        "projected_control": [
+          0.040417078882455826,
+          0.04062027856707573,
+          0.01782269962131977,
+          0.017855901271104813,
+          0.01778229884803295,
+          0.01778229884803295,
+          0.0177839994430542,
+          0.019128769636154175,
+          0.017783600836992264,
+          0.017827589064836502,
+          0.018030790612101555,
+          0.018250880762934685,
+          0.019314760342240334,
+          0.01780359074473381,
+          0.017842400819063187,
+          0.019008170813322067,
+          0.0182688906788826,
+          0.018211590126156807,
+          0.01804219000041485,
+          0.01825729012489319,
+          0.017890000715851784
+        ],
+        "static_control": [
+          0.04090629145503044,
+          0.04097149893641472,
+          0.0176279004663229,
+          0.017828701063990593,
+          0.01773270033299923,
+          0.017616700381040573,
+          0.017603199928998947,
+          0.018196290358901024,
+          0.017661189660429955,
+          0.01761160045862198,
+          0.017683589830994606,
+          0.0179939903318882,
+          0.01824057847261429,
+          0.018056590110063553,
+          0.017582399770617485,
+          0.017628399655222893,
+          0.017863089218735695,
+          0.01805999130010605,
+          0.01804528944194317,
+          0.017766090109944344,
+          0.01760520040988922
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.018231190741062164,
+        "static": 0.01797119900584221,
+        "projected_control": 0.018030790612101555,
+        "static_control": 0.017766090109944344
+      },
+      "paired_projected_over_static": 1.0130788227029481,
+      "paired_projected_control": 1.0000658670367495,
+      "paired_static_control": 1.0033626683820511,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_4219882519686a97",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMTksMjU2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MzQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE3LDJdLCJzdG9yYWdlIjoiZjMyIn0seyJieXRlcyI6OCwiZWxlbWVudHMiOjIsImZpcnN0X3dyaXRlIjotMSwiaWQiOjMsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIsMV0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6InNjYWxlZF9uayIsInJvb3RfaXIiOiJmdW5jLmZ1bmMgQHNjYWxlZF9uayglYXJnMDogdGVuc29yPDE3eDI1NnhmOEU0TTNGTj4sICVhcmcxOiB0ZW5zb3I8MTl4MjU2eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwxN3gyeGYzMj4sICVhcmczOiB0ZW5zb3I8MngxeGYzMj4pIC0+IHRlbnNvcjwxN3gxOXhmMzI+IGF0dHJpYnV0ZXMge3Rlc3NlcmEuZnJvbnRlbmQuYXV0aG9yaXR5ID0gXCJ0cmFjZXJcIiwgdGVzc2VyYS5sb3dlcmluZy5kcm9wcGVkID0ge2RpbV9uYW1lcyA9IFwibm90X3lldF9jYXJyaWVkOkZST05URU5ELUlSLU1FRElVTS0xXCJ9LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmJsb2NrcyA9IDIgOiBpNjQsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuZGlnZXN0ID0gXCIwYzg4NTU3ZGRjODc0MTE0NWQ2MjQwZDkxZDg3YWM4M2NiZWYyMjhhY2FiNDIwNWFjMTAwNDMyMmMzMTJlZGJjXCIsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuc2NoZW1hID0gXCJ0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnYxXCJ9IHtcbiAgJTAgPSB0ZXNzZXJhLnNjYWxlZF9tYXRtdWwgJWFyZzAsICVhcmcxIHNjYWxlcyglYXJnMiwgJWFyZzMpIHtudW1lcmljX3BvbGljeSA9IHthY2N1bSA9IFwiZnAzMlwiLCBleGVjdXRpb25fbW9kZSA9IFwiZXhhY3RfcGVyX2Jsb2NrXCJ9LCBzY2FsZV9sYXlvdXQgPSB7YmxvY2sgPSBbMTI4LCAxMjhdLCBmb3JtYXQgPSBcImZwMzJcIiwgZ3JhbnVsYXJpdHkgPSBcImJsb2NrXCJ9LCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCIsIHRyYW5zcG9zZUIgPSB0cnVlfSA6ICh0ZW5zb3I8MTd4MjU2eGY4RTRNM0ZOPiwgdGVuc29yPDE5eDI1NnhmOEU0TTNGTj4sIHRlbnNvcjwxN3gyeGYzMj4sIHRlbnNvcjwyeDF4ZjMyPikgLT4gdGVuc29yPDE3eDE5eGYzMj5cbiAgcmV0dXJuICUwIDogdGVuc29yPDE3eDE5eGYzMj5cbn0iLCJzY2hlbWEiOjEsInN0ZXBzIjpbeyJpbnB1dHMiOlswLDEsMiwzXSwibWVtYmVyIjoic2NhbGVkX25rX19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "scaled_nk__member_0",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMTksMjU2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MzQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE3LDJdLCJzdG9yYWdlIjoiZjMyIn0seyJieXRlcyI6OCwiZWxlbWVudHMiOjIsImZpcnN0X3dyaXRlIjotMSwiaWQiOjMsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIsMV0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6InNjYWxlZF9uayIsInJvb3RfaXIiOiJmdW5jLmZ1bmMgQHNjYWxlZF9uayglYXJnMDogdGVuc29yPDE3eDI1NnhmOEU0TTNGTj4sICVhcmcxOiB0ZW5zb3I8MTl4MjU2eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwxN3gyeGYzMj4sICVhcmczOiB0ZW5zb3I8MngxeGYzMj4pIC0+IHRlbnNvcjwxN3gxOXhmMzI+IGF0dHJpYnV0ZXMge3Rlc3NlcmEuZnJvbnRlbmQuYXV0aG9yaXR5ID0gXCJ0cmFjZXJcIiwgdGVzc2VyYS5sb3dlcmluZy5kcm9wcGVkID0ge2RpbV9uYW1lcyA9IFwibm90X3lldF9jYXJyaWVkOkZST05URU5ELUlSLU1FRElVTS0xXCJ9LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmJsb2NrcyA9IDIgOiBpNjQsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuZGlnZXN0ID0gXCIwYzg4NTU3ZGRjODc0MTE0NWQ2MjQwZDkxZDg3YWM4M2NiZWYyMjhhY2FiNDIwNWFjMTAwNDMyMmMzMTJlZGJjXCIsIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuc2NoZW1hID0gXCJ0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnYxXCJ9IHtcbiAgJTAgPSB0ZXNzZXJhLnNjYWxlZF9tYXRtdWwgJWFyZzAsICVhcmcxIHNjYWxlcyglYXJnMiwgJWFyZzMpIHtudW1lcmljX3BvbGljeSA9IHthY2N1bSA9IFwiZnAzMlwiLCBleGVjdXRpb25fbW9kZSA9IFwiZXhhY3RfcGVyX2Jsb2NrXCJ9LCBzY2FsZV9sYXlvdXQgPSB7YmxvY2sgPSBbMTI4LCAxMjhdLCBmb3JtYXQgPSBcImZwMzJcIiwgZ3JhbnVsYXJpdHkgPSBcImJsb2NrXCJ9LCB0ZXNzZXJhLmVmZmVjdF9raW5kID0gXCJwdXJlXCIsIHRyYW5zcG9zZUIgPSB0cnVlfSA6ICh0ZW5zb3I8MTd4MjU2eGY4RTRNM0ZOPiwgdGVuc29yPDE5eDI1NnhmOEU0TTNGTj4sIHRlbnNvcjwxN3gyeGYzMj4sIHRlbnNvcjwyeDF4ZjMyPikgLT4gdGVuc29yPDE3eDE5eGYzMj5cbiAgcmV0dXJuICUwIDogdGVuc29yPDE3eDE5eGYzMj5cbn0iLCJzY2hlbWEiOjEsInN0ZXBzIjpbeyJpbnB1dHMiOlswLDEsMiwzXSwibWVtYmVyIjoic2NhbGVkX25rX19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "6c442e73ebbba600b46e932ac96df47bdaee66f6ba4050c5aeccd8aefa68dffd",
+        "static": "9ffbb933219845dded777cadff5908d2a5a36df6bf876bc47958b68733f041c2",
+        "projected_control": "6c442e73ebbba600b46e932ac96df47bdaee66f6ba4050c5aeccd8aefa68dffd",
+        "static_control": "9ffbb933219845dded777cadff5908d2a5a36df6bf876bc47958b68733f041c2"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    },
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "rhs_layout": "KN",
+      "scale_format": "e8m0",
+      "samples_ms": {
+        "projected": [
+          0.14511623978614807,
+          0.10747960954904556,
+          0.11165916174650192,
+          0.11192277073860168,
+          0.10662385821342468,
+          0.11171527951955795,
+          0.11096041649580002,
+          0.11187966167926788,
+          0.11016419529914856,
+          0.11091148108243942,
+          0.11182277649641037,
+          0.10573888570070267,
+          0.11173535138368607,
+          0.11102107912302017,
+          0.10596964508295059,
+          0.11005591601133347,
+          0.11167300492525101,
+          0.10797780752182007,
+          0.10972215980291367,
+          0.10646720975637436,
+          0.11156914383172989
+        ],
+        "static": [
+          0.1392979770898819,
+          0.11079686880111694,
+          0.1090615913271904,
+          0.11085297912359238,
+          0.11092498898506165,
+          0.10984531044960022,
+          0.10463491082191467,
+          0.10906930267810822,
+          0.11067526787519455,
+          0.10463087260723114,
+          0.11055608838796616,
+          0.10824404656887054,
+          0.10911539196968079,
+          0.10894510895013809,
+          0.11005579680204391,
+          0.10892032831907272,
+          0.10635146498680115,
+          0.10556834191083908,
+          0.10888656973838806,
+          0.1088072881102562,
+          0.11056365817785263
+        ],
+        "projected_control": [
+          0.106681689620018,
+          0.11187564581632614,
+          0.11175194382667542,
+          0.11103268712759018,
+          0.1119619756937027,
+          0.11010570824146271,
+          0.11086922883987427,
+          0.10684297233819962,
+          0.10678612440824509,
+          0.11008050292730331,
+          0.11096031218767166,
+          0.11104581505060196,
+          0.11098556220531464,
+          0.10935909301042557,
+          0.11080969125032425,
+          0.1076076477766037,
+          0.11181336641311646,
+          0.1107441782951355,
+          0.10644540935754776,
+          0.10914457589387894,
+          0.11054246127605438
+        ],
+        "static_control": [
+          0.10902227461338043,
+          0.1098240539431572,
+          0.10552334040403366,
+          0.10897071659564972,
+          0.11073849350214005,
+          0.10286020487546921,
+          0.10894874483346939,
+          0.11074632406234741,
+          0.10981128364801407,
+          0.11071047931909561,
+          0.10541829466819763,
+          0.11011641472578049,
+          0.10804499685764313,
+          0.10355035960674286,
+          0.11071518808603287,
+          0.11059439927339554,
+          0.11070337891578674,
+          0.11065016686916351,
+          0.10978756099939346,
+          0.10964656621217728,
+          0.10525564104318619
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.11096041649580002,
+        "static": 0.10906930267810822,
+        "projected_control": 0.1107441782951355,
+        "static_control": 0.10978756099939346
+      },
+      "paired_projected_over_static": 1.0114574251577997,
+      "paired_projected_control": 1.0075488222985762,
+      "paired_static_control": 1.0016841070979352,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_b76b3611f27176d9",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjU2LDE5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MTM2LCJmaXJzdF93cml0ZSI6LTEsImlkIjoyLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNyw4XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjE1MiwiZWxlbWVudHMiOjE1MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbOCwxOV0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6Im14ZnA4Iiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAbXhmcDgoJWFyZzA6IHRlbnNvcjwxN3gyNTZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDI1NngxOXhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MTd4OHh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSwgJWFyZzM6IHRlbnNvcjw4eDE5eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTd4MjU2eGY4RTRNM0ZOPiwgdGVuc29yPDI1NngxOXhmOEU0TTNGTj4sIHRlbnNvcjwxN3g4eHVpOD4sIHRlbnNvcjw4eDE5eHVpOD4pIC0+IHRlbnNvcjwxN3gxOXhmMzI+XG4gIHJldHVybiAlMCA6IHRlbnNvcjwxN3gxOXhmMzI+XG59Iiwic2NoZW1hIjoxLCJzdGVwcyI6W3siaW5wdXRzIjpbMCwxLDIsM10sIm1lbWJlciI6Im14ZnA4X19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "mxfp8__member_0",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjU2LDE5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MTM2LCJmaXJzdF93cml0ZSI6LTEsImlkIjoyLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNyw4XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjE1MiwiZWxlbWVudHMiOjE1MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbOCwxOV0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6Im14ZnA4Iiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAbXhmcDgoJWFyZzA6IHRlbnNvcjwxN3gyNTZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDI1NngxOXhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MTd4OHh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSwgJWFyZzM6IHRlbnNvcjw4eDE5eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MTd4MjU2eGY4RTRNM0ZOPiwgdGVuc29yPDI1NngxOXhmOEU0TTNGTj4sIHRlbnNvcjwxN3g4eHVpOD4sIHRlbnNvcjw4eDE5eHVpOD4pIC0+IHRlbnNvcjwxN3gxOXhmMzI+XG4gIHJldHVybiAlMCA6IHRlbnNvcjwxN3gxOXhmMzI+XG59Iiwic2NoZW1hIjoxLCJzdGVwcyI6W3siaW5wdXRzIjpbMCwxLDIsM10sIm1lbWJlciI6Im14ZnA4X19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992",
+        "static": "0e73a254e117501d1814a8e6310498e0b954fb6f5dd5ac0d36cdb19e3b81ad96",
+        "projected_control": "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992",
+        "static_control": "0e73a254e117501d1814a8e6310498e0b954fb6f5dd5ac0d36cdb19e3b81ad96"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    },
+    {
+      "shape_mnk": [
+        17,
+        19,
+        256
+      ],
+      "rhs_layout": "NK",
+      "scale_format": "e8m0",
+      "samples_ms": {
+        "projected": [
+          0.02589554153382778,
+          0.012407570146024227,
+          0.012916159816086292,
+          0.013390369713306427,
+          0.012834960594773293,
+          0.012811649590730667,
+          0.01223065983504057,
+          0.01232306007295847,
+          0.012839260511100292,
+          0.012824250385165215,
+          0.01226986013352871,
+          0.012305059470236301,
+          0.012879849411547184,
+          0.012964249588549137,
+          0.01282816007733345,
+          0.012951560318470001,
+          0.012885949574410915,
+          0.012424959801137447,
+          0.012817859649658203,
+          0.01280594989657402,
+          0.012406259775161743
+        ],
+        "static": [
+          0.13197846710681915,
+          0.025350429117679596,
+          0.02698553167283535,
+          0.02527383156120777,
+          0.02402954176068306,
+          0.0239805206656456,
+          0.0261559896171093,
+          0.026050899177789688,
+          0.028025278821587563,
+          0.024126920849084854,
+          0.02568931132555008,
+          0.02614790014922619,
+          0.024860909208655357,
+          0.026071609929203987,
+          0.02614619955420494,
+          0.024012530222535133,
+          0.026199910789728165,
+          0.026969891041517258,
+          0.026197699829936028,
+          0.02610550820827484,
+          0.026557300239801407
+        ],
+        "projected_control": [
+          0.026112329214811325,
+          0.012460069730877876,
+          0.01244037039577961,
+          0.012363569810986519,
+          0.012515970505774021,
+          0.012803250923752785,
+          0.01387444045394659,
+          0.013697450049221516,
+          0.012313449755311012,
+          0.01305325049906969,
+          0.012502959929406643,
+          0.013070650398731232,
+          0.012851350009441376,
+          0.013021860271692276,
+          0.012865159660577774,
+          0.01300744991749525,
+          0.012942560017108917,
+          0.012579859234392643,
+          0.012423059903085232,
+          0.013058150187134743,
+          0.012639259919524193
+        ],
+        "static_control": [
+          0.10718002915382385,
+          0.026853129267692566,
+          0.02686762996017933,
+          0.024167940020561218,
+          0.02394114062190056,
+          0.027829280123114586,
+          0.026121098548173904,
+          0.026322700083255768,
+          0.02699138969182968,
+          0.023912930861115456,
+          0.026440490037202835,
+          0.026089699938893318,
+          0.026140708476305008,
+          0.02416963130235672,
+          0.027024900540709496,
+          0.023999331519007683,
+          0.0252677109092474,
+          0.026456201449036598,
+          0.026998000219464302,
+          0.02405932918190956,
+          0.02486252970993519
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.012824250385165215,
+        "static": 0.02610550820827484,
+        "projected_control": 0.012851350009441376,
+        "static_control": 0.026140708476305008
+      },
+      "paired_projected_over_static": 0.4894422137166541,
+      "paired_projected_control": 0.9956260243241547,
+      "paired_static_control": 1.0036924363871633,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_d2c39bb47fbb2ba2",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMTksMjU2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MTM2LCJmaXJzdF93cml0ZSI6LTEsImlkIjoyLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNyw4XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjE1MiwiZWxlbWVudHMiOjE1MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbOCwxOV0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6Im14ZnA4X25rIiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAbXhmcDhfbmsoJWFyZzA6IHRlbnNvcjwxN3gyNTZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDE5eDI1NnhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MTd4OHh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSwgJWFyZzM6IHRlbnNvcjw4eDE5eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwiLCB0cmFuc3Bvc2VCID0gdHJ1ZX0gOiAodGVuc29yPDE3eDI1NnhmOEU0TTNGTj4sIHRlbnNvcjwxOXgyNTZ4ZjhFNE0zRk4+LCB0ZW5zb3I8MTd4OHh1aTg+LCB0ZW5zb3I8OHgxOXh1aTg+KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MTd4MTl4ZjMyPlxufSIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzAsMSwyLDNdLCJtZW1iZXIiOiJteGZwOF9ua19fbWVtYmVyXzAiLCJvcGVyYXRpb24iOiJ0ZXNzZXJhLnNjYWxlZF9tYXRtdWwiLCJvdXRwdXQiOjQsInN0ZXAiOjB9XX0=",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "mxfp8_nk__member_0",
+          "geometry": [
+            2,
+            2,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjQzNTIsImVsZW1lbnRzIjo0MzUyLCJmaXJzdF93cml0ZSI6LTEsImlkIjowLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNywyNTZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjo0ODY0LCJlbGVtZW50cyI6NDg2NCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MSwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMTksMjU2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6MTM2LCJlbGVtZW50cyI6MTM2LCJmaXJzdF93cml0ZSI6LTEsImlkIjoyLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxNyw4XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjE1MiwiZWxlbWVudHMiOjE1MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbOCwxOV0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjoxMjkyLCJlbGVtZW50cyI6MzIzLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzE3LDE5XSwic3RvcmFnZSI6ImYzMiJ9XSwia2luZCI6InByaW1hbCIsIm91dHB1dHMiOls0XSwicm9vdCI6Im14ZnA4X25rIiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAbXhmcDhfbmsoJWFyZzA6IHRlbnNvcjwxN3gyNTZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDE5eDI1NnhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MTd4OHh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSwgJWFyZzM6IHRlbnNvcjw4eDE5eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwiLCB0cmFuc3Bvc2VCID0gdHJ1ZX0gOiAodGVuc29yPDE3eDI1NnhmOEU0TTNGTj4sIHRlbnNvcjwxOXgyNTZ4ZjhFNE0zRk4+LCB0ZW5zb3I8MTd4OHh1aTg+LCB0ZW5zb3I8OHgxOXh1aTg+KSAtPiB0ZW5zb3I8MTd4MTl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MTd4MTl4ZjMyPlxufSIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzAsMSwyLDNdLCJtZW1iZXIiOiJteGZwOF9ua19fbWVtYmVyXzAiLCJvcGVyYXRpb24iOiJ0ZXNzZXJhLnNjYWxlZF9tYXRtdWwiLCJvdXRwdXQiOjQsInN0ZXAiOjB9XX0=",
+          "scalars": [
+            17,
+            19,
+            256
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef",
+        "static": "622d605af114cd1dbc4563d29b3df74ffd0581ec52813a6d93f8c09749cc3d40",
+        "projected_control": "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef",
+        "static_control": "622d605af114cd1dbc4563d29b3df74ffd0581ec52813a6d93f8c09749cc3d40"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    },
+    {
+      "shape_mnk": [
+        200,
+        129,
+        1536
+      ],
+      "rhs_layout": "KN",
+      "scale_format": "fp32",
+      "samples_ms": {
+        "projected": [
+          0.6001787781715393,
+          0.5285548567771912,
+          0.5279542803764343,
+          0.529656171798706,
+          0.5261980295181274,
+          0.5258375406265259,
+          0.5215471386909485,
+          0.5235592126846313,
+          0.5239536762237549,
+          0.5226128697395325,
+          0.5209077596664429,
+          0.5194122791290283,
+          0.5223417282104492,
+          0.5230591297149658,
+          0.5397343635559082,
+          0.5153262615203857,
+          0.5223973989486694,
+          0.5235084295272827,
+          0.5198789834976196,
+          0.5221378207206726,
+          0.5203919410705566
+        ],
+        "static": [
+          0.03211425989866257,
+          0.03225246071815491,
+          0.032272789627313614,
+          0.03230736032128334,
+          0.03222893923521042,
+          0.032062359154224396,
+          0.03214019909501076,
+          0.031965311616659164,
+          0.031897298991680145,
+          0.03153090924024582,
+          0.031687721610069275,
+          0.0314297117292881,
+          0.03129291906952858,
+          0.031221330165863037,
+          0.031419821083545685,
+          0.03127552196383476,
+          0.031039049848914146,
+          0.030854549258947372,
+          0.030873820185661316,
+          0.030836530029773712,
+          0.030899420380592346
+        ],
+        "projected_control": [
+          0.5240285992622375,
+          0.5212584137916565,
+          0.5296931862831116,
+          0.5286390781402588,
+          0.5254861116409302,
+          0.5258321166038513,
+          0.5266047120094299,
+          0.5233232975006104,
+          0.5234647393226624,
+          0.5257068872451782,
+          0.5236614346504211,
+          0.5248003602027893,
+          0.5235363245010376,
+          0.5223273634910583,
+          0.5183286666870117,
+          0.5232517123222351,
+          0.5147754549980164,
+          0.5222541689872742,
+          0.5232823491096497,
+          0.5199607610702515,
+          0.518714964389801
+        ],
+        "static_control": [
+          0.03213746100664139,
+          0.032097071409225464,
+          0.03229304030537605,
+          0.03227483853697777,
+          0.032077349722385406,
+          0.03189107030630112,
+          0.03190018981695175,
+          0.03177570179104805,
+          0.03176430985331535,
+          0.031638920307159424,
+          0.03167932853102684,
+          0.031443141400814056,
+          0.03129972144961357,
+          0.031088540330529213,
+          0.031099319458007812,
+          0.031096821650862694,
+          0.03100774995982647,
+          0.03114904835820198,
+          0.03091954067349434,
+          0.030839139595627785,
+          0.030807750299572945
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.5230591297149658,
+        "static": 0.03153090924024582,
+        "projected_control": 0.5234647393226624,
+        "static_control": 0.031638920307159424
+      },
+      "paired_projected_over_static": 16.526154729093765,
+      "paired_projected_control": 1.0009340398012772,
+      "paired_static_control": 1.0010094214874743,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_b8828f6aa725d0fd",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE1MzYsMTI5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjI0MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCwxMl0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjo5NiwiZWxlbWVudHMiOjI0LCJmaXJzdF93cml0ZSI6LTEsImlkIjozLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxMiwyXSwic3RvcmFnZSI6ImYzMiJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290Ijoic2NhbGVkIiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAc2NhbGVkKCVhcmcwOiB0ZW5zb3I8MjAweDE1MzZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDE1MzZ4MTI5eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwyMDB4MTJ4ZjMyPiwgJWFyZzM6IHRlbnNvcjwxMngyeGYzMj4pIC0+IHRlbnNvcjwyMDB4MTI5eGYzMj4gYXR0cmlidXRlcyB7dGVzc2VyYS5mcm9udGVuZC5hdXRob3JpdHkgPSBcInRyYWNlclwiLCB0ZXNzZXJhLmxvd2VyaW5nLmRyb3BwZWQgPSB7ZGltX25hbWVzID0gXCJub3RfeWV0X2NhcnJpZWQ6RlJPTlRFTkQtSVItTUVESVVNLTFcIn0sIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuYmxvY2tzID0gMiA6IGk2NCwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5kaWdlc3QgPSBcIjBjODg1NTdkZGM4NzQxMTQ1ZDYyNDBkOTFkODdhYzgzY2JlZjIyOGFjYWI0MjA1YWMxMDA0MzIyYzMxMmVkYmNcIiwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5zY2hlbWEgPSBcInRlc3NlcmEuc3RydWN0dXJlZF9jZmcudjFcIn0ge1xuICAlMCA9IHRlc3NlcmEuc2NhbGVkX21hdG11bCAlYXJnMCwgJWFyZzEgc2NhbGVzKCVhcmcyLCAlYXJnMykge251bWVyaWNfcG9saWN5ID0ge2FjY3VtID0gXCJmcDMyXCIsIGV4ZWN1dGlvbl9tb2RlID0gXCJleGFjdF9wZXJfYmxvY2tcIn0sIHNjYWxlX2xheW91dCA9IHtibG9jayA9IFsxMjgsIDEyOF0sIGZvcm1hdCA9IFwiZnAzMlwiLCBncmFudWxhcml0eSA9IFwiYmxvY2tcIn0sIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgdGVuc29yPDE1MzZ4MTI5eGY4RTRNM0ZOPiwgdGVuc29yPDIwMHgxMnhmMzI+LCB0ZW5zb3I8MTJ4MnhmMzI+KSAtPiB0ZW5zb3I8MjAweDEyOXhmMzI+XG4gIHJldHVybiAlMCA6IHRlbnNvcjwyMDB4MTI5eGYzMj5cbn0iLCJzY2hlbWEiOjEsInN0ZXBzIjpbeyJpbnB1dHMiOlswLDEsMiwzXSwibWVtYmVyIjoic2NhbGVkX19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "scaled__member_0",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE1MzYsMTI5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjI0MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCwxMl0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjo5NiwiZWxlbWVudHMiOjI0LCJmaXJzdF93cml0ZSI6LTEsImlkIjozLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxMiwyXSwic3RvcmFnZSI6ImYzMiJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290Ijoic2NhbGVkIiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAc2NhbGVkKCVhcmcwOiB0ZW5zb3I8MjAweDE1MzZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDE1MzZ4MTI5eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwyMDB4MTJ4ZjMyPiwgJWFyZzM6IHRlbnNvcjwxMngyeGYzMj4pIC0+IHRlbnNvcjwyMDB4MTI5eGYzMj4gYXR0cmlidXRlcyB7dGVzc2VyYS5mcm9udGVuZC5hdXRob3JpdHkgPSBcInRyYWNlclwiLCB0ZXNzZXJhLmxvd2VyaW5nLmRyb3BwZWQgPSB7ZGltX25hbWVzID0gXCJub3RfeWV0X2NhcnJpZWQ6RlJPTlRFTkQtSVItTUVESVVNLTFcIn0sIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuYmxvY2tzID0gMiA6IGk2NCwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5kaWdlc3QgPSBcIjBjODg1NTdkZGM4NzQxMTQ1ZDYyNDBkOTFkODdhYzgzY2JlZjIyOGFjYWI0MjA1YWMxMDA0MzIyYzMxMmVkYmNcIiwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5zY2hlbWEgPSBcInRlc3NlcmEuc3RydWN0dXJlZF9jZmcudjFcIn0ge1xuICAlMCA9IHRlc3NlcmEuc2NhbGVkX21hdG11bCAlYXJnMCwgJWFyZzEgc2NhbGVzKCVhcmcyLCAlYXJnMykge251bWVyaWNfcG9saWN5ID0ge2FjY3VtID0gXCJmcDMyXCIsIGV4ZWN1dGlvbl9tb2RlID0gXCJleGFjdF9wZXJfYmxvY2tcIn0sIHNjYWxlX2xheW91dCA9IHtibG9jayA9IFsxMjgsIDEyOF0sIGZvcm1hdCA9IFwiZnAzMlwiLCBncmFudWxhcml0eSA9IFwiYmxvY2tcIn0sIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIn0gOiAodGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgdGVuc29yPDE1MzZ4MTI5eGY4RTRNM0ZOPiwgdGVuc29yPDIwMHgxMnhmMzI+LCB0ZW5zb3I8MTJ4MnhmMzI+KSAtPiB0ZW5zb3I8MjAweDEyOXhmMzI+XG4gIHJldHVybiAlMCA6IHRlbnNvcjwyMDB4MTI5eGYzMj5cbn0iLCJzY2hlbWEiOjEsInN0ZXBzIjpbeyJpbnB1dHMiOlswLDEsMiwzXSwibWVtYmVyIjoic2NhbGVkX19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "06249a90bc414e858495b3dc0809381ec9589c0255fddafd1dd34e9a072225ad",
+        "static": "f3868e275b528a5dcddf30023a328889a60dc57982845974eb4d9ce6a2b28006",
+        "projected_control": "06249a90bc414e858495b3dc0809381ec9589c0255fddafd1dd34e9a072225ad",
+        "static_control": "f3868e275b528a5dcddf30023a328889a60dc57982845974eb4d9ce6a2b28006"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    },
+    {
+      "shape_mnk": [
+        200,
+        129,
+        1536
+      ],
+      "rhs_layout": "NK",
+      "scale_format": "fp32",
+      "samples_ms": {
+        "projected": [
+          0.2827259302139282,
+          0.07783882319927216,
+          0.07820907235145569,
+          0.07827776670455933,
+          0.07824692875146866,
+          0.07824473083019257,
+          0.07829061895608902,
+          0.07840712368488312,
+          0.07844994217157364,
+          0.07838384062051773,
+          0.08001051098108292,
+          0.07837522774934769,
+          0.07831893861293793,
+          0.07835613936185837,
+          0.07831227034330368,
+          0.07811058312654495,
+          0.07811528444290161,
+          0.07817848026752472,
+          0.07819078117609024,
+          0.07881058007478714,
+          0.08110979199409485
+        ],
+        "static": [
+          0.07816921919584274,
+          0.0782962292432785,
+          0.07825376838445663,
+          0.07821176946163177,
+          0.07836203277111053,
+          0.07827723026275635,
+          0.07833731919527054,
+          0.07850442081689835,
+          0.07843423634767532,
+          0.07844904810190201,
+          0.08142741024494171,
+          0.07882142066955566,
+          0.0783599391579628,
+          0.07760585099458694,
+          0.07912016659975052,
+          0.07881777733564377,
+          0.07900657504796982,
+          0.078765369951725,
+          0.07879658043384552,
+          0.07813498377799988,
+          0.08129099011421204
+        ],
+        "projected_control": [
+          0.07800541818141937,
+          0.07809492200613022,
+          0.07806847244501114,
+          0.07801627367734909,
+          0.07816601544618607,
+          0.07745062559843063,
+          0.07810132950544357,
+          0.07840152084827423,
+          0.07832024991512299,
+          0.08062011748552322,
+          0.08072461187839508,
+          0.07827522605657578,
+          0.07814034819602966,
+          0.07811354100704193,
+          0.07799217849969864,
+          0.078070268034935,
+          0.07797697931528091,
+          0.07801077514886856,
+          0.07797098159790039,
+          0.07930576801300049,
+          0.08043500036001205
+        ],
+        "static_control": [
+          0.07798001915216446,
+          0.07780221849679947,
+          0.08030295372009277,
+          0.07781127095222473,
+          0.07805223017930984,
+          0.0780523270368576,
+          0.07798393070697784,
+          0.07816942036151886,
+          0.07803753763437271,
+          0.07795865088701248,
+          0.0806238055229187,
+          0.07859861850738525,
+          0.07712335139513016,
+          0.08005902916193008,
+          0.07711399346590042,
+          0.07772298157215118,
+          0.07770658284425735,
+          0.07764778286218643,
+          0.07730358839035034,
+          0.07708679139614105,
+          0.08061299473047256
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.07831227034330368,
+        "static": 0.07843423634767532,
+        "projected_control": 0.07810132950544357,
+        "static_control": 0.07798001915216446
+      },
+      "paired_projected_over_static": 0.9987606158863058,
+      "paired_projected_control": 1.0018009819078193,
+      "paired_static_control": 1.0062904784691602,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_4219882519686a97",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzEyOSwxNTM2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjI0MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCwxMl0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjo5NiwiZWxlbWVudHMiOjI0LCJmaXJzdF93cml0ZSI6LTEsImlkIjozLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxMiwyXSwic3RvcmFnZSI6ImYzMiJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290Ijoic2NhbGVkX25rIiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAc2NhbGVkX25rKCVhcmcwOiB0ZW5zb3I8MjAweDE1MzZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDEyOXgxNTM2eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwyMDB4MTJ4ZjMyPiwgJWFyZzM6IHRlbnNvcjwxMngyeGYzMj4pIC0+IHRlbnNvcjwyMDB4MTI5eGYzMj4gYXR0cmlidXRlcyB7dGVzc2VyYS5mcm9udGVuZC5hdXRob3JpdHkgPSBcInRyYWNlclwiLCB0ZXNzZXJhLmxvd2VyaW5nLmRyb3BwZWQgPSB7ZGltX25hbWVzID0gXCJub3RfeWV0X2NhcnJpZWQ6RlJPTlRFTkQtSVItTUVESVVNLTFcIn0sIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuYmxvY2tzID0gMiA6IGk2NCwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5kaWdlc3QgPSBcIjBjODg1NTdkZGM4NzQxMTQ1ZDYyNDBkOTFkODdhYzgzY2JlZjIyOGFjYWI0MjA1YWMxMDA0MzIyYzMxMmVkYmNcIiwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5zY2hlbWEgPSBcInRlc3NlcmEuc3RydWN0dXJlZF9jZmcudjFcIn0ge1xuICAlMCA9IHRlc3NlcmEuc2NhbGVkX21hdG11bCAlYXJnMCwgJWFyZzEgc2NhbGVzKCVhcmcyLCAlYXJnMykge251bWVyaWNfcG9saWN5ID0ge2FjY3VtID0gXCJmcDMyXCIsIGV4ZWN1dGlvbl9tb2RlID0gXCJleGFjdF9wZXJfYmxvY2tcIn0sIHNjYWxlX2xheW91dCA9IHtibG9jayA9IFsxMjgsIDEyOF0sIGZvcm1hdCA9IFwiZnAzMlwiLCBncmFudWxhcml0eSA9IFwiYmxvY2tcIn0sIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIiwgdHJhbnNwb3NlQiA9IHRydWV9IDogKHRlbnNvcjwyMDB4MTUzNnhmOEU0TTNGTj4sIHRlbnNvcjwxMjl4MTUzNnhmOEU0TTNGTj4sIHRlbnNvcjwyMDB4MTJ4ZjMyPiwgdGVuc29yPDEyeDJ4ZjMyPikgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MjAweDEyOXhmMzI+XG59Iiwic2NoZW1hIjoxLCJzdGVwcyI6W3siaW5wdXRzIjpbMCwxLDIsM10sIm1lbWJlciI6InNjYWxlZF9ua19fbWVtYmVyXzAiLCJvcGVyYXRpb24iOiJ0ZXNzZXJhLnNjYWxlZF9tYXRtdWwiLCJvdXRwdXQiOjQsInN0ZXAiOjB9XX0=",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "scaled_nk__member_0",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzEyOSwxNTM2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjI0MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCwxMl0sInN0b3JhZ2UiOiJmMzIifSx7ImJ5dGVzIjo5NiwiZWxlbWVudHMiOjI0LCJmaXJzdF93cml0ZSI6LTEsImlkIjozLCJsYXN0X3JlYWQiOjAsIm93bmVyc2hpcCI6MCwic2hhcGUiOlsxMiwyXSwic3RvcmFnZSI6ImYzMiJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290Ijoic2NhbGVkX25rIiwicm9vdF9pciI6ImZ1bmMuZnVuYyBAc2NhbGVkX25rKCVhcmcwOiB0ZW5zb3I8MjAweDE1MzZ4ZjhFNE0zRk4+LCAlYXJnMTogdGVuc29yPDEyOXgxNTM2eGY4RTRNM0ZOPiwgJWFyZzI6IHRlbnNvcjwyMDB4MTJ4ZjMyPiwgJWFyZzM6IHRlbnNvcjwxMngyeGYzMj4pIC0+IHRlbnNvcjwyMDB4MTI5eGYzMj4gYXR0cmlidXRlcyB7dGVzc2VyYS5mcm9udGVuZC5hdXRob3JpdHkgPSBcInRyYWNlclwiLCB0ZXNzZXJhLmxvd2VyaW5nLmRyb3BwZWQgPSB7ZGltX25hbWVzID0gXCJub3RfeWV0X2NhcnJpZWQ6RlJPTlRFTkQtSVItTUVESVVNLTFcIn0sIHRlc3NlcmEuc3RydWN0dXJlZF9jZmcuYmxvY2tzID0gMiA6IGk2NCwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5kaWdlc3QgPSBcIjBjODg1NTdkZGM4NzQxMTQ1ZDYyNDBkOTFkODdhYzgzY2JlZjIyOGFjYWI0MjA1YWMxMDA0MzIyYzMxMmVkYmNcIiwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5zY2hlbWEgPSBcInRlc3NlcmEuc3RydWN0dXJlZF9jZmcudjFcIn0ge1xuICAlMCA9IHRlc3NlcmEuc2NhbGVkX21hdG11bCAlYXJnMCwgJWFyZzEgc2NhbGVzKCVhcmcyLCAlYXJnMykge251bWVyaWNfcG9saWN5ID0ge2FjY3VtID0gXCJmcDMyXCIsIGV4ZWN1dGlvbl9tb2RlID0gXCJleGFjdF9wZXJfYmxvY2tcIn0sIHNjYWxlX2xheW91dCA9IHtibG9jayA9IFsxMjgsIDEyOF0sIGZvcm1hdCA9IFwiZnAzMlwiLCBncmFudWxhcml0eSA9IFwiYmxvY2tcIn0sIHRlc3NlcmEuZWZmZWN0X2tpbmQgPSBcInB1cmVcIiwgdHJhbnNwb3NlQiA9IHRydWV9IDogKHRlbnNvcjwyMDB4MTUzNnhmOEU0TTNGTj4sIHRlbnNvcjwxMjl4MTUzNnhmOEU0TTNGTj4sIHRlbnNvcjwyMDB4MTJ4ZjMyPiwgdGVuc29yPDEyeDJ4ZjMyPikgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MjAweDEyOXhmMzI+XG59Iiwic2NoZW1hIjoxLCJzdGVwcyI6W3siaW5wdXRzIjpbMCwxLDIsM10sIm1lbWJlciI6InNjYWxlZF9ua19fbWVtYmVyXzAiLCJvcGVyYXRpb24iOiJ0ZXNzZXJhLnNjYWxlZF9tYXRtdWwiLCJvdXRwdXQiOjQsInN0ZXAiOjB9XX0=",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "6c442e73ebbba600b46e932ac96df47bdaee66f6ba4050c5aeccd8aefa68dffd",
+        "static": "d9f416e8add2598dbd37ab65bf2248bae1048527b69ea30624056a2f277366c8",
+        "projected_control": "6c442e73ebbba600b46e932ac96df47bdaee66f6ba4050c5aeccd8aefa68dffd",
+        "static_control": "d9f416e8add2598dbd37ab65bf2248bae1048527b69ea30624056a2f277366c8"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    },
+    {
+      "shape_mnk": [
+        200,
+        129,
+        1536
+      ],
+      "rhs_layout": "KN",
+      "scale_format": "e8m0",
+      "samples_ms": {
+        "projected": [
+          0.6222301721572876,
+          0.5452384948730469,
+          0.5507078766822815,
+          0.5448862314224243,
+          0.5468930006027222,
+          0.5485244989395142,
+          0.5496492981910706,
+          0.5478782653808594,
+          0.5478551387786865,
+          0.5494436621665955,
+          0.5454484820365906,
+          0.5484641790390015,
+          0.5486164093017578,
+          0.5449588298797607,
+          0.5467217564582825,
+          0.5451440811157227,
+          0.548468291759491,
+          0.5456750988960266,
+          0.5469576716423035,
+          0.5482983589172363,
+          0.5474227070808411
+        ],
+        "static": [
+          0.5435934662818909,
+          0.5465677380561829,
+          0.5450374484062195,
+          0.5462014079093933,
+          0.5460107326507568,
+          0.5436949729919434,
+          0.5462285876274109,
+          0.5419735312461853,
+          0.5475108623504639,
+          0.5464145541191101,
+          0.5466452836990356,
+          0.5438033938407898,
+          0.5450577139854431,
+          0.5469549298286438,
+          0.5451233386993408,
+          0.5460888743400574,
+          0.5460802912712097,
+          0.5455299615859985,
+          0.5411636233329773,
+          0.5443823933601379,
+          0.5437132716178894
+        ],
+        "projected_control": [
+          0.5490778088569641,
+          0.5483183860778809,
+          0.5430145859718323,
+          0.546201765537262,
+          0.5495710372924805,
+          0.5498023629188538,
+          0.5506160855293274,
+          0.5479861497879028,
+          0.5470225811004639,
+          0.5471730828285217,
+          0.5478373765945435,
+          0.5607740879058838,
+          0.5419372916221619,
+          0.549645185470581,
+          0.5477573871612549,
+          0.5442686676979065,
+          0.5487240552902222,
+          0.5471041798591614,
+          0.5486762523651123,
+          0.5493500232696533,
+          0.5637410283088684
+        ],
+        "static_control": [
+          0.5452214479446411,
+          0.5466140508651733,
+          0.5468297600746155,
+          0.5450201630592346,
+          0.5426451563835144,
+          0.5435296893119812,
+          0.5458552241325378,
+          0.5463381409645081,
+          0.5440270900726318,
+          0.5452204346656799,
+          0.5448494553565979,
+          0.5447526574134827,
+          0.5450628399848938,
+          0.5443841814994812,
+          0.5423128604888916,
+          0.5443432927131653,
+          0.5434249639511108,
+          0.5439304709434509,
+          0.5449213981628418,
+          0.5459898114204407,
+          0.5442842841148376
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.5478551387786865,
+        "static": 0.5455299615859985,
+        "projected_control": 0.5483183860778809,
+        "static_control": 0.5448494553565979
+      },
+      "paired_projected_over_static": 1.005543607915731,
+      "paired_projected_control": 0.9980856206282515,
+      "paired_static_control": 1.000683997291528,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_b76b3611f27176d9",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE1MzYsMTI5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjk2MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCw0OF0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjo2MTkyLCJlbGVtZW50cyI6NjE5MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbNDgsMTI5XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290IjoibXhmcDgiLCJyb290X2lyIjoiZnVuYy5mdW5jIEBteGZwOCglYXJnMDogdGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgJWFyZzE6IHRlbnNvcjwxNTM2eDEyOXhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MjAweDQ4eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9LCAlYXJnMzogdGVuc29yPDQ4eDEyOXh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSkgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MjAweDE1MzZ4ZjhFNE0zRk4+LCB0ZW5zb3I8MTUzNngxMjl4ZjhFNE0zRk4+LCB0ZW5zb3I8MjAweDQ4eHVpOD4sIHRlbnNvcjw0OHgxMjl4dWk4PikgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MjAweDEyOXhmMzI+XG59Iiwic2NoZW1hIjoxLCJzdGVwcyI6W3siaW5wdXRzIjpbMCwxLDIsM10sIm1lbWJlciI6Im14ZnA4X19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "mxfp8__member_0",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzE1MzYsMTI5XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjk2MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCw0OF0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjo2MTkyLCJlbGVtZW50cyI6NjE5MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbNDgsMTI5XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290IjoibXhmcDgiLCJyb290X2lyIjoiZnVuYy5mdW5jIEBteGZwOCglYXJnMDogdGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgJWFyZzE6IHRlbnNvcjwxNTM2eDEyOXhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MjAweDQ4eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9LCAlYXJnMzogdGVuc29yPDQ4eDEyOXh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSkgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwifSA6ICh0ZW5zb3I8MjAweDE1MzZ4ZjhFNE0zRk4+LCB0ZW5zb3I8MTUzNngxMjl4ZjhFNE0zRk4+LCB0ZW5zb3I8MjAweDQ4eHVpOD4sIHRlbnNvcjw0OHgxMjl4dWk4PikgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPlxuICByZXR1cm4gJTAgOiB0ZW5zb3I8MjAweDEyOXhmMzI+XG59Iiwic2NoZW1hIjoxLCJzdGVwcyI6W3siaW5wdXRzIjpbMCwxLDIsM10sIm1lbWJlciI6Im14ZnA4X19tZW1iZXJfMCIsIm9wZXJhdGlvbiI6InRlc3NlcmEuc2NhbGVkX21hdG11bCIsIm91dHB1dCI6NCwic3RlcCI6MH1dfQ==",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992",
+        "static": "eaa599bcb5750362d0a608bad4d35e0073aac32e91efd272d69963684d37ba37",
+        "projected_control": "3f5c918b3a797cd9a8253f11fa199ba579aaeb213a89cc161a724a2fcad29992",
+        "static_control": "eaa599bcb5750362d0a608bad4d35e0073aac32e91efd272d69963684d37ba37"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    },
+    {
+      "shape_mnk": [
+        200,
+        129,
+        1536
+      ],
+      "rhs_layout": "NK",
+      "scale_format": "e8m0",
+      "samples_ms": {
+        "projected": [
+          0.23734496533870697,
+          0.04323989897966385,
+          0.04324519261717796,
+          0.042970091104507446,
+          0.043175067752599716,
+          0.043081458657979965,
+          0.043058548122644424,
+          0.04295814037322998,
+          0.04291016235947609,
+          0.043246060609817505,
+          0.04310296103358269,
+          0.04314964637160301,
+          0.04296296089887619,
+          0.043001752346754074,
+          0.043037138879299164,
+          0.04302935302257538,
+          0.04294294863939285,
+          0.042990561574697495,
+          0.042961761355400085,
+          0.04312235862016678,
+          0.04328475892543793
+        ],
+        "static": [
+          0.5088427066802979,
+          0.5032943487167358,
+          0.5033577084541321,
+          0.5073259472846985,
+          0.5054568648338318,
+          0.5065286159515381,
+          0.5064808130264282,
+          0.5073010921478271,
+          0.5055526494979858,
+          0.505516767501831,
+          0.5064129829406738,
+          0.5081204175949097,
+          0.5082896947860718,
+          0.5081561803817749,
+          0.5070958137512207,
+          0.5089815855026245,
+          0.5047546625137329,
+          0.5046975612640381,
+          0.5072633624076843,
+          0.5082905292510986,
+          0.5054703950881958
+        ],
+        "projected_control": [
+          0.042926620692014694,
+          0.04292009025812149,
+          0.04319991171360016,
+          0.04315779358148575,
+          0.04287897050380707,
+          0.043028660118579865,
+          0.04315626248717308,
+          0.042939748615026474,
+          0.04310575872659683,
+          0.04301495850086212,
+          0.04301014915108681,
+          0.04311365261673927,
+          0.04318375140428543,
+          0.04312004894018173,
+          0.042944952845573425,
+          0.04287375137209892,
+          0.04291895031929016,
+          0.0428505502641201,
+          0.042935460805892944,
+          0.042912960052490234,
+          0.04309706389904022
+        ],
+        "static_control": [
+          0.508148729801178,
+          0.5041380524635315,
+          0.5015385150909424,
+          0.5059729814529419,
+          0.5056307315826416,
+          0.5080503225326538,
+          0.5062319040298462,
+          0.5083977580070496,
+          0.5089179277420044,
+          0.5078235268592834,
+          0.5054738521575928,
+          0.5072294473648071,
+          0.5203301906585693,
+          0.5072791576385498,
+          0.5038589239120483,
+          0.5071594715118408,
+          0.5060958862304688,
+          0.5079498291015625,
+          0.506161630153656,
+          0.5070948004722595,
+          0.507745623588562
+        ]
+      },
+      "medians_ms": {
+        "projected": 0.043058548122644424,
+        "static": 0.5065286159515381,
+        "projected_control": 0.04301014915108681,
+        "static_control": 0.5071594715118408
+      },
+      "paired_projected_over_static": 0.08501516151293499,
+      "paired_projected_control": 1.0012270551593891,
+      "paired_static_control": 1.000491689667523,
+      "members": {
+        "projected": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "tessera_rocm_scaled_matmul_d2c39bb47fbb2ba2",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzEyOSwxNTM2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjk2MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCw0OF0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjo2MTkyLCJlbGVtZW50cyI6NjE5MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbNDgsMTI5XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290IjoibXhmcDhfbmsiLCJyb290X2lyIjoiZnVuYy5mdW5jIEBteGZwOF9uayglYXJnMDogdGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgJWFyZzE6IHRlbnNvcjwxMjl4MTUzNnhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MjAweDQ4eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9LCAlYXJnMzogdGVuc29yPDQ4eDEyOXh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSkgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwiLCB0cmFuc3Bvc2VCID0gdHJ1ZX0gOiAodGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgdGVuc29yPDEyOXgxNTM2eGY4RTRNM0ZOPiwgdGVuc29yPDIwMHg0OHh1aTg+LCB0ZW5zb3I8NDh4MTI5eHVpOD4pIC0+IHRlbnNvcjwyMDB4MTI5eGYzMj5cbiAgcmV0dXJuICUwIDogdGVuc29yPDIwMHgxMjl4ZjMyPlxufSIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzAsMSwyLDNdLCJtZW1iZXIiOiJteGZwOF9ua19fbWVtYmVyXzAiLCJvcGVyYXRpb24iOiJ0ZXNzZXJhLnNjYWxlZF9tYXRtdWwiLCJvdXRwdXQiOjQsInN0ZXAiOjB9XX0=",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        },
+        "static": {
+          "abi": "flattened_rank1_memref_then_i64",
+          "architecture": "gfx1201",
+          "entry": "mxfp8_nk__member_0",
+          "geometry": [
+            9,
+            13,
+            1,
+            32,
+            1,
+            1
+          ],
+          "inputs": [
+            0,
+            1,
+            2,
+            3
+          ],
+          "output": 4,
+          "program_base64": "eyJhcmd1bWVudF9jb3VudCI6NCwiYnVmZmVycyI6W3siYnl0ZXMiOjMwNzIwMCwiZWxlbWVudHMiOjMwNzIwMCwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MCwibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbMjAwLDE1MzZdLCJzdG9yYWdlIjoiZjhFNE0zRk4ifSx7ImJ5dGVzIjoxOTgxNDQsImVsZW1lbnRzIjoxOTgxNDQsImZpcnN0X3dyaXRlIjotMSwiaWQiOjEsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzEyOSwxNTM2XSwic3RvcmFnZSI6ImY4RTRNM0ZOIn0seyJieXRlcyI6OTYwMCwiZWxlbWVudHMiOjk2MDAsImZpcnN0X3dyaXRlIjotMSwiaWQiOjIsImxhc3RfcmVhZCI6MCwib3duZXJzaGlwIjowLCJzaGFwZSI6WzIwMCw0OF0sInN0b3JhZ2UiOiJ1aTgifSx7ImJ5dGVzIjo2MTkyLCJlbGVtZW50cyI6NjE5MiwiZmlyc3Rfd3JpdGUiOi0xLCJpZCI6MywibGFzdF9yZWFkIjowLCJvd25lcnNoaXAiOjAsInNoYXBlIjpbNDgsMTI5XSwic3RvcmFnZSI6InVpOCJ9LHsiYnl0ZXMiOjEwMzIwMCwiZWxlbWVudHMiOjI1ODAwLCJmaXJzdF93cml0ZSI6MCwiaWQiOjQsImxhc3RfcmVhZCI6MSwib3duZXJzaGlwIjoyLCJzaGFwZSI6WzIwMCwxMjldLCJzdG9yYWdlIjoiZjMyIn1dLCJraW5kIjoicHJpbWFsIiwib3V0cHV0cyI6WzRdLCJyb290IjoibXhmcDhfbmsiLCJyb290X2lyIjoiZnVuYy5mdW5jIEBteGZwOF9uayglYXJnMDogdGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgJWFyZzE6IHRlbnNvcjwxMjl4MTUzNnhmOEU0TTNGTj4sICVhcmcyOiB0ZW5zb3I8MjAweDQ4eHVpOD4ge3Rlc3NlcmEuZHR5cGVfc3RhdHVzID0gXCJwbGFubmVkX2dhdGVkXCJ9LCAlYXJnMzogdGVuc29yPDQ4eDEyOXh1aTg+IHt0ZXNzZXJhLmR0eXBlX3N0YXR1cyA9IFwicGxhbm5lZF9nYXRlZFwifSkgLT4gdGVuc29yPDIwMHgxMjl4ZjMyPiBhdHRyaWJ1dGVzIHt0ZXNzZXJhLmZyb250ZW5kLmF1dGhvcml0eSA9IFwidHJhY2VyXCIsIHRlc3NlcmEubG93ZXJpbmcuZHJvcHBlZCA9IHtkaW1fbmFtZXMgPSBcIm5vdF95ZXRfY2FycmllZDpGUk9OVEVORC1JUi1NRURJVU0tMVwifSwgdGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy5ibG9ja3MgPSAyIDogaTY0LCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLmRpZ2VzdCA9IFwiMGM4ODU1N2RkYzg3NDExNDVkNjI0MGQ5MWQ4N2FjODNjYmVmMjI4YWNhYjQyMDVhYzEwMDQzMjJjMzEyZWRiY1wiLCB0ZXNzZXJhLnN0cnVjdHVyZWRfY2ZnLnNjaGVtYSA9IFwidGVzc2VyYS5zdHJ1Y3R1cmVkX2NmZy52MVwifSB7XG4gICUwID0gdGVzc2VyYS5zY2FsZWRfbWF0bXVsICVhcmcwLCAlYXJnMSBzY2FsZXMoJWFyZzIsICVhcmczKSB7bnVtZXJpY19wb2xpY3kgPSB7YWNjdW0gPSBcImZwMzJcIiwgZXhlY3V0aW9uX21vZGUgPSBcImV4YWN0X3Blcl9ibG9ja1wifSwgc2NhbGVfbGF5b3V0ID0ge2Jsb2NrID0gWzEsIDMyXSwgZm9ybWF0ID0gXCJlOG0wXCIsIGdyYW51bGFyaXR5ID0gXCJibG9ja1wifSwgdGVzc2VyYS5lZmZlY3Rfa2luZCA9IFwicHVyZVwiLCB0cmFuc3Bvc2VCID0gdHJ1ZX0gOiAodGVuc29yPDIwMHgxNTM2eGY4RTRNM0ZOPiwgdGVuc29yPDEyOXgxNTM2eGY4RTRNM0ZOPiwgdGVuc29yPDIwMHg0OHh1aTg+LCB0ZW5zb3I8NDh4MTI5eHVpOD4pIC0+IHRlbnNvcjwyMDB4MTI5eGYzMj5cbiAgcmV0dXJuICUwIDogdGVuc29yPDIwMHgxMjl4ZjMyPlxufSIsInNjaGVtYSI6MSwic3RlcHMiOlt7ImlucHV0cyI6WzAsMSwyLDNdLCJtZW1iZXIiOiJteGZwOF9ua19fbWVtYmVyXzAiLCJvcGVyYXRpb24iOiJ0ZXNzZXJhLnNjYWxlZF9tYXRtdWwiLCJvdXRwdXQiOjQsInN0ZXAiOjB9XX0=",
+          "scalars": [
+            200,
+            129,
+            1536
+          ],
+          "schema": 1,
+          "step": 0
+        }
+      },
+      "image_sha256": {
+        "projected": "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef",
+        "static": "9e17ecf3b5917b79f4210ef41bbce847c8583c8c55aaddf89460298222f137f2",
+        "projected_control": "4f6cb64ef0c46bebf3f6e5fea81b88a0bcf73782db2c014136dd9d5cf37e17ef",
+        "static_control": "9e17ecf3b5917b79f4210ef41bbce847c8583c8c55aaddf89460298222f137f2"
+      },
+      "correctness": "float64_block_oracle_before_timing_and_bitwise_projected_public_parity",
+      "timing": "native sequence event windows include enqueue gaps; alternating order and identical-image controls"
+    }
+  ]
+}

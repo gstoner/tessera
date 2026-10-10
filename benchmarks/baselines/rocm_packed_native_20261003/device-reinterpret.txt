@@ -1,0 +1,53 @@
+F
+=================================== FAILURES ===================================
+_________ test_native_packed_matches_independent_folded_oracle[shape0] _________
+
+shape = (83, 32, 64)
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d638783b820>
+
+    @pytest.mark.parametrize("shape",[(83,32,64),(128,64,128),(256,80,192),(200,128,256)])
+    def test_native_packed_matches_independent_folded_oracle(shape,monkeypatch):
+        def legacy(*args,**kwargs):
+            raise AssertionError("hand-emitted HIP materializer was used")
+        monkeypatch.setattr(packed,"package_mxfp4_packed_folded_prefill",legacy)
+>       program,a,sa,payload,expected=compile_case(*shape)
+                                      ^^^^^^^^^^^^^^^^^^^^
+
+tests/device/rocm/test_packed_native_folded.py:48: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+tests/device/rocm/test_packed_native_folded.py:38: in compile_case
+    program=packed.compile_packed_folded_scaled_matmul(
+python/tessera/compiler/rocm_mxfp4_packed_folded.py:868: in compile_packed_folded_scaled_matmul
+    native_target,backend,binary,compiler,toolchain,libraries,state=_compile_native_tile_ir(
+python/tessera/compiler/rocm_native.py:1528: in _compile_native_tile_ir
+    backend_ir = _run_opt(tool, tile_ir, native_pipeline)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+tool = PosixPath('/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt')
+source = 'module attributes {tessera.arch = "gfx1201", tessera.target = "rocm"} {\n  func.func @packed_folded_w4a8(%arg0: tenso...erization.to_tensor %alloc : memref<83x32xbf16> to tensor<83x32xbf16>\n    return %14 : tensor<83x32xbf16>\n  }\n}\n\n'
+pipeline = 'builtin.module(tessera-rocm-executable{family=matmul input=directive output=binary arch=gfx1201 staging=register lds-... scale-group-panels=-1 blockscale-stage-k=-1 blockscale-lds-pad-bytes=-1 blockscale-prefetch=-1 tile-q=64 tile-kv=64})'
+
+    def _run_opt(tool: Path, source: str, pipeline: str) -> str:
+        result = subprocess.run(
+            [str(tool), "-", f"--pass-pipeline={pipeline}"],
+            input=source,
+            capture_output=True,
+            text=True,
+            check=False,
+            env=_serializer_env(),
+        )
+        if result.returncode:
+>           raise RuntimeError(
+                "ROCm native packaging failed: " + (result.stderr.strip() or f"tessera-opt exited {result.returncode}")
+            )
+E           RuntimeError: ROCm native packaging failed: <stdin>:26:5: error: expected result type with stride = dynamic instead of 1 in dim = 0
+E               tessera_rocm.scaled_wmma_gemm {abi = "a_bpacked_sa_scaleplane_d_m_n_k", block_m = 256 : i64, block_n = 64 : i64, instruction_k = 16 : i64, k = 64 : i64, k_step_schedule = "isolated_k_stage", m = 83 : i64, macro_k = 64 : i64, n = 32 : i64, name = "packed_folded_w4a8", numeric_policy = {accum = "f32", execution_mode = "folded_row_reference_explicit_approximate", storage = "e4m3_raw_u8"}, output = "bf16", package_abi = "tessera.rocm.mxfp4_w4a8.a_bpacked_sa_scaleplane_o_m_n_k.e4m3_e2m1_e8m0_bf16.approx_bm256_tm4.v1", partial_combine = "row_reference_after_full_k", physical_contract = "rocm_mxfp4_w4a8_packed_folded_prefill_v1", scale_format = "e8m0_k32_plus_row_reference", scale_k = 64 : i64, stage_k = 64 : i64, tessera.schedule_hash = "d8d16f2f6ba29a9373997d90003bc2cd41a2dbd0581d24ede4ce63aef012acb1", tile_m_per_wave = 4 : i64, tile_n_per_wave = 2 : i64}
+E               ^
+E           <stdin>:26:5: note: see current operation: %4 = "memref.reinterpret_cast"(%arg3, %2, %arg6, %3) <{operandSegmentSizes = array<i32: 1, 1, 1, 1>, static_offsets = array<i64: -9223372036854775808>, static_sizes = array<i64: -9223372036854775808>, static_strides = array<i64: -9223372036854775808>}> : (memref<?xi8>, index, index, index) -> memref<?xi8, strided<[1], offset: ?>>
+
+python/tessera/compiler/rocm_native.py:508: RuntimeError
+=========================== short test summary info ============================
+FAILED tests/device/rocm/test_packed_native_folded.py::test_native_packed_matches_independent_folded_oracle[shape0]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 1.22s

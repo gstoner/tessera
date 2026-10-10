@@ -1,0 +1,333 @@
+{
+  "compiler_sha256": "eaf9c3f58f62d81e7c54f499ae1babc5ca727ffebeb979243a6c60df5b410c06",
+  "gpu": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 610.88, 12.0",
+  "production_package_support": false,
+  "rows": [
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.009150720201432705,
+      "device_dispatch_window_samples_ms": [
+        0.010709439404308796,
+        0.009150720201432705,
+        0.006829119753092527
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 5.960464477539063e-08,
+      "pitch": 8,
+      "ptx_sha256": "295022e8e4addcbd7149c69595edbb963d409a2df7d8763fa150d9509075c7bb",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "target_sha256": "6598a2c216ef928ca0ad8391f4ffca32260e7c5d1fbe5b47e9c533ff4e070ad7",
+      "tile_sha256": "aaf94a6c05273395bb53d561c86c34f8836c51a7db0967dfe349754af1c31739"
+    },
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.009884480386972427,
+      "device_dispatch_window_samples_ms": [
+        0.009884480386972427,
+        0.009776320308446884,
+        0.010231359861791134
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 5.960464477539063e-08,
+      "pitch": 13,
+      "ptx_sha256": "ca7fd91c7f36d840e4e70a64a6584956c4add86bf7f9587d8d2f33011bd36d2c",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "target_sha256": "4fb6dcb345aa9d93c5b79fda2e221dd3db5044738d62807064ab9101c99587c3",
+      "tile_sha256": "d241876ae60398fe4eafa5421fbcc1542e89c8bec287260be3c416aae113acfb"
+    },
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.007769920397549868,
+      "device_dispatch_window_samples_ms": [
+        0.008828800171613693,
+        0.007039359770715237,
+        0.007769920397549868
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 3.8743019104003906e-07,
+      "pitch": 16,
+      "ptx_sha256": "721832a633acbde0d52ef9d9e18028f0bf23880003e3c9fb002a3a8a8423aa4e",
+      "shape_mkn": [
+        16,
+        64,
+        16
+      ],
+      "target_sha256": "cfc707feef0943d0afa16de05b691dcc8d1688a4e43010e91630af93740c363b",
+      "tile_sha256": "cba313cd085ae4a1c4aedf4ac82216f3fe5771c1985b7a669c432362dd4c301a"
+    },
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.010259199887514114,
+      "device_dispatch_window_samples_ms": [
+        0.010088319890201092,
+        0.010677119717001915,
+        0.010259199887514114
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 3.8743019104003906e-07,
+      "pitch": 21,
+      "ptx_sha256": "9421b2172638f0e1eb6f94e6c63a826abe179c00a961ab1d589fec6b59a62021",
+      "shape_mkn": [
+        16,
+        64,
+        16
+      ],
+      "target_sha256": "4a8cde038a56407b2c52a56a86a92d22fdfc60d7ba3171e6ae8349f53f5a4c12",
+      "tile_sha256": "383cc87f69f09412ad6bba3b52820316abc70cdf0db50bf6e2317e6388acd30b"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.008186239749193192,
+      "device_dispatch_window_samples_ms": [
+        0.007107520010322332,
+        0.008985280059278011,
+        0.008186239749193192
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 1.7881393432617188e-07,
+      "pitch": 19,
+      "ptx_sha256": "f2a3abdf77f6d3e6253d429e957f57ab778279fd19c8a99a75f6b7b4fa4f64b2",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "target_sha256": "7565a69eaefcf641de5b7fede7c197db9133be6d08ec3c1dc7e6b79c1388128d",
+      "tile_sha256": "0a65bf30cefd9402d948db557bba0bcc40fe64d45d48ddea8bbdd905e84457bb"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.010583359748125076,
+      "device_dispatch_window_samples_ms": [
+        0.01095391996204853,
+        0.010583359748125076,
+        0.010496319271624088
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 1.7881393432617188e-07,
+      "pitch": 24,
+      "ptx_sha256": "3f4d6e0579a29ac9f24bb47e2a20e86fd6c1f9723c7d613327f2b55f9c1fd099",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "target_sha256": "09976039345fe73d540aeda016b131602eda95a60f5c2075e091ba307e83c797",
+      "tile_sha256": "3a0b5b032645796c56279fca5c996fe3285b12894dabc4440a1d7b851c8e68f6"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.012087039649486542,
+      "device_dispatch_window_samples_ms": [
+        0.011236799880862236,
+        0.015401920303702354,
+        0.012087039649486542
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 2.980232238769531e-07,
+      "pitch": 13,
+      "ptx_sha256": "b466434b992b5110b6acf70f48ff83c7f31aa1aa954df9b90acd910501515681",
+      "shape_mkn": [
+        33,
+        67,
+        13
+      ],
+      "target_sha256": "0871f904fc35d43bec58f79ee28c7b396209c4e831f8427d2453a26286593a2f",
+      "tile_sha256": "697ae33b34f042771f2cbdbaf8d4c83dc2dfd5e461ae31cbb9d80043d5cea140"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.008488000370562077,
+      "device_dispatch_window_samples_ms": [
+        0.008488000370562077,
+        0.00812384020537138,
+        0.010057599283754826
+      ],
+      "dtype": "fp16",
+      "max_abs_error": 2.980232238769531e-07,
+      "pitch": 18,
+      "ptx_sha256": "2b365d115c35d7820bce865b5cb92fcd54813196fd57db0f9c06d66d618e9a88",
+      "shape_mkn": [
+        33,
+        67,
+        13
+      ],
+      "target_sha256": "11fb41c9572aae62f7d91f512ba64153b0987634bccdc08c321bbc1329cebafc",
+      "tile_sha256": "6392fd730be83e25b9c4bd67e66c2c80e32913ec762d752fb412ed0cabc6e5a0"
+    },
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.009354880079627037,
+      "device_dispatch_window_samples_ms": [
+        0.011393279768526554,
+        0.009354880079627037,
+        0.0083689596503973
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 2.9802322387695312e-08,
+      "pitch": 8,
+      "ptx_sha256": "17a9c0f523d3008604dea919a568d98335c4c3f05989617b5d4da5d2153259ec",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "target_sha256": "abc512e41d86d6847f212473499a929a7370adfb280080f37a58a027ce1adf14",
+      "tile_sha256": "69e65014fa5b0eb6084920a8f1f6b86d092ab2120cbd1957aebb3214da6613f9"
+    },
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.007135360036045313,
+      "device_dispatch_window_samples_ms": [
+        0.007135360036045313,
+        0.007314239628612995,
+        0.006835839711129665
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 2.9802322387695312e-08,
+      "pitch": 13,
+      "ptx_sha256": "f6b66ceb9175f61c08d8a00d2670e9c7cd0097512257a90224dfb2d71ff1e948",
+      "shape_mkn": [
+        16,
+        16,
+        8
+      ],
+      "target_sha256": "a633c94baa84a794e5c3ac2bb6414f116da821cfc985f591b22f7eabc49f5416",
+      "tile_sha256": "ec1ecd260002be356f0285063edd4f85ca1805e4e9a7d14b3192f1b55b2f0e47"
+    },
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.008701760321855545,
+      "device_dispatch_window_samples_ms": [
+        0.0067552002146840096,
+        0.008701760321855545,
+        0.010553599335253239
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 1.1920928955078125e-07,
+      "pitch": 16,
+      "ptx_sha256": "7ba641947972de2b6faf3d17939baccec1bd78e49170beb86cf91b14f81f04bf",
+      "shape_mkn": [
+        16,
+        64,
+        16
+      ],
+      "target_sha256": "c7ebb4fd2e8f3c3b9b01db623b02954abe4e88a10ff79e51128efa9559475109",
+      "tile_sha256": "f8857cb13ecdcf8d36d5216d85dee09595a8e232f4728e22fdd38da1f6ef10e5"
+    },
+    {
+      "bounded": false,
+      "device_dispatch_window_median_ms": 0.007111679762601852,
+      "device_dispatch_window_samples_ms": [
+        0.007274559698998928,
+        0.007111679762601852,
+        0.0070223999209702015
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 1.1920928955078125e-07,
+      "pitch": 21,
+      "ptx_sha256": "4da211cc836e2da139758319a27d005e2c4b9f96524c51b4278e6fe39ee51dea",
+      "shape_mkn": [
+        16,
+        64,
+        16
+      ],
+      "target_sha256": "152c1e58105e7746bd81b7b13848b5237dca209290bda485429fbf86dff55cd6",
+      "tile_sha256": "2b6661164350754b2d6d6c99feec19efea177539e8a9442dbf4a2b1f576368da"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.008868799544870853,
+      "device_dispatch_window_samples_ms": [
+        0.008868799544870853,
+        0.008500159718096256,
+        0.010075840167701244
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 1.1920928955078125e-07,
+      "pitch": 19,
+      "ptx_sha256": "8bc259b4b8ad8028341f90b8958e10b64a8b59ef2078653a7aadeb4ef1b73d78",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "target_sha256": "263ef97d00e27c90c4e0ac1f64f2f0ca26d0e4e631d884be1cbdb70a633fe0ec",
+      "tile_sha256": "a8bf8b95c1a73837335a76de05919406dd7dce5b12fd16545864aefe45a66261"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.008138559758663177,
+      "device_dispatch_window_samples_ms": [
+        0.006901119835674763,
+        0.009344320744276047,
+        0.008138559758663177
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 1.1920928955078125e-07,
+      "pitch": 24,
+      "ptx_sha256": "0f049355933dda8300fe9093290554c5658165fc142b6a8d6d5862fa43d05b18",
+      "shape_mkn": [
+        17,
+        35,
+        19
+      ],
+      "target_sha256": "51188857ed5c505a255a1c7a2f27f24b82c0973645b897a5a553b3129441280e",
+      "tile_sha256": "2c33c39d1008b04c966d1d7cac694286f7c2075d0aa1d623f0fa01d687a82d5c"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.0072479997761547565,
+      "device_dispatch_window_samples_ms": [
+        0.0072479997761547565,
+        0.006873279809951782,
+        0.00856736022979021
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 1.4901161193847656e-07,
+      "pitch": 13,
+      "ptx_sha256": "140027cec9c0a4cbc85828f63c6df8fd04ab8f55896a03a3668d03de90d2395c",
+      "shape_mkn": [
+        33,
+        67,
+        13
+      ],
+      "target_sha256": "3a342b129a11b28f4b38cc03535051d0294568e06cfbfd675ea048a3f6c687d2",
+      "tile_sha256": "aaadd7ce2b57171bdc3db9486fac829d20dd43da23977424bee76feaf61b6451"
+    },
+    {
+      "bounded": true,
+      "device_dispatch_window_median_ms": 0.009351360611617565,
+      "device_dispatch_window_samples_ms": [
+        0.00997855979949236,
+        0.008969279937446117,
+        0.009351360611617565
+      ],
+      "dtype": "bf16",
+      "max_abs_error": 1.4901161193847656e-07,
+      "pitch": 18,
+      "ptx_sha256": "58beec488eebaae626abdeb82918b7be525218fe7382a8b8cdabc2d5b3936d93",
+      "shape_mkn": [
+        33,
+        67,
+        13
+      ],
+      "target_sha256": "6f39b789a9f3a03ca1e161ae282e2da491357e898f1a48e93bba2faf8a75e26d",
+      "tile_sha256": "bc083fd251e153182ea38da2b0d6530f4edc5f72137e53bd1c2bf60e2c3a5a0e"
+    }
+  ],
+  "schema": "tessera.nvidia.row_major_b_core.v1",
+  "scope": "raw Tile typed-fragment gather; native Schedule/profile/checked package and tensor RHS edge remain open",
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_row_major_b_core.py": "fcebb9ff1bb8a5054e3e71f389de5abe3e6bec9dc8fd19300ad4ea645da9226e",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "9eabdf9d4dfc94ac7290e06405bb6822167d93a3782ed710562fbd353364ec65"
+  }
+}

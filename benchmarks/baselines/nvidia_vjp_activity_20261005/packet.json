@@ -1,0 +1,2061 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "architecture": "sm_120",
+  "rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        0
+      ],
+      "max_abs_gradient_error": 1.64959021997646e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2",
+        "requested_gradients": "b7d0b70a1305ad23a6c2209837318a0f885106dbe1b553c4c2634f5ffafc13dd"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.012710999697446823,
+          0.014104999601840973,
+          0.010591999627649784,
+          0.015658000484108925,
+          0.012547999620437622
+        ],
+        "requested_gradients": [
+          0.010991999879479408,
+          0.010111999697983265,
+          0.012777999974787235,
+          0.011626999825239182,
+          0.009995999746024609
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.012710999697446823,
+        "requested_gradients": 0.010991999879479408
+      },
+      "dispatch_ratio_all_over_requested": 1.1563864480363175,
+      "checked_backward_wall_samples_ms": [
+        0.168441,
+        0.166601,
+        0.154601,
+        0.175041,
+        0.776935
+      ],
+      "checked_backward_wall_median_ms": 0.168441
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "k"
+      ],
+      "gradient_activity": [
+        0,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 1.64959021997646e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2",
+        "requested_gradients": "a61d9d15cd7f340c4245c16afb66fa3cfa9351f4dc364fbd0998c92f783d0b5b"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.01217699982225895,
+          0.011795000173151493,
+          0.012432999908924103,
+          0.011358999647200108,
+          0.012532999739050865
+        ],
+        "requested_gradients": [
+          0.009608999826014042,
+          0.010599000379443169,
+          0.012389999814331532,
+          0.012639000080525875,
+          0.009290000423789024
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.01217699982225895,
+        "requested_gradients": 0.010599000379443169
+      },
+      "dispatch_ratio_all_over_requested": 1.1488819120977032,
+      "checked_backward_wall_samples_ms": [
+        0.165411,
+        0.153681,
+        0.151741,
+        0.153131,
+        0.157761
+      ],
+      "checked_backward_wall_median_ms": 0.153681
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "gradient_activity": [
+        0,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 1.64959021997646e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2",
+        "requested_gradients": "7034e8b9a5db2353ca68cc9ec43e1c757c25e38fa034a6847931a525a58a8865"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.014940000139176846,
+          0.011408999562263489,
+          0.01052900031208992,
+          0.01053799968212843,
+          0.011979999952018261
+        ],
+        "requested_gradients": [
+          0.009746000170707703,
+          0.009820999577641487,
+          0.010452999733388424,
+          0.009812000207602978,
+          0.009309000335633755
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.011408999562263489,
+        "requested_gradients": 0.009812000207602978
+      },
+      "dispatch_ratio_all_over_requested": 1.1627598166399398,
+      "checked_backward_wall_samples_ms": [
+        0.208721,
+        0.156071,
+        0.155701,
+        0.166371,
+        0.166931
+      ],
+      "checked_backward_wall_median_ms": 0.166371
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 1.64959021997646e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2",
+        "requested_gradients": "bd76c3d469c81b8e5011471f36eb60e0524302ba889641d95860cee0a616ff13"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.013824000023305416,
+          0.016071999445557594,
+          0.011195000261068344,
+          0.01078800018876791,
+          0.010347999632358551
+        ],
+        "requested_gradients": [
+          0.010631999932229519,
+          0.009890999644994736,
+          0.011342000216245651,
+          0.008821999654173851,
+          0.008778000250458717
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.011195000261068344,
+        "requested_gradients": 0.009890999644994736
+      },
+      "dispatch_ratio_all_over_requested": 1.1318370905749136,
+      "checked_backward_wall_samples_ms": [
+        0.157711,
+        0.156171,
+        0.148631,
+        0.155211,
+        0.150241
+      ],
+      "checked_backward_wall_median_ms": 0.155211
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 1.64959021997646e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2",
+        "requested_gradients": "d2fcb54738d279afff31861331d2767a635f927e2ceea9de8325b3a09864e34d"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.012249000370502472,
+          0.01105900015681982,
+          0.01424300018697977,
+          0.010878000408411026,
+          0.011862999759614468
+        ],
+        "requested_gradients": [
+          0.010897000320255756,
+          0.013515999540686607,
+          0.01243400014936924,
+          0.010929999873042107,
+          0.010413999669253826
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.011862999759614468,
+        "requested_gradients": 0.010929999873042107
+      },
+      "dispatch_ratio_all_over_requested": 1.0853613812817624,
+      "checked_backward_wall_samples_ms": [
+        0.165251,
+        0.172491,
+        0.181631,
+        0.161071,
+        0.179801
+      ],
+      "checked_backward_wall_median_ms": 0.172491
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        1
+      ],
+      "max_abs_gradient_error": 1.64959021997646e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2",
+        "requested_gradients": "b341e805e19ff721f452639cc15909eb47a483223fb7a4d6745f0440c9e132e2"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.01080899965018034,
+          0.014147000387310982,
+          0.011699000373482704,
+          0.011531000025570393,
+          0.01181699987500906
+        ],
+        "requested_gradients": [
+          0.012315000407397747,
+          0.011562000028789043,
+          0.01232600025832653,
+          0.011692999862134457,
+          0.01305100042372942
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.011699000373482704,
+        "requested_gradients": 0.012315000407397747
+      },
+      "dispatch_ratio_all_over_requested": 0.949979698454171,
+      "checked_backward_wall_samples_ms": [
+        0.162521,
+        0.162661,
+        0.171441,
+        0.165501,
+        0.1546
+      ],
+      "checked_backward_wall_median_ms": 0.162661
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        0
+      ],
+      "max_abs_gradient_error": 2.8347658206917536e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32",
+        "requested_gradients": "ac9690885e5caf507a3f98f7868fb841eb05061789e4e767f9d3e35c3e13ab03"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.011912999674677849,
+          0.012269999831914902,
+          0.012505000457167625,
+          0.011598999612033367,
+          0.011873000301420689
+        ],
+        "requested_gradients": [
+          0.009790999814867973,
+          0.010394000448286533,
+          0.009584999643266201,
+          0.01090299990028143,
+          0.01234500017017126
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.011912999674677849,
+        "requested_gradients": 0.010394000448286533
+      },
+      "dispatch_ratio_all_over_requested": 1.1461419242714892,
+      "checked_backward_wall_samples_ms": [
+        0.155701,
+        0.155831,
+        0.15824,
+        0.150631,
+        0.178711
+      ],
+      "checked_backward_wall_median_ms": 0.155831
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "k"
+      ],
+      "gradient_activity": [
+        0,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 2.8347658206917536e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32",
+        "requested_gradients": "f113a88f390ab40bd63ea672d40097e3f57a06f72f5ca1febab891cc1e355449"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.011845000088214874,
+          0.012962999753654003,
+          0.014077999629080296,
+          0.012776999734342098,
+          0.012857000343501568
+        ],
+        "requested_gradients": [
+          0.01106599997729063,
+          0.010509000159800053,
+          0.011030999943614006,
+          0.009436000138521194,
+          0.01193699985742569
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.012857000343501568,
+        "requested_gradients": 0.011030999943614006
+      },
+      "dispatch_ratio_all_over_requested": 1.1655335336072283,
+      "checked_backward_wall_samples_ms": [
+        0.159971,
+        0.159011,
+        0.201361,
+        0.157871,
+        0.150021
+      ],
+      "checked_backward_wall_median_ms": 0.159011
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "gradient_activity": [
+        0,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 2.8347658206917536e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32",
+        "requested_gradients": "2a5551af11e92ff38b6ca92fd071a9e64f828614265b684f429fcf8aa2e9988a"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.01185499969869852,
+          0.014523000456392765,
+          0.011498999781906605,
+          0.009557000361382961,
+          0.010786999948322773
+        ],
+        "requested_gradients": [
+          0.00937500037252903,
+          0.009064000099897385,
+          0.010664000175893307,
+          0.010471000336110592,
+          0.011966999620199203
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.011498999781906605,
+        "requested_gradients": 0.010471000336110592
+      },
+      "dispatch_ratio_all_over_requested": 1.0981758583514531,
+      "checked_backward_wall_samples_ms": [
+        0.169641,
+        0.313201,
+        0.156651,
+        0.150971,
+        0.159681
+      ],
+      "checked_backward_wall_median_ms": 0.159681
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 2.8347658206917536e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32",
+        "requested_gradients": "5485073458ae8b82f43e47ae3b927b83101214df60878a89f8e82fd65ac7d5be"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.012799999676644802,
+          0.011358000338077545,
+          0.013420999981462955,
+          0.01610800065100193,
+          0.013109000399708748
+        ],
+        "requested_gradients": [
+          0.014232000336050987,
+          0.011672000400722027,
+          0.010255999863147736,
+          0.009922999888658524,
+          0.016454000025987625
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.013109000399708748,
+        "requested_gradients": 0.011672000400722027
+      },
+      "dispatch_ratio_all_over_requested": 1.1231151430476158,
+      "checked_backward_wall_samples_ms": [
+        0.166341,
+        0.177481,
+        0.157201,
+        0.153171,
+        0.154421
+      ],
+      "checked_backward_wall_median_ms": 0.157201
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 2.8347658206917536e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32",
+        "requested_gradients": "2e2657e58fe66c98fe2d5b45a3167c4ddf27b157a3702913116b28c55812b5da"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.013973000459372997,
+          0.015836000442504883,
+          0.012128000147640705,
+          0.01471600029617548,
+          0.016265999525785446
+        ],
+        "requested_gradients": [
+          0.013269999995827675,
+          0.014181000180542469,
+          0.015196000225841999,
+          0.01636900007724762,
+          0.012044000439345837
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.01471600029617548,
+        "requested_gradients": 0.014181000180542469
+      },
+      "dispatch_ratio_all_over_requested": 1.037726543179026,
+      "checked_backward_wall_samples_ms": [
+        0.174521,
+        0.165151,
+        0.188101,
+        0.160301,
+        0.159891
+      ],
+      "checked_backward_wall_median_ms": 0.165151
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        1
+      ],
+      "max_abs_gradient_error": 2.8347658206917536e-08,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 1,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32",
+        "requested_gradients": "8f5d41ed7c0c69b84fde0c24c4730fcf80e1d0247145af141199def7c9b2ec32"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.021714000031352043,
+          0.012671999633312225,
+          0.012330000288784504,
+          0.011610999703407288,
+          0.013873999938368797
+        ],
+        "requested_gradients": [
+          0.011777999810874462,
+          0.013472000136971474,
+          0.01891300082206726,
+          0.0117419995367527,
+          0.01626400090754032
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.012671999633312225,
+        "requested_gradients": 0.013472000136971474
+      },
+      "dispatch_ratio_all_over_requested": 0.9406175404152654,
+      "checked_backward_wall_samples_ms": [
+        0.212581,
+        0.159821,
+        0.169261,
+        0.166021,
+        0.166941
+      ],
+      "checked_backward_wall_median_ms": 0.166941
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        0
+      ],
+      "max_abs_gradient_error": 9.532994761640712e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01",
+        "requested_gradients": "f76ccbca36349aac17bff1d84761e956262d0f946ee00607a1ef36263a33d212"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07168599963188171,
+          0.07164400070905685,
+          0.0716480016708374,
+          0.07311899960041046,
+          0.07143399864435196
+        ],
+        "requested_gradients": [
+          0.07139600068330765,
+          0.0714619979262352,
+          0.07132399827241898,
+          0.07127799838781357,
+          0.07138299942016602
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.0716480016708374,
+        "requested_gradients": 0.07138299942016602
+      },
+      "dispatch_ratio_all_over_requested": 1.0037124000507678,
+      "checked_backward_wall_samples_ms": [
+        0.271102,
+        0.222281,
+        0.216881,
+        0.227532,
+        0.224161
+      ],
+      "checked_backward_wall_median_ms": 0.224161
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "k"
+      ],
+      "gradient_activity": [
+        0,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 9.532994761640712e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01",
+        "requested_gradients": "8898691944f9123f89f441662919e979900ac8ad79a9e3d034488283558911e5"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07124300301074982,
+          0.07246199995279312,
+          0.07115200161933899,
+          0.0725409984588623,
+          0.07129000127315521
+        ],
+        "requested_gradients": [
+          0.01653899997472763,
+          0.01715400069952011,
+          0.01828799955546856,
+          0.01651499979197979,
+          0.020641999319195747
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07129000127315521,
+        "requested_gradients": 0.01715400069952011
+      },
+      "dispatch_ratio_all_over_requested": 4.155881914773944,
+      "checked_backward_wall_samples_ms": [
+        0.197661,
+        0.168271,
+        0.163151,
+        0.166671,
+        0.160731
+      ],
+      "checked_backward_wall_median_ms": 0.166671
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "v"
+      ],
+      "gradient_activity": [
+        0,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 9.532994761640712e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01",
+        "requested_gradients": "a60920b3cd1fe6ca9dfc9e5d973357a6e81d8525a0a661e01e165eb6b5a9d799"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07198899984359741,
+          0.07155399769544601,
+          0.07145199924707413,
+          0.07163500040769577,
+          0.07166499644517899
+        ],
+        "requested_gradients": [
+          0.017170999199151993,
+          0.014719000086188316,
+          0.017900999635457993,
+          0.01541099976748228,
+          0.02187499962747097
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07163500040769577,
+        "requested_gradients": 0.017170999199151993
+      },
+      "dispatch_ratio_all_over_requested": 4.171859748920933,
+      "checked_backward_wall_samples_ms": [
+        0.205971,
+        0.207841,
+        0.195001,
+        0.172782,
+        0.165921
+      ],
+      "checked_backward_wall_median_ms": 0.195001
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 9.532994761640712e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01",
+        "requested_gradients": "c5882a1780d3e6575a49302ba7b41a3a78991c6b8c2a74be8893b987aa3680bf"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07170400023460388,
+          0.07176899909973145,
+          0.07172399759292603,
+          0.0717030018568039,
+          0.07161299884319305
+        ],
+        "requested_gradients": [
+          0.07112299650907516,
+          0.07282000035047531,
+          0.0714460015296936,
+          0.07139000296592712,
+          0.07140400260686874
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07170400023460388,
+        "requested_gradients": 0.07140400260686874
+      },
+      "dispatch_ratio_all_over_requested": 1.0042014119206573,
+      "checked_backward_wall_samples_ms": [
+        0.253961,
+        0.227302,
+        0.233671,
+        0.256071,
+        0.236062
+      ],
+      "checked_backward_wall_median_ms": 0.236062
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 9.532994761640712e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01",
+        "requested_gradients": "2df7bea5e5aaf0d9eb2ae1bec0a3d2a29cb8173f104c1071ceaa96507c3d4327"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07153400033712387,
+          0.07152999937534332,
+          0.07158699631690979,
+          0.0716330036520958,
+          0.07169400155544281
+        ],
+        "requested_gradients": [
+          0.07279600203037262,
+          0.07120899856090546,
+          0.07144100219011307,
+          0.07152599841356277,
+          0.07102599740028381
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07158699631690979,
+        "requested_gradients": 0.07144100219011307
+      },
+      "dispatch_ratio_all_over_requested": 1.0020435621326842,
+      "checked_backward_wall_samples_ms": [
+        0.270731,
+        0.246211,
+        0.228822,
+        0.230532,
+        0.224671
+      ],
+      "checked_backward_wall_median_ms": 0.230532
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        1
+      ],
+      "max_abs_gradient_error": 9.532994761640712e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01",
+        "requested_gradients": "e9a516ba43d07749a4543c8a0a4944d7e8382ba5099bbc877c6603b82e9e1f01"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.09683699905872345,
+          0.08920399844646454,
+          0.07960999757051468,
+          0.08100099861621857,
+          0.0796080008149147
+        ],
+        "requested_gradients": [
+          0.09670499712228775,
+          0.09682899713516235,
+          0.07955200225114822,
+          0.07964800298213959,
+          0.0796009972691536
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.08100099861621857,
+        "requested_gradients": 0.07964800298213959
+      },
+      "dispatch_ratio_all_over_requested": 1.0169871884218162,
+      "checked_backward_wall_samples_ms": [
+        0.265642,
+        0.228031,
+        0.228691,
+        0.220201,
+        0.218251
+      ],
+      "checked_backward_wall_median_ms": 0.228031
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        0
+      ],
+      "max_abs_gradient_error": 8.426122990318197e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 40,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c",
+        "requested_gradients": "477398f9aba471fcc3205580aaa89199d3670cb0777a9542c450ba66ce9a401c"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.09480299800634384,
+          0.07000400125980377,
+          0.07146900147199631,
+          0.07207000255584717,
+          0.07205100357532501
+        ],
+        "requested_gradients": [
+          0.06998399645090103,
+          0.0698700025677681,
+          0.07147800177335739,
+          0.07152599841356277,
+          0.0714230015873909
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07205100357532501,
+        "requested_gradients": 0.0714230015873909
+      },
+      "dispatch_ratio_all_over_requested": 1.0087927134673234,
+      "checked_backward_wall_samples_ms": [
+        0.241011,
+        0.244681,
+        0.225922,
+        0.224661,
+        0.262311
+      ],
+      "checked_backward_wall_median_ms": 0.241011
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "k"
+      ],
+      "gradient_activity": [
+        0,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 8.426122990318197e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c",
+        "requested_gradients": "9a31785a7a47c5e96ceaf668ed2a8da925921bd6323f2015463463db51e109ca"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07034900039434433,
+          0.07080099731683731,
+          0.07012999802827835,
+          0.07047899812459946,
+          0.07003399729728699
+        ],
+        "requested_gradients": [
+          0.019860999658703804,
+          0.019148999825119972,
+          0.023298999294638634,
+          0.01817600056529045,
+          0.019889000803232193
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07034900039434433,
+        "requested_gradients": 0.019860999658703804
+      },
+      "dispatch_ratio_all_over_requested": 3.542067448932001,
+      "checked_backward_wall_samples_ms": [
+        0.184451,
+        0.168451,
+        0.176401,
+        0.168731,
+        0.194591
+      ],
+      "checked_backward_wall_median_ms": 0.176401
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "v"
+      ],
+      "gradient_activity": [
+        0,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 8.426122990318197e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c",
+        "requested_gradients": "5e67cff2b0b97fe68886676be52277f05cf17c3e5867e78e18254e583975c69d"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07015600055456161,
+          0.07018999755382538,
+          0.07023199647665024,
+          0.0712369978427887,
+          0.07005800306797028
+        ],
+        "requested_gradients": [
+          0.016971999779343605,
+          0.013150000013411045,
+          0.01384500041604042,
+          0.013841000385582447,
+          0.014298999682068825
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07018999755382538,
+        "requested_gradients": 0.01384500041604042
+      },
+      "dispatch_ratio_all_over_requested": 5.0696999237721405,
+      "checked_backward_wall_samples_ms": [
+        0.178461,
+        0.164581,
+        0.161051,
+        0.174681,
+        0.163901
+      ],
+      "checked_backward_wall_median_ms": 0.164581
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "v",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        0,
+        1
+      ],
+      "max_abs_gradient_error": 8.426122990318197e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c",
+        "requested_gradients": "511462fc9e929730b34d6be59629b3a342900f9bed069804a25139557ac51a1b"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07156100124120712,
+          0.07149100303649902,
+          0.07159499824047089,
+          0.07305599749088287,
+          0.07169800251722336
+        ],
+        "requested_gradients": [
+          0.07168799638748169,
+          0.07188799977302551,
+          0.07177799940109253,
+          0.07176200300455093,
+          0.07177399843931198
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07159499824047089,
+        "requested_gradients": 0.07177399843931198
+      },
+      "dispatch_ratio_all_over_requested": 0.9975060578658935,
+      "checked_backward_wall_samples_ms": [
+        0.242571,
+        0.234511,
+        0.228181,
+        0.231741,
+        0.267082
+      ],
+      "checked_backward_wall_median_ms": 0.234511
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "k",
+        "q"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        0
+      ],
+      "max_abs_gradient_error": 8.426122990318197e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 48,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 10
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c",
+        "requested_gradients": "308a5cabcfcd64094d06485cf7d058ea28f41872ed14579a99a76594f8b07565"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.07021600008010864,
+          0.0703049972653389,
+          0.07017599791288376,
+          0.07018999755382538,
+          0.06998299807310104
+        ],
+        "requested_gradients": [
+          0.07154999673366547,
+          0.07274600118398666,
+          0.07142999768257141,
+          0.07145299762487411,
+          0.07150200009346008
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.07018999755382538,
+        "requested_gradients": 0.07150200009346008
+      },
+      "dispatch_ratio_all_over_requested": 0.9816508274185367,
+      "checked_backward_wall_samples_ms": [
+        0.305242,
+        0.229861,
+        0.227351,
+        0.226082,
+        0.243321
+      ],
+      "checked_backward_wall_median_ms": 0.229861
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "wrt": [
+        "q",
+        "k",
+        "v"
+      ],
+      "gradient_activity": [
+        1,
+        1,
+        1
+      ],
+      "max_abs_gradient_error": 8.426122990318197e-09,
+      "resources": {
+        "all_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        },
+        "requested_gradients": {
+          "block_threads": 128,
+          "launch_blocks": 16,
+          "registers": 56,
+          "local_bytes": 0,
+          "shared_bytes": 0,
+          "active_blocks_per_sm": 9
+        }
+      },
+      "image_sha256": {
+        "all_gradients": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c",
+        "requested_gradients": "964ff9eec2e624e6b5724d16f51f44e55df78c5b98f956634852b4e70b2fc32c"
+      },
+      "device_dispatch_samples_ms": {
+        "all_gradients": [
+          0.0718419998884201,
+          0.07163400202989578,
+          0.0716409981250763,
+          0.0733719989657402,
+          0.07323600351810455
+        ],
+        "requested_gradients": [
+          0.07165099680423737,
+          0.07163400202989578,
+          0.07453099638223648,
+          0.07323600351810455,
+          0.07338699698448181
+        ]
+      },
+      "device_dispatch_medians_ms": {
+        "all_gradients": 0.0718419998884201,
+        "requested_gradients": 0.07323600351810455
+      },
+      "dispatch_ratio_all_over_requested": 0.9809655966639436,
+      "checked_backward_wall_samples_ms": [
+        0.306682,
+        0.231861,
+        0.219251,
+        0.227492,
+        0.277612
+      ],
+      "checked_backward_wall_median_ms": 0.231861
+    }
+  ],
+  "nonfinite_value_rows": [
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "primal_value_kind": "inf",
+      "max_abs_error": 5.8342926378962545e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": false,
+      "primal_value_kind": "nan",
+      "max_abs_error": 5.8342926378962545e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "primal_value_kind": "inf",
+      "max_abs_error": 5.487436341433671e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        3,
+        5,
+        4,
+        3
+      ],
+      "causal": true,
+      "primal_value_kind": "nan",
+      "max_abs_error": 5.487436341433671e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "primal_value_kind": "inf",
+      "max_abs_error": 2.0186577617820056e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": false,
+      "primal_value_kind": "nan",
+      "max_abs_error": 2.0186577617820056e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "primal_value_kind": "inf",
+      "max_abs_error": 2.1017224079156183e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    },
+    {
+      "shape": [
+        1,
+        2,
+        1,
+        8,
+        129,
+        8,
+        6
+      ],
+      "causal": true,
+      "primal_value_kind": "nan",
+      "max_abs_error": 2.1017224079156183e-08,
+      "activity": [
+        0,
+        0,
+        1
+      ],
+      "finite_value_gradient": true,
+      "inactive_gradients": "exact_zero",
+      "repeated_cotangent_multipliers": [
+        1,
+        2
+      ]
+    }
+  ],
+  "biased_value_rows": [
+    {
+      "physical_bias": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "causal": false,
+      "frontend_argument_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "activity": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "max_abs_error": 2.5515206336645946e-08,
+      "inactive_gradients": "Q,K,physical dBias exactly zero"
+    },
+    {
+      "physical_bias": [
+        1,
+        2,
+        3,
+        5
+      ],
+      "causal": true,
+      "frontend_argument_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "activity": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "max_abs_error": 4.029404856997765e-08,
+      "inactive_gradients": "Q,K,physical dBias exactly zero"
+    },
+    {
+      "physical_bias": [
+        1,
+        2,
+        1,
+        5
+      ],
+      "causal": false,
+      "frontend_argument_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "activity": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "max_abs_error": 3.3601741177696764e-08,
+      "inactive_gradients": "Q,K,physical dBias exactly zero"
+    },
+    {
+      "physical_bias": [
+        1,
+        2,
+        1,
+        5
+      ],
+      "causal": true,
+      "frontend_argument_order": [
+        "k",
+        "bias",
+        "v",
+        "q"
+      ],
+      "activity": [
+        0,
+        0,
+        1,
+        0
+      ],
+      "max_abs_error": 5.2275863887674134e-08,
+      "inactive_gradients": "Q,K,physical dBias exactly zero"
+    }
+  ],
+  "repetitions": 32,
+  "timing_scope": "alternating balanced preloaded CUDA-event dispatch windows include host dispatch gaps; checked allocating/synchronizing wall measured separately; inactive ABI outputs remain allocated and zero-filled",
+  "compiler_sha256": "4ce7265a3e6f838f974229808ed59f02ebe989337958f8b91ec94c2018402700",
+  "nvidia_compiler_sha256": "abc86ecafd7eece45cd75943b5dd8afb8ecdad270d0cc35c6e4bfef3f5a8ef97",
+  "source_sha256": {
+    "src/transforms/lib/AutodiffPairedPass.cpp": "0691b32e63bfb3592dcb2a644a8f4a47d5909ac95ee2c1be286bfb5489ffed55",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "c50ae5086462c566ac91a0538d0511a5374d9ab2530bdfe5ec49590f7db2d66e",
+    "src/compiler/ir/TileOps.cpp": "ce248a08d1649a2f7f326d857c92354d07525a86bf05d764dfd6742d4b2222f5",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/lib/Conversion/NVIDIALowering.cpp": "937fe01cf4e2b18fc9f4eb773fe4fc6b75c646b5181958f71b83545841427fa7",
+    "python/tessera/compiler/scheduled_checkpoint.py": "88f4059efaaf995daf9156b81d8a62977766bc9c64547659c6d749a4ce16a8d8",
+    "python/tessera/compiler/nvidia_native.py": "58b057d344a9341d553e6b8854057852b741e1ecc6965f297a997fd949031c6d",
+    "python/tessera/compiler/native_attention_program.py": "ee0b352e98c0db366b5f260db6c8875256cc83e637b914bbe44be45cb6c01b3a",
+    "python/tessera/compiler/resident_attention.py": "70ad87b991060ebfc06be40f9f823fbd1522f467b61d45cf306a8a43044ddec0"
+  },
+  "recorder_sha256": "1dbcc690478807c116d8d159e4acc67f379e7c695fd262df7103d7d59d88c9ec"
+}

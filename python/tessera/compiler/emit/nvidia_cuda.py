@@ -3478,6 +3478,7 @@ class CudaOwnedDeviceBuffer:
                  shape: tuple[int, ...], dtype: Any, nbytes: int,
                  *, owns: bool = True, layout: str = "row_major",
                  storage_order: str | None = None) -> None:
+        import numpy as np
         if layout not in {"row_major", "col_major", "strided"}:
             raise ValueError("CUDA device buffer layout must be row_major, col_major, or strided")
         if storage_order is None:
@@ -3487,7 +3488,7 @@ class CudaOwnedDeviceBuffer:
         self._session = session
         self.ptr = ptr
         self.shape = shape
-        self.dtype = dtype
+        self.dtype = np.dtype(dtype)
         self.nbytes = nbytes
         self.layout = layout
         self.storage_order = storage_order

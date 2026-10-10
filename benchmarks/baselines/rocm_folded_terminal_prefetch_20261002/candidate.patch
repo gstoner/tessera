@@ -1,0 +1,31 @@
+--- a/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
++++ b/src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp
+@@ -2241,8 +2241,15 @@
+   };
+ 
+   SmallVector<Value> initAccs = zeroFragments(b, loc);
++  // Folded full-K prefetch has no per-group join. Peel the last slab:
++  // it is already published in LDS, and no subsequent slab consumes a
++  // terminal register fetch or LDS handoff. The checked K>=64 contract
++  // guarantees one final stage even when the prefetched loop is empty.
++  const bool peelFoldedFinal = foldedFullK && prefetch == 1;
++  Value prefetchedGroups = peelFoldedFinal
++      ? Value(b.create<arith::SubIOp>(loc, cGroups, ci(1))) : cGroups;
+   auto groupLoop = b.create<scf::ForOp>(
+-      loc, c0, cGroups, ci(1), initAccs,
++      loc, c0, prefetchedGroups, ci(1), initAccs,
+       [&](OpBuilder &gb, Location l, Value g, ValueRange iter) {
+         SmallVector<Value> accs(iter.begin(), iter.end());
+         Value kGroup = gb.create<arith::MulIOp>(l, g, ci(scaleK));
+@@ -2278,7 +2285,10 @@
+         gb.create<scf::YieldOp>(l, joined);
+       });
+ 
+-  ValueRange accs = groupLoop.getResults();
++  SmallVector<Value> accs(groupLoop.getResults().begin(),
++                         groupLoop.getResults().end());
++  if (peelFoldedFinal)
++    accs = compute(b, loc, Value(), std::move(accs));
+   const bool masked = !wholeM || !wholeN;
+   // A bf16 output is the fp32 accumulator rounded once, by the store's
+   // epilogue (the architecture consumer owns the element map and the cast).

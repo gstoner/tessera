@@ -1,0 +1,6 @@
+{
+  "compiler": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt",
+  "sha256": "e659bc19246badf53aecee727c53fcd194df139cbc708f30b22f7c4d3b2820f3",
+  "serial_target": "byte_identical_to_preintegration_control",
+  "target_sha256": "b74b45880fabb98cc5f1ce833b8cedd9ab58f42a507251e80d1acf0d88b8ad00"
+}

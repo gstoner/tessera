@@ -1,0 +1,2 @@
+{"native_resources": {"vgpr_count": 177, "sgpr_count": 29, "lds_bytes": 25600, "scratch_bytes": 0, "vgpr_spill_count": 0, "sgpr_spill_count": 0, "spills": false}, "diagnostic_resources": {"vgpr_count": 177, "sgpr_count": 29, "lds_bytes": 25600, "scratch_bytes": 0, "vgpr_spill_count": 0, "sgpr_spill_count": 0, "spills": false}, "selected_instruction_stream_matches_native": true}
+165 {'global_prefetch_vectors': 20, 'other_address_or_state': 25, 'lds_fragment_vectors': 48, 'wmma_accumulator': 64}

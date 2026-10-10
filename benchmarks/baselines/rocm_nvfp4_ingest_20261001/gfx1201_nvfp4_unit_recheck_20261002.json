@@ -1,0 +1,23 @@
+{
+  "command": "pytest /tmp/test_rocm_nvfp4_ingest_latest.py -q with PYTHONPATH=checkout/python",
+  "covers": [
+    "joint scale/code selection",
+    "merged projection scales",
+    "scalar parity",
+    "exhaustive E8M0 scale search"
+  ],
+  "device_architecture_visible": "gfx1201",
+  "implementation_sha256": "c8b3420c8da62847da9730bbca38170b7a9c08f65911be887e772aed5220d37b",
+  "result": {
+    "duration_seconds": 0.48,
+    "failed": 0,
+    "passed": 12
+  },
+  "schema": "tessera.rocm.nvfp4_ingest_host_test.v1",
+  "source_revision": "58b848ccb",
+  "test_scope": "host-side conversion properties; no GPU kernel launched by these tests",
+  "test_sha256": "6a285883764a8f9c45525257831697fd48c227ed88a80fa1c1f15a3ad6a6d15e",
+  "tests": "tests/unit/test_rocm_nvfp4_ingest.py",
+  "validation_host": "Tajasaurus WSL2",
+  "work_item": "ROCM-NVFP4-INGEST-1"
+}

@@ -1,0 +1,16 @@
+{
+  "architecture": "gfx1201",
+  "sha256": {
+    "python/tessera/compiler/graph_ir.py": "72c06fe80072bb0ada8b7e0743c51873ce33c139f4fced6f7eabbf4b8aca27d3",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "a523a272877b412d4aacdf508241da33232a63a2d547d0f898b28fc95fd2d8ce",
+    "python/tessera/compiler/reference_typed_scaled_matmul.py": "6fffc5ba7babd4a303535ad60483a91553debbd5a9afb1b0d8cf510ab0264789",
+    "python/tessera/compiler/native_scaled_program.py": "df18af5a67d51347059db5eed46cfa93e680b7597b198ce9743b39c3fd70742f",
+    "python/tessera/compiler/capabilities.py": "6fc70467691c944011185121e4acb043a3247c8467d5c764741d499fcd9dce55",
+    "src/compiler/ir/TesseraOps.cpp": "3d1f5cbcfdf008153b5fb13eea3281490722c18b1a5f4ed2fd6740e6da9c751a",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "a6e7c06ae6775ec77aefa8fb010a1f992ff4d34a39db3752d1b844cdbbcfc133",
+    "src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/GenerateWMMAGemmKernel.cpp": "415e52164fb80ede4df146bd68a45d6a207fb91bd4a60601ad894e495bc431d0",
+    "benchmarks/rocm/benchmark_multidimensional_scaled_batch.py": "9a392d4ddad377c171d7c89662d55181a671116be010b3748fb049cf1e7c2ff1",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/tools/tessera-opt/tessera-opt": "cfe639a2c740b0ac7e8c4682c9ab41f8e7c796af181ae7afdb0540d36cb96642",
+    "/home/angstorms/scratch/next-five-compiler-slices-rocm/.build-gfx1201-current/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "203a6528e397605739621ac469ffbe1cb63c7151139459a9fd07425a0ac05a8c"
+  }
+}

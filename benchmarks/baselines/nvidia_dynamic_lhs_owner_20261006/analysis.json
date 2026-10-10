@@ -1,0 +1,1459 @@
+{
+  "comparisons": [
+    {
+      "control": "control",
+      "median_warm_ratio": 0.12073774452938105,
+      "prepared": "prepared",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008824960328638554,
+          "control_wall_ms": 4.397131,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.485114,
+          "producer_event_ms": 0.008493440225720406,
+          "warm_prepared_over_control": 0.11032511881042434
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008417599834501743,
+          "control_wall_ms": 4.497651,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.458833,
+          "producer_event_ms": 0.009882240556180477,
+          "warm_prepared_over_control": 0.10201614131465513
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01246976014226675,
+          "control_wall_ms": 4.02255,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.514774,
+          "producer_event_ms": 0.008732479996979237,
+          "warm_prepared_over_control": 0.12797205752569887
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01666111871600151,
+          "control_wall_ms": 4.645313,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.519014,
+          "producer_event_ms": 0.009706559590995312,
+          "warm_prepared_over_control": 0.1117285315327514
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008439360186457634,
+          "control_wall_ms": 4.443372,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.536574,
+          "producer_event_ms": 0.008999359793961048,
+          "warm_prepared_over_control": 0.12075828897512969
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008684160187840462,
+          "control_wall_ms": 4.671882,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.558423,
+          "producer_event_ms": 0.007788800168782473,
+          "warm_prepared_over_control": 0.11952848980346678
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012786240316927433,
+          "control_wall_ms": 4.759544,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.545674,
+          "producer_event_ms": 0.008827200159430504,
+          "warm_prepared_over_control": 0.1146483780799169
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018356800079345703,
+          "control_wall_ms": 4.975177,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.609194,
+          "producer_event_ms": 0.008158720098435879,
+          "warm_prepared_over_control": 0.12244669888126593
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009501120075583458,
+          "control_wall_ms": 3.833038,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.457724,
+          "producer_event_ms": 0.008726400323212147,
+          "warm_prepared_over_control": 0.11941546105204279
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008524159900844097,
+          "control_wall_ms": 4.342041,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.505743,
+          "producer_event_ms": 0.00831167958676815,
+          "warm_prepared_over_control": 0.11647586929741106
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01287199929356575,
+          "control_wall_ms": 4.31839,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.516014,
+          "producer_event_ms": 0.0094307204708457,
+          "warm_prepared_over_control": 0.11949221816464006
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016710400581359863,
+          "control_wall_ms": 4.102218,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.529123,
+          "producer_event_ms": 0.008791999891400337,
+          "warm_prepared_over_control": 0.12898461271439013
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008016959764063358,
+          "control_wall_ms": 4.7749,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.521454,
+          "producer_event_ms": 0.009387520141899586,
+          "warm_prepared_over_control": 0.10920731324216214
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.007821120321750641,
+          "control_wall_ms": 4.286951,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.540284,
+          "producer_event_ms": 0.009304000064730644,
+          "warm_prepared_over_control": 0.1260298986389161
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012139840051531792,
+          "control_wall_ms": 5.062792,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.526414,
+          "producer_event_ms": 0.009190400131046772,
+          "warm_prepared_over_control": 0.10397701505414404
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018384641036391258,
+          "control_wall_ms": 4.458742,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.576594,
+          "producer_event_ms": 0.008516479283571243,
+          "warm_prepared_over_control": 0.12931764161281367
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008776959963142872,
+          "control_wall_ms": 4.896385,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.490393,
+          "producer_event_ms": 0.008847679942846298,
+          "warm_prepared_over_control": 0.1001540932749365
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008881599642336369,
+          "control_wall_ms": 3.909069,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.549823,
+          "producer_event_ms": 0.009692479856312275,
+          "warm_prepared_over_control": 0.14065318366086654
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012161280028522015,
+          "control_wall_ms": 4.091679,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.582024,
+          "producer_event_ms": 0.09514816105365753,
+          "warm_prepared_over_control": 0.1422457626807968
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016807999461889267,
+          "control_wall_ms": 4.22442,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.793886,
+          "producer_event_ms": 0.2503398358821869,
+          "warm_prepared_over_control": 0.18792781020826527
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008557120338082314,
+          "control_wall_ms": 4.141419,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.495414,
+          "producer_event_ms": 0.008909439668059349,
+          "warm_prepared_over_control": 0.11962421575793225
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008681279607117176,
+          "control_wall_ms": 4.220359,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.523303,
+          "producer_event_ms": 0.00993376038968563,
+          "warm_prepared_over_control": 0.12399490185550564
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012438720092177391,
+          "control_wall_ms": 4.581671,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.590894,
+          "producer_event_ms": 0.09514304250478745,
+          "warm_prepared_over_control": 0.12896910319400937
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01834496110677719,
+          "control_wall_ms": 4.827234,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.836406,
+          "producer_event_ms": 0.250375360250473,
+          "warm_prepared_over_control": 0.1732681697220396
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009342079982161522,
+          "control_wall_ms": 4.388687,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.470923,
+          "producer_event_ms": 0.010062719695270061,
+          "warm_prepared_over_control": 0.10730384736938404
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009228799492120743,
+          "control_wall_ms": 4.365472,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.473474,
+          "producer_event_ms": 0.0089868800714612,
+          "warm_prepared_over_control": 0.10845883331745114
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012654720805585384,
+          "control_wall_ms": 4.415016,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.517993,
+          "producer_event_ms": 0.009485119953751564,
+          "warm_prepared_over_control": 0.11732528262638235
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016976960003376007,
+          "control_wall_ms": 4.349912,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.558624,
+          "producer_event_ms": 0.009492800571024418,
+          "warm_prepared_over_control": 0.12842190830527148
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009172480553388596,
+          "control_wall_ms": 4.610652,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.556585,
+          "producer_event_ms": 0.00896127987653017,
+          "warm_prepared_over_control": 0.12071720008363242
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.0086678396910429,
+          "control_wall_ms": 4.660103,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.546263,
+          "producer_event_ms": 0.009355840273201466,
+          "warm_prepared_over_control": 0.11722122880116599
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01317664049565792,
+          "control_wall_ms": 4.530262,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.542064,
+          "producer_event_ms": 0.008854400366544724,
+          "warm_prepared_over_control": 0.1196540067660546
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01836192049086094,
+          "control_wall_ms": 5.099277,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.576084,
+          "producer_event_ms": 0.00901408027857542,
+          "warm_prepared_over_control": 0.1129736627368939
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.00854336004704237,
+          "control_wall_ms": 3.812627,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.462264,
+          "producer_event_ms": 0.00878399983048439,
+          "warm_prepared_over_control": 0.12124553490283733
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.00940799992531538,
+          "control_wall_ms": 3.841718,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.527773,
+          "producer_event_ms": 0.008983040228486061,
+          "warm_prepared_over_control": 0.1373794224354833
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.013721279799938202,
+          "control_wall_ms": 4.226391,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.485134,
+          "producer_event_ms": 0.009366719983518124,
+          "warm_prepared_over_control": 0.11478682403024236
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01694175973534584,
+          "control_wall_ms": 4.068958,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.633175,
+          "producer_event_ms": 0.00926399976015091,
+          "warm_prepared_over_control": 0.1556110925696456
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.01692543923854828,
+          "control_wall_ms": 5.117235,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.561214,
+          "producer_event_ms": 0.014874880202114582,
+          "warm_prepared_over_control": 0.10967133618057408
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.014787520281970501,
+          "control_wall_ms": 4.22078,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.539924,
+          "producer_event_ms": 0.015463040210306644,
+          "warm_prepared_over_control": 0.12792043176853565
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.015949120745062828,
+          "control_wall_ms": 4.995396,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.543953,
+          "producer_event_ms": 0.015114559791982174,
+          "warm_prepared_over_control": 0.10889086671006662
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018666880205273628,
+          "control_wall_ms": 4.914196,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.557154,
+          "producer_event_ms": 0.015141439624130726,
+          "warm_prepared_over_control": 0.11337643024413355
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008881920017302036,
+          "control_wall_ms": 3.737716,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.470323,
+          "producer_event_ms": 0.008703360334038734,
+          "warm_prepared_over_control": 0.1258316576219274
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009237759746611118,
+          "control_wall_ms": 3.859018,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.474573,
+          "producer_event_ms": 0.01018975954502821,
+          "warm_prepared_over_control": 0.12297765908321756
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012712960131466389,
+          "control_wall_ms": 3.949828,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.572504,
+          "producer_event_ms": 0.0951814353466034,
+          "warm_prepared_over_control": 0.14494403300599418
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016725439578294754,
+          "control_wall_ms": 4.27228,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.806486,
+          "producer_event_ms": 0.25043392181396484,
+          "warm_prepared_over_control": 0.18877180334622262
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008914239704608917,
+          "control_wall_ms": 4.171505,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.541184,
+          "producer_event_ms": 0.008856959640979767,
+          "warm_prepared_over_control": 0.12973351344418863
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008653439581394196,
+          "control_wall_ms": 5.017046,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.518293,
+          "producer_event_ms": 0.009185600094497204,
+          "warm_prepared_over_control": 0.10330640779454683
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01295871939510107,
+          "control_wall_ms": 4.558453,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.590894,
+          "producer_event_ms": 0.09506464004516602,
+          "warm_prepared_over_control": 0.12962599373076789
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01834847964346409,
+          "control_wall_ms": 5.087206,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.817166,
+          "producer_event_ms": 0.25085312128067017,
+          "warm_prepared_over_control": 0.16063159227285073
+        }
+      ]
+    },
+    {
+      "control": "control_reverse",
+      "median_warm_ratio": 0.12029619615233028,
+      "prepared": "prepared_reverse",
+      "rows": [
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009244800545275211,
+          "control_wall_ms": 4.686783,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.531173,
+          "producer_event_ms": 0.009467200376093388,
+          "warm_prepared_over_control": 0.11333424227236465
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008823360316455364,
+          "control_wall_ms": 4.02037,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.486813,
+          "producer_event_ms": 0.009172160178422928,
+          "warm_prepared_over_control": 0.1210866164059527
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012147840112447739,
+          "control_wall_ms": 4.317301,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.503144,
+          "producer_event_ms": 0.008183680474758148,
+          "warm_prepared_over_control": 0.11654132987252917
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016681600362062454,
+          "control_wall_ms": 4.845265,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.525063,
+          "producer_event_ms": 0.00902239978313446,
+          "warm_prepared_over_control": 0.108366209072156
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008246399462223053,
+          "control_wall_ms": 4.798435,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.496863,
+          "producer_event_ms": 0.008797120302915573,
+          "warm_prepared_over_control": 0.10354688559915891
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.007649279665201902,
+          "control_wall_ms": 4.403521,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.530424,
+          "producer_event_ms": 0.006829440128058195,
+          "warm_prepared_over_control": 0.12045451810040195
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012452799826860428,
+          "control_wall_ms": 4.802394,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.526123,
+          "producer_event_ms": 0.008596159517765045,
+          "warm_prepared_over_control": 0.10955431811717241
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018311040475964546,
+          "control_wall_ms": 5.080291,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.548494,
+          "producer_event_ms": 0.00793151929974556,
+          "warm_prepared_over_control": 0.10796507522895835
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008784639649093151,
+          "control_wall_ms": 4.647503,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.456243,
+          "producer_event_ms": 0.00932287983596325,
+          "warm_prepared_over_control": 0.09816949015417525
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008072960190474987,
+          "control_wall_ms": 4.466902,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.475033,
+          "producer_event_ms": 0.007518399972468615,
+          "warm_prepared_over_control": 0.10634506868518717
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012319999746978283,
+          "control_wall_ms": 4.432111,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.495864,
+          "producer_event_ms": 0.009235200472176075,
+          "warm_prepared_over_control": 0.11187986943467798
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.017404800280928612,
+          "control_wall_ms": 4.474631,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.554114,
+          "producer_event_ms": 0.015415680594742298,
+          "warm_prepared_over_control": 0.12383456870521839
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008584960363805294,
+          "control_wall_ms": 4.485062,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.554534,
+          "producer_event_ms": 0.008634880185127258,
+          "warm_prepared_over_control": 0.12364020831819046
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008380799554288387,
+          "control_wall_ms": 4.326271,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.555375,
+          "producer_event_ms": 0.010094080120325089,
+          "warm_prepared_over_control": 0.12837267938138872
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.013203519396483898,
+          "control_wall_ms": 4.44044,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.547524,
+          "producer_event_ms": 0.008569600060582161,
+          "warm_prepared_over_control": 0.123303996901208
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018276799470186234,
+          "control_wall_ms": 5.135516,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.598094,
+          "producer_event_ms": 0.008247040212154388,
+          "warm_prepared_over_control": 0.11646229901727499
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009158080443739891,
+          "control_wall_ms": 3.886378,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.424763,
+          "producer_event_ms": 0.008974400348961353,
+          "warm_prepared_over_control": 0.10929533874471294
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009097919799387455,
+          "control_wall_ms": 3.812276,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.467493,
+          "producer_event_ms": 0.009164160117506981,
+          "warm_prepared_over_control": 0.12262831967045407
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012162880040705204,
+          "control_wall_ms": 4.344561,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.573334,
+          "producer_event_ms": 0.09519807994365692,
+          "warm_prepared_over_control": 0.1319659224487814
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01666560024023056,
+          "control_wall_ms": 3.978288,
+          "dtype": "bf16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.748826,
+          "producer_event_ms": 0.2505238354206085,
+          "warm_prepared_over_control": 0.18822820268416968
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009138879366219044,
+          "control_wall_ms": 4.226209,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.486534,
+          "producer_event_ms": 0.009149120189249516,
+          "warm_prepared_over_control": 0.11512303343256333
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008708479814231396,
+          "control_wall_ms": 4.23325,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.510583,
+          "producer_event_ms": 0.010339200496673584,
+          "warm_prepared_over_control": 0.12061253174275084
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012723519466817379,
+          "control_wall_ms": 4.800544,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.575714,
+          "producer_event_ms": 0.09534943848848343,
+          "warm_prepared_over_control": 0.11992682495983786
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018372800201177597,
+          "control_wall_ms": 4.45216,
+          "dtype": "bf16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.812996,
+          "producer_event_ms": 0.2502063810825348,
+          "warm_prepared_over_control": 0.18260709408466902
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.016486400738358498,
+          "control_wall_ms": 4.635003,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.493444,
+          "producer_event_ms": 0.008632000535726547,
+          "warm_prepared_over_control": 0.106460341018118
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.00903904065489769,
+          "control_wall_ms": 3.863367,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.479143,
+          "producer_event_ms": 0.009989759884774685,
+          "warm_prepared_over_control": 0.12402212888395019
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.013981759548187256,
+          "control_wall_ms": 4.331842,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.496454,
+          "producer_event_ms": 0.009898880496621132,
+          "warm_prepared_over_control": 0.11460574970185894
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01769631914794445,
+          "control_wall_ms": 5.145485,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.535263,
+          "producer_event_ms": 0.015165760181844234,
+          "warm_prepared_over_control": 0.10402576239168904
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009687679819762707,
+          "control_wall_ms": 4.721083,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.528883,
+          "producer_event_ms": 0.009000319987535477,
+          "warm_prepared_over_control": 0.11202577883083181
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009454079903662205,
+          "control_wall_ms": 4.613102,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.582364,
+          "producer_event_ms": 0.00893791951239109,
+          "warm_prepared_over_control": 0.12624130140629886
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012429759837687016,
+          "control_wall_ms": 4.896725,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.571764,
+          "producer_event_ms": 0.010668800212442875,
+          "warm_prepared_over_control": 0.11676457223960914
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018363840878009796,
+          "control_wall_ms": 5.232906,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "layernorm",
+          "prepared_wall_ms": 0.575465,
+          "producer_event_ms": 0.015881279483437538,
+          "warm_prepared_over_control": 0.10997044472039055
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009270079433918,
+          "control_wall_ms": 3.912708,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.478664,
+          "producer_event_ms": 0.008070080541074276,
+          "warm_prepared_over_control": 0.12233573269459412
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.009107840247452259,
+          "control_wall_ms": 3.984129,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.458034,
+          "producer_event_ms": 0.01119328010827303,
+          "warm_prepared_over_control": 0.11496465099398137
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012540160678327084,
+          "control_wall_ms": 4.27352,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.496153,
+          "producer_event_ms": 0.010156160220503807,
+          "warm_prepared_over_control": 0.11609937475430089
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.01662624068558216,
+          "control_wall_ms": 4.107589,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.526944,
+          "producer_event_ms": 0.009953600354492664,
+          "warm_prepared_over_control": 0.12828547354664743
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.009086079895496368,
+          "control_wall_ms": 4.732184,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.544154,
+          "producer_event_ms": 0.01730847917497158,
+          "warm_prepared_over_control": 0.1149900341998536
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.015080000273883343,
+          "control_wall_ms": 4.347851,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.554764,
+          "producer_event_ms": 0.015160960145294666,
+          "warm_prepared_over_control": 0.12759498888071372
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.012610239908099174,
+          "control_wall_ms": 4.664832,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.560423,
+          "producer_event_ms": 0.00844896025955677,
+          "warm_prepared_over_control": 0.1201378742042586
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018451839685440063,
+          "control_wall_ms": 4.382981,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "rmsnorm",
+          "prepared_wall_ms": 0.577794,
+          "producer_event_ms": 0.016046719625592232,
+          "warm_prepared_over_control": 0.13182671793466594
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008767999708652496,
+          "control_wall_ms": 3.900393,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.438533,
+          "producer_event_ms": 0.008928639814257622,
+          "warm_prepared_over_control": 0.11243302918449499
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008563200011849403,
+          "control_wall_ms": 3.856812,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.482634,
+          "producer_event_ms": 0.009791039861738682,
+          "warm_prepared_over_control": 0.1251380673986702
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.01242239959537983,
+          "control_wall_ms": 4.020688,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.577474,
+          "producer_event_ms": 0.09511872380971909,
+          "warm_prepared_over_control": 0.14362566804487195
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.016697920858860016,
+          "control_wall_ms": 3.851828,
+          "dtype": "fp16",
+          "fused": false,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.781276,
+          "producer_event_ms": 0.2504611313343048,
+          "warm_prepared_over_control": 0.2028325252321755
+        },
+        {
+          "active_mkn": [
+            1,
+            1,
+            1
+          ],
+          "consumer_event_ms": 0.008328319527208805,
+          "control_wall_ms": 4.147209,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.517903,
+          "producer_event_ms": 0.008751040324568748,
+          "warm_prepared_over_control": 0.1248798891013209
+        },
+        {
+          "active_mkn": [
+            17,
+            35,
+            19
+          ],
+          "consumer_event_ms": 0.008535999804735184,
+          "control_wall_ms": 4.071339,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.491334,
+          "producer_event_ms": 0.0098575996235013,
+          "warm_prepared_over_control": 0.12068118130177811
+        },
+        {
+          "active_mkn": [
+            63,
+            511,
+            31
+          ],
+          "consumer_event_ms": 0.013094400055706501,
+          "control_wall_ms": 4.431012,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.620474,
+          "producer_event_ms": 0.09515295922756195,
+          "warm_prepared_over_control": 0.1400298622526863
+        },
+        {
+          "active_mkn": [
+            128,
+            1024,
+            64
+          ],
+          "consumer_event_ms": 0.018400000408291817,
+          "control_wall_ms": 5.086965,
+          "dtype": "fp16",
+          "fused": true,
+          "kind": "softmax",
+          "prepared_wall_ms": 0.844836,
+          "producer_event_ms": 0.25065410137176514,
+          "warm_prepared_over_control": 0.16607859499721347
+        }
+      ]
+    }
+  ],
+  "scope": "Identical-image native dynamic host ownership; complete warm portable wall, separate dispatch events; no kernel or format promotion"
+}

@@ -1,0 +1,18 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________ test_forward_capture_maps_frontend_inputs_to_native_roles ___________
+
+    def test_forward_capture_maps_frontend_inputs_to_native_roles():
+        from tessera.compiler.native_attention_program import NativeAttentionJVPProgram
+        class Pair:
+            def capture(self, q, k, v):
+                assert (q,k,v) == ("q","k","v")
+                raise RuntimeError("canonical capture reached")
+>       program=NativeAttentionJVPProgram(Pair(),None,(1,2),(1,2,0))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       TypeError: NativeAttentionJVPProgram.__init__() takes 4 positional arguments but 5 were given
+
+tests/unit/test_native_attention_program.py:123: TypeError
+=========================== short test summary info ============================
+FAILED tests/unit/test_native_attention_program.py::test_forward_capture_maps_frontend_inputs_to_native_roles
+1 failed, 9 deselected in 0.26s

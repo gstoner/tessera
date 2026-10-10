@@ -1,0 +1,75 @@
+.........F......                                                         [100%]
+=================================== FAILURES ===================================
+______ test_compact_descriptor_cannot_relabel_the_physical_image[ordinal] ______
+
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x793ec9023d90>
+change = 'ordinal'
+
+    @pytest.mark.parametrize("change",["activity","physical_roles","symbol","output","shape","ordinal","scalar","guard","direction"])
+    def test_compact_descriptor_cannot_relabel_the_physical_image(monkeypatch,change):
+        a=artifact()
+        monkeypatch.setattr(native,"_compile_tile_ir",lambda text,entry:(text,"// PTX",{},"compiler","toolchain",(),"cold"))
+        d=native.package_scheduled_checkpoint(a,pipeline_name="tessera-nvidia-pipeline-sm120").descriptor
+        if change in ("activity","physical_roles","output","shape"):
+            key,value={"activity":("gradient_activity",[1,0,0]),"physical_roles":("physical_gradient_roles",[0]),
+                       "output":("gradient_output","complete_v1"),"shape":("shape",[1,2,1,4,6,9,8])}[change]
+            d=replace(d,provenance={**d.provenance,key:value})
+        elif change == "symbol":
+            d=replace(d,entry_symbol=d.entry_symbol.replace("_m4_","_m1_"))
+        elif change in ("ordinal","direction"):
+            first=replace(d.buffers[-1],**({"ordinal":0} if change=="ordinal" else {"direction":"input"}))
+>           d=replace(d,buffers=(*d.buffers[:-1],first))
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/unit/test_compact_attention_gradients.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/usr/lib/python3.14/dataclasses.py:1770: in replace
+    return _replace(obj, **changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.14/dataclasses.py:1804: in _replace
+    return self.__class__(**changes)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+<string>:16: in __init__
+    ???
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = LaunchDescriptor(image_digest='481a4652dd14c7e13896a3459c1df43a77f6a6571fddf15cab5e6774d6496c49', entry_symbol='tesser...b0a856e691a785342c', 'work_item': 'NVIDIA-LSE-1', 'workspace_bytes': 0}, schema_version='tessera.launch_descriptor.v1')
+
+    def __post_init__(self) -> None:
+        if self.schema_version != LAUNCH_DESCRIPTOR_SCHEMA_VERSION:
+            raise _error(
+                "E_LAUNCH_DESCRIPTOR_SCHEMA",
+                f"unsupported launch-descriptor schema {self.schema_version!r}",
+            )
+        _validate_digest(self.image_digest, "image_digest", "E_LAUNCH_DESCRIPTOR_SCHEMA")
+        if _SYMBOL_RE.fullmatch(self.entry_symbol) is None:
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", f"invalid entry symbol {self.entry_symbol!r}")
+        if not self.abi_id:
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "ABI identifier must be non-empty")
+        object.__setattr__(self, "buffers", tuple(self.buffers))
+        object.__setattr__(self, "scalars", tuple(self.scalars))
+        object.__setattr__(self, "shape_guards", tuple(self.shape_guards))
+        if any(not isinstance(item, BufferBinding) for item in self.buffers):
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "buffers must contain BufferBinding values")
+        if any(not isinstance(item, ScalarArgument) for item in self.scalars):
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "scalars must contain ScalarArgument values")
+        if any(not isinstance(item, ShapeGuard) for item in self.shape_guards):
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "shape_guards must contain ShapeGuard values")
+        if not isinstance(self.geometry, LaunchGeometry):
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "geometry must be LaunchGeometry")
+        if not isinstance(self.workspace, WorkspaceRequirement):
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "workspace must be WorkspaceRequirement")
+        if not isinstance(self.ordering, OrderingSemantics):
+            raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "ordering must be OrderingSemantics")
+        ordinals = [item.ordinal for item in self.buffers]
+        ordinals.extend(item.ordinal for item in self.scalars)
+        names = [item.name for item in self.buffers]
+        names.extend(item.name for item in self.scalars)
+        if len(ordinals) != len(set(ordinals)):
+>           raise _error("E_LAUNCH_DESCRIPTOR_SCHEMA", "argument ordinals must be unique")
+E           tessera.compiler.native_artifact.ArtifactContractError: E_LAUNCH_DESCRIPTOR_SCHEMA: argument ordinals must be unique
+
+python/tessera/compiler/native_artifact.py:808: ArtifactContractError
+=========================== short test summary info ============================
+FAILED tests/unit/test_compact_attention_gradients.py::test_compact_descriptor_cannot_relabel_the_physical_image[ordinal]
+1 failed, 15 passed in 1.06s

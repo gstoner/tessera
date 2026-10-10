@@ -94,7 +94,8 @@ def _bridge(tmp_path, monkeypatch, content=b"ptx-launch-bridge-v1"):
 
     lib = tmp_path / "libtessera_nvidia_ptx_launch.so"
     lib.write_bytes(content)
-    # Exercise discovery regardless of prior suite GPU initialization.
+    # This fixture identifies an unloaded bridge; other tests may already
+    # have loaded the real CUDA runtime in this worker.
     monkeypatch.setattr(rt, "_nvidia_ptx_launch_lib", None)
     monkeypatch.setattr(rt, "_nvidia_ptx_launch_lib_path", lambda: lib)
     return lib
@@ -105,7 +106,8 @@ def _gemm_lib(tmp_path, monkeypatch, content=b"shipped-gemm-v1"):
 
     lib = tmp_path / "libtessera_nvidia_gemm.so"
     lib.write_bytes(content)
-    # Exercise discovery regardless of prior suite GPU initialization.
+    # Identity below describes an unloaded fixture, independent of the
+    # real GEMM image another test may have loaded in this worker.
     monkeypatch.setattr(rt, "_nvidia_gemm_runtime", None)
     monkeypatch.setattr(rt, "_nvidia_gemm_lib_path", lambda: lib)
     return lib
@@ -753,3 +755,28 @@ def test_x86_generic_identity_is_what_cc_receives(monkeypatch):
     cand.run(reg, *ins)
     assert len(seen) == 1, seen
     _assert_identity_is(ident, seen[0][1], seen[0][0], "cc")
+
+
+@pytest.mark.parametrize("kind", ["bridge", "gemm"])
+def test_nvidia_library_identity_retains_loaded_image(tmp_path, monkeypatch, kind):
+    from types import SimpleNamespace
+    from tessera import runtime as rt
+    from tessera.compiler.emit import nvidia_cuda as native
+
+    loaded = tmp_path / f"loaded_{kind}.so"
+    replacement = tmp_path / f"replacement_{kind}.so"
+    loaded.write_bytes(b"loaded native image")
+    replacement.write_bytes(b"different locator image")
+    field = "_nvidia_ptx_launch_lib" if kind == "bridge" else "_nvidia_gemm_runtime"
+    monkeypatch.setattr(rt, field, SimpleNamespace(_name=str(loaded)))
+    locator = "_nvidia_ptx_launch_lib_path" if kind == "bridge" else "_nvidia_gemm_lib_path"
+    monkeypatch.setattr(rt, locator, lambda: replacement)
+    identity = native._ptx_bridge_identity if kind == "bridge" else lambda: native._gemm_runtime_identity("test_entry")
+    first = identity()
+    assert first is not None and first["library"] == loaded.name
+    replacement.write_bytes(b"locator rebuilt without replacing loaded image")
+    assert identity() == first
+    monkeypatch.setattr(rt, field, None)
+    unloaded = identity()
+    assert unloaded is not None and unloaded["library"] == replacement.name
+    assert unloaded["abi_digest"] != first["abi_digest"]

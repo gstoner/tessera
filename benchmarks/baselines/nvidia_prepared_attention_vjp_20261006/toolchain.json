@@ -1,0 +1,9 @@
+{
+  "compiler_path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/tools/tessera-opt/tessera-opt",
+  "compiler_sha256": "565541351f3e1f28b99be72ba2c2d48be7c4f0595d38e65f6d8d313adc65418f",
+  "runtime_library_path": "/home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_ptx_launch.so",
+  "runtime_library_sha256": "68ea35ed6dc0715359643a96df3bcf4e375549041d9a8aad82ac71d070b2069d",
+  "cuda_sdk": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2026 NVIDIA Corporation\nBuilt on Mon_Aug_03_13:24:11_PDT_2026\nCuda compilation tools, release 13.4, V13.4.59\nBuild cuda_13.4.r13.4/compiler.38657139_0\n",
+  "llvm_mlir": "23.1.1 (matching existing build; runtime-only rebuild)",
+  "all_88_program_digests_unchanged": true
+}

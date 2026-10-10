@@ -1,0 +1,50 @@
+....FsF                                                                  [100%]
+=================================== FAILURES ===================================
+__ test_canonical_movement_spine_executes_on_owning_device[gfx1151-paged_kv] ___
+
+arch = 'gfx1151', family = 'paged_kv'
+
+    @pytest.mark.hardware_rocm
+    @pytest.mark.parametrize("arch,family", CASES)
+    def test_canonical_movement_spine_executes_on_owning_device(arch, family):
+        if os.environ.get("TESSERA_ROCM_MOVEMENT_DEVICE_PROOF") != "1":
+            pytest.skip("explicit owning-device movement gate")
+        if rt._rocm_live_arch() != arch:
+            pytest.skip("different owning architecture")
+        module = _paged_module(4, 4, 3, 8, 1, 5) if family == "paged_kv" else _moe_module(7, 9, 13)
+        result = canonical_compile(module, target="rocm_"+arch, enable_tool_validation=True)
+>       assert result.executable, result.reason
+E       AssertionError: first failing gate `runtime_abi` — no execution_matrix row for 'rocm_gfx1151' (tsrLaunchKernel returns UNIMPLEMENTED for this target). (see docs/audit/op_target_conformance.md)
+E       assert False
+E        +  where False = CompileResult(bundle=CompileArtifactBundle(request=CompileRequest(source_origin='<canonical>', function_name='gfx1151_...x8xf32>', 'shape': ['5', '3', '8'], 'rank': 3, 'dtype': 'fp32', 'layout': None}]}, differentiation=None, backward=None).executable
+
+tests/unit/test_rocm_movement_compiler_spine.py:74: AssertionError
+_ test_canonical_movement_spine_executes_on_owning_device[gfx1151-moe_dispatch] _
+
+arch = 'gfx1151', family = 'moe_dispatch'
+
+    @pytest.mark.hardware_rocm
+    @pytest.mark.parametrize("arch,family", CASES)
+    def test_canonical_movement_spine_executes_on_owning_device(arch, family):
+        if os.environ.get("TESSERA_ROCM_MOVEMENT_DEVICE_PROOF") != "1":
+            pytest.skip("explicit owning-device movement gate")
+        if rt._rocm_live_arch() != arch:
+            pytest.skip("different owning architecture")
+        module = _paged_module(4, 4, 3, 8, 1, 5) if family == "paged_kv" else _moe_module(7, 9, 13)
+        result = canonical_compile(module, target="rocm_"+arch, enable_tool_validation=True)
+>       assert result.executable, result.reason
+E       AssertionError: first failing gate `codegen` — no backend_manifest entry for 'moe_dispatch' on 'rocm_gfx1151'. (see docs/audit/op_target_conformance.md)
+E       assert False
+E        +  where False = CompileResult(bundle=CompileArtifactBundle(request=CompileRequest(source_origin='<canonical>', function_name='gfx1151_...r<9x13xf32>', 'shape': ['9', '13'], 'rank': 2, 'dtype': 'fp32', 'layout': None}]}, differentiation=None, backward=None).executable
+
+tests/unit/test_rocm_movement_compiler_spine.py:74: AssertionError
+=============================== warnings summary ===============================
+tests/unit/test_rocm_movement_compiler_spine.py:65
+  /home/gstoner/scratch/rocm-native-movement-20261005/tests/unit/test_rocm_movement_compiler_spine.py:65: PytestUnknownMarkWarning: Unknown pytest.mark.hardware_rocm - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+    @pytest.mark.hardware_rocm
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/unit/test_rocm_movement_compiler_spine.py::test_canonical_movement_spine_executes_on_owning_device[gfx1151-paged_kv]
+FAILED tests/unit/test_rocm_movement_compiler_spine.py::test_canonical_movement_spine_executes_on_owning_device[gfx1151-moe_dispatch]
+2 failed, 4 passed, 1 skipped, 1 warning in 2.13s

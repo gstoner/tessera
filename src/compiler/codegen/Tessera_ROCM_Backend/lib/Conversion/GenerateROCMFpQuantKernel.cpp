@@ -28,6 +28,9 @@
 #include "mlir/Pass/Pass.h"
 
 #include <limits>
+#include <cstdlib>
+#include "NativeNVFP4Ingest.h"
+#include "NativeMXFP4Storage.h"
 
 using namespace mlir;
 
@@ -89,8 +92,8 @@ struct GenerateROCMFpQuantKernelPass
 
   StringRef getArgument() const final { return "generate-rocm-fpquant-kernel"; }
   StringRef getDescription() const final {
-    return "Expand a tessera_rocm.fpquant directive into a flat 1-operand "
-           "elementwise low-precision float-grid quantization gpu kernel";
+    return "Expand float-grid quantization and policy-gated NVFP4 K16 to "
+           "MXFP4 K32 joint-SSE ingest into native GPU kernels";
   }
   void getDependentDialects(DialectRegistry &registry) const final {
     registry.insert<gpu::GPUDialect, scf::SCFDialect, arith::ArithDialect,
@@ -101,10 +104,24 @@ struct GenerateROCMFpQuantKernelPass
     ModuleOp module = getOperation();
     SmallVector<Operation *> directives;
     module.walk([&](Operation *op) {
-      if (op->getName().getStringRef() == "tessera_rocm.fpquant")
+      if (op->getName().getStringRef() == "tessera_rocm.fpquant" ||
+          op->getName().getStringRef() == "tessera_rocm.nvfp4_requantize" ||
+          op->getName().getStringRef() == "tessera_rocm.mxfp4_folded_storage")
         directives.push_back(op);
     });
     for (Operation *op : directives) {
+      if (op->getName().getStringRef() == "tessera_rocm.mxfp4_folded_storage") {
+        if (failed(emitNativeMXFP4Storage(module,op)))
+          return signalPassFailure();
+        op->erase();
+        continue;
+      }
+      if (op->getName().getStringRef() == "tessera_rocm.nvfp4_requantize") {
+        if (failed(emitNativeNVFP4Ingest(module, op)))
+          return signalPassFailure();
+        op->erase();
+        continue;
+      }
       auto nameAttr = op->getAttrOfType<StringAttr>("name");
       if (!nameAttr) {
         op->emitError("tessera_rocm.fpquant missing name");

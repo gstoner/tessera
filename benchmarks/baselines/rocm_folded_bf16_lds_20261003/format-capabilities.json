@@ -1,0 +1,86 @@
+{
+  "live_architecture": "gfx1201",
+  "capabilities": {
+    "fp8_e4m3": {
+      "storage": "fp8_e4m3",
+      "scalar_vector": "artifact_only",
+      "dense_matrix": "ready",
+      "sparse_matrix": "artifact_only",
+      "matrix_format": "fp8",
+      "accumulators": [
+        "fp32"
+      ],
+      "dense_shapes": [
+        [
+          16,
+          16,
+          16
+        ]
+      ],
+      "sparse_shapes": [
+        [
+          16,
+          16,
+          32
+        ]
+      ],
+      "requires_scale_operand": false,
+      "note": ""
+    },
+    "fp8_e5m2": {
+      "storage": "fp8_e5m2",
+      "scalar_vector": "artifact_only",
+      "dense_matrix": "ready",
+      "sparse_matrix": "artifact_only",
+      "matrix_format": "bf8",
+      "accumulators": [
+        "fp32"
+      ],
+      "dense_shapes": [
+        [
+          16,
+          16,
+          16
+        ]
+      ],
+      "sparse_shapes": [
+        [
+          16,
+          16,
+          32
+        ]
+      ],
+      "requires_scale_operand": false,
+      "note": ""
+    },
+    "mxfp8": {
+      "storage": "mxfp8",
+      "scalar_vector": "unregistered",
+      "dense_matrix": "unsupported",
+      "sparse_matrix": "unsupported",
+      "matrix_format": null,
+      "accumulators": [],
+      "dense_shapes": [],
+      "sparse_shapes": [],
+      "requires_scale_operand": false,
+      "note": ""
+    },
+    "mxfp4": {
+      "storage": "mxfp4",
+      "scalar_vector": "unregistered",
+      "dense_matrix": "unsupported",
+      "sparse_matrix": "unsupported",
+      "matrix_format": null,
+      "accumulators": [],
+      "dense_shapes": [],
+      "sparse_shapes": [],
+      "requires_scale_operand": false,
+      "note": ""
+    }
+  },
+  "scope": "canonical storage capabilities; explicit physical packages assessed separately",
+  "decision": "pending native MXFP8 evaluation and broader matched format coverage",
+  "source_sha256": {
+    "python/tessera/compiler/rocm_isa_contract.py": "3289c0ee08bb1650976937c8e050d01c311c9b75e089b395aa4e0b918ab2c532"
+  }
+}

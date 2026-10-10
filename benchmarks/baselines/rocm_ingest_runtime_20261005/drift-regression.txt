@@ -1,0 +1,27 @@
+..................................................................F..... [ 11%]
+........................................................................ [ 22%]
+........................................................................ [ 34%]
+........................................................................ [ 45%]
+........................................................................ [ 57%]
+........................................................................ [ 68%]
+........................................................................ [ 79%]
+........................................................................ [ 91%]
+.......................................................                  [100%]
+=================================== FAILURES ===================================
+_ TestBackendDtypeAudit.test_planned_gated_bucket_is_empty_for_retained_targets _
+
+self = <test_backend_kernel_manifest.TestBackendDtypeAudit object at 0x731ef3e8f230>
+
+    def test_planned_gated_bucket_is_empty_for_retained_targets(self):
+        """Retained backend manifest entries use canonical dtypes only."""
+        buckets = audit_backend_dtypes()
+>       assert buckets["planned_gated"] == []
+E       AssertionError: assert [('nvfp4_requ...01', 'uint8')] == []
+E         
+E         Left contains one more item: ('nvfp4_requantize', 'nvfp4_requantize::rocm_gfx1201', 'uint8')
+E         Use -v to get more diff
+
+tests/unit/test_backend_kernel_manifest.py:348: AssertionError
+=========================== short test summary info ============================
+FAILED tests/unit/test_backend_kernel_manifest.py::TestBackendDtypeAudit::test_planned_gated_bucket_is_empty_for_retained_targets
+1 failed, 630 passed in 43.41s

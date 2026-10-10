@@ -15,13 +15,19 @@ def _as_dtype_token(item):
     dtype) and the planned/gated set (``uint*``, ``complex*``, ``mxfp*``).
     ``allow_planned_gated`` stays False -- an annotation IS a first-class
     storage declaration, and #15a admits a planned/gated dtype only where
-    ``metadata.dtype_status = "planned_gated"`` can be carried, which an
-    annotation cannot do. Concretely, most of that set has no element-type
+    ``metadata.dtype_status = "planned_gated"`` can be carried, which a bare-string
+    annotation cannot do. An explicitly gated Dtype token carries that status
+    on the Tensor declaration and emitted Graph argument. Concretely, most of that set has no element-type
     mapping either (``uint8`` would render ``tensor<?xuint8>``, which MLIR
     rejects), so admitting them here would reintroduce exactly the invalid
     element types ``GRAPH_IR_UNRESOLVED_ELEMENT_TYPE`` exists to stop.
     """
-    from ..dtype import _TF32_NOT_A_DTYPE, canonicalize_dtype, is_known_dtype
+    from ..dtype import Dtype, _TF32_NOT_A_DTYPE, canonicalize_dtype, is_known_dtype
+
+    # Explicit gated tokens carry their status on the Tensor declaration.
+    # Bare strings retain first-class-only admission.
+    if isinstance(item, Dtype) and item.is_planned_gated:
+        return canonicalize_dtype(str(item), allow_planned_gated=True)
 
     if isinstance(item, str):
         # `is_known_dtype` covers canonical + alias + planned/gated; `tf32` is
@@ -62,7 +68,12 @@ class Tensor:
             if dtype is not None:
                 dims = dims[:-1]
         label = ", ".join(str(d) for d in dims) + (f", {dtype}" if dtype else "")
-        attrs = {"__dims__": dims}
+        attrs: dict[str, object] = {"__dims__": dims}
+        from ..dtype import Dtype
+        token = shape[-1] if isinstance(shape, tuple) and shape else shape
+        if isinstance(token, Dtype):
+            if token.is_planned_gated:
+                attrs["dtype_status"] = "planned_gated"
         if dtype is not None:
             attrs["dtype"] = dtype
         return type(f"Tensor[{label}]", (cls,), attrs)

@@ -1,0 +1,10 @@
+Traceback (most recent call last):
+  File "<stdin>", line 3, in <module>
+  File "/home/angstorms/scratch/next-five-compiler-slices/benchmarks/nvidia/benchmark_compact_attention_gradients.py", line 93, in run_case
+    assert session.lib.tessera_nvidia_copy_d2d_async(ct.c_void_p(saved.ptr),native._saved[4].pointer,native._saved[4].nbytes,ct.c_void_p(session.stream)) == 0
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/ctypes/__init__.py", line 486, in __getattr__
+    func = self.__getitem__(name)
+  File "/usr/lib/python3.14/ctypes/__init__.py", line 491, in __getitem__
+    func = self._FuncPtr((name_or_ordinal, self))
+AttributeError: /home/angstorms/scratch/next-five-compiler-slices/.build-sm120-w1-1/src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/libtessera_nvidia_gemm.so: undefined symbol: tessera_nvidia_copy_d2d_async

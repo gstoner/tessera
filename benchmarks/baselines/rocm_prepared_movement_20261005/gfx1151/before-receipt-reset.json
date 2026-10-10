@@ -1,0 +1,645 @@
+{
+  "device": {
+    "name": "AMD Radeon(TM) 8060S Graphics",
+    "pci_bus_id": "0000:c5:00.0",
+    "architecture": "gfx1151",
+    "ordinal": 0
+  },
+  "architecture": "gfx1151",
+  "scope": "host_wall_full_calls_not_isolated_kernel_time",
+  "repeats": 10,
+  "source_and_compiler_sha256": {
+    "python/tessera/__init__.py": "4359098a57300a02196aadd560c7b43cdd0317f1e2faa2c74e186d7a38ee03e4",
+    "python/tessera/compiler/jit.py": "dc94e4eb23f40e98a5aa0c4c8535d28012ec48759203412126d2537652412ffb",
+    "python/tessera/compiler/graph_ir.py": "ea9b1a591555379f9e2290a9ce764c5133d817414e75765602d1377c83abd4a4",
+    "python/tessera/compiler/trace.py": "5aac388730910c93b8dcdc1b9090e33ffa8e420ac43f4f8cf50a8a1f1740a0ec",
+    "python/tessera/compiler/prepared_rocm_movement.py": "9f772ed2d835c7c14a69ea74997cc9d688e40db68cdc31e5c3af2ee7a8e7d085",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e44ca5c03002a71016ac532ec2074dac1e5eabb7d4c2b553fe020da7c2b983ce",
+    "python/tessera/compiler/op_catalog.py": "d829d8b1c278d3f82d4a85360a0c6bc6e72b5af86114e04f25772e904e70451d",
+    "python/tessera/compiler/rocm_native.py": "069a42028fdd8d4b89d95ca230e413b004e4d2e3840d4d896a4edc9254cf320b",
+    "src/compiler/programming_model/lib/NativePagedKV.h": "0835c7fffdeb99cc03eb083ab7a9a16f2aaeb5cbbe3d67a726858cc0e9786acd",
+    "src/compiler/programming_model/lib/NativeMoeDispatch.h": "1c681f67c2014b798b3893625cd8cb83f208d7f5cf8bc7756d2eddf5c4feeae4",
+    "benchmarks/rocm/benchmark_public_movement_jit.py": "a66d6b4efaa46b8b09264de680ca740a3239f2b3ddb8a4e5bd97b8c560a7081f",
+    "tests/unit/test_public_movement_frontend.py": "de49c84b823cf559cac83e70b40ec92d1ba195433575c387dea0ebdeda30403b",
+    "/home/gstoner/scratch/rocm-native-movement-20261005/.build/tools/tessera-opt/tessera-opt": "deebfbf99289f5bcb52acb09946869dda968c0ca6bc9e44276b2d83aa2cdf6d4",
+    "/home/gstoner/scratch/rocm-native-movement-20261005/.build/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/libtessera_rocm_native_movement.so": "caceddd59e97488c67ee83763b73a31e35fa22c40e12c5ddfb9c4ad24360750e"
+  },
+  "rows": [
+    {
+      "family": "paged",
+      "large": false,
+      "shape": [
+        4,
+        4,
+        4,
+        3,
+        8,
+        1,
+        5
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 631.182172,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5241664,
+          0.5127455000000001,
+          0.5053423,
+          0.5056764,
+          0.5043513,
+          0.5209647000000001,
+          0.5038383,
+          0.5154319,
+          0.5270661999999999,
+          0.498773
+        ],
+        "jit_unprepared": [
+          0.7535375,
+          0.8237019,
+          0.7281268,
+          0.7052259000000001,
+          0.6926152,
+          0.7022478999999999,
+          0.6949654,
+          0.7158726,
+          0.7182427,
+          0.7174356000000001
+        ],
+        "descriptor": [
+          0.5409444,
+          0.5843309999999999,
+          0.5864281,
+          0.5413864,
+          0.533663,
+          0.5286217,
+          0.5291337,
+          0.5302518,
+          0.5383393,
+          0.5452508
+        ],
+        "retained": [
+          0.632628,
+          0.6619325,
+          0.6289236,
+          0.6399682,
+          0.6344449,
+          0.6357929999999999,
+          0.6144415999999999,
+          0.6494198,
+          0.6333428,
+          0.6397891
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.50921095,
+        "jit_unprepared": 0.7166541,
+        "descriptor": 0.53964185,
+        "retained": 0.63511895
+      },
+      "retained_over_jit": 1.2472609828991303,
+      "jit_over_descriptor": 0.9436090807264116,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0414daf06b8c23a961c39dfb52a3575d3f3d6e8c89e8ccb6da28061b4b779de6",
+      "schedule_digest": "4652791728d912d1f77945d0e4d671a3d3e163c32e5d64d47461411463a48c1e",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "845fd89125070a88538c7e0c6446c3a9fc0215e782d458d9c7eab867203e0011",
+          "output_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "2dc77932e751368b6727dadb7184d8d10f1028eb7441b75bddc212806159cd83",
+          "output_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "d52b24bceb9fcc8e85c2ab8cb1dc34a55a52c140f656479d813996902e8ffb60",
+          "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+          "output_digest": "dc337b9ed7065645a9009eec6424439d7a7a2fbcd5a4aa74024eaca59d25c58f"
+        }
+      ]
+    },
+    {
+      "family": "paged",
+      "large": true,
+      "shape": [
+        8,
+        4,
+        8,
+        4,
+        32,
+        1,
+        5
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 250.723391,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.532791,
+          0.584791,
+          0.5401874,
+          0.5249365,
+          0.5226453,
+          0.5440802,
+          0.5177781,
+          0.5213153,
+          0.5305708,
+          0.5311929
+        ],
+        "jit_unprepared": [
+          0.7558219,
+          0.7370229,
+          0.7427412,
+          0.7125283,
+          0.7197828000000001,
+          0.7365019,
+          0.7214969,
+          0.7242930999999999,
+          0.7205138,
+          0.7331306
+        ],
+        "descriptor": [
+          0.5506260000000001,
+          0.5765795,
+          0.5532982,
+          0.5671619999999999,
+          0.5540432,
+          0.5530792,
+          0.5549602,
+          0.5599225,
+          0.5389252,
+          0.5392163
+        ],
+        "retained": [
+          0.6588802,
+          0.672821,
+          0.6659062,
+          0.6608194000000001,
+          0.6724281000000001,
+          0.6503477,
+          0.6557741,
+          0.6804541000000001,
+          0.6385812,
+          0.6476976
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.53088185,
+        "jit_unprepared": 0.7287118499999999,
+        "descriptor": 0.5536707,
+        "retained": 0.6598498
+      },
+      "retained_over_jit": 1.2429315487052346,
+      "jit_over_descriptor": 0.958840426267816,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0414daf06b8c23a961c39dfb52a3575d3f3d6e8c89e8ccb6da28061b4b779de6",
+      "schedule_digest": "77e7e9fd533fce73668127be64311ed259d57323052ed772a3ff91c019bb9b38",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "b5560193a517710c55aac6d97b2be2329cd293123ea0de1b3499491b3eb57ae0",
+          "output_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "63e6f7a5c5ae76c6110f89e9be66334b514272b1a0b3b40db95fd38cb515cded",
+          "output_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "7f9eb870c9d482d5fab74f50a9d2f8506a458c06aa2adcbaa6660da9fd2bbc0b",
+          "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+          "output_digest": "dc337b9ed7065645a9009eec6424439d7a7a2fbcd5a4aa74024eaca59d25c58f"
+        }
+      ]
+    },
+    {
+      "family": "paged_default",
+      "large": false,
+      "shape": [
+        4,
+        4,
+        4,
+        3,
+        8,
+        3,
+        1
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 238.82497,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5380442999999999,
+          0.5104157,
+          0.5293163,
+          0.5337609,
+          0.5280317,
+          0.5389657999999999,
+          0.5238085,
+          0.516652,
+          0.5081615,
+          0.5003351
+        ],
+        "jit_unprepared": [
+          0.721938,
+          0.7159276,
+          0.7159156,
+          0.7163407,
+          0.721653,
+          0.7235111,
+          0.7173197,
+          0.705319,
+          0.7044149,
+          0.7086562
+        ],
+        "descriptor": [
+          0.5498008999999999,
+          0.5481928,
+          0.5423665,
+          0.5441996,
+          0.5528891,
+          0.5450846,
+          0.5403203999999999,
+          0.5398244,
+          0.5368712,
+          0.533246
+        ],
+        "retained": [
+          0.6723191,
+          0.6499528,
+          0.6495148000000001,
+          0.6748752,
+          0.637609,
+          0.6461356,
+          0.6440783999999999,
+          0.6761618,
+          0.6346738000000001,
+          0.6363209999999999
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.5259201,
+        "jit_unprepared": 0.71613415,
+        "descriptor": 0.54328305,
+        "retained": 0.6478252
+      },
+      "retained_over_jit": 1.2317939550133186,
+      "jit_over_descriptor": 0.9680406926002937,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0414daf06b8c23a961c39dfb52a3575d3f3d6e8c89e8ccb6da28061b4b779de6",
+      "schedule_digest": "0b2b8792870dca1d9af7b924761410f7fc750b8658832b1af612eeb3005ef787",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "70d9258eb99e243472f25998c649d13b1734f03a67ec47ecce304b4a3cf4ef44"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "70d9258eb99e243472f25998c649d13b1734f03a67ec47ecce304b4a3cf4ef44",
+          "output_digest": "6f7d42dc5409809f158efb641e7dc6e8fae39f558258301f43e2bf6d60b87300"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "6f7d42dc5409809f158efb641e7dc6e8fae39f558258301f43e2bf6d60b87300",
+          "output_digest": "d3780e45acbb5015a634f9ecc2c57afc38a21f851a46290932baef857746e78c"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "d3780e45acbb5015a634f9ecc2c57afc38a21f851a46290932baef857746e78c",
+          "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+          "output_digest": "dc337b9ed7065645a9009eec6424439d7a7a2fbcd5a4aa74024eaca59d25c58f"
+        }
+      ]
+    },
+    {
+      "family": "paged_default",
+      "large": true,
+      "shape": [
+        8,
+        4,
+        8,
+        4,
+        32,
+        3,
+        1
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 236.172795,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5208853,
+          0.5664769,
+          0.5133558,
+          0.5105907000000001,
+          0.4889844,
+          0.4914136,
+          0.516298,
+          0.5137368999999999,
+          0.5088174999999999,
+          0.5172591
+        ],
+        "jit_unprepared": [
+          0.7406981,
+          0.740202,
+          0.6975555,
+          0.7433031999999999,
+          0.6834256,
+          0.6773043999999999,
+          0.7081982,
+          0.6986586,
+          0.7356233,
+          0.7190458
+        ],
+        "descriptor": [
+          0.568014,
+          0.5826669,
+          0.5619327000000001,
+          0.5260086,
+          0.5091296,
+          0.5618497,
+          0.543211,
+          0.5390573,
+          0.5696131,
+          0.5581165
+        ],
+        "retained": [
+          0.6583802000000001,
+          0.6519488,
+          0.7088121000000001,
+          0.6125426,
+          0.6304917,
+          0.6175769,
+          0.6312087,
+          0.6511299,
+          0.6467576,
+          0.6427043
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.5135463499999999,
+        "jit_unprepared": 0.713622,
+        "descriptor": 0.5599831,
+        "retained": 0.64473095
+      },
+      "retained_over_jit": 1.2554484127868888,
+      "jit_over_descriptor": 0.9170747295766604,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "0414daf06b8c23a961c39dfb52a3575d3f3d6e8c89e8ccb6da28061b4b779de6",
+      "schedule_digest": "5827538d451561c020c5a81d94dd7fbcd3ddd5602f413a77efd5405acd7a588c",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "6bb368491dc28a50736dac07e29abdcd09950d1cf5eeab5b8605452c8ea482cd"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "6bb368491dc28a50736dac07e29abdcd09950d1cf5eeab5b8605452c8ea482cd",
+          "output_digest": "31fdbe7a4ee64a9912933bcc2bea6ac3127184e33380ab8f707ded0e2a62cae7"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "31fdbe7a4ee64a9912933bcc2bea6ac3127184e33380ab8f707ded0e2a62cae7",
+          "output_digest": "a2f8e5d474345d87ef0d0e92f7c73e806c4f038bf4b7c2f667454b4382bc9b7e"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "a2f8e5d474345d87ef0d0e92f7c73e806c4f038bf4b7c2f667454b4382bc9b7e",
+          "output_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "26a1eb1198f646f5a72459a0a71c2f1a7c8afcdfe98f9f428c765e92a74474e8",
+          "output_digest": "dc337b9ed7065645a9009eec6424439d7a7a2fbcd5a4aa74024eaca59d25c58f"
+        }
+      ]
+    },
+    {
+      "family": "dispatched",
+      "large": false,
+      "shape": [
+        7,
+        9,
+        13
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 333.439933,
+      "warm_call_samples_ms": {
+        "jit": [
+          0.5072144,
+          0.5065084,
+          0.533916,
+          0.515886,
+          0.524798,
+          0.5258416,
+          0.5193112,
+          0.5243905,
+          0.5239393999999999,
+          0.5252735000000001
+        ],
+        "jit_unprepared": [
+          0.6992206999999999,
+          0.748346,
+          0.7323711,
+          0.7015927,
+          0.7198548,
+          0.7328171,
+          0.7189913,
+          0.7138585,
+          0.7175832,
+          0.7169707
+        ],
+        "descriptor": [
+          0.5521326,
+          0.5289437,
+          0.5376892,
+          0.5401945,
+          0.5323739,
+          0.5362361,
+          0.5408964,
+          0.5417655,
+          0.5365942,
+          0.5384753
+        ],
+        "retained": [
+          1.7373964000000002,
+          1.7334277,
+          1.8071311,
+          1.8344201000000002,
+          1.8205376999999998,
+          1.8382708,
+          1.8592030000000002,
+          1.815652,
+          1.8268156000000002,
+          1.8565639999999999
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 0.52416495,
+        "jit_unprepared": 0.7182872499999999,
+        "descriptor": 0.53808225,
+        "retained": 1.82367665
+      },
+      "retained_over_jit": 3.4792037315734294,
+      "jit_over_descriptor": 0.9741353668514432,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "3f98d83231524c655ad923ed5fbea7dfb42193a81f4fa4605a536f135fa6c44b",
+      "schedule_digest": "c1c500b208823e3bdb1bcf7ecf275261aeaba25876b43d23a31784f78cab2178",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "39a31ac3fb3ddf06fd69310617188515160a44abd0195b0d7bc9c0eb5a6a6b2a"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "39a31ac3fb3ddf06fd69310617188515160a44abd0195b0d7bc9c0eb5a6a6b2a",
+          "output_digest": "e220a728df01406121fba06154c2ae22dfe25a283f899c4b44b87ddfabe36836"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "e220a728df01406121fba06154c2ae22dfe25a283f899c4b44b87ddfabe36836",
+          "output_digest": "0672cb7c684d50bae989f20c3d31a8da391a3e550c4bb8280e7f8c143b9f128b"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "0672cb7c684d50bae989f20c3d31a8da391a3e550c4bb8280e7f8c143b9f128b",
+          "output_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41",
+          "output_digest": "3b19fdbba845daab5dc6c960ecea38121bfcc78f83d250fa01efb4a23cbee703"
+        }
+      ]
+    },
+    {
+      "family": "dispatched",
+      "large": true,
+      "shape": [
+        64,
+        128,
+        256
+      ],
+      "correctness": "bit_exact_before_after_every_trial",
+      "first_call_wall_ms": 701.664977,
+      "warm_call_samples_ms": {
+        "jit": [
+          1.1791304999999999,
+          1.2273643,
+          1.2188299,
+          1.2111759,
+          1.2042009999999999,
+          1.1961525,
+          1.1949435,
+          1.2055126,
+          1.2219985,
+          1.1924333
+        ],
+        "jit_unprepared": [
+          1.375672,
+          1.4164143,
+          1.4336153,
+          1.427727,
+          1.4098948999999998,
+          1.4262399000000001,
+          1.4683549,
+          1.4190635,
+          1.4353959,
+          1.4077629
+        ],
+        "descriptor": [
+          1.1931953,
+          1.2317926,
+          1.2287523999999999,
+          1.2514868,
+          1.2379829,
+          1.2275093,
+          1.2227991,
+          1.2313255,
+          1.2339696999999998,
+          1.247506
+        ],
+        "retained": [
+          4.0473067,
+          4.0637352,
+          4.430878,
+          3.9717488000000003,
+          4.0084783999999996,
+          4.0885546,
+          3.984176,
+          3.9872068,
+          4.0093555,
+          4.016700500000001
+        ]
+      },
+      "warm_call_medians_ms": {
+        "jit": 1.2048568,
+        "jit_unprepared": 1.4226517,
+        "descriptor": 1.23155905,
+        "retained": 4.013028
+      },
+      "retained_over_jit": 3.3307095083830713,
+      "jit_over_descriptor": 0.9783183356088366,
+      "execution_kind": "native_gpu",
+      "fallback_reason": null,
+      "image_digest": "3f98d83231524c655ad923ed5fbea7dfb42193a81f4fa4605a536f135fa6c44b",
+      "schedule_digest": "e86bac8e31588c53aac4d4cc44b1d7a7dc58af1d6272eed8a46269b2c0cb44c6",
+      "artifact_chain": [
+        {
+          "producer": "graph-ir-renderer.targeted",
+          "input_digest": null,
+          "output_digest": "09f8b0d048ffe0d249c0e63019196b795bed953a99d3072bd9419e233748cdcd"
+        },
+        {
+          "producer": "tessera-opt.tessera-graph-to-schedule",
+          "input_digest": "09f8b0d048ffe0d249c0e63019196b795bed953a99d3072bd9419e233748cdcd",
+          "output_digest": "b24c6c8c53baeab49946c449d7fb9b7700dc986754aa84955c9568f6c4e17ca3"
+        },
+        {
+          "producer": "tessera-opt.tessera-schedule-to-tile",
+          "input_digest": "b24c6c8c53baeab49946c449d7fb9b7700dc986754aa84955c9568f6c4e17ca3",
+          "output_digest": "9dfa98cd540dccff1f754450ddc7ba7de0bfb528472e9757d0d0e4b6edfaba86"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.target",
+          "input_digest": "9dfa98cd540dccff1f754450ddc7ba7de0bfb528472e9757d0d0e4b6edfaba86",
+          "output_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41"
+        },
+        {
+          "producer": "rocm_gfx1151.package_scheduled.backend",
+          "input_digest": "5e52294a4bce648c9d7ba4a3d412ee6070ea0d60b0e458bb413072a7816d6e41",
+          "output_digest": "3b19fdbba845daab5dc6c960ecea38121bfcc78f83d250fa01efb4a23cbee703"
+        }
+      ]
+    }
+  ]
+}

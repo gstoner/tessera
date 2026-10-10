@@ -326,7 +326,13 @@ def test_nvidia_composed_dynamic_axes_lower_through_schedule_and_tile(axes):
         axis in axes for axis in ("M", "N", "K")
     )
     assert "schedule.matmul" in artifact.schedule_ir
-    assert "tile.matmul_kernel" in artifact.tile_ir
+    assert "tile.view" in artifact.tile_ir
+    assert "tile.fragment_pack" in artifact.tile_ir
+    assert "tile.fragment_zero" in artifact.tile_ir
+    assert "tile.mma" in artifact.tile_ir
+    assert "tile.fragment_unpack" in artifact.tile_ir
+    assert "scf.for" in artifact.tile_ir
+    assert "tile.matmul_kernel" not in artifact.tile_ir
 
 
 @requires_tessera_opt
@@ -599,7 +605,11 @@ def test_nvidia_sm120_scheduled_epilogue_and_reduced_output_are_retained() -> No
     assert artifact.bias_name == "bias"
     assert artifact.residual_name == "residual"
     assert artifact.activation == "gelu"
-    assert '_fused_f16_gelu_b1_r1_outf16_macro_kernel' in artifact.function_name
+    assert '_fused_f16_gelu_b1_r1_outf16_kernel' in artifact.function_name
+    assert "_macro_kernel" not in artifact.function_name
+    assert "tile.fragment_pack" in artifact.tile_ir
+    assert "tile.fragment_unpack" in artifact.tile_ir
+    assert "tile.matmul_kernel" not in artifact.tile_ir
     assert 'bias = true' in artifact.tile_ir
     assert 'activation = "gelu"' in artifact.tile_ir
     assert 'residual = true' in artifact.tile_ir
@@ -635,16 +645,25 @@ def test_public_matmul_explicit_epilogue_matches_scheduled_order() -> None:
         ((256, 512, 256), True),
         ((512, 256, 512), True),
         ((257, 512, 257), True),
+        ((257, 513, 257), False),
+        ((257, 520, 257), True),
     ],
 )
+@requires_tessera_opt
+@requires_nvidia_target_ir
 def test_sm120_macro_cta_admission_is_exact(shape, expected) -> None:
-    m, k, n = shape
-    assert scheduled_matmul._uses_sm120_macro_cta(
-        m, n, k, "f16", "f32"
-    ) is expected
-    assert scheduled_matmul._uses_sm120_macro_cta(
-        m, n, k, "bf16", "f32"
-    ) is expected
+    # The native Schedule/Tile producer is the authority; there is no Python
+    # implementation of the physical crossover or native entry-name policy.
+    for dtype in ("fp16", "bf16"):
+        artifact = scheduled_matmul.lower_scheduled_matmul(
+            _module(target="nvidia_sm120", shape=shape, dtype=dtype),
+            target="nvidia_sm120",
+        )
+        assert ("tessera_nvidia.macro_cta_matmul" in artifact.tile_ir) is expected
+        assert ("_macro_kernel" in artifact.function_name) is expected
+        if not expected:
+            assert "tile.fragment_pack" in artifact.tile_ir
+        artifact.validate()
 
 
 def test_scheduled_artifact_rejects_graph_reentry() -> None:
@@ -684,7 +703,7 @@ def test_rocm_packages_the_exact_scheduled_tile_artifact(monkeypatch) -> None:
     # This test isolates final image consumption; native replay is tested below.
     monkeypatch.setattr(scheduled_matmul, "verify_matmul_projection", lambda _: None)
 
-    def fake_compile(tile_ir: str, *, family: str, architecture: str):
+    def fake_compile(tile_ir: str, *, family: str, architecture: str, k_unroll: int = 1, staging="register", lds_waves=(2,2)):
         assert tile_ir == artifact.tile_ir
         assert (family, architecture) == ("matmul", "gfx1151")
         return (
@@ -880,7 +899,7 @@ def test_driver_records_adjacent_scheduled_matmul_lineage(
         monkeypatch.setattr(
             rocm_native,
             "_compile_shape_free_tile_ir",
-            lambda tile_ir, *, family, architecture: (
+            lambda tile_ir, *, family, architecture, k_unroll=1, staging="register", lds_waves=(2,2): (
                 'module {\n  tessera_rocm.wmma_gemm {name = "tessera_rocm_matmul_fixture"}\n}',
                 "module { gpu.binary @gfx1151 }",
                 b"hsaco-image",
@@ -1406,13 +1425,25 @@ def test_gfx1151_bounded_dynamic_scheduled_matmul_executes_exact_artifact() -> N
 
 
 @pytest.mark.parametrize(
-    "shape",
+    ("shape", "dtype"),
     [
-        (16, 16, 8),
-        (16, 32, 8),
-        (16, 32, 32),
-        (32, 32, 16),
-        (48, 64, 24),
+        ((16, 16, 8), "fp16"),
+        ((16, 32, 8), "fp16"),
+        ((16, 32, 32), "fp16"),
+        ((32, 32, 16), "fp16"),
+        ((48, 64, 24), "fp16"),
+        ((48, 67, 16), "fp16"),
+        ((48, 67, 16), "bf16"),
+        ((1, 1, 1), "fp16"),
+        ((1, 1, 1), "bf16"),
+        ((17, 19, 23), "fp16"),
+        ((17, 19, 23), "bf16"),
+        ((31, 33, 9), "fp16"),
+        ((31, 33, 9), "bf16"),
+        ((48, 67, 17), "fp16"),
+        ((48, 67, 17), "bf16"),
+        ((257, 513, 257), "fp16"),
+        ((257, 513, 257), "bf16"),
     ],
 )
 @pytest.mark.skipif(
@@ -1421,14 +1452,14 @@ def test_gfx1151_bounded_dynamic_scheduled_matmul_executes_exact_artifact() -> N
     or scheduled_matmul.find_tessera_opt() is None,
     reason="requires the SM120 CUDA compiler, PTX bridge, and RTX host",
 )
-def _sm120_typed_scheduled_matmul_executes_exact_artifact(
-    shape: tuple[int, int, int],
+def test_sm120_typed_scheduled_matmul_executes_exact_artifact(
+    shape: tuple[int, int, int], dtype: str,
 ) -> None:
     """Prove the canonical composed-layout -> typed-MMA package on RTX 5070."""
     m, k, n = shape
     bundle = compile_graph_module(
-        _module(target="nvidia_sm120", shape=shape),
-        source_origin="sm120-scheduled-typed-mma-exact-device",
+        _module(target="nvidia_sm120", shape=shape, dtype=dtype),
+        source_origin=f"sm120-scheduled-typed-mma-exact-device-{dtype}",
         target="nvidia_sm120",
         options={"package_native": True},
         enable_tool_validation=False,
@@ -1442,6 +1473,14 @@ def _sm120_typed_scheduled_matmul_executes_exact_artifact(
     assert "tile.matmul_kernel" not in tile
     assert "tile.mma" in tile
     assert "tessera_nvidia.block_coordinate" in tile
+    provenance = bundle.launch_descriptor.provenance
+    for key in ("graph_ir_digest", "schedule_digest", "schedule_ir_digest", "tile_ir_digest"):
+        assert len(provenance[key]) == 64, (key, provenance)
+    assert provenance["graph_ir_digest"] == bundle.graph.output_digest
+    assert provenance["schedule_ir_digest"] == bundle.schedule.output_digest
+    assert provenance["tile_ir_digest"] == bundle.tile.output_digest
+    assert "nvvm.mma.sync" in bundle.target_ir.text
+    assert bundle.native_image.image_digest
     artifact = rt.RuntimeArtifact(
         metadata={"target": "nvidia_sm120"},
         native_image=bundle.native_image,
@@ -1449,16 +1488,28 @@ def _sm120_typed_scheduled_matmul_executes_exact_artifact(
         tile_ir=tile,
         target_ir=bundle.target_ir.text,
     )
-    rng = np.random.default_rng(3106)
-    a = np.ascontiguousarray(rng.standard_normal((m, k)), dtype=np.float32).astype(np.float16)
+    rng = np.random.default_rng(3106 + k + n)
+    storage_dtype = (
+        np.float16 if dtype == "fp16"
+        else pytest.importorskip("ml_dtypes").bfloat16
+    )
+    a = np.ascontiguousarray(
+        rng.standard_normal((m, k)), dtype=np.float32
+    ).astype(storage_dtype)
     # The SM120 B-fragment contract is column-major, which is part of the
     # descriptor and therefore deliberately exercised rather than copied away.
-    b = np.asfortranarray(rng.standard_normal((k, n)), dtype=np.float32).astype(np.float16)
+    b = np.asfortranarray(
+        rng.standard_normal((k, n)), dtype=np.float32
+    ).astype(storage_dtype)
     output = np.zeros((m, n), dtype=np.float32)
     result = rt.launch(artifact, {"a": a, "b": b, "o": output, "M": m, "N": n, "K": k})
     assert result["ok"] is True, result.get("reason")
     assert result.get("execution_kind") == "native_gpu", result
-    np.testing.assert_allclose(output, a.astype(np.float32) @ b.astype(np.float32), rtol=2e-4, atol=2e-4)
+    tolerance = 2e-4 if dtype == "fp16" else 2e-2
+    np.testing.assert_allclose(
+        output, a.astype(np.float32) @ b.astype(np.float32),
+        rtol=tolerance, atol=tolerance,
+    )
 
 
 @pytest.mark.parametrize(
@@ -1518,7 +1569,7 @@ def _sm120_macro_cta_reuses_shared_panels_exact_device(
 @pytest.mark.parametrize(
     "shape,expected_route,expects_macro_target",
     [
-        ((257, 513, 257), "macro_cta_masked_scalar_shared_ab_f16", False),
+        ((257, 513, 257), "typed_fragment_global", False),
         ((257, 520, 257), "macro_cta_cp_async_2stage_shared_ab_f16", True),
     ],
 )
@@ -1546,6 +1597,10 @@ def _sm120_macro_cta_k_tail_exact_device(
     assert bundle.tile is not None and bundle.target_ir is not None
     assert ("tessera_nvidia.macro_cta_matmul" in bundle.tile.text) is expects_macro_target
     assert bundle.launch_descriptor.provenance["physical_route"] == expected_route
+    if expected_route == "typed_fragment_global":
+        assert "_macro_kernel" not in bundle.launch_descriptor.entry_symbol
+        assert bundle.launch_descriptor.geometry.policy == "sm120_scheduled_typed_16x8_mn"
+        assert "tile.fragment_pack" in bundle.tile.text and "tile.store" in bundle.tile.text
 
     artifact = rt.RuntimeArtifact(
         metadata={"target": "nvidia_sm120"},
@@ -1817,8 +1872,19 @@ def test_nvidia_scheduled_package_compiles_once_without_graph(monkeypatch, dtype
     )
     assert {g.predicate for g in package.descriptor.shape_guards} == ({"max"} if dynamic else {"eq"})
     # Graph text is provenance only once the scheduled artifact exists.
+    # The package image and launch contract stay fixed; the descriptor records
+    # the detached Graph digest separately as provenance.
     detached = replace(artifact, graph_ir="discarded frontend")
-    assert nvidia_native.package_scheduled_matmul(detached, pipeline_name="tessera-nvidia-pipeline-sm120") == package
+    detached_package = nvidia_native.package_scheduled_matmul(
+        detached, pipeline_name="tessera-nvidia-pipeline-sm120"
+    )
+    assert detached_package.image == package.image
+    assert replace(
+        detached_package.descriptor, provenance=package.descriptor.provenance
+    ) == package.descriptor
+    assert detached_package.descriptor.provenance["graph_ir_digest"] != (
+        package.descriptor.provenance["graph_ir_digest"]
+    )
     changed = replace(artifact, tile_ir=artifact.tile_ir + "\n// changed compiler input")
     assert nvidia_native.package_scheduled_matmul(changed, pipeline_name="tessera-nvidia-pipeline-sm120").image.image_digest != package.image.image_digest
 
@@ -2044,3 +2110,76 @@ def test_bounded_dynamic_mk_rejects_inconsistent_capacities(m_bound, k_bound):
     graph = _module(target="rocm", shape=(8, 32, 16), dtype="bf16")
     with pytest.raises(ValueError, match="bound|capacity"):
         scheduled_matmul.with_bounded_dynamic_mk(graph, m_bound, k_bound)
+
+
+@requires_tessera_opt
+@requires_nvidia_target_ir
+@pytest.mark.parametrize("shape,macro", [
+    ((17, 19, 23), False), ((257, 513, 257), False), ((257, 520, 257), True),
+])
+def test_sm120_scheduled_entry_projects_actual_native_producer(shape, macro):
+    """Native Tile output owns the entry across the macro/typed crossover."""
+    artifact = scheduled_matmul.lower_scheduled_matmul(
+        _module(target="nvidia_sm120", shape=shape), target="nvidia_sm120",
+    )
+    assert f"llvm.func @{artifact.function_name}(" in artifact.tile_ir
+    assert ("_macro_kernel" in artifact.function_name) is macro
+    assert ("tessera_nvidia.macro_cta_matmul" in artifact.tile_ir) is macro
+    if not macro:
+        assert "tile.view" in artifact.tile_ir and "tile.fragment_pack" in artifact.tile_ir
+    artifact.validate()
+
+
+@pytest.mark.parametrize("axes", [("M",),("N",),("M","N","K")])
+@requires_tessera_opt
+@requires_nvidia_target_ir
+def test_bounded_fused_projection_preserves_named_epilogue_operands_and_input_graph(axes):
+    graph=_module(target="nvidia_sm120",shape=(17,19,23),
+                  bias=True,residual=True,activation="relu")
+    before=[str(arg.ir_type) for arg in graph.functions[0].args]
+    projected=scheduled_matmul.with_bounded_dynamic_axes(graph,axes)
+    assert [str(arg.ir_type) for arg in graph.functions[0].args] == before
+    assert projected is not graph
+    args={arg.name:arg for arg in projected.functions[0].args}
+    assert tuple(args["bias"].ir_type.shape)==("?" if "N" in axes else "23",)
+    assert tuple(args["residual"].ir_type.shape)==(
+        "?" if "M" in axes else "17","?" if "N" in axes else "23")
+    artifact=scheduled_matmul.lower_scheduled_matmul(projected,target="nvidia_sm120")
+    assert artifact.bias_name=="bias" and artifact.residual_name=="residual"
+    assert artifact.activation=="relu"
+    assert "tile.fragment_pack" in artifact.tile_ir
+    assert "tile.matmul_kernel" not in artifact.tile_ir
+    assert 'activation = "relu"' in artifact.tile_ir
+    assert "residual = true" in artifact.tile_ir
+    artifact.validate()
+
+
+@pytest.mark.parametrize("target",["nvidia_sm120","rocm_gfx1151","rocm_gfx1201","x86","apple_gpu_f16"])
+@pytest.mark.parametrize("has_bias,has_residual",[(True,False),(False,True),(True,True)])
+def test_tracer_epilogue_role_markers_bind_typed_ssa_operands(target,has_bias,has_residual):
+    graph=_module(target=target,dtype="fp32" if target=="x86" else "fp16",bias=has_bias,residual=has_residual)
+    fn=graph.functions[0]
+    op=fn.body[0]
+    renames={arg.name:"arg"+str(i) for i,arg in enumerate(fn.args)}
+    for arg in fn.args:arg.name=renames[arg.name]
+    op.operands=["%"+renames[value[1:]] for value in op.operands]
+    if has_bias:op.kwargs["bias"]="bias"
+    if has_residual:op.kwargs["residual"]="residual"
+    if target in {"x86","apple_gpu_f16"}:
+        with pytest.raises(ValueError,match="fused matmul"):
+            scheduled_matmul._graph_contract(graph,target)
+        return
+    if target.startswith("rocm_") and has_residual:
+        with pytest.raises(ValueError,match="residual epilogue"):
+            scheduled_matmul._graph_contract(graph,target)
+        return
+    contract=scheduled_matmul._graph_contract(graph,target)
+    assert contract[16]==("arg2" if has_bias else None)
+    assert contract[17]==("arg"+str(2+int(has_bias)) if has_residual else None)
+
+
+def test_explicit_epilogue_binding_is_not_replaced_by_role_position():
+    graph=_module(target="nvidia_sm120",bias=True,residual=True)
+    graph.functions[0].body[0].kwargs["bias"]="residual"
+    with pytest.raises(ValueError,match="ABI order"):
+        scheduled_matmul._graph_contract(graph,"nvidia_sm120")

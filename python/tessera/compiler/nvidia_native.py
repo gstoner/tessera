@@ -42,15 +42,24 @@ from .nvidia_math_contract import CUDA_MATH_CONTRACT_VERSION
 
 if TYPE_CHECKING:
     from .scheduled_attention import ScheduledAttentionArtifact
+    from .scheduled_matmul import ScheduledMatmulArtifact
 
 
 SM120_F16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.v1"
 SM120_BF16_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.bf16.v1"
+SM120_ROW_B_F16_ABI = "tessera.nvidia.matmul.a_row_b_d_m_n_k.f16.v1"
+SM120_ROW_B_BF16_ABI = "tessera.nvidia.matmul.a_row_b_d_m_n_k.bf16.v1"
 SM120_STRIDED_F16_ABI = (
     "tessera.nvidia.matmul.a_b_d_m_n_k_lda_ldb_ldd.f16.v1"
 )
 SM120_STRIDED_BF16_ABI = (
     "tessera.nvidia.matmul.a_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
+)
+SM120_STRIDED_ROW_B_F16_ABI = (
+    "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.f16.v1"
+)
+SM120_STRIDED_ROW_B_BF16_ABI = (
+    "tessera.nvidia.matmul.a_row_b_d_m_n_k_lda_ldb_ldd.bf16.v1"
 )
 SM120_TF32_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.f32_tf32.v1"
 SM120_FP8_E4M3_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp8_e4m3.v1"
@@ -103,6 +112,7 @@ def _packed_format_attr(logical: str) -> str:
     )
 SM120_FP64_ABI = "tessera.nvidia.matmul.a_b_d_m_n_k.fp64.v1"
 SM120_NVFP4_ABI = "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k.v1"
+SM120_NVFP4_BATCH_ABI = "tessera.nvidia.nvfp4.a_b_scale_a_scale_b_d_m_n_k_rows_batches.v1"
 SM120_FP6_E2M3_ABI = "tessera.nvidia.mxfp6_e2m3.a_b_scale_a_scale_b_d_m_n_k.v1"
 SM120_FP6_E3M2_ABI = "tessera.nvidia.mxfp6_e3m2.a_b_scale_a_scale_b_d_m_n_k.v1"
 SM120_MXFP4_ABI = "tessera.nvidia.mxfp4.a_b_scale_a_scale_b_d_m_n_k.v1"
@@ -132,8 +142,18 @@ SM120_ATTN_BWD_BF16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_dq_dk_dv_d
 SM120_ATTN_BWD_BIAS_BF16_ABI = "tessera.nvidia.attention_backward.do_q_k_v_bias_dq_dk_dv_dims.bf16_f32acc.v3"
 # Saved-LSE is a distinct paired physical ABI: row_lse is f32[B,Hq,Sq], not
 # optional metadata on the zero-workspace recompute path.
+SM120_ATTN_LSE_BIAS_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims.f32.v1"
+SM120_ATTN_BWD_LSE_BIAS_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dims.f32.v2"
+SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims.f32.v1"
+# Broadcast checkpoint ABIs carry four physical extents for checked host
+# allocation/copies; native kernels retain seven logical dimension arguments.
+SM120_ATTN_LSE_BCAST_F32_ABI = "tessera.nvidia.attention.q_k_v_bias_o_row_lse_dims_bias_shape.f32.v1"
+SM120_ATTN_BWD_LSE_BCAST_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dims_bias_shape.f32.v1"
+SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_bias_row_lse_dq_dk_dv_dbias_dims_bias_shape.f32.v1"
 SM120_ATTN_LSE_F32_ABI = "tessera.nvidia.attention.q_k_v_o_row_lse_dims.f32.v1"
-SM120_ATTN_BWD_LSE_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_row_lse_dq_dk_dv_dims.f32.v1"
+SM120_ATTN_BWD_LSE_F32_ABI = "tessera.nvidia.attention_backward.do_q_k_v_output_row_lse_dq_dk_dv_dims.f32.v2"
+SM120_ATTN_BWD_LSE_COMPACT_F32_ABI = "tessera.nvidia.sm120.attention_backward_lse.compact.f32.v1"
+SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI = "tessera.nvidia.sm120.attention_backward_lse.cotangent.f32.v1"
 SM120_PAGED_KV_F32_ABI = "tessera.nvidia.paged_kv.pages_table_o_dims.f32_i32.v1"
 SM120_PAGED_ATTN_F32_ABI = "tessera.nvidia.paged_attention.q_kp_vp_table_indices_o_dims.f32_i32_i64.v1"
 SM120_REPLAY_DECODE_F32_ABI = "tessera.nvidia.replay_ssm.delta_x_b_s0_c_a_y_dims.f32.v1"
@@ -155,9 +175,17 @@ SM120_EPILOGUE_ABIS = tuple(
     f"tessera.nvidia.matmul.a_b_{suffix}_d_m_n_k.{storage}.v1"
     for storage in ("f16", "bf16", "tf32", "e4m3", "e5m2")
     for suffix in ("bias", "residual", "bias_residual")
+) + tuple(
+    f"tessera.nvidia.matmul.a_row_b_{suffix}_d_m_n_k.{storage}.v1"
+    for storage in ("f16", "bf16")
+    for suffix in ("bias", "residual", "bias_residual")
 )
 SM120_REDUCED_OUTPUT_ABIS = tuple(
     f"tessera.nvidia.matmul.a_b_{suffix}d_m_n_k.{storage}.out_f16.v2"
+    for storage in ("f16", "bf16")
+    for suffix in ("", "bias_", "residual_", "bias_residual_")
+) + tuple(
+    f"tessera.nvidia.matmul.a_row_b_{suffix}d_m_n_k.{storage}.out_f16.v2"
     for storage in ("f16", "bf16")
     for suffix in ("", "bias_", "residual_", "bias_residual_")
 )
@@ -193,7 +221,7 @@ class NVIDIANativeTensorProgramResult:
 
 @dataclass(frozen=True)
 class NVIDIANativeTensorProgram:
-    """One checked static SM120 producer-to-matmul package edge.
+    """One checked SM120 producer-to-matmul package edge.
 
     Python only sequences two already-compiled Graph -> Schedule -> Tile
     packages. The producer and consumer semantics, layouts, and ABIs remain
@@ -287,15 +315,30 @@ class NVIDIANativeTensorProgram:
         if self.dtype not in {"fp16", "bf16"} or min(self.m, self.k, self.n) <= 0:
             raise ValueError("SM120 RMSNorm-to-matmul requires positive static fp16/bf16 shapes")
         storage = "f16" if self.dtype == "fp16" else "bf16"
-        norm_abi = SM120_NORM_F16_ABI if storage == "f16" else SM120_NORM_BF16_ABI
+        producer_kind = self.producer.descriptor.provenance.get("kind")
+        producer_abis = {
+            "rmsnorm": SM120_NORM_F16_ABI if storage == "f16" else SM120_NORM_BF16_ABI,
+            "layernorm": SM120_NORM_F16_ABI if storage == "f16" else SM120_NORM_BF16_ABI,
+            "softmax": SM120_SOFTMAX_F16_ABI if storage == "f16" else SM120_SOFTMAX_BF16_ABI,
+        }
+        if not isinstance(producer_kind, str):
+            raise ValueError("resident producer kind must be a string")
+        producer_abi = producer_abis.get(producer_kind)
         static_matmul_abis = {
             SM120_F16_ABI if storage == "f16" else SM120_BF16_ABI,
             f"tessera.nvidia.matmul.a_b_d_m_n_k.{storage}.out_f16.v2",
+            *(f"tessera.nvidia.matmul.a_b_{prefix}d_m_n_k.{storage}{suffix}"
+              for prefix in ("bias_", "residual_", "bias_residual_")
+              for suffix in (".v1", ".out_f16.v2")),
         }
-        dynamic_matmul_abi = (
-            SM120_STRIDED_F16_ABI if storage == "f16" else SM120_STRIDED_BF16_ABI
-        )
+        static_matmul_abis |= {abi.replace(".a_b_", ".a_row_b_") for abi in static_matmul_abis
+                               if abi != SM120_F16_ABI}
+        static_matmul_abis.add(SM120_ROW_B_F16_ABI if storage == "f16" else SM120_ROW_B_BF16_ABI)
+        dynamic_matmul_abis = {
+            SM120_STRIDED_F16_ABI, SM120_STRIDED_ROW_B_F16_ABI
+        } if storage == "f16" else {SM120_STRIDED_BF16_ABI, SM120_STRIDED_ROW_B_BF16_ABI}
         for package in (self.producer, self.consumer):
+            package.descriptor.validate_image(package.image)
             if (package.image.target != "nvidia_sm120"
                     or package.image.architecture != "sm_120a"
                     or package.descriptor.image_digest != package.image.image_digest):
@@ -310,14 +353,19 @@ class NVIDIANativeTensorProgram:
             if "completion" not in package.descriptor.ordering.synchronization:
                 raise ValueError("tensor program edge requires producer completion before consumption")
         producer_provenance = self.producer.descriptor.provenance
-        if (self.producer.descriptor.abi_id != norm_abi
-                or producer_provenance.get("kind") != "rmsnorm"
+        if (producer_abi is None
+                or self.producer.descriptor.abi_id != producer_abi
                 or producer_provenance.get("storage") != storage):
-            raise ValueError("tensor producer must be the matching scheduled SM120 RMSNorm package")
-        if (self.consumer.descriptor.abi_id not in static_matmul_abis | {dynamic_matmul_abi}
+            raise ValueError("tensor producer must be a matching scheduled SM120 RMSNorm, LayerNorm, or softmax package")
+        if (self.consumer.descriptor.abi_id not in static_matmul_abis | dynamic_matmul_abis
                 or self.consumer.descriptor.provenance.get("storage") != storage):
             raise ValueError("tensor consumer must be a matching scheduled SM120 matmul package")
-        dynamic_abi = self.consumer.descriptor.abi_id == dynamic_matmul_abi
+        dynamic_abi = self.consumer.descriptor.abi_id in dynamic_matmul_abis
+        rhs_layout = self.consumer.descriptor.provenance.get("b_layout")
+        row_rhs_abi = ".a_row_b_" in self.consumer.descriptor.abi_id
+        if (rhs_layout not in {"row_major", "col_major"}
+                or row_rhs_abi != (rhs_layout == "row_major")):
+            raise ValueError("tensor consumer RHS layout differs from its native ABI")
         dynamic_n = self.dynamic_n
         dynamic_k = self.dynamic_k
         producer_input = self._binding(self.producer, self.producer_input_name, "input")
@@ -330,7 +378,7 @@ class NVIDIANativeTensorProgram:
                 or produced.layout != "row_major"
                 or consumed.layout != ("strided" if dynamic_abi else "row_major")
                 or produced.alignment < consumed.alignment):
-            raise ValueError("RMSNorm output and matmul A bindings have incompatible storage/layout")
+            raise ValueError("producer output and matmul A bindings have incompatible storage/layout")
         producer_input_shape, producer_input_dynamic = self._shape_bound(
             self.producer, self.producer_input_name, 2
         )
@@ -349,7 +397,7 @@ class NVIDIANativeTensorProgram:
             or produced_dynamic != expected_dynamic_m
             or consumed_dynamic != expected_dynamic_m
         ):
-            raise ValueError("RMSNorm output and matmul A shapes do not match")
+            raise ValueError("producer output and matmul A shapes do not match")
         if self.dynamic_m and (
             self.producer.descriptor.provenance.get("dynamic_m_bound") != self.m
             or self.consumer.descriptor.provenance.get("dynamic_shape_bounds")
@@ -371,24 +419,48 @@ class NVIDIANativeTensorProgram:
         if (
             rhs.dtype != self.dtype
             or rhs.rank != 2
-            or rhs.layout != ("strided" if dynamic_abi else "col_major")
+            or rhs.layout != ("strided" if dynamic_abi else rhs_layout)
             or rhs_shape != (self.k, self.n)
             or rhs_dynamic != (dynamic_k, dynamic_n)
         ):
-            raise ValueError("matmul RHS must have a bounded column-major KxN contract")
+            raise ValueError("matmul RHS must match its bounded native KxN layout contract")
         output = self._binding(self.consumer, self.output_name, "output")
         output_shape, output_dynamic = self._shape_bound(self.consumer, self.output_name, 2)
         epilogue = self.consumer.descriptor.provenance.get("epilogue")
-        if (
-            not isinstance(epilogue, Mapping)
-            or epilogue.get("bias") is not False
-            or epilogue.get("residual") is not False
-            or epilogue.get("activation") != "none"
+        if not isinstance(epilogue, Mapping) or epilogue.get("activation") not in {
+            "none", "relu", "gelu", "silu"
+        }:
+            raise ValueError("tensor consumer has an unsupported epilogue contract")
+        # Bind semantic flags to the compiler-owned symbol and ABI. Metadata
+        # edits must never reinterpret an already compiled image.
+        entry = self.consumer.descriptor.entry_symbol
+        for role in ("bias", "residual"):
+            expected = (("_b1_r" in entry) if role == "bias" else ("_r1" in entry))
+            if epilogue.get(role) is not expected:
+                raise ValueError("tensor consumer epilogue does not match its native entry")
+        activation = epilogue["activation"]
+        if (activation != "none" and f"_fused_{storage}_{activation}_" not in entry) or (
+            activation == "none" and any(f"_fused_{storage}_{value}_" in entry
+                                        for value in ("relu", "gelu", "silu"))
         ):
-            raise ValueError(
-                "resident RMSNorm-to-matmul edge does not support fused bias, "
-                "residual, or activation"
-            )
+            raise ValueError("tensor consumer epilogue does not match its native entry")
+        extra_inputs = [binding for binding in self.consumer.descriptor.buffers
+                        if binding.direction == "input"
+                        and binding.name not in {self.consumer_input_name, self.consumer_rhs_name}]
+        expected_roles = ([("bias", 1)] if epilogue["bias"] else []) + (
+            [("residual", 2)] if epilogue["residual"] else [])
+        if len(extra_inputs) != len(expected_roles):
+            raise ValueError("tensor consumer epilogue buffers do not match its contract")
+        for binding, (role, rank) in zip(sorted(extra_inputs,key=lambda item:item.ordinal),
+                                         expected_roles):
+            shape, dynamic = self._shape_bound(self.consumer, binding.name, rank)
+            expected_shape = (self.n,) if role == "bias" else (self.m,self.n)
+            expected_dynamic = (dynamic_n,) if role == "bias" else (self.dynamic_m,dynamic_n)
+            expected_layout = "strided" if dynamic_abi and rank == 2 else "row_major"
+            if (binding.dtype != "fp32" or binding.rank != rank
+                    or binding.layout != expected_layout or shape != expected_shape
+                    or dynamic != expected_dynamic):
+                raise ValueError("tensor consumer epilogue buffer storage/layout/shape drift")
         output_storage = epilogue.get("output")
         expected_output_dtype = (
             {"f16": "fp16", "f32": "fp32"}.get(output_storage)
@@ -415,10 +487,46 @@ class NVIDIANativeTensorProgram:
         if not self.producer.descriptor.ordering.ordered_submission:
             raise ValueError("producer package must declare ordered submission")
 
+    def _epilogue_inputs(self, bias: Any, residual: Any, m: int, n: int) -> dict[str, Any]:
+        import numpy as np
+        epilogue = self.consumer.descriptor.provenance["epilogue"]
+        if not isinstance(epilogue, Mapping):
+            raise ValueError("resident consumer epilogue contract must be a mapping")
+        supplied = {"bias": bias, "residual": residual}
+        inputs = [binding for binding in sorted(self.consumer.descriptor.buffers,
+                                                key=lambda item:item.ordinal)
+                  if binding.direction == "input"
+                  and binding.name not in {self.consumer_input_name,self.consumer_rhs_name}]
+        result = {}
+        for role in ("bias", "residual"):
+            value = supplied[role]
+            if not epilogue[role]:
+                if value is not None:
+                    raise ValueError(f"consumer has no {role} operand")
+                continue
+            if value is None:
+                raise ValueError(f"consumer requires its {role} operand")
+            array = np.asarray(value)
+            shape = (n,) if role == "bias" else (m,n)
+            if array.dtype != np.float32 or array.shape != shape:
+                raise ValueError(f"{role} must be fp32 with active shape {shape}")
+            binding = inputs.pop(0)
+            result[binding.name] = np.array(array,copy=True,order="C")
+        return result
+
+    def prepare_resident(self) -> Any:
+        """Retain a native owner for repeated resident device submissions."""
+        from .resident_nvidia_tensor import ResidentTensorCall
+        return ResidentTensorCall(self)
+
     def execute_resident(
         self,
         producer_input: Any,
         rhs: Any,
+        *,
+        bias: Any | None = None,
+        residual: Any | None = None,
+        _producer_chain: tuple = (),
     ) -> NVIDIANativeTensorProgramResult:
         """Run the two packages on one caller-owned CUDA stream and edge allocation.
 
@@ -428,7 +536,6 @@ class NVIDIANativeTensorProgram:
         """
         self.validate()
         import numpy as np
-        from tessera import runtime as rt
         from .emit.nvidia_cuda import NvidiaDeviceSession
 
         source = np.asarray(producer_input)
@@ -450,24 +557,33 @@ class NVIDIANativeTensorProgram:
             or source.dtype != storage_dtype
         ):
             raise ValueError(
-                f"RMSNorm source must be {self.dtype} within the MxK bound"
+                f"producer input must be {self.dtype} within the MxK bound"
             )
         active_n = self._validate_rhs_shape(tuple(right.shape), active_k=active_k)
         if right.dtype != storage_dtype:
             raise ValueError(f"matmul RHS must have dtype {self.dtype} within its KxN bound")
 
+        epilogue_inputs = self._epilogue_inputs(bias,residual,active_m,active_n)
         # Host views may be padded or sliced. Normalize them to the compact
-        # row-major producer input and column-major matmul RHS required by the
+        # row-major producer input and scheduled matmul RHS required by the
         # native ABI; never advertise caller strides as device pitches.
         packed_source = np.array(source, copy=True, order="C")
-        packed_rhs = np.array(right, copy=True, order="F")
+        rhs_layout = self.consumer.descriptor.provenance["b_layout"]
+        if not isinstance(rhs_layout, str) or rhs_layout not in {"row_major", "col_major"}:
+            raise ValueError("resident consumer RHS layout contract differs")
+        packed_rhs = np.array(right, copy=True, order="C" if rhs_layout == "row_major" else "F")
         session = NvidiaDeviceSession()
         try:
             device_source = session.upload(packed_source)
             device_rhs = session.upload(
                 packed_rhs, layout="strided"
-                if (self.dynamic_n or self.dynamic_m or self.dynamic_k) else "col_major"
+                if (self.dynamic_n or self.dynamic_m or self.dynamic_k) else rhs_layout
             )
+            device_epilogue = {
+                name: session.upload(value, layout=self._binding(
+                    self.consumer,name,"input").layout)
+                for name,value in epilogue_inputs.items()
+            }
             edge_shape = (
                 self.m if self.dynamic_m else active_m,
                 self.k if not self.dynamic_k else active_k,
@@ -489,47 +605,21 @@ class NVIDIANativeTensorProgram:
                 if self.dynamic_n or self.dynamic_m or self.dynamic_k else "row_major",
             )
 
-            def runtime_artifact(package: NVIDIANativePackage) -> Any:
-                return rt.RuntimeArtifact(
-                    metadata={"target": "nvidia_sm120"},
-                    native_image=package.image,
-                    launch_descriptor=package.descriptor,
-                    tile_ir=package.tile_ir,
-                    target_ir=package.target_ir,
-                )
-
-            producer_receipt = rt.launch(
-                runtime_artifact(self.producer),
-                {
-                    self.producer_input_name: device_source,
-                    self.intermediate_name: edge,
-                    "Rows": active_m,
-                    "Columns": active_k,
-                },
-                stream=session.stream,
-            )
-            if (producer_receipt.get("ok") is not True
-                    or producer_receipt.get("execution_kind") != "native_gpu"):
-                raise RuntimeError(f"resident RMSNorm producer failed: {producer_receipt}")
-            consumer_receipt = rt.launch(
-                runtime_artifact(self.consumer),
-                {
-                    self.consumer_input_name: consumer_edge,
-                    self.consumer_rhs_name: device_rhs,
-                    self.output_name: result,
-                    "M": active_m,
-                    "N": active_n,
-                    "K": active_k,
-                    **({"LDA": active_k, "LDB": active_k, "LDD": active_n}
-                       if self.dynamic_n or self.dynamic_m or self.dynamic_k else {}),
-                },
-                stream=session.stream,
-            )
-            if (consumer_receipt.get("ok") is not True
-                    or consumer_receipt.get("execution_kind") != "native_gpu"):
-                raise RuntimeError(f"resident matmul consumer failed: {consumer_receipt}")
-            if session.synchronize() != 0:
-                raise RuntimeError("resident RMSNorm-to-matmul stream did not complete")
+            ordered = [device_source, device_rhs]
+            for binding in sorted(self.consumer.descriptor.buffers, key=lambda item: item.ordinal)[2:-1]:
+                ordered.append(device_epilogue[binding.name])
+            ordered.append(result)
+            # One native call owns both module launches and completion; Python
+            # supplies frontend values and retains the caller's result buffers.
+            from .resident_nvidia_tensor import ResidentTensorCall
+            with ResidentTensorCall(self, producer_chain=_producer_chain) as owner:
+                receipts = owner.invoke(ordered, consumer_edge, stream=session.stream)
+            consumer_receipt = receipts[-1]
+            producer_receipt = receipts[0] if len(receipts) == 2 else dict(
+                ok=True, execution_kind="native_gpu", runtime_status="executed",
+                compiler_path="canonical_nvidia_lhs_program",
+                native_call_binding="prepared_cpp_resident_tensor_matmul",
+                component_receipts=receipts[:-1])
             return NVIDIANativeTensorProgramResult(
                 producer_receipt=producer_receipt,
                 consumer_receipt=consumer_receipt,
@@ -548,6 +638,8 @@ class NVIDIANativeTensorProgram:
         *,
         intermediate: Any | None = None,
         output: Any | None = None,
+        bias: Any | None = None,
+        residual: Any | None = None,
     ) -> NVIDIANativeTensorProgramResult:
         """Run both native packages with an explicit caller-owned edge buffer."""
         self.validate()
@@ -565,8 +657,10 @@ class NVIDIANativeTensorProgram:
         if source.shape != (self.m, self.k) or source.dtype != storage_dtype or not source.flags.c_contiguous:
             raise ValueError(f"RMSNorm source must be contiguous {self.dtype} with shape MxK")
         active_n = self._validate_rhs_shape(tuple(right.shape), active_k=self.k)
-        if right.dtype != storage_dtype or not right.flags.f_contiguous:
-            raise ValueError(f"matmul RHS must be column-major {self.dtype} within its KxN bound")
+        rhs_layout = self.consumer.descriptor.provenance["b_layout"]
+        compact = right.flags.c_contiguous if rhs_layout == "row_major" else right.flags.f_contiguous
+        if right.dtype != storage_dtype or not compact:
+            raise ValueError(f"matmul RHS must be {rhs_layout} {self.dtype} within its KxN bound")
         output_dtype = self._binding(self.consumer, self.output_name, "output").dtype
         output_storage_dtype = {"fp16": np.float16, "fp32": np.float32}[output_dtype]
         edge = np.empty((self.m, self.k), dtype=storage_dtype) if intermediate is None else np.asarray(intermediate)
@@ -575,6 +669,10 @@ class NVIDIANativeTensorProgram:
             raise ValueError(f"intermediate must be caller-owned contiguous {self.dtype} with shape MxK")
         if result.shape != (self.m, active_n) or result.dtype != output_storage_dtype or not result.flags.c_contiguous:
             raise ValueError("matmul output must match its scheduled dtype and active MxN shape")
+        epilogue_inputs = self._epilogue_inputs(bias,residual,self.m,active_n)
+        if any(np.shares_memory(edge,value) or np.shares_memory(result,value)
+               for value in (np.asarray(v) for v in (bias,residual) if v is not None)):
+            raise ValueError("producer intermediate and consumer output must not alias epilogue inputs")
         if (np.shares_memory(edge, source) or np.shares_memory(edge, right)
                 or np.shares_memory(edge, result) or np.shares_memory(result, source)
                 or np.shares_memory(result, right)):
@@ -601,6 +699,7 @@ class NVIDIANativeTensorProgram:
             raise RuntimeError(f"RMSNorm producer did not complete natively: {producer_receipt}")
         # Retain and pass the exact output allocation through consumer completion.
         consumer_args: dict[str, Any] = {
+            **epilogue_inputs,
             self.consumer_input_name: edge,
             self.consumer_rhs_name: right,
             self.output_name: result,
@@ -716,19 +815,21 @@ def _with_bounded_dynamic_k(module: GraphIRModule, bound: int) -> GraphIRModule:
     return module
 
 
-def package_scheduled_rmsnorm_matmul(
+def package_scheduled_tensor_matmul(
     producer_artifact: Any,
     consumer_artifact: Any,
     *,
     pipeline_name: str,
+    producer_schedule: str | None = None,
     dynamic_m_bound: int | None = None,
     dynamic_n_bound: int | None = None,
     dynamic_k_bound: int | None = None,
 ) -> NVIDIANativeTensorProgram:
-    """Package a resident RMSNorm -> matmul edge from Graph or Schedule IR.
+    """Package a resident shape-preserving tensor producer -> matmul edge.
 
     Graph IR is lowered through the canonical Schedule path before entering
-    this same package contract.
+    this same package contract. Currently admitted producers are RMSNorm and
+    last-axis softmax with matching fp16/bf16 storage.
     """
     explicit_dynamic_axes = tuple(
         axis for axis, bound in (
@@ -748,8 +849,10 @@ def package_scheduled_rmsnorm_matmul(
         )
 
         producer_artifact = lower_scheduled_kernel(
-            producer_artifact, target="nvidia_sm120")
-        if "N" in explicit_dynamic_axes and len(explicit_dynamic_axes) > 1:
+            producer_artifact, target="nvidia_sm120", schedule=producer_schedule)
+        if explicit_dynamic_axes and len(consumer_artifact.functions[0].args) > 2:
+            consumer_artifact = with_bounded_dynamic_axes(consumer_artifact,explicit_dynamic_axes)
+        elif "N" in explicit_dynamic_axes and len(explicit_dynamic_axes) > 1:
             consumer_artifact = with_bounded_dynamic_axes(
                 consumer_artifact, explicit_dynamic_axes
             )
@@ -779,24 +882,29 @@ def package_scheduled_rmsnorm_matmul(
             )
         consumer_artifact = lower_scheduled_matmul(
             consumer_artifact, target="nvidia_sm120")
+    if producer_schedule is not None and producer_artifact.schedule != producer_schedule:
+        raise ValueError("producer Schedule artifact differs from the explicit physical request")
+    supported_producer = (
+        producer_artifact.family == "norm"
+        and producer_artifact.kind in {"rmsnorm", "layernorm"}
+    ) or (
+        producer_artifact.family == "softmax" and producer_artifact.kind == "softmax"
+    )
     if (producer_artifact.target != "nvidia_sm120"
-            or producer_artifact.family != "norm"
-            or producer_artifact.kind != "rmsnorm"
+            or not supported_producer
             or producer_artifact.dtype not in {"fp16", "bf16"}
             or producer_artifact.storage != ("f16" if producer_artifact.dtype == "fp16" else "bf16")
             or producer_artifact.output_shape != producer_artifact.input_shape):
-        raise ValueError("producer must be a shape-preserving fp16/bf16 RMSNorm Schedule artifact")
+        raise ValueError("producer must be shape-preserving fp16/bf16 RMSNorm, LayerNorm, or softmax Schedule artifact")
     storage = "f16" if producer_artifact.dtype == "fp16" else "bf16"
     if (consumer_artifact.target != "nvidia_sm120"
             or consumer_artifact.storage != storage
             or consumer_artifact.a_dtype != producer_artifact.dtype
             or consumer_artifact.output_dtype not in {"fp16", "fp32"}
-            or consumer_artifact.bias_name is not None
-            or consumer_artifact.residual_name is not None
-            or consumer_artifact.activation != "none"
+            or consumer_artifact.activation not in {"none", "relu", "gelu", "silu"}
             or consumer_artifact.a_name == consumer_artifact.b_name):
         raise ValueError(
-            "consumer must be an unfused matching scheduled fp16/bf16 SM120 matmul"
+            "consumer must be a matching scheduled fp16/bf16 SM120 matmul"
         )
     if dynamic_m_bound is not None and (
         dynamic_m_bound != consumer_artifact.m
@@ -850,6 +958,23 @@ def package_scheduled_rmsnorm_matmul(
     )
     program.validate()
     return program
+
+
+def package_scheduled_rmsnorm_matmul(
+    producer_artifact: Any,
+    consumer_artifact: Any,
+    *,
+    pipeline_name: str,
+    dynamic_m_bound: int | None = None,
+    dynamic_n_bound: int | None = None,
+    dynamic_k_bound: int | None = None,
+) -> NVIDIANativeTensorProgram:
+    """Compatibility wrapper for the RMSNorm -> matmul package contract."""
+    return package_scheduled_tensor_matmul(
+        producer_artifact, consumer_artifact, pipeline_name=pipeline_name,
+        dynamic_m_bound=dynamic_m_bound, dynamic_n_bound=dynamic_n_bound,
+        dynamic_k_bound=dynamic_k_bound,
+    )
 
 
 _cache: dict[
@@ -1704,7 +1829,7 @@ def emit_attention_backward_tile_ir(
       attributes {{nvvm.kernel}} {{
     tile.attention_backward_kernel %do, %q, %key, %v, {optional_operand}%dq, %dk, %dv,
         %b, %hq, %hkv, %sq, %sk, %d, %dv_dim {{
-      storage = "{storage}", accum = "f32", scale = {scale:.17g} : f32,
+      storage = "{storage}", accum = "f32", scale = {scale:.17e} : f32,
       causal = {str(causal).lower()}, bias = {str(bias).lower()},
       window_left = {window_left} : i64, window_right = {window_right} : i64,
       softcap = {float(softcap)!r} : f32,
@@ -2049,27 +2174,50 @@ def _saved_lse_policy(op: Any, head_dim: int) -> tuple[float, bool] | None:
     return physical_scale, causal
 
 
-def _checkpoint_identity(dims: tuple[int, ...], scale: float, causal: bool) -> str:
+def _checkpoint_identity(
+    dims: tuple[int, ...], scale: float, causal: bool, *, bias: bool = False,
+    bias_shape: tuple[int, ...] = (), shape_bounds: tuple[int, ...] = (),
+) -> str:
+    from .attention_shape_contract import attention_dimensions
+    attention_dimensions(dims,shape_bounds)
+    # Full-shaped bias preserves the v1 identity. Broadcast storage is part of
+    # the saved-state contract, not merely a launch allocation detail.
+    logical_bias = (dims[0], dims[1], dims[3], dims[4])
+    if bias_shape and (
+        not bias or len(bias_shape) != 4 or
+        any(type(extent) is not int or extent not in (1, logical)
+            for extent, logical in zip(bias_shape, logical_bias, strict=True))
+    ):
+        raise ValueError("checkpoint physical bias shape disagrees with logical dimensions")
     policy = {"schema": "tessera.attention_checkpoint.v1", "shape": list(dims),
               "scale_f32_bits": struct.pack("!f", scale).hex(), "causal": causal,
               "mask_alignment": "end_aligned_v1", "storage": "f32", "lse": "natural_log"}
+    if bias:
+        policy["bias"] = "exact_f32[B,Hq,Sq,Sk]"
+        if bias_shape and tuple(bias_shape) != logical_bias:
+            policy["schema"] = "tessera.attention_checkpoint.broadcast.v1"
+            policy["bias_shape"] = list(bias_shape)
+            policy["bias_gradient_reduction"] = "physical_owner_lexicographic_bhqk_v1"
+    if shape_bounds:
+        policy["schema"] = "tessera.attention_checkpoint.bounded_sequences.v1"
+        policy["shape_bounds"] = list(shape_bounds)
     return hashlib.sha256(json.dumps(policy, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def _attention_lse_contract(
     module: GraphIRModule,
-) -> tuple[tuple[str, str, str, str, str], tuple[int, int, int, int, int, int, int], float, bool] | None:
+) -> tuple[tuple[str, ...], tuple[int, int, int, int, int, int, int], float, bool] | None:
     """The explicit f32 forward-save ABI, deliberately separate from attention."""
     if not requests_attention(module):
         return None
     fn, op = module.functions[0], module.functions[0].body[0]
     if any(arg.layout is not None or arg.ir_type.layout is not None for arg in fn.args) or any(t.layout is not None for t in fn.result_types):
         return None
-    if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) != 3:
+    if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) not in (3, 4):
         return None
     if len(fn.result_types) != 2 or len(fn.return_values) != 2 or len(op.result_names) != 2:
         return None
-    q_name, k_name, v_name = (item.removeprefix("%") for item in op.operands)
+    q_name, k_name, v_name = (item.removeprefix("%") for item in op.operands[:3])
     output_name, lse_name = op.result_names
     args = {arg.name: arg for arg in fn.args}
     if any(name not in args for name in (q_name, k_name, v_name)):
@@ -2097,11 +2245,18 @@ def _attention_lse_contract(
     if any(value.removeprefix("%") != expected for value, expected in zip(
             fn.return_values, (output_name, lse_name), strict=True)):
         return None
+    bias_name = op.operands[3].removeprefix("%") if len(op.operands) == 4 else None
+    if bias_name:
+        physical = _shape(module, bias_name)
+        if (bias_name not in args or args[bias_name].ir_type.dtype != "fp32" or physical is None
+                or len(physical) != 4 or any(extent not in (1, logical)
+                    for extent, logical in zip(physical, (b, hq, sq, sk), strict=True))):
+            return None
     policy = _saved_lse_policy(op, d)
     if policy is None:
         return None
     scale, causal = policy
-    return (q_name, k_name, v_name, output_name, lse_name), (b, hq, hkv, sq, sk, d, dv), scale, causal
+    return (q_name, k_name, v_name, *((bias_name,) if bias_name else ()), output_name, lse_name), (b, hq, hkv, sq, sk, d, dv), scale, causal
 
 
 def supports_attention_lse(module: GraphIRModule) -> bool:
@@ -2110,36 +2265,47 @@ def supports_attention_lse(module: GraphIRModule) -> bool:
 
 def _attention_backward_lse_contract(
     module: GraphIRModule,
-) -> tuple[tuple[str, str, str, str, str, str, str, str], tuple[int, int, int, int, int, int, int], float, bool] | None:
-    """The paired f32 backward-load ABI. row_lse is an input pointer."""
+) -> tuple[tuple[str, ...], tuple[int, int, int, int, int, int, int], float, bool] | None:
+    """The paired f32 backward ABI consumes saved output and row LSE."""
     if not requests_attention_backward(module):
         return None
     fn, op = module.functions[0], module.functions[0].body[0]
     if any(arg.layout is not None or arg.ir_type.layout is not None for arg in fn.args) or any(t.layout is not None for t in fn.result_types):
         return None
-    if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) != 5:
+    seeded = op.kwargs.get("lse_cotangent", False)
+    if type(seeded) is not bool:
+        return None
+    if op.kwargs.get("lse_checkpoint") != "saved" or len(op.operands) - int(seeded) not in (6, 7):
         return None
     if len(fn.result_types) != 3 or len(fn.return_values) != 3 or len(op.result_names) != 3:
         return None
-    do_name, q_name, k_name, v_name, lse_name = (item.removeprefix("%") for item in op.operands)
+    physical_names = tuple(item.removeprefix("%") for item in op.operands)
+    bias_name = physical_names[5] if len(physical_names) - int(seeded) == 7 else None
+    do_name, q_name, k_name, v_name, output_name = physical_names[:5]
+    lse_name = physical_names[-1 - int(seeded)]
     dq_name, dk_name, dv_name = op.result_names
     args = {arg.name: arg for arg in fn.args}
-    if any(name not in args for name in (do_name, q_name, k_name, v_name, lse_name)):
+    if any(name not in args for name in (do_name, q_name, k_name, v_name, output_name, lse_name)):
         return None
-    if any(args[name].ir_type.dtype != "fp32" for name in (do_name, q_name, k_name, v_name, lse_name)):
+    if any(args[name].ir_type.dtype != "fp32" for name in (do_name, q_name, k_name, v_name, output_name, lse_name)):
         return None
-    shapes = tuple(_shape(module, name) for name in (do_name, q_name, k_name, v_name, lse_name))
+    shapes = tuple(_shape(module, name) for name in (do_name, q_name, k_name, v_name, output_name, lse_name))
     if any(shape is None for shape in shapes):
         return None
-    do_shape, q_shape, k_shape, v_shape, lse_shape = cast(tuple[tuple[int, ...], ...], shapes)
-    if len(do_shape) != 4 or len(q_shape) != 4 or len(k_shape) != 4 or len(v_shape) != 4 or len(lse_shape) != 3:
+    do_shape, q_shape, k_shape, v_shape, output_shape, lse_shape = cast(tuple[tuple[int, ...], ...], shapes)
+    if len(do_shape) != 4 or len(q_shape) != 4 or len(k_shape) != 4 or len(v_shape) != 4 or len(output_shape) != 4 or len(lse_shape) != 3:
         return None
     b, hq, sq, d = q_shape
     bk, hkv, sk, dk = k_shape
     bv, hv, sv, dv = v_shape
     if (b != bk or b != bv or hkv != hv or sk != sv or d != dk or hq % hkv
-            or do_shape != (b, hq, sq, dv) or lse_shape != (b, hq, sq)):
+            or do_shape != (b, hq, sq, dv) or output_shape != (b, hq, sq, dv)
+            or lse_shape != (b, hq, sq)):
         return None
+    if seeded:
+        seed_name = physical_names[-1]
+        if seed_name not in args or args[seed_name].ir_type.dtype != "fp32" or _shape(module, seed_name) != lse_shape:
+            return None
     if tuple(result.dtype for result in fn.result_types) != ("fp32", "fp32", "fp32"):
         return None
     try:
@@ -2151,14 +2317,19 @@ def _attention_backward_lse_contract(
     if any(value.removeprefix("%") != expected for value, expected in zip(
             fn.return_values, (dq_name, dk_name, dv_name), strict=True)):
         return None
+    if bias_name:
+        physical = _shape(module, bias_name)
+        if (bias_name not in args or args[bias_name].ir_type.dtype != "fp32" or physical is None
+                or len(physical) != 4 or any(extent not in (1, logical)
+                    for extent, logical in zip(physical, (b, hq, sq, sk), strict=True))):
+            return None
     policy = _saved_lse_policy(op, d)
     if policy is None or op.kwargs.get("deterministic", True) is not True:
         return None
     if op.kwargs.get("route", "deterministic_direct") != "deterministic_direct":
         return None
     scale, causal = policy
-    return (do_name, q_name, k_name, v_name, lse_name, dq_name, dk_name, dv_name), (b, hq, hkv, sq, sk, d, dv), scale, causal
-
+    return (*physical_names, dq_name, dk_name, dv_name), (b, hq, hkv, sq, sk, d, dv), scale, causal
 
 def supports_attention_backward_lse(module: GraphIRModule) -> bool:
     return _attention_backward_lse_contract(module) is not None
@@ -2548,9 +2719,38 @@ def supports_nvfp4_matmul(module: GraphIRModule) -> bool:
         or op.kwargs.get("activation", "none") != "none"
     ):
         return False
-    a_shape, b_shape = (_static_shape(module, name) for name in matrix_names)
-    sa_shape, sb_shape = (_static_shape(module, name) for name in scale_names)
-    if not a_shape or not b_shape or a_shape[1] != b_shape[0]:
+    a_shape, b_shape = (_shape(module, name) for name in matrix_names)
+    sa_shape, sb_shape = (_shape(module, name) for name in scale_names)
+    ta, tb = (op.kwargs.get(name, False) for name in ("transposeA", "transposeB"))
+    if type(ta) is not bool or type(tb) is not bool: return False
+    if a_shape and ta: a_shape = (*a_shape[:-2], a_shape[-1], a_shape[-2])
+    if b_shape and tb: b_shape = (*b_shape[:-2], b_shape[-1], b_shape[-2])
+    if sa_shape and ta: sa_shape = (*sa_shape[:-2], sa_shape[-1], sa_shape[-2])
+    if sb_shape and tb: sb_shape = (*sb_shape[:-2], sb_shape[-1], sb_shape[-2])
+    if op.kwargs.get("batching") in {"shared_rhs_rows", "independent_rhs", "shared_lhs"}:
+        shared_lhs = op.kwargs["batching"] == "shared_lhs"
+        rhs_batched = op.kwargs["batching"] != "shared_rhs_rows"
+        if not a_shape or not b_shape or not fn.result_types:return False
+        rank=fn.result_types[0].rank
+        if (rank is None or rank < 3 or len(a_shape) != (2 if shared_lhs else rank)
+                or len(b_shape) != (rank if rhs_batched else 2)):
+            return False
+        prefix=b_shape[:-2] if shared_lhs else a_shape[:-2]
+        batch=math.prod(prefix)
+        rows, k = a_shape[-2:]
+        if rhs_batched and b_shape[:-2] != prefix:
+            return False
+        kb, n = b_shape[-2:]
+        if (batch * rows > 2**63 - 1 or k != kb or not fn.result_types
+                or tuple(fn.result_types[0].shape) != tuple(map(str,(*prefix,rows,n)))):
+            return False
+        scale_k = (k + 15) // 16
+        expected_sa = (rows, scale_k) if shared_lhs else (*prefix, rows, scale_k)
+        expected_sb = (*prefix, scale_k, n) if rhs_batched else (scale_k, n)
+        return sa_shape == expected_sa and sb_shape == expected_sb
+    if op.kwargs.get("batching") is not None:
+        return False
+    if not a_shape or len(a_shape) != 2 or not b_shape or len(b_shape) != 2 or a_shape[1] != b_shape[0]:
         return False
     m, k = a_shape
     n = b_shape[1]
@@ -2975,6 +3175,13 @@ def package_scheduled_matmul(
         abi_id = f"tessera.nvidia.matmul.a_b_{suffix}d_m_n_k.{storage}.out_f16.v2"
     if dynamic:
         abi_id = SM120_STRIDED_F16_ABI if storage == "f16" else SM120_STRIDED_BF16_ABI
+    if artifact.b_layout == "row_major":
+        if dynamic:
+            abi_id = SM120_STRIDED_ROW_B_F16_ABI if storage == "f16" else SM120_STRIDED_ROW_B_BF16_ABI
+        elif suffix or artifact.output_dtype == "fp16":
+            abi_id = abi_id.replace(".a_b_", ".a_row_b_")
+        else:
+            abi_id = SM120_ROW_B_F16_ABI if storage == "f16" else SM120_ROW_B_BF16_ABI
     m, n, k = artifact.m, artifact.n, artifact.k
     # The frontend names are binding labels; shape/storage and pointer arity
     # must agree with the durable Schedule record and the emitted launch IR.
@@ -2985,7 +3192,7 @@ def package_scheduled_matmul(
         ("storage", storage), ("accum", "f32"),
         ("output", "f16" if artifact.output_dtype == "fp16" else "f32"),
         ("activation", artifact.activation), ("arch", "sm_120"),
-        ("a_layout", "row_major"), ("b_layout", "col_major"),
+        ("a_layout", "row_major"), ("b_layout", artifact.b_layout),
     ):
         if f'{field} = "{value}"' not in schedule_op.group():
             raise ValueError(f"NVIDIA scheduled launch contract disagrees on {field}")
@@ -3006,7 +3213,7 @@ def package_scheduled_matmul(
         raise ValueError("NVIDIA scheduled launch contract disagrees with Tile entry ABI")
     rows: list[tuple[str, str, str, tuple[int, ...], str, int]] = [
         (artifact.a_name, "input", artifact.a_dtype, (m, k), "row_major", 2),
-        (artifact.b_name, "input", artifact.b_dtype, (k, n), "col_major", 2),
+        (artifact.b_name, "input", artifact.b_dtype, (k, n), artifact.b_layout, 2),
     ]
     if bias:
         rows.append((bias, "input", "fp32", (n,), "row_major", 4))
@@ -3087,6 +3294,7 @@ def package_scheduled_matmul(
             "schedule": "shared",
             "shape": [m, n, k],
             "storage": storage,
+            "b_layout": artifact.b_layout,
             "epilogue": {
                 "bias": bool(bias), "activation": artifact.activation,
                 "residual": bool(residual),
@@ -3094,7 +3302,9 @@ def package_scheduled_matmul(
                 "output": "f16" if artifact.output_dtype == "fp16" else "f32",
             },
             "route": "canonical_scheduled_tile_consumer",
+            "graph_ir_digest": artifact.graph_digest,
             "schedule_digest": artifact.schedule_digest,
+            "schedule_ir_digest": artifact.schedule_ir_digest,
             "tile_ir_digest": artifact.tile_digest,
             "physical_route": physical_route,
             "dynamic_shape_bounds": [m, n, k] if dynamic else None,
@@ -3130,11 +3340,13 @@ def package_nvfp4_matmul(
     module: GraphIRModule,
     *,
     pipeline_name: str,
+    scheduled_artifact: ScheduledMatmulArtifact | None = None,
 ) -> NVIDIANativePackage:
     """Compile logical NVFP4 Graph through the canonical Schedule/Tile route."""
     if not supports_nvfp4_matmul(module):
         raise ValueError("SM120 NVFP4 packaging requires one static rank-2 matmul with logical scale_a/scale_b views")
-    from .scheduled_matmul import find_tessera_opt, lower_scheduled_matmul, run_tessera_opt
+    from .scheduled_matmul import (find_tessera_opt, lower_scheduled_matmul, run_tessera_opt,
+                                   _canonical_matmul_graph_ir, _graph_contract)
 
     # Give the scale operands first-class Graph semantics. Keep the caller-owned
     # module intact because callers commonly reuse the source for oracle runs.
@@ -3157,7 +3369,17 @@ def package_nvfp4_matmul(
         op.kwargs.update(expected_contract)
     else:
         raise ValueError("NVFP4 packaging requires matmul, gemm, or scaled_matmul")
-    artifact = lower_scheduled_matmul(scheduled_module, target="nvidia_sm120")
+    if scheduled_artifact is None:
+        artifact = lower_scheduled_matmul(scheduled_module, target="nvidia_sm120")
+    else:
+        artifact = scheduled_artifact
+        contract = _graph_contract(scheduled_module, "nvidia_sm120")
+        if artifact.graph_ir != _canonical_matmul_graph_ir(scheduled_module, "nvidia_sm120", contract):
+            raise ValueError("NVFP4 shared Schedule belongs to a different logical Graph")
+        artifact.validate()
+        if (artifact.a_name, artifact.b_name, artifact.output_name) != (
+                contract[3], contract[4], contract[5]):
+            raise ValueError("NVFP4 shared Schedule buffer roles differ from its logical Graph")
     tool = find_tessera_opt()
     if tool is None or run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
         raise ValueError("NVFP4 Tile does not replay from its canonical Schedule")
@@ -3171,8 +3393,14 @@ def package_nvfp4_matmul(
             or "tessera.scale_vector_size = 16 : i64" not in tile_ir
             or "tessera.storage_pack" not in tile_ir):
         raise ValueError("NVFP4 Tile lost its packed K16 scale contract")
+    independent_rhs = op.kwargs.get("batching") == "independent_rhs"
+    shared_lhs = op.kwargs.get("batching") == "shared_lhs"
+    rhs_batched = independent_rhs or shared_lhs
+    batch_aware = rhs_batched or (op.kwargs.get("batching") == "shared_rhs_rows" and op.kwargs.get("transposeA", False))
+    abi_id = SM120_NVFP4_BATCH_ABI if batch_aware else SM120_NVFP4_ABI
+    expected_entry = "tessera_tile_matmul_nvfp4_batched" if batch_aware else "tessera_tile_matmul_nvfp4"
     entry_match = re.search(r"llvm.func @([A-Za-z0-9_]+)\(", tile_ir)
-    if entry_match is None or entry_match.group(1) != "tessera_tile_matmul_nvfp4":
+    if entry_match is None or entry_match.group(1) != expected_entry:
         raise ValueError("NVFP4 Schedule/Tile emitted an unexpected runtime entry")
     entry = entry_match.group(1)
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
@@ -3187,7 +3415,7 @@ def package_nvfp4_matmul(
         target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(),
         binary_format="ptx",
         payload=ptx.encode("ascii"),
-        entry_points=(NativeEntryPoint(entry, SM120_NVFP4_ABI),),
+        entry_points=(NativeEntryPoint(entry, abi_id),),
         compile_state=compile_state,
         device_libraries=device_libraries,
         resource_record=ResourceRecord(
@@ -3196,43 +3424,50 @@ def package_nvfp4_matmul(
         ),
     )
     a_name, b_name = artifact.a_name, artifact.b_name
-    args = {arg.name: arg for arg in fn.args}
     scale_a_name, scale_b_name = (value.removeprefix("%") for value in op.operands[2:4])
-    a_shape, b_shape = _static_shape(scheduled_module, a_name), _static_shape(scheduled_module, b_name)
+    a_shape, b_shape = _shape(scheduled_module, a_name), _shape(scheduled_module, b_name)
     assert a_shape is not None and b_shape is not None
-    m, k = a_shape
-    n = b_shape[1]
-    scale_k = (k + 15) // 16
+    ta, tb = (op.kwargs.get(name, False) for name in ("transposeA", "transposeB"))
+    m, n, k = artifact.m, artifact.n, artifact.k
+    batch_prefix = (b_shape[:-2] if shared_lhs else a_shape[:-2]) if op.kwargs.get("batching") in {"shared_rhs_rows", "independent_rhs", "shared_lhs"} else ()
+    batch_count = math.prod(batch_prefix) if batch_prefix else 1
+    batch_shape = (*batch_prefix, m // batch_count) if batch_prefix else None
     output_name = artifact.output_name
+    row_shape = batch_shape if batch_shape else (m,)
+    physical_a, physical_b = list(a_shape), list(b_shape)
+    physical_a[-2 if ta else -1] = (k + 1) // 2
+    physical_b[-1 if tb else -2] = (k + 1) // 2
+    scale_a_shape = _shape(scheduled_module, scale_a_name)
+    scale_b_shape = _shape(scheduled_module, scale_b_name)
+    assert scale_a_shape is not None and scale_b_shape is not None
+    physical_shapes = {
+        a_name: tuple(physical_a), b_name: tuple(physical_b),
+        scale_a_name: scale_a_shape,
+        scale_b_name: scale_b_shape,
+        output_name: (*row_shape, n),
+    }
     descriptor = LaunchDescriptor(
         image_digest=image.image_digest,
         entry_symbol=entry,
-        abi_id=SM120_NVFP4_ABI,
+        abi_id=abi_id,
         buffers=(
-            BufferBinding(0, a_name, "input", "uint8", 2, "row_major", 1),
-            BufferBinding(1, b_name, "input", "uint8", 2, "row_major", 1),
-            BufferBinding(2, scale_a_name, "input", "uint8", 2, "row_major", 1),
-            BufferBinding(3, scale_b_name, "input", "uint8", 2, "row_major", 1),
-            BufferBinding(4, output_name, "output", "fp32", 2, "row_major", 4),
+            BufferBinding(0, a_name, "input", "uint8", len(a_shape), "row_major", 1),
+            BufferBinding(1, b_name, "input", "uint8", len(b_shape), "row_major", 1),
+            BufferBinding(2, scale_a_name, "input", "uint8", len(a_shape), "row_major", 1),
+            BufferBinding(3, scale_b_name, "input", "uint8", len(b_shape), "row_major", 1),
+            BufferBinding(4, output_name, "output", "fp32", len(row_shape)+1, "row_major", 4),
         ),
         scalars=(
             ScalarArgument(5, "M", "int64"),
             ScalarArgument(6, "N", "int64"),
             ScalarArgument(7, "K", "int64"),
+        ) + ((ScalarArgument(8, "BatchRows", "int64"), ScalarArgument(9, "BatchCount", "int64")) if batch_aware else ()),
+        shape_guards=tuple(
+            ShapeGuard(name, dim, "eq", extent)
+            for name, shape in physical_shapes.items()
+            for dim, extent in enumerate(shape)
         ),
-        shape_guards=(
-            ShapeGuard(a_name, 0, "eq", m),
-            ShapeGuard(a_name, 1, "eq", (k + 1) // 2),
-            ShapeGuard(b_name, 0, "eq", (k + 1) // 2),
-            ShapeGuard(b_name, 1, "eq", n),
-            ShapeGuard(scale_a_name, 0, "eq", m),
-            ShapeGuard(scale_a_name, 1, "eq", scale_k),
-            ShapeGuard(scale_b_name, 0, "eq", scale_k),
-            ShapeGuard(scale_b_name, 1, "eq", n),
-            ShapeGuard(output_name, 0, "eq", m),
-            ShapeGuard(output_name, 1, "eq", n),
-        ),
-        geometry=LaunchGeometry(policy="sm120_nvfp4_m16n8k64"),
+        geometry=LaunchGeometry(policy="sm120_nvfp4_batched_m16n8k64" if batch_aware else "sm120_nvfp4_m16n8k64"),
         ordering=OrderingSemantics(
             ordered_submission=True,
             residency="none",
@@ -3243,6 +3478,10 @@ def package_nvfp4_matmul(
             "sync_key": "E2E-SPINE-2026-07-18",
             "schedule": "graph_schedule_tile_sm120_nvfp4_k16_m16n8k64",
             "shape": [m, n, k],
+            "batch_rows": [batch_count,batch_shape[-1]] if batch_shape else None,
+            "logical_batch_shape": list(batch_prefix),
+            "batching": "shared_lhs" if shared_lhs else ("independent_rhs" if independent_rhs else ("shared_rhs_rows" if batch_shape else None)),
+            "transposeA": ta, "transposeB": tb,
             "scale_vector_size": 16,
             "storage_pack": {
                 "logical": "nvfp4",
@@ -3507,15 +3746,21 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     nan_mode: str | None = None
     if norm:
         if (artifact.kind not in {"rmsnorm", "layernorm"} or artifact.axis != -1
-                or output_shape != shape or artifact.schedule != "serial"
+                or output_shape != shape or artifact.schedule not in {"serial","cooperative_128"}
                 or artifact.keepdims is not False or type(artifact.epsilon) is not float
                 or not math.isfinite(artifact.epsilon) or artifact.epsilon <= 0.0):
             raise ValueError("unsupported NVIDIA scheduled norm contract")
-        entry = f"tessera_tile_norm_{artifact.kind}_{storage}_{artifact.schedule_digest[:10]}"
+        strategy = "" if artifact.schedule == "serial" else "_cooperative_128"
+        entry = f"tessera_tile_norm_{artifact.kind}_{storage}{strategy}_{artifact.schedule_digest[:10]}"
         abi = {"f16": SM120_NORM_F16_ABI, "bf16": SM120_NORM_BF16_ABI, "f32": SM120_NORM_F32_ABI}[storage]
         scalar_names = ("Rows", "Columns")
-        geometry = "sm120_norm_serial_rows"
+        geometry = f"sm120_norm_{artifact.schedule}_rows"
         required = {"kind": f'"{artifact.kind}"'}
+        if artifact.schedule != "serial":
+            required["schedule"] = f'"{artifact.schedule}"'
+        elif (not re.search(r'\bschedule = "serial"', artifact.tile_ir)
+              or re.search(r'\bschedule = "(?!serial")[^"]+"', artifact.schedule_ir)):
+            raise ValueError("NVIDIA serial norm schedule disagrees with native IR")
         epsilon_attr = re.search(r"epsilon = ([^ ]+) : f32", artifact.schedule_ir)
         tile_epsilon = re.search(r"tessera.norm_epsilon = ([^ ]+) : f32", artifact.tile_ir)
         if (epsilon_attr is None or tile_epsilon is None
@@ -3524,13 +3769,19 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
             raise ValueError("scheduled norm epsilon disagrees with native IR")
     elif softmax:
         if (artifact.axis != -1 or shape != output_shape or artifact.keepdims is not False
-                or artifact.kind != "softmax" or artifact.schedule != "serial"):
+                or artifact.kind != "softmax"):
             raise ValueError("NVIDIA scheduled softmax requires shape-preserving last axis and fixed policy")
-        entry = f"tessera_tile_softmax_{storage}"
+        entry = f"tessera_tile_softmax_{storage}" + ("_cooperative_128" if artifact.schedule == "cooperative_128" else "")
         abi = {"f16": SM120_SOFTMAX_F16_ABI, "bf16": SM120_SOFTMAX_BF16_ABI, "f32": SM120_SOFTMAX_F32_ABI}[storage]
         scalar_names = ("Rows", "K")
-        geometry = "sm120_softmax_thread_per_row_128"
+        geometry = ("sm120_softmax_cooperative_128_rows" if artifact.schedule == "cooperative_128"
+                    else "sm120_softmax_thread_per_row_128")
         required = {'exp_mode': '"approx_exp2"', 'ftz': 'false'}
+        if artifact.schedule == "cooperative_128":
+            required["schedule"] = '"cooperative_128"'
+        elif (re.search(r'\bschedule = "(?!serial")[^"]+"', artifact.schedule_ir)
+              or re.search(r'\bschedule = "(?!serial")[^"]+"', artifact.tile_ir)):
+            raise ValueError("NVIDIA serial softmax schedule disagrees with native IR")
     else:
         if (artifact.kind not in {"sum", "mean", "max", "min"}
                 or not 0 <= artifact.axis < len(shape)
@@ -3568,6 +3819,8 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
     if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
         raise ValueError("unary Tile IR disagrees with native Schedule replay")
     lowered, ptx, metrics, compiler, toolchain, libraries, state = _compile_tile_ir(artifact.tile_ir, entry)
+    if (norm or softmax) and artifact.schedule == "cooperative_128" and "nvvm.barrier" not in lowered:
+        raise RuntimeError("selected NVIDIA compiler did not materialize the cooperative norm schedule")
     image = NativeImageArtifact(
         target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
         compiler_fingerprint=compiler, toolchain_fingerprint=toolchain,
@@ -3593,6 +3846,8 @@ def package_scheduled_kernel(artifact: Any, *, pipeline_name: str) -> NVIDIANati
                     "axis": artifact.axis, "kind": artifact.kind, "keepdims": artifact.keepdims,
                     "epsilon": artifact.epsilon,
                     **({"nan_mode": nan_mode} if nan_mode is not None else {}),
+                    "graph_ir_digest": hashlib.sha256(artifact.graph_ir.encode()).hexdigest(),
+                    "schedule_ir_digest": hashlib.sha256(artifact.schedule_ir.encode()).hexdigest(),
                     "schedule_digest": artifact.schedule_digest, "tile_ir_digest": artifact.tile_digest},
     )
     return NVIDIANativePackage(artifact.tile_ir, lowered, ptx, image, descriptor)
@@ -3647,6 +3902,8 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError("scheduled attention validation requires production tessera-opt")
+    if run_tessera_opt(tool, artifact.graph_ir, "--tessera-graph-to-schedule") != artifact.schedule_ir:
+        raise ValueError("attention Schedule IR disagrees with retained Graph replay")
     if run_tessera_opt(tool, artifact.schedule_ir, "--tessera-schedule-to-tile") != artifact.tile_ir:
         raise ValueError("attention Tile IR disagrees with native Schedule replay")
     storage, dims, scale, causal = artifact.dtype, artifact.dims, artifact.scale, artifact.causal
@@ -3677,7 +3934,8 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
     for index, (name, shape) in enumerate(zip(names, shapes)):
         element = storage_ir if index < 3 else "f32"
         typed = "tensor<" + "".join(f"{dim}x" for dim in shape) + element + ">"
-        if f"%arg{index}: {typed}" not in artifact.schedule_ir:
+        from .scheduled_attention import schedule_attention_argument_types
+        if schedule_attention_argument_types(artifact.schedule_ir)[index] != typed:
             raise ValueError("scheduled attention argument shape disagrees")
     binding_attr = "tessera.launch_bindings = " + json.dumps(names + [artifact.output_name])
     if binding_attr not in artifact.schedule_ir or binding_attr not in artifact.tile_ir:
@@ -3757,6 +4015,9 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
             "sync_key": "IR-NATIVE-FOUNDATION-1",
             "route": "canonical_scheduled_tile_consumer",
             "schedule_digest": artifact.schedule_digest,
+            "graph_ir_digest": artifact.graph_digest,
+            "schedule_ir_digest": artifact.schedule_ir_digest,
+            "target_ir_digest": image.target_ir_digest,
             "schedule": "thread_per_output_128",
             "storage": storage_ir,
             "accum": "f32",
@@ -3788,27 +4049,26 @@ def package_attention_backward(
             "dO/Q/K/V and gradients, deterministic_direct, valid dropout, and a "
             "nonnegative workspace limit"
         )
-    (storage, names, dims, scale, causal, bias_name, window_left, window_right,
-     softcap, dropout_p, dropout_seed) = contract
-    storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}[storage]
+    from .scheduled_attention_recompute import lower_native_attention_recompute
+
+    artifact = lower_native_attention_recompute(module)
+    storage_ir = artifact.storage
+    storage = {"f16": "fp16", "bf16": "bf16", "f32": "fp32"}[storage_ir]
+    names, dims = artifact.input_names[:4], artifact.dims
+    scale, causal = artifact.scale, artifact.causal
+    bias_name = artifact.input_names[4] if artifact.bias else None
+    window_left, window_right = artifact.window_left, artifact.window_right
+    softcap, dropout_p, dropout_seed = artifact.softcap, artifact.dropout_p, artifact.dropout_seed
     do_name, q_name, k_name, v_name = names
     b, hq, hkv, sq, sk, d, dv = dims
-    semantic_key = hashlib.sha256(
-        f"{scale:.17g}:{causal}:{bool(bias_name)}:{window_left}:{window_right}:"
-        f"{softcap:.17g}:{dropout_p:.17g}:{dropout_seed}:deterministic_direct".encode()
-    ).hexdigest()[:10]
-    entry = f"tessera_tile_attention_backward_{storage_ir}_deterministic_{semantic_key}"
+    entry = artifact.entry
     if storage == "fp16":
         abi_id = SM120_ATTN_BWD_BIAS_F16_ABI if bias_name else SM120_ATTN_BWD_F16_ABI
     elif storage == "bf16":
         abi_id = SM120_ATTN_BWD_BIAS_BF16_ABI if bias_name else SM120_ATTN_BWD_BF16_ABI
     else:
         abi_id = SM120_ATTN_BWD_BIAS_F32_ABI if bias_name else SM120_ATTN_BWD_F32_ABI
-    tile_ir = emit_attention_backward_tile_ir(
-        entry=entry, storage=storage_ir, scale=scale, causal=causal, bias=bias_name is not None,
-        window_left=window_left, window_right=window_right, softcap=softcap,
-        dropout_p=dropout_p, dropout_seed=dropout_seed,
-    )
+    tile_ir = artifact.tile_ir
     (lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state) = _compile_tile_ir(
         tile_ir, entry
     )
@@ -3821,7 +4081,7 @@ def package_attention_backward(
         device_libraries=device_libraries,
         resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
     )
-    result_names = module.functions[0].body[0].result_names
+    result_names = artifact.output_names
     if len(result_names) != 3:
         raise ValueError("SM120 attention backward needs dQ,dK,dV SSA result names")
     dq_name, dk_name, dv_name = result_names
@@ -3877,6 +4137,11 @@ def package_attention_backward(
         provenance={
             "work_item": "NVIDIA-PARITY-ATTN-BWD", "sync_key": "E2E-SPINE-2026-07-18",
             "route": "deterministic_direct", "candidate_role": "canonical_reference",
+            "compiler_route": "canonical_scheduled_tile_consumer",
+            "graph_ir_digest": artifact.graph_digest,
+            "target_ir_digest": image.target_ir_digest,
+            "schedule_digest": artifact.schedule_digest,
+            "schedule_ir_digest": artifact.schedule_ir_digest,
             "deterministic": True, "dk_dv_reduction": "single_owner_fixed_order",
             "workspace_bytes": 0, "storage": storage_ir, "accum": "f32",
             "shape": list(dims), "scale": scale, "causal": causal,
@@ -3898,28 +4163,34 @@ def package_attention_lse(
     contract = _attention_lse_contract(module)
     if contract is None:
         raise ValueError("SM120 saved-LSE forward requires the canonical f32 paired ABI")
-    from .scheduled_checkpoint import lower_scheduled_checkpoint
+    from .scheduled_checkpoint import lower_checkpoint_graph
 
-    names, dims, scale, causal = contract
-    return package_scheduled_checkpoint(lower_scheduled_checkpoint(
-        names, dims, scale, causal, backward=False), pipeline_name=pipeline_name)
+    return package_scheduled_checkpoint(
+        lower_checkpoint_graph(module, backward=False), pipeline_name=pipeline_name)
 
 
 def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
-    q_name, k_name, v_name, output_name, lse_name = names
-    b, hq, hkv, sq, sk, d, dv = dims
+    bias_name = names[3] if scheduled.bias else None
+    unbiassed_names = names[:3] + names[4:] if scheduled.bias else names
+    q_name, k_name, v_name, output_name, lse_name = unbiassed_names
+    b, hq, hkv, sq, sk, d, dv = scheduled.shape_bounds or dims
+    from .attention_shape_contract import physical_attention_bias_shape
+    physical_bias = physical_attention_bias_shape(scheduled.shape_bounds or dims,scheduled.bias_shape)
+    abi_id = SM120_ATTN_LSE_BIAS_F32_ABI if scheduled.bias else SM120_ATTN_LSE_F32_ABI
+    if scheduled.bias_shape:
+        abi_id = SM120_ATTN_LSE_BCAST_F32_ABI
     entry, tile_ir = scheduled.entry, scheduled.tile_ir
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
     image = NativeImageArtifact(
         target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
         target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(), binary_format="ptx",
-        payload=ptx.encode("ascii"), entry_points=(NativeEntryPoint(entry, SM120_ATTN_LSE_F32_ABI),),
+        payload=ptx.encode("ascii"), entry_points=(NativeEntryPoint(entry, abi_id),),
         compile_state=compile_state, device_libraries=device_libraries,
         resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
     )
-    buffers = (
+    buffers: tuple[BufferBinding, ...] = (
         BufferBinding(0, q_name, "input", "fp32", 4, "row_major", 4),
         BufferBinding(1, k_name, "input", "fp32", 4, "row_major", 4),
         BufferBinding(2, v_name, "input", "fp32", 4, "row_major", 4),
@@ -3933,22 +4204,39 @@ def _package_attention_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativ
                             (lse_name, (b, hq, sq)))
         for axis, extent in enumerate(shape)
     )
+    if bias_name is not None:
+        index = 3
+        expanded = [*buffers[:index], BufferBinding(index, bias_name, "input", "fp32", 4, "row_major", 4), *buffers[index:]]
+        buffers = tuple(replace(binding, ordinal=i) for i, binding in enumerate(expanded))
+        guards += tuple(ShapeGuard(bias_name, axis, "eq", extent)
+                        for axis, extent in enumerate(physical_bias))
+    from .attention_shape_contract import attention_guards
+    guards = attention_guards(buffers,dims,scheduled.shape_bounds,
+        backward=scheduled.backward,bias=scheduled.bias,bias_shape=scheduled.bias_shape,
+        bias_gradient=scheduled.bias_gradient,lse_cotangent=scheduled.lse_cotangent,
+        gradient_roles=tuple(i for i,x in enumerate(scheduled.gradient_activity) if x) if scheduled.compact_gradients else None)
     descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_ATTN_LSE_F32_ABI,
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=abi_id,
         buffers=buffers,
-        scalars=tuple(ScalarArgument(5 + index, name, "int64") for index, name in enumerate(
-            ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))),
+        scalars=tuple(ScalarArgument(len(buffers) + index, name, "int64") for index, name in enumerate(
+            ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv") +
+            (("BiasB", "BiasH", "BiasQ", "BiasK") if scheduled.bias_shape else ()))),
         shape_guards=guards,
         geometry=LaunchGeometry(policy="sm120_attention_lse_thread_per_output_128"),
         workspace=WorkspaceRequirement(bytes=0, alignment=4),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={
             "schedule_digest": scheduled.schedule_digest,
+            **({"shape_bounds": list(scheduled.shape_bounds), "shape_policy": "bounded_sequences_v1"} if scheduled.shape_bounds else {}),
+            "frontend_argument_indices": list(scheduled.frontend_argument_indices),
             "graph_ir_digest": hashlib.sha256(scheduled.graph_ir.encode()).hexdigest(),
+            "target_ir_digest": image.target_ir_digest,
             "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
 
-            "checkpoint_contract": _checkpoint_identity(dims, scale, causal),
-            "mask_alignment": "end_aligned_v1",
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds),
+            "mask_alignment": "end_aligned_v1", "bias": scheduled.bias,
+            "bias_shape": list(scheduled.bias_shape),
+            "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1" if scheduled.bias_shape else "none",
             "work_item": "NVIDIA-LSE-1", "checkpoint_role": "forward_save",
             "lse_checkpoint": "saved", "shape": list(dims), "storage": "f32",
             "accum": "f32", "output": "f32", "row_lse": "f32[B,Hq,Sq]",
@@ -3966,61 +4254,126 @@ def package_attention_backward_lse(
     contract = _attention_backward_lse_contract(module)
     if contract is None:
         raise ValueError("SM120 saved-LSE backward requires the canonical f32 paired ABI")
-    from .scheduled_checkpoint import lower_scheduled_checkpoint
+    from .scheduled_checkpoint import lower_checkpoint_graph
 
-    names, dims, scale, causal = contract
-    return package_scheduled_checkpoint(lower_scheduled_checkpoint(
-        names, dims, scale, causal, backward=True), pipeline_name=pipeline_name)
+    return package_scheduled_checkpoint(
+        lower_checkpoint_graph(module, backward=True), pipeline_name=pipeline_name)
 
 
 def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     names, dims, scale, causal = scheduled.names, scheduled.dims, scheduled.scale, scheduled.causal
-    do_name, q_name, k_name, v_name, lse_name, dq_name, dk_name, dv_name = names
-    b, hq, hkv, sq, sk, d, dv = dims
+    bias_name = names[5] if scheduled.bias else None
+    unbiassed_names = names[:5] + names[6:] if scheduled.bias else names
+    seeded = scheduled.lse_cotangent
+    seed_name = unbiassed_names[6] if seeded else None
+    if seeded:
+        unbiassed_names = unbiassed_names[:6] + unbiassed_names[7:]
+    bias_gradient = scheduled.bias_gradient
+    dbias_name = unbiassed_names[-1] if bias_gradient else None
+    if bias_gradient:
+        unbiassed_names = unbiassed_names[:-1]
+    do_name, q_name, k_name, v_name, output_name, lse_name, dq_name, dk_name, dv_name = unbiassed_names
+    b, hq, hkv, sq, sk, d, dv = scheduled.shape_bounds or dims
+    from .attention_shape_contract import physical_attention_bias_shape
+    physical_bias = physical_attention_bias_shape(scheduled.shape_bounds or dims,scheduled.bias_shape)
+    abi_id = SM120_ATTN_BWD_LSE_BIAS_F32_ABI if scheduled.bias else SM120_ATTN_BWD_LSE_F32_ABI
+    if bias_gradient:
+        abi_id = SM120_ATTN_BWD_LSE_BIAS_GRAD_F32_ABI
+    if scheduled.bias_shape:
+        abi_id = SM120_ATTN_BWD_LSE_BCAST_GRAD_F32_ABI if bias_gradient else SM120_ATTN_BWD_LSE_BCAST_F32_ABI
+    if scheduled.compact_gradients:
+        abi_id = SM120_ATTN_BWD_LSE_COMPACT_F32_ABI
+    if seeded:
+        abi_id = SM120_ATTN_BWD_LSE_COTANGENT_F32_ABI
     entry, tile_ir = scheduled.entry, scheduled.tile_ir
     lowered, ptx, metrics, compiler_fp, toolchain_fp, device_libraries, compile_state = _compile_tile_ir(tile_ir, entry)
     image = NativeImageArtifact(
         target="nvidia_sm120", architecture="sm_120a", pipeline_name=pipeline_name,
         compiler_fingerprint=compiler_fp, toolchain_fingerprint=toolchain_fp,
         target_ir_digest=hashlib.sha256(lowered.encode()).hexdigest(), binary_format="ptx",
-        payload=ptx.encode("ascii"), entry_points=(NativeEntryPoint(entry, SM120_ATTN_BWD_LSE_F32_ABI),),
+        payload=ptx.encode("ascii"), entry_points=(NativeEntryPoint(entry, abi_id),),
         compile_state=compile_state, device_libraries=device_libraries,
         resource_record=ResourceRecord(provenance="ptxas --arch=sm_120a -v", metrics=metrics),
     )
-    buffers = (
+    buffers: tuple[BufferBinding, ...] = (
         BufferBinding(0, do_name, "input", "fp32", 4, "row_major", 4),
         BufferBinding(1, q_name, "input", "fp32", 4, "row_major", 4),
         BufferBinding(2, k_name, "input", "fp32", 4, "row_major", 4),
         BufferBinding(3, v_name, "input", "fp32", 4, "row_major", 4),
-        BufferBinding(4, lse_name, "input", "fp32", 3, "row_major", 4),
-        BufferBinding(5, dq_name, "output", "fp32", 4, "row_major", 4),
-        BufferBinding(6, dk_name, "output", "fp32", 4, "row_major", 4),
-        BufferBinding(7, dv_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(4, output_name, "input", "fp32", 4, "row_major", 4),
+        BufferBinding(5, lse_name, "input", "fp32", 3, "row_major", 4),
+        BufferBinding(6, dq_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(7, dk_name, "output", "fp32", 4, "row_major", 4),
+        BufferBinding(8, dv_name, "output", "fp32", 4, "row_major", 4),
     )
     guards = tuple(
         ShapeGuard(name, axis, "eq", extent)
         for name, shape in ((do_name, (b, hq, sq, dv)), (q_name, (b, hq, sq, d)),
                             (k_name, (b, hkv, sk, d)), (v_name, (b, hkv, sk, dv)),
-                            (lse_name, (b, hq, sq)), (dq_name, (b, hq, sq, d)),
+                            (output_name, (b, hq, sq, dv)), (lse_name, (b, hq, sq)),
+                            (dq_name, (b, hq, sq, d)),
                             (dk_name, (b, hkv, sk, d)), (dv_name, (b, hkv, sk, dv)))
         for axis, extent in enumerate(shape)
     )
+    if bias_name is not None:
+        index = 5
+        expanded = [*buffers[:index], BufferBinding(index, bias_name, "input", "fp32", 4, "row_major", 4), *buffers[index:]]
+        buffers = tuple(replace(binding, ordinal=i) for i, binding in enumerate(expanded))
+        guards += tuple(ShapeGuard(bias_name, axis, "eq", extent)
+                        for axis, extent in enumerate(physical_bias))
+    if seeded:
+        assert isinstance(seed_name, str)
+        index = 6 + int(scheduled.bias)
+        expanded = [*buffers[:index], BufferBinding(index, seed_name, "input", "fp32", 3, "row_major", 4), *buffers[index:]]
+        buffers = tuple(replace(binding, ordinal=i) for i, binding in enumerate(expanded))
+        guards += tuple(ShapeGuard(seed_name, axis, "eq", extent) for axis, extent in enumerate((b,hq,sq)))
+    if bias_gradient:
+        if not isinstance(dbias_name, str):
+            raise ValueError("saved-LSE bias gradient requires a named output")
+        buffers += (BufferBinding(len(buffers), dbias_name, "output", "fp32", 4, "row_major", 4),)
+        guards += tuple(ShapeGuard(dbias_name, axis, "eq", extent)
+                        for axis, extent in enumerate(physical_bias))
+    if scheduled.compact_gradients:
+        inputs = tuple(binding for binding in buffers if binding.direction == "input")
+        outputs = tuple(binding for binding in buffers if binding.direction == "output")
+        selected = tuple(binding for binding, active in zip(outputs, scheduled.gradient_activity, strict=True) if active)
+        buffers = tuple(replace(binding, ordinal=i) for i, binding in enumerate((*inputs, *selected)))
+        retained = {binding.name for binding in buffers}
+        guards = tuple(guard for guard in guards if guard.binding in retained)
+    from .attention_shape_contract import attention_guards
+    guards = attention_guards(buffers,dims,scheduled.shape_bounds,
+        backward=scheduled.backward,bias=scheduled.bias,bias_shape=scheduled.bias_shape,
+        bias_gradient=scheduled.bias_gradient,lse_cotangent=scheduled.lse_cotangent,
+        gradient_roles=tuple(i for i,x in enumerate(scheduled.gradient_activity) if x) if scheduled.compact_gradients else None)
     descriptor = LaunchDescriptor(
-        image_digest=image.image_digest, entry_symbol=entry, abi_id=SM120_ATTN_BWD_LSE_F32_ABI,
+        image_digest=image.image_digest, entry_symbol=entry, abi_id=abi_id,
         buffers=buffers,
-        scalars=tuple(ScalarArgument(8 + index, name, "int64") for index, name in enumerate(
-            ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv"))),
+        scalars=tuple(ScalarArgument(len(buffers) + index, name, "int64") for index, name in enumerate(
+            ("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv") +
+            (("BiasB", "BiasH", "BiasQ", "BiasK") if scheduled.bias_shape else ()))),
         shape_guards=guards,
-        geometry=LaunchGeometry(policy="sm120_attention_backward_lse_deterministic_direct_128"),
+        geometry=LaunchGeometry(policy=f"sm120_attention_backward_lse_deterministic_direct_{scheduled.compact_threads if scheduled.compact_gradients else 128}"),
         workspace=WorkspaceRequirement(bytes=0, alignment=4),
         ordering=OrderingSemantics(ordered_submission=True, residency="none", synchronization=("completion",)),
         provenance={
+            "lse_cotangent": seeded,
             "schedule_digest": scheduled.schedule_digest,
+            **({"shape_bounds": list(scheduled.shape_bounds), "shape_policy": "bounded_sequences_v1"} if scheduled.shape_bounds else {}),
+            "frontend_argument_indices": list(scheduled.frontend_argument_indices),
             "graph_ir_digest": hashlib.sha256(scheduled.graph_ir.encode()).hexdigest(),
+            "target_ir_digest": image.target_ir_digest,
             "schedule_ir_digest": hashlib.sha256(scheduled.schedule_ir.encode()).hexdigest(),
-
-            "checkpoint_contract": _checkpoint_identity(dims, scale, causal),
-            "mask_alignment": "end_aligned_v1",
+            "checkpoint_contract": _checkpoint_identity(dims, scale, causal, bias=scheduled.bias, bias_shape=scheduled.bias_shape, shape_bounds=scheduled.shape_bounds),
+            "mask_alignment": "end_aligned_v1", "bias": scheduled.bias,
+            "bias_shape": list(scheduled.bias_shape),
+            "bias_gradient_reduction": "physical_owner_lexicographic_bhqk_v1" if scheduled.bias_shape else "none",
+            "bias_gradient": bias_gradient,
+            "gradient_activity": list(scheduled.gradient_activity),
+            "inactive_gradient": ("absent_v1" if scheduled.compact_gradients else "zero_fill_v1") if scheduled.gradient_activity else "none",
+            "gradient_output": "compact_v1" if scheduled.compact_gradients else "complete_v1",
+            "gradient_launch": scheduled.compact_launch if scheduled.compact_gradients else "logical_v1",
+            "gradient_block_threads": scheduled.compact_threads if scheduled.compact_gradients else 128,
+            "physical_gradient_roles": [i for i, active in enumerate(scheduled.gradient_activity) if active] if scheduled.compact_gradients else list(range(3 + int(bias_gradient))),
             "work_item": "NVIDIA-LSE-1", "checkpoint_role": "backward_load",
             "route": "deterministic_direct", "deterministic": True,
             "lse_checkpoint": "saved", "shape": list(dims), "storage": "f32",
@@ -4029,8 +4382,10 @@ def _package_attention_backward_lse(scheduled: Any, *, pipeline_name: str) -> NV
             "tile_ir_digest": hashlib.sha256(tile_ir.encode()).hexdigest(),
         },
     )
+    if seeded:
+        from .lse_cotangent_contract import lse_cotangent_contract
+        lse_cotangent_contract(descriptor)
     return NVIDIANativePackage(tile_ir, lowered, ptx, image, descriptor)
-
 
 def package_scheduled_checkpoint(scheduled: Any, *, pipeline_name: str) -> NVIDIANativePackage:
     """Consume a replay-verified native checkpoint without Graph reconstruction."""
@@ -4046,10 +4401,53 @@ class AttentionCheckpointPair:
     backward: NVIDIANativePackage
     contract_digest: str
 
-    def capture(self, q, k, v):
+    def capture(self, q, k, v, *, bias=None, asynchronous=False):
         """Capture one resident CUDA forward generation with private saved LSE."""
         from .resident_attention import ResidentAttentionTape
-        return ResidentAttentionTape(self, q, k, v)
+        return ResidentAttentionTape(self, q, k, v, bias=bias, asynchronous=asynchronous)
+
+
+@dataclass(frozen=True)
+class AttentionForwardCheckpoint:
+    """Compiler-owned saved-LSE producer without a reverse executable."""
+    forward: NVIDIANativePackage
+    contract_digest: str
+
+    def capture(self, q, k, v, *, bias=None, asynchronous=False):
+        from .resident_attention import ResidentAttentionTape
+        return ResidentAttentionTape(self, q, k, v, bias=bias, asynchronous=asynchronous)
+
+
+def package_scheduled_checkpoint_pair(forward,backward, *, pipeline_name: str):
+    """Package replay-verified native checkpoint products with one sealed policy."""
+    forward.validate();backward.validate()
+    if forward.backward or not backward.backward:
+        raise ValueError("checkpoint pair requires forward then backward native products")
+    f_identity=_checkpoint_identity(forward.dims,forward.scale,forward.causal,
+        bias=forward.bias,bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds)
+    b_identity=_checkpoint_identity(backward.dims,backward.scale,backward.causal,
+        bias=backward.bias,bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds)
+    if f_identity!=b_identity:
+        raise ValueError("checkpoint producer and consumer policies disagree")
+    f,b=forward.names,backward.names
+    if (f[:3]!=b[1:4] or f[3+int(forward.bias)]!=b[4] or
+            f[4+int(forward.bias)]!=b[5+int(backward.bias)] or
+            (forward.bias and f[3]!=b[5]) or
+            forward.frontend_argument_indices!=backward.frontend_argument_indices):
+        raise ValueError("checkpoint producer and consumer saved bindings disagree")
+    return AttentionCheckpointPair(
+        package_scheduled_checkpoint(forward,pipeline_name=pipeline_name),
+        package_scheduled_checkpoint(backward,pipeline_name=pipeline_name),f_identity)
+
+
+def package_generated_attention_forward_checkpoint(source: str, *, pipeline_name: str):
+    from .scheduled_checkpoint import lower_generated_checkpoint
+    forward = lower_generated_checkpoint(source)
+    identity = _checkpoint_identity(
+        forward.dims, forward.scale, forward.causal,
+        bias=forward.bias, bias_shape=forward.bias_shape)
+    return AttentionForwardCheckpoint(
+        package_scheduled_checkpoint(forward, pipeline_name=pipeline_name), identity)
 
 
 def package_attention_checkpoint_pair(
@@ -4061,10 +4459,17 @@ def package_attention_checkpoint_pair(
         raise ValueError("requires a supported saved-LSE producer and consumer")
     f_names, f_dims, f_scale, f_causal = forward_contract
     b_names, b_dims, b_scale, b_causal = backward_contract
-    identity = _checkpoint_identity(f_dims, f_scale, f_causal)
-    if identity != _checkpoint_identity(b_dims, b_scale, b_causal):
+    f_bias, b_bias = len(f_names) == 6, len(b_names) - int(backward.functions[0].body[0].kwargs.get("lse_cotangent", False)) == 10
+    f_physical = _shape(forward, f_names[3]) if f_bias else ()
+    b_physical = _shape(backward, b_names[5]) if b_bias else ()
+    if f_physical is None or b_physical is None:
+        raise ValueError("saved-LSE physical bias shapes must be concrete")
+    identity = _checkpoint_identity(f_dims, f_scale, f_causal, bias=f_bias, bias_shape=f_physical)
+    if identity != _checkpoint_identity(b_dims, b_scale, b_causal, bias=b_bias, bias_shape=b_physical):
         raise ValueError("saved-LSE producer and consumer policies disagree")
-    if f_names[:3] != b_names[1:4] or f_names[4] != b_names[4]:
+    if (f_names[:3] != b_names[1:4] or f_names[3 + int(f_bias)] != b_names[4]
+            or f_names[4 + int(f_bias)] != b_names[5 + int(b_bias)]
+            or (f_bias and f_names[3] != b_names[5])):
         raise ValueError("saved-LSE producer and consumer bindings disagree")
     # All contract checks precede either target compilation.
     return AttentionCheckpointPair(
@@ -4432,11 +4837,16 @@ __all__ = [
     "SM120_EPILOGUE_ABIS",
     "SM120_REDUCED_OUTPUT_ABIS",
     "SM120_F16_ABI",
+    "SM120_ROW_B_F16_ABI",
+    "SM120_ROW_B_BF16_ABI",
     "SM120_STRIDED_F16_ABI",
+    "SM120_STRIDED_ROW_B_F16_ABI",
+    "SM120_STRIDED_ROW_B_BF16_ABI",
     "SM120_STRIDED_BF16_ABI",
     "SM120_FP8_E4M3_ABI",
     "SM120_FP8_E5M2_ABI",
     "SM120_NVFP4_ABI",
+    "SM120_NVFP4_BATCH_ABI",
     "SM120_FP64_ABI",
     "SM120_FP6_E2M3_ABI",
     "SM120_FP6_E3M2_ABI",
@@ -4542,15 +4952,25 @@ __all__ = [
 ]
 
 
-def package_generated_attention_checkpoint_pair(source: str, *, pipeline_name: str) -> AttentionCheckpointPair:
+def package_generated_attention_checkpoint_pair(
+    source: str, *, pipeline_name: str, prune_inactive: bool = False, compact_gradients: bool = False, compact_launch: str = "packed_v1", compact_threads: int = 128,
+) -> AttentionCheckpointPair:
     """Package compiler-generated paired AD directly through native Schedule IR."""
     from .scheduled_checkpoint import lower_generated_checkpoint
     forward = lower_generated_checkpoint(source)
-    backward = lower_generated_checkpoint(source, backward=True)
-    identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal)
-    if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal):
+    if not compact_gradients and (compact_launch != "packed_v1" or compact_threads != 128):
+        raise ValueError("compact launch requires compact gradient outputs")
+    backward = lower_generated_checkpoint(source, backward=True, prune_inactive=prune_inactive,
+        compact_gradients=compact_gradients, compact_launch=compact_launch, compact_threads=compact_threads)
+    identity = _checkpoint_identity(forward.dims, forward.scale, forward.causal, bias=forward.bias, bias_shape=forward.bias_shape,shape_bounds=forward.shape_bounds)
+    if identity != _checkpoint_identity(backward.dims, backward.scale, backward.causal, bias=backward.bias, bias_shape=backward.bias_shape,shape_bounds=backward.shape_bounds):
         raise ValueError('generated checkpoint producer and consumer policies disagree')
-    if forward.names[:3] != backward.names[1:4] or forward.names[4] != backward.names[4]:
+    if forward.frontend_argument_indices != backward.frontend_argument_indices:
+        raise ValueError("generated checkpoint frontend mappings disagree")
+    if (forward.names[:3] != backward.names[1:4] or
+            forward.names[3 + int(forward.bias):5 + int(forward.bias)] !=
+            (backward.names[4], backward.names[5 + int(backward.bias)]) or
+            (forward.bias and forward.names[3] != backward.names[5])):
         raise ValueError('generated checkpoint bindings disagree')
     return AttentionCheckpointPair(package_scheduled_checkpoint(forward,pipeline_name=pipeline_name),
         package_scheduled_checkpoint(backward,pipeline_name=pipeline_name),identity)

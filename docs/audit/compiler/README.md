@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-28
+last_updated: 2026-10-07
 audit_role: index
 ---
 
@@ -214,3 +214,7 @@ landing plans and two references. The August substrate snapshot and superseded
 AD/workload status excerpts are archived; they are not additional queues.
 
 - `HEAP_BARRIER_ARCHITECTURE_REVIEW.md` — [publication, reader epochs and reclamation design](HEAP_BARRIER_ARCHITECTURE_REVIEW.md); scoped exploration under W4-PRODUCT-1 / W2.4a / DISPATCH-BREAKER, not a status queue.
+
+## Current five-slice evidence
+
+`FIVE_SLICE_STATUS_20261007.md` records the scoped native boundaries, owning-device receipts and incomplete delivery gates after PR 892. It does not declare general backend closure.

@@ -1,0 +1,10 @@
+-- Testing: 4 tests, 4 workers --
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_encoded_invalid.mlir (1 of 4)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul_schedule.mlir (2 of 4)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_core.mlir (3 of 4)
+PASS: Tessera-IR v0.3.1 :: phase_f4/autodiff_forward_scaled_matmul.mlir (4 of 4)
+
+Testing Time: 0.11s
+
+Total Discovered Tests: 4
+  Passed: 4 (100.00%)

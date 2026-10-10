@@ -231,6 +231,11 @@ class ResidentAttentionTape:
         from .attention_shape_contract import physical_attention_bias_shape,DYNAMIC_DIM
         forward_physical = tuple(pair.forward.descriptor.provenance.get("bias_shape", ()))
         self._bias_shape = physical_attention_bias_shape(self.dims,forward_physical)
+        self._symbolic_dims = tuple(pair.forward.descriptor.provenance["shape"])
+        self._shape_bounds = tuple(pair.forward.descriptor.provenance.get("shape_bounds",()))
+        self._symbolic_bias_shape = forward_physical or (
+            (self._symbolic_dims[0],self._symbolic_dims[1],self._symbolic_dims[3],self._symbolic_dims[4])
+            if self._has_bias else ())
         self._forward_scalars = self.dims + (self._bias_shape if DYNAMIC_DIM in forward_physical else ())
         compact = reverse_policy.get("gradient_output") == "compact_v1"
         physical = tuple(reverse_policy.get("bias_shape", ()))
@@ -515,14 +520,17 @@ class ResidentAttentionTape:
                 raise ValueError("resident bias JVP requires its traced native AD source")
             if self._jvp_binding is not None:
                 raise ValueError('resident attention JVP is already prepared')
-            package = (materialize(self.dims,self._scale,self._causal,compiler=compiler,llvm_bin=llvm_bin)
+            package = (materialize(self._symbolic_dims,self._scale,self._causal,compiler=compiler,llvm_bin=llvm_bin,shape_bounds=self._shape_bounds)
                        if source is None else
-                       materialize_generated(source,self.dims,self._scale,self._causal,compiler=compiler,llvm_bin=llvm_bin,
-                           bias_shape=self._bias_shape if self._has_bias else ()))
+                       materialize_generated(source,self._symbolic_dims,self._scale,self._causal,compiler=compiler,llvm_bin=llvm_bin,
+                           bias_shape=self._symbolic_bias_shape if self._has_bias else (),
+                           shape_bounds=self._shape_bounds))
             if f'tessera.attention_checkpoint_identity = "{self.contract_digest}"' not in package.arena_ir:
                 raise ValueError("resident JVP product differs from its captured forward generation")
             names = ('q','k','v','primal','lse','dq','dk','dv') + (
                 ('bias','dbias') if self._has_bias else ()) + ('tangent','scratch')
+            if self._shape_bounds:
+                names+=('query_size','key_size')
             signature = inspect.Signature([inspect.Parameter(n,inspect.Parameter.POSITIONAL_ONLY) for n in names])
             self._jvp_binding = generate_tensor_binding(package,signature)
             return package.binding_digest
@@ -543,7 +551,8 @@ class ResidentAttentionTape:
             try:
                 result = _Buffer(self,self.shapes[3])
                 extra=(self._bias,dbias) if self._has_bias else ()
-                self._jvp_binding(*self._saved,dq,dk,dv,*extra,result,128)
+                scalars=(self.dims[3],self.dims[4]) if self._shape_bounds else ()
+                self._jvp_binding(*self._saved,dq,dk,dv,*extra,result,128,*scalars)
             except BaseException:
                 self._release(start)
                 raise

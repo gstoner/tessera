@@ -22,13 +22,17 @@ def requests_composed_typed_scaled(module):
     if not 2<=len(fn.body)<=128:return False
     arguments={arg.name:arg.ir_type for arg in fn.args}
     products=0
+    permutations=0
     for op in fn.body:
         if op.op_name=="tessera.add":continue
+        if op.op_name=="tessera.transpose":
+            permutations+=1
+            continue
         if op.op_name!="tessera.scaled_matmul" or len(op.operands)!=4:return False
         lhs=arguments.get(op.operands[0].removeprefix("%"))
         if lhs is None or lhs.dtype!="fp8_e4m3" or op.kwargs.get("physical_contract"):return False
         products+=1
-    return products>=2
+    return products>=2 or (products>=1 and permutations>=1)
 
 @dataclass(frozen=True)
 class _LogicalScaleShape:
@@ -237,13 +241,21 @@ def _package_native_typed(module,program,*,pipeline_name):
     return ROCMNativePackage(program.tile_ir,target_ir,backend_ir,image,descriptor)
 
 
+def supports_composed_scaled_primal(module):
+    return _supports_composed_scaled(module, (), primal=True)
+
+
 def supports_composed_scale_jvp(module, wrt_indices):
+    return _supports_composed_scaled(module, wrt_indices, primal=False)
+
+
+def _supports_composed_scaled(module, wrt_indices, *, primal):
     """Check frontend product/sum SSA; native AD and codegen own execution."""
     import copy
-    if len(module.functions) != 1 or not wrt_indices:
+    if len(module.functions) != 1 or (not primal and not wrt_indices):
         return False
     fn = module.functions[0]
-    if not 2 <= len(fn.body) <= 128 or len(fn.result_types) != 1:
+    if not 2 <= len(fn.body) <= 128 or len(fn.result_types) != 1 or len(fn.return_values) != 1:
         return False
     names = {arg.name: arg for arg in fn.args}
     values = {("%" + name): arg.ir_type for name, arg in names.items()}
@@ -256,7 +268,7 @@ def supports_composed_scale_jvp(module, wrt_indices):
         if len(op.result_names) != 1 or any(v not in values for v in op.operands):
             return False
         result = op.inferred_type
-        if result is None or str(result) != str(expected):
+        if result is None or result.dtype != "fp32":
             return False
         if op.op_name == "tessera.scaled_matmul":
             if len(op.operands) != 4 or any(v.removeprefix("%") not in names for v in op.operands):
@@ -273,12 +285,25 @@ def supports_composed_scale_jvp(module, wrt_indices):
             used.update(v.removeprefix("%") for v in op.operands)
         elif op.op_name == "tessera.add":
             if (len(op.operands) != 2 or op.kwargs or op.numeric_policy is not None
-                    or any(str(values[v]) != str(expected) for v in op.operands)):
+                    or any(str(values[v]) != str(result) for v in op.operands)):
+                return False
+        elif op.op_name == "tessera.transpose":
+            if len(op.operands) != 1 or set(op.kwargs) != {"permutation"} or op.numeric_policy is not None:
+                return False
+            axes = op.kwargs["permutation"]
+            source = values[op.operands[0]]
+            if (op.operands[0].removeprefix("%") in names or
+                    not isinstance(axes, (list, tuple)) or
+                    any(type(axis) is not int for axis in axes) or
+                    sorted(axes) != list(range(source.rank)) or
+                    not 1 <= source.rank <= 8 or source.dtype != "fp32" or
+                    tuple(result.shape) != tuple(source.shape[axis] for axis in axes)):
                 return False
         else:
             return False
         values["%" + op.result_names[0]] = result
-    return (fn.return_values == ["%" + fn.body[-1].result_names[0]]
+    return (str(values.get(fn.return_values[0])) == str(expected)
+            and fn.return_values == ["%" + fn.body[-1].result_names[0]]
             and used == set(names)
             and all(type(i) is int and 0 <= i < len(fn.args)
                     and fn.args[i].name in scales and fn.args[i].ir_type.dtype == "fp32"

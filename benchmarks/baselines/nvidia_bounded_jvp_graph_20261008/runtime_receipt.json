@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "source_revision": "e8d5d145fb2e253ca29949f1e03be28767fba681",
+  "source_dirty": true,
+  "source_sha256": {
+    "benchmarks/nvidia/benchmark_bounded_attention_jvp.py": "6743c88321bc341be02664ca37fecfc639ec2145c9cfd6943ed7f742412b4fcf",
+    "benchmarks/nvidia/replay_bounded_attention_jvp.py": "c296440fe905c3ab48c432ccc2c760cfd475dd721f200d1c6851b3c0df33961c",
+    "python/tessera/compiler/native_attention_jvp.py": "06dd96c1c3d19f62dc7bb7b9adfc2cc9b8697f993551dea2459d0689afbcbaba",
+    "python/tessera/compiler/native_attention_jvp_artifact.py": "3ce4d8490d13ca2d3619f1e279b6a68e934286feeb4274d9c5027a632484d5a2",
+    "python/tessera/compiler/native_attention_program.py": "1171d951b658806006b083a9169408c01d07de29e05031fea813ad73253d5faa",
+    "python/tessera/compiler/native_gpu_tensor.py": "ae7d2e5466d9dd74604d86c70ef9fb4282a68c8cdf7604699c10f04d14b7929b",
+    "python/tessera/compiler/native_storage_contract.py": "542adf4e4bd695ca2661da5202f90fb3139073d757bff7d8c5b0e9f040e3ce5f",
+    "python/tessera/compiler/nvidia_native.py": "89f9212b304dfd3aeafa4b33e941d5a9418ac9ece21a43fc3152016b4e104360",
+    "python/tessera/compiler/resident_attention.py": "1b14ca8965df21d5c81472b28787ae4b65f5115cfe48cd4a8bbee70b572d0403",
+    "src/compiler/ir/AttentionADContract.h": "3b63c59d3af4d17da70a7860e66bf6ee244522e605c796dba44f8048e2e53c67",
+    "src/compiler/ir/TangentInterface.cpp": "16ca135325d67d4430c1571e6e5e84d98958b94d6067ac51542926b1c9b0428a",
+    "src/compiler/ir/include/Tessera/IR/AttentionShapeContract.h": "a137a3e8320535f9db85ac45d34bd4143759cc43c89de1ddfca7c8e607daeb59",
+    "src/compiler/ir/include/Tessera/IR/AttentionTangentZero.h": "3ae49c170fa2217efe95e6493ff8fbfdf6398a1a14691265db95b5f9a87003ea",
+    "src/compiler/programming_model/lib/NativeAttentionJvp.h": "ba3b96ca9890d8fa5a5cd9197ebdf61f5516fbeb0c8ec6ecada694b2afcce7dd",
+    "src/compiler/programming_model/lib/NativeCheckpoint.h": "e2f017f2e221e85bc6361c8d2ef0ff545de06a011c5fccd8dac841914a21a32a",
+    "src/compiler/programming_model/lib/PMPasses.cpp": "ea56d4e61c5a319a4c82ebba1af2c17f392ce508e3041c9a3a8a1f19481ec393",
+    "src/compiler/tile_opt_fa4/lib/Dialect/Attn/AttnOps.cpp": "62b647da020de9aa103f8c272f82eb5e69e79ca24eeafce2edcf0ca0c4a7795b",
+    "src/transforms/lib/AutodiffForwardPass.cpp": "9c9e162927c3754e82686f49d0ed12751d3e13eef0701f1c5f763a16fb323e6e",
+    "tests/unit/test_bounded_attention_jvp_graph.py": "3d41175d37f3aa5d12eeebdcf09bcaca10d247bbfe604199ce785e0971059761",
+    "tests/unit/test_bounded_attention_jvp_lowering.py": "fe2d7e9111acae478cae50734e02ddb877f412e227efbbbdaeca701d68849337",
+    "tests/unit/test_native_attention_bias_jvp.py": "9bf7c11c2acca68410606a23c6ce733266fd507f2e6abe223c1174df1693919a",
+    "tests/unit/test_native_attention_jvp.py": "5719fb0a041b22d07df56d12f84e081c4a0912421f8fc1e43867ac1214b5157b",
+    "tests/unit/test_native_tensor_product_geometry.py": "2e86c620b58c115323cc97be9aca686cc6a6d235e8384f340f9d051420a8a641"
+  },
+  "tools": {
+    ".build-native-jvp-make/tools/tessera-opt/tessera-opt": {
+      "sha256": "de98eabf4c1ee2f8bd5ca4444e6a94c7b7928a3eb4de31d0a0c0d85264fec28b",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    },
+    ".build-native-jvp-make/src/compiler/codegen/tessera_gpu_backend_NVIDIA/tools/tessera-nvidia-opt": {
+      "sha256": "1866784f0307d453af00e8932b332ff84cd1844518fa9d1f6d588b3ee60c2f8f",
+      "version": "LLVM (http://llvm.org/):\n  LLVM version 23.1.1\n  Optimized build with assertions."
+    }
+  },
+  "host_regression_passed": 574,
+  "host_regression_skipped": 0,
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "exact_device_cases": 40,
+  "compiler_free_replay_cases": 9,
+  "maximum_abs_jvp_error": 3.081143902516903e-08,
+  "kernel_median_range_ms": [
+    0.00921150017529726,
+    0.013439999893307686
+  ],
+  "pipeline_wall_median_range_ms": [
+    5.169666022993624,
+    6.425011029932648
+  ],
+  "public_python_jit_dynamic_proved": false,
+  "prepared_dynamic_abi_proved": false,
+  "performance_promotion": false
+}

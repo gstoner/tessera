@@ -1,3 +1,4 @@
+#include "Tessera/IR/StaticPermutationContract.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include "mlir/Dialect/Func/IR/FuncOps.h"
 //===- TileOps.cpp - Tessera Tile IR op verifiers -------------*- C++ -*-===//
@@ -3228,4 +3229,16 @@ LogicalResult tessera::tile::MXFP4FoldedStorageKernelOp::verify() {
 #include "Tessera/IR/StructuredReductionContract.h"
 mlir::LogicalResult tessera::tile::StructuredReductionKernelOp::verify() {
   return tessera::verifyStructuredReductionCarrier(getOperation());
+}
+
+mlir::LogicalResult tessera::tile::TransposeKernelOp::verify() {
+  auto shape = getSourceShape();
+  auto axes = getPermutation();
+  auto count = tessera::staticPermutationElements(shape, axes);
+  if (!count || getNumOperands() != 3 ||
+      !mlir::isa<mlir::LLVM::LLVMPointerType>(getOperand(0).getType()) ||
+      !mlir::isa<mlir::LLVM::LLVMPointerType>(getOperand(1).getType()) ||
+      !getOperand(2).getType().isSignlessInteger(64))
+    return emitOpError("requires compact positive rank-1..8 f32 shapes, a unique axis permutation and pointer/pointer/i64 ABI");
+  return mlir::success();
 }

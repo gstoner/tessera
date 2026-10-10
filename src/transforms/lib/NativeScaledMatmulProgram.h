@@ -2,6 +2,7 @@
 #pragma once
 #include "Tessera/IR/TesseraOps.h"
 #include "Tessera/IR/ScaledBatchContract.h"
+#include "Tessera/IR/TransposeUtils.h"
 #include "mlir/IR/SymbolTable.h"
 #include "mlir/Transforms/RegionUtils.h"
 #include "llvm/ADT/SetVector.h"
@@ -125,8 +126,19 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
         return op.emitError("scaled transpose captured a value outside its native input frame");
       hasScaledProduct = true;
     } else {
-      if (!isa<ScaledMatmulOp, AddOp>(op) || op.getNumResults() != 1)
-        return op.emitError("scaled JVP program needs scaled products and their native sums");
+      if (!isa<ScaledMatmulOp, AddOp, TransposeOp>(op) || op.getNumResults() != 1)
+        return op.emitError("scaled JVP program needs scaled products, native sums and result permutations");
+      if (isa<TransposeOp>(op)) {
+        auto type = dyn_cast<RankedTensorType>(op.getOperand(0).getType());
+        auto axes = transposePermutation(&op);
+        if (!axes || !type.hasStaticShape() || !type.getElementType().isF32() ||
+            type.getEncoding() || type.getRank() < 1 || type.getRank() > 8)
+          return op.emitError("scaled result permutation requires static unencoded rank-1..8 f32 storage");
+        auto *producer = op.getOperand(0).getDefiningOp();
+        if (!producer || producer->getBlock() != &root.getBody().front() ||
+            !isa<ScaledMatmulOp, AddOp, TransposeOp>(producer))
+          return op.emitError("scaled result permutation must retain a native computed producer");
+      }
       llvm::append_range(capturedInputs[&op], op.getOperands());
       hasScaledProduct |= isa<ScaledMatmulOp>(op);
     }
@@ -279,6 +291,12 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
             AddOp::getOperationName().str() : ops[index]->getName().getStringRef().str()},
         {"inputs", std::move(inputs)},
         {"output", cast<IntegerAttr>(step.get("output")).getInt()}};
+    if (isa<TransposeOp>(ops[index])) {
+      llvm::json::Array axes;
+      auto permutation = transposePermutation(ops[index]);
+      for (int64_t axis : *permutation) axes.push_back(axis);
+      manifestStep["permutation"] = std::move(axes);
+    }
     if (auto transpose = ops[index]->getAttrOfType<BoolAttr>("transposeA"); transpose && transpose.getValue())
       manifestStep["transposeA"] = true;
     if (auto batching = ops[index]->getAttrOfType<StringAttr>("batching"))
@@ -370,7 +388,8 @@ static mlir::LogicalResult projectNativeScaledMatmulMember(
   module->setAttr("tessera.autodiff.scaled_program_witness",
                   b.getStringAttr(witness));
   auto target = module->getAttrOfType<StringAttr>("tessera.target");
-  if (kind == "tessera.add" && target && target.getValue() == "rocm") {
+  if ((kind == "tessera.add" || kind == "tessera.transpose") &&
+      target && target.getValue() == "rocm") {
     llvm::SmallVector<Attribute> bindings;
     for (unsigned arg = 0; arg < child.getNumArguments(); ++arg)
       bindings.push_back(b.getStringAttr((llvm::Twine("member_input_") + llvm::Twine(arg)).str()));

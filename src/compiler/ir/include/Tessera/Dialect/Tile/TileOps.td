@@ -1639,3 +1639,16 @@ def Tile_StructuredReductionKernelOp : Tile_Op<"structured_reduction_kernel",
   let assemblyFormat = "attr-dict-with-keyword $body";
   let hasVerifier = 1;
 }
+
+// A checked compact f32 axis permutation. Operands are source pointer,
+// destination pointer and the flattened i64 count, with one owning program
+// buffer per result. This is movement, not pointwise elementwise arithmetic.
+def Tile_TransposeKernelOp : Tile_Op<"transpose_kernel"> {
+  let summary = "Launch-level compact f32 result-axis materialization";
+  let arguments = (ins Variadic<AnyType>:$inputs,
+                       DenseI64ArrayAttr:$source_shape,
+                       DenseI64ArrayAttr:$permutation);
+  let results = (outs);
+  let assemblyFormat = "$inputs attr-dict `:` type($inputs)";
+  let hasVerifier = 1;
+}

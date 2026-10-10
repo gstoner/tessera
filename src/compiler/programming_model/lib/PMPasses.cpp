@@ -35,6 +35,8 @@
 #include "mlir/Dialect/Vector/IR/VectorOps.h"
 #include "mlir/IR/Builders.h"
 #include "Tessera/IR/StructuredReductionContract.h"
+#include "Tessera/IR/StaticPermutationContract.h"
+#include "Tessera/IR/TransposeUtils.h"
 #include "mlir/IR/IRMapping.h"
 #include "llvm/ADT/SetVector.h"
 #include "mlir/Transforms/RegionUtils.h"
@@ -81,6 +83,7 @@ namespace tessera {
 #include "NativeAbsolute.h"
 #include "NativeX86Kernel.h"
 #include "NativeROCMMath.h"
+#include "NativeResultPermutation.h"
 #include "NativeSparse.h"
 
 // ---------------------------------------------------------------------------
@@ -3169,6 +3172,7 @@ struct GraphToSchedulePass
     if (failed(scheduleNativeAbsolute(mod))) return signalPassFailure();
     if (failed(scheduleNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(scheduleNativeROCMMath(mod))) return signalPassFailure();
+    if (failed(scheduleNativeResultPermutation(mod))) return signalPassFailure();
     bool jvpSelected=false;
     if (failed(scheduleNativeAttentionJvp(mod,jvpSelected))) return signalPassFailure();
     if (jvpSelected) return;
@@ -4192,6 +4196,7 @@ struct ScheduleToTilePass
     if (failed(lowerNativeAbsolute(mod))) return signalPassFailure();
     if (failed(lowerNativeX86Kernel(mod))) return signalPassFailure();
     if (failed(lowerNativeROCMMath(mod))) return signalPassFailure();
+    if (failed(lowerNativeResultPermutation(mod))) return signalPassFailure();
     bool jvpSelected=false;
     if (failed(lowerNativeAttentionJvp(mod,jvpSelected))) return signalPassFailure();
     if (jvpSelected) return;

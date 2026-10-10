@@ -14086,3 +14086,26 @@ wider NVFP4 maps and generic primitive closure remain open. No speedup or
 default-route promotion is claimed.
 
 Existing SM120 attention JVP parity is validated. Nonleading SM120 scaled-result maps require follow-up; existing NVIDIA out_axes admission/diagnostics are preserved.
+
+## Native batched program readback — 2026-10-09
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1 / FRONTEND-IR-MEDIUM-1.
+Sync ROCM-BATCHED-PROGRAM-READBACK-20261009; dependent on PR909.
+
+Additive checked HIP read_many validates all returned spans before enqueue,
+stages copies privately, completes once and publishes outputs only on success.
+Aggregate returned-output staging and input/output cache budget are counted in
+native ownership. Python marshals arrays; numerical execution and lifetime
+checks stay native. Existing single-read providers remain compatible.
+
+gfx1201 RX9070XT: 598 public map/reverse, 16 forced-pinned mixed-map and 28
+NVFP4/MXFP4 regression checks pass. 18 native-body host tests and 149 focused
+ABI/binding/artifact gates pass. Nine rotating same-image A/B rounds improve
+automatic multioutput read latency 22–30% and public latency 3–14%; these are
+host transport gains. First pinned single-output control has 25% variance; a retained repeat
+restores the primal ratio to 0.997 and reproduces multioutput gains, while
+an unchanged single-gradient read control still varies by 10.5%. No kernel or default pinned-policy promotion.
+Evidence: benchmarks/baselines/native_batched_read_20261009/README.md.
+Generic scaled_matmul batching/transpose closure remains open.
+
+Not applicable to this HIP transport ABI: CUDA resident streams/events are unchanged. SM120 scaled-result ownership parity remains follow-up required.

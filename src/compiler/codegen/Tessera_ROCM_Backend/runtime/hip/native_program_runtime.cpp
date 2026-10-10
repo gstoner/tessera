@@ -306,26 +306,27 @@ extern "C" int tessera_rocm_program_prepare(
   auto &pool = state();
   std::lock_guard<std::mutex> guard(pool.mutex);
   if (!pool.next) return 12;
-  uint64_t inputTotal = 0, outputMaximum = 0;
+  uint64_t inputTotal = 0, outputTotal = 0;
   for (uint32_t i = 0; i < arguments; ++i) {
     p->inputOffsets.push_back(inputTotal);
     inputTotal += contract[i].bytes;
   }
   for (uint32_t i = arguments; i < buffers; ++i)
     if (contract[i].ownership == 2)
-      outputMaximum = std::max(outputMaximum, contract[i].bytes);
+      outputTotal += contract[i].bytes;
   // Owning gfx1201 transfer measurements favor pinned staging for moderate
   // uploads. Bound default locked memory and retain explicit mode overrides.
   const char *pinnedMode = std::getenv("TESSERA_ROCM_PROGRAM_PINNED");
   const bool automaticPinned = arch == "gfx1201" &&
       inputTotal >= 256 * 1024 && inputTotal <= 8 * 1024 * 1024 &&
-      outputMaximum <= 8 * 1024 * 1024;
+      outputTotal <= 8 * 1024 * 1024;
   p->pinned = pinnedMode ? !std::strcmp(pinnedMode, "1") : automaticPinned;
   p->cacheKey = programKey(arch, arguments, buffers, contract, steps, plan);
   keyValue(p->cacheKey, p->pinned);
-  p->pinnedReadbackBytes = outputMaximum;
-  p->allocationBytes = total + p->cacheKey.size() +
-      (p->pinned ? inputTotal + outputMaximum : 0);
+  p->pinnedReadbackBytes = outputTotal;
+  // Budget both pinned slabs and pageable snapshots/readback capacity.
+  // Reserved capacity counts even before the first pageable read.
+  p->allocationBytes = total + p->cacheKey.size() + inputTotal + outputTotal;
   if (cacheEnabled()) {
     for (auto it = pool.idle.begin(); it != pool.idle.end(); ++it) {
       if ((*it)->poisoned || (*it)->cacheKey != p->cacheKey || !identity(**it)) continue;
@@ -360,7 +361,7 @@ extern "C" int tessera_rocm_program_prepare(
     if (hipMalloc(&owned.buffers[i], contract[i].bytes) != hipSuccess) return 4;
   if (owned.pinned) {
     if (hipHostMalloc(&owned.pinnedInputs, inputTotal, hipHostMallocDefault) != hipSuccess ||
-        hipHostMalloc(&owned.pinnedReadback, outputMaximum, hipHostMallocDefault) != hipSuccess)
+        hipHostMalloc(&owned.pinnedReadback, outputTotal, hipHostMallocDefault) != hipSuccess)
       return 4;
   }
   for (uint32_t i = 0; i < steps; ++i) {
@@ -518,6 +519,51 @@ extern "C" int tessera_rocm_program_read(
   }
   if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
   std::memcpy(output, staging, bytes);
+  return 0;
+} catch (...) { return 12; }
+
+// Admit the complete destination frame before any enqueue, then publish only
+// after one successful completion. Failed copies target retained private
+// staging, never borrowed caller output buffers.
+extern "C" int tessera_rocm_program_read_many(
+    uint64_t handle, uint64_t generation, uint32_t count,
+    const uint32_t *slots, void *const *outputs, const uint64_t *bytes) try {
+  if (!count || count > 128 || !slots || !outputs || !bytes) return 1;
+  if (getpid() != process) return 2;
+  auto &pool = state(); std::lock_guard<std::mutex> guard(pool.mutex);
+  auto it = pool.programs.find(handle); if (it == pool.programs.end()) return 1;
+  auto &p = *it->second;
+  if (!identity(p)) return 2;
+  if (p.poisoned || !p.output || !generation || generation != p.generation) return 10;
+  std::array<uint64_t, 128> offsets{};
+  uint64_t total = 0;
+  for (uint32_t i = 0; i < count; ++i) {
+    if (!outputs[i] || slots[i] >= p.contract.size() ||
+        p.contract[slots[i]].ownership != 2 ||
+        bytes[i] != p.contract[slots[i]].bytes ||
+        total > p.pinnedReadbackBytes ||
+        bytes[i] > p.pinnedReadbackBytes - total) return 1;
+    uintptr_t begin = reinterpret_cast<uintptr_t>(outputs[i]);
+    if (bytes[i] > UINTPTR_MAX - begin) return 1;
+    for (uint32_t j = 0; j < i; ++j) {
+      uintptr_t other = reinterpret_cast<uintptr_t>(outputs[j]);
+      if (slots[i] == slots[j] ||
+          (begin < other + bytes[j] && other < begin + bytes[i])) return 1;
+    }
+    offsets[i] = total;
+    total += bytes[i];
+  }
+  if (!p.pinned) p.readback.resize(total);
+  void *staging = p.pinned ? p.pinnedReadback : p.readback.data();
+  for (uint32_t i = 0; i < count; ++i)
+    if (hipMemcpyAsync(static_cast<unsigned char *>(staging) + offsets[i],
+                       p.buffers[slots[i]], bytes[i],
+                       hipMemcpyDeviceToHost, p.stream) != hipSuccess) {
+      p.poisoned = true; return 5;
+    }
+  if (hipStreamSynchronize(p.stream) != hipSuccess) { p.poisoned = true; return 7; }
+  for (uint32_t i = 0; i < count; ++i)
+    std::memcpy(outputs[i], static_cast<unsigned char *>(staging) + offsets[i], bytes[i]);
   return 0;
 } catch (...) { return 12; }
 

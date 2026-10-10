@@ -478,6 +478,12 @@ class PreparedScaledProgram:
             c.c_uint64, c.c_uint32, c.POINTER(c.c_uint64), c.POINTER(c.c_float)]
         self.lib.tessera_rocm_program_read.argtypes = [
             c.c_uint64, c.c_uint32, c.c_uint64, c.c_void_p, c.c_uint64]
+        self._read_many = getattr(self.lib, "tessera_rocm_program_read_many", None)
+        if self._read_many is not None:
+            self._read_many.argtypes = [
+                c.c_uint64, c.c_uint64, c.c_uint32, c.POINTER(c.c_uint32),
+                c.POINTER(c.c_void_p), c.POINTER(c.c_uint64)]
+            self._read_many.restype = c.c_int
         self.lib.tessera_rocm_program_close.argtypes = [c.c_uint64]
         rows = self._binding.storage
         buffers, steps = self._binding.buffers, self._binding.steps
@@ -553,16 +559,26 @@ class PreparedScaledProgram:
         _status(profile(self.handle, repeats, members, c.byref(generation), elapsed))
         return generation.value, tuple(float(value) for value in elapsed)
 
-    def read(self, generation):
+    def read(self, generation, *, batched=True):
         outputs = []
         for slot in self._binding.outputs:
             contract = self._binding.storage[slot]
             if contract.storage != "f32":
                 raise ValueError("native paired outputs require f32 storage")
-            out = np.empty(contract.shape, dtype=np.float32)
-            _status(self.lib.tessera_rocm_program_read(
-                self.handle,slot,generation,c.c_void_p(out.ctypes.data),out.nbytes))
-            outputs.append(out)
+            outputs.append(np.empty(contract.shape, dtype=np.float32))
+        read_many = getattr(self, "_read_many", None)
+        if batched and len(outputs) > 1 and read_many is not None:
+            count = len(outputs)
+            slots = (c.c_uint32 * count)(*self._binding.outputs)
+            pointers = (c.c_void_p * count)(*(out.ctypes.data for out in outputs))
+            sizes = (c.c_uint64 * count)(*(out.nbytes for out in outputs))
+            _status(read_many(self.handle, generation, count, slots, pointers, sizes))
+        else:
+            # Older providers and explicit A/B controls retain the checked
+            # single-output transport; neither path evaluates arithmetic.
+            for slot, out in zip(self._binding.outputs, outputs, strict=True):
+                _status(self.lib.tessera_rocm_program_read(
+                    self.handle,slot,generation,c.c_void_p(out.ctypes.data),out.nbytes))
         return tuple(outputs)
 
     def close(self):

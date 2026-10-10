@@ -1,0 +1,503 @@
+{
+  "architecture": "gfx1201",
+  "device_inventory": "WSL environment detected.\n=====================    \nHSA System Attributes    \n=====================    \nRuntime Version:         1.21\nRuntime Ext Version:     1.30\nSystem Timestamp Freq.:  1000.000000MHz\nSig. Max Wait Duration:  18446744073709551615 (0xFFFFFFFFFFFFFFFF) (timestamp count)\nMachine Model:           LARGE                              \nSystem Endianness:       LITTLE                             \nMwaitx:                  DISABLED\nXNACK enabled:           NO\nDMAbuf Support:          YES\nVMM Support:             YES\nFabric Support:          NO\n\n==========               \nHSA Agents               \n==========               \n*******                  \nAgent 1                  \n*******                  \n  Name:                    AMD Ryzen 7 9800X3D 8-Core Processor\n  Uuid:                    CPU-XX                             \n  Marketing Name:          AMD Ryzen 7 9800X3D 8-Core Processor\n  Vendor Name:             CPU                                \n  Feature:                 None specified                     \n  Profile:                 FULL_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        0(0x0)                             \n  Queue Min Size:          0(0x0)                             \n  Queue Max Size:          0(0x0)                             \n  Queue Type:              MULTI                              \n  Node:                    0                                  \n  Device Type:             CPU                                \n  Cache Info:              \n    L1:                      49152(0xc000) KB                   \n  Chip ID:                 0(0x0)                             \n  Cacheline Size:          64(0x40)                           \n  BDFID:                   0                                  \n  Internal Node ID:        0                                  \n  Compute Unit:            16                                 \n  SIMDs per CU:            0                                  \n  Shader Engines:          0                                  \n  Shader Arrs. per Eng.:   0                                  \n  Memory Properties:       \n  Features:                None\n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: FINE GRAINED        \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 2                   \n      Segment:                 GLOBAL; FLAGS: EXTENDED FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 3                   \n      Segment:                 GLOBAL; FLAGS: KERNARG, FINE GRAINED\n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n    Pool 4                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    15916700(0xf2de9c) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:4KB                                \n      Alloc Alignment:         4KB                                \n      Accessible by all:       TRUE                               \n  ISA Info:                \n*******                  \nAgent 2                  \n*******                  \n  Name:                    gfx1201                            \n  Uuid:                    GPU-28d9e7efbf2ef716               \n  Marketing Name:          AMD Radeon RX 9070 XT              \n  Vendor Name:             AMD                                \n  Feature:                 KERNEL_DISPATCH                    \n  Profile:                 BASE_PROFILE                       \n  Float Round Mode:        NEAR                               \n  Max Queue Number:        128(0x80)                          \n  Queue Min Size:          64(0x40)                           \n  Queue Max Size:          131072(0x20000)                    \n  Queue Type:              MULTI                              \n  Node:                    1                                  \n  Device Type:             GPU                                \n  Cache Info:              \n    L1:                      32(0x20) KB                        \n    L3:                      65536(0x10000) KB                  \n  Chip ID:                 30032(0x7550)                      \n  Cacheline Size:          64(0x40)                           \n  Max Clock Freq. (MHz):   2400                               \n  BDFID:                   768                                \n  Internal Node ID:        1                                  \n  Compute Unit:            64                                 \n  SIMDs per CU:            2                                  \n  Shader Engines:          4                                  \n  Shader Arrs. per Eng.:   2                                  \n  Coherent Host Access:    FALSE                              \n  Memory Properties:       \n  Features:                KERNEL_DISPATCH \n  Fast F16 Operation:      TRUE                               \n  Wavefront Size:          32(0x20)                           \n  Workgroup Max Size:      1024(0x400)                        \n  Workgroup Max Size per Dimension:\n    x                        1024(0x400)                        \n    y                        1024(0x400)                        \n    z                        1024(0x400)                        \n  Max Waves Per CU:        32(0x20)                           \n  Max Work-item Per CU:    1024(0x400)                        \n  Grid Max Size:           2147483647(0x7fffffff)             \n  Grid Max Size per Dimension:\n    x                        2147483647(0x7fffffff)             \n    y                        65535(0xffff)                      \n    z                        65535(0xffff)                      \n  Max fbarriers/Workgrp:   32                                 \n  Packet Processor uCode:: 358                                \n  SDMA engine uCode::      0                                  \n  IOMMU Support::          None                               \n  Pool Info:               \n    Pool 1                   \n      Segment:                 GLOBAL; FLAGS: COARSE GRAINED      \n      Size:                    16577056(0xfcf220) KB              \n      Allocatable:             TRUE                               \n      Alloc Granule:           4KB                                \n      Alloc Recommended Granule:2048KB                             \n      Alloc Alignment:         4KB                                \n      Accessible by all:       FALSE                              \n    Pool 2                   \n      Segment:                 GROUP                              \n      Size:                    64(0x40) KB                        \n      Allocatable:             FALSE                              \n      Alloc Granule:           0KB                                \n      Alloc Recommended Granule:0KB                                \n      Alloc Alignment:         0KB                                \n      Accessible by all:       FALSE                              \n  ISA Info:                \n    ISA 1                    \n      Name:                    amdgcn-amd-amdhsa--gfx1201         \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n    ISA 2                    \n      Name:                    amdgcn-amd-amdhsa--gfx12-generic   \n      Machine Models:          HSA_MACHINE_MODEL_LARGE            \n      Profiles:                HSA_PROFILE_BASE                   \n      Default Rounding Mode:   NEAR                               \n      Default Rounding Mode:   NEAR                               \n      Fast f16:                TRUE                               \n      Workgroup Max Size:      1024(0x400)                        \n      Workgroup Max Size per Dimension:\n        x                        1024(0x400)                        \n        y                        1024(0x400)                        \n        z                        1024(0x400)                        \n      Grid Max Size:           4294967295(0xffffffff)             \n      Grid Max Size per Dimension:\n        x                        2147483647(0x7fffffff)             \n        y                        65535(0xffff)                      \n        z                        65535(0xffff)                      \n      FBarrier Max Size:       32                                 \n*** Done ***             \n",
+  "identity_sha256": {
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.build-output-axes/tools/tessera-opt/tessera-opt": "26697b7560b468a4257e684e2fac8e88e277ca2c1c52b1f1aae00a000f57626f",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.build-output-axes/src/compiler/codegen/Tessera_ROCM_Backend/tools/tessera-rocm-opt": "4b649c8d6c9b34e49c9d933b8ed300453474cf8c5d8d34947214d3dbc8bfce3c",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/.transfer/libtessera_rocm_batched_readback.so": "040f9dc1247d66c6f6879a89d3778c26d5f05658fc21c136ab80577a3b40c202",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "2cd926a1751ccd77b08461c7dab02972d7a5a6c7eaf6923e9938b2eb403eb0d1",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h": "21555db0e7a4c7092d871dcae3172a6ee9776361110107bea731a3f4b2599c4e",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_image_cache.cpp": "80be398eddb21197cded4a88093d86b3c3fc67034e8368c09be51d9a419f0860",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_movement_runtime.cpp": "e9a76f3ac03dd6758e699891e501a84488e9fca2b9e44e4fd3dfdc4c83e19ad3",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_nvfp4_runtime.cpp": "e77d9e19742f78da1f05cb23f766032827bd51b58b60f178161c7139698ef425",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/native_scaled_program.py": "a712e02d477e70c29eba3551d00444d7e431f6f5f08ac60e2416ed96761f458f",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/python/tessera/compiler/jit.py": "dcd3acf0f8adcf569576e60c20c969d659575b7fc87aa99fd1c654c458d1a2c5",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/unit/test_native_typed_scaled_vmap.py": "77734168ab9e23b1f481de0950b36041987c1e8cddb177ff0b67d7fbe0d28903",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/unit/test_public_floating_scaled_reverse.py": "fda1486d67eb169f0c582ff909ce0c040bd99557de3dcc17a6b6904ed6247412",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/device/rocm/test_floating_scaled_adjoint.py": "0153234f0d4657c81ba4dddbed1adf1217489444cc0076b440e348d3f5db11f6",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/tests/device/rocm/test_public_mapped_scale_vjp.py": "eee722f1f16054d5bccd34ac2e1305bb1082950774c295ace7235e85386e0eec",
+    "/home/angstorms/scratch/rocm-strided-paged-kv-20261008/benchmarks/rocm/record_native_batched_read.py": "dd1e2c1203224871cd447aef5feda03987b560584c22c85f4dca83c1dc8bcf7b"
+  },
+  "pinned_mode": "1",
+  "cases": [
+    {
+      "label": "f32_four_gradients",
+      "input_shapes": [
+        [
+          2,
+          9
+        ],
+        [
+          9,
+          5
+        ],
+        [
+          2,
+          3
+        ],
+        [
+          3,
+          2
+        ],
+        [
+          2,
+          5
+        ]
+      ],
+      "output_count": 4,
+      "bulk_api_applies": true,
+      "correctness": "independent_before_and_after_each_rotating_transport/public/window",
+      "read_samples_ms": {
+        "serial": [
+          0.3676212625578046,
+          0.40455251932144165,
+          0.3940649004653096,
+          0.41747837793082,
+          0.4393516993150115,
+          0.4417342599481344,
+          0.44166231993585825,
+          0.4394512763246894,
+          0.44353989884257317
+        ],
+        "batched": [
+          0.10572813916951418,
+          0.11598271783441305,
+          0.11006460059434175,
+          0.10336801875382662,
+          0.12492076028138399,
+          0.12906468007713556,
+          0.12904321774840355,
+          0.13695471920073032,
+          0.20169843919575214
+        ]
+      },
+      "read_median_ms": {
+        "serial": 0.4393516993150115,
+        "batched": 0.12492076028138399
+      },
+      "read_batched_over_serial": 0.2843297533073085,
+      "public_samples_ms": {
+        "serial": [
+          1.572056591976434,
+          1.0107951471582055,
+          1.0097356978803873,
+          1.0949688032269478,
+          1.109412859659642,
+          1.1208707001060247,
+          1.130577188450843,
+          1.130424439907074,
+          1.2062040041200817
+        ],
+        "batched": [
+          0.712506053969264,
+          0.7494214456528425,
+          0.7762250956147909,
+          0.7501789019443095,
+          0.8262550574727356,
+          0.7948511047288775,
+          0.8178650517947972,
+          0.8217820548452437,
+          0.8294622064568102
+        ]
+      },
+      "public_median_ms": {
+        "serial": 1.1208707001060247,
+        "batched": 0.7948511047288775
+      },
+      "public_batched_over_serial": 0.7091371954443019,
+      "native_program_samples_ms": [
+        0.011077304370701313,
+        0.011402773670852184,
+        0.011130054481327534,
+        0.013471734710037708,
+        0.01350727304816246,
+        0.013231569901108742,
+        0.013319882564246655,
+        0.01322660967707634,
+        0.013280672021210194
+      ],
+      "native_program_median_ms": 0.013231569901108742,
+      "image_sha256": [
+        "79ebc304913126818be3aeecc45bd896e56c59546d5d6c88488c838e57546bb8",
+        "41a93aaf8eea14ecea643af7278965efed9bac50cdce06de6affb4e83b54e469",
+        "63a862b4623d343ad8ecc2861c30199fe86e8a79bf70aecc1420e016323ecc70",
+        "3ebf9ed923a2b5ca571b3600235185c66ceb108a01621144195d03d6be19fb39"
+      ],
+      "program_sha256": "e7cfd572c6b06ce4cb50e1511b7d702b0079892bac6c70e4d995c4e656d7e02b"
+    },
+    {
+      "label": "fp8_two_gradients",
+      "input_shapes": [
+        [
+          2,
+          7,
+          256
+        ],
+        [
+          2,
+          256,
+          19
+        ],
+        [
+          2,
+          7,
+          2
+        ],
+        [
+          2,
+          2,
+          1
+        ],
+        [
+          2,
+          7,
+          19
+        ]
+      ],
+      "output_count": 2,
+      "bulk_api_applies": true,
+      "correctness": "independent_before_and_after_each_rotating_transport/public/window",
+      "read_samples_ms": {
+        "serial": [
+          0.21541422232985497,
+          0.20450721960514784,
+          0.23890203796327114,
+          0.2004905790090561,
+          0.24170478340238333,
+          0.20798704121261835,
+          0.21182117983698845,
+          0.24108843877911568,
+          0.19447006285190582
+        ],
+        "batched": [
+          0.100549659691751,
+          0.10170446243137121,
+          0.1309013832360506,
+          0.10381150059401989,
+          0.1417208183556795,
+          0.10970954317599535,
+          0.11131899897009134,
+          0.12099585961550474,
+          0.10975504294037819
+        ]
+      },
+      "read_median_ms": {
+        "serial": 0.21182117983698845,
+        "batched": 0.10975504294037819
+      },
+      "read_batched_over_serial": 0.5181495213313538,
+      "public_samples_ms": {
+        "serial": [
+          2.9153264011256397,
+          2.9447532957419753,
+          3.0983243486844003,
+          2.991340192966163,
+          3.069834504276514,
+          3.0125546967610717,
+          3.0098175047896802,
+          3.0662390985526145,
+          2.9892782447859645
+        ],
+        "batched": [
+          2.1911939489655197,
+          2.7766455546952784,
+          2.8998872032389045,
+          2.7703224448487163,
+          2.8879454475827515,
+          2.79038225999102,
+          2.86901785293594,
+          2.8497845982201397,
+          2.8849682537838817
+        ]
+      },
+      "public_median_ms": {
+        "serial": 3.0098175047896802,
+        "batched": 2.8497845982201397
+      },
+      "public_batched_over_serial": 0.9468296977092892,
+      "native_program_samples_ms": [
+        1.9421476125717163,
+        2.0034749507904053,
+        1.988329529762268,
+        1.9933373928070068,
+        1.9912389516830444,
+        1.9935336112976074,
+        2.0099101066589355,
+        1.9939261674880981,
+        1.9944220781326294
+      ],
+      "native_program_median_ms": 1.9935336112976074,
+      "image_sha256": [
+        "6652e9db2951cb25abf7794e3ef880a0ceeff18f5162e4ff1b99c1ce6efb8200",
+        "f533809840b67fc1d82c32b2b54377c32dceedbff48efa16a7719d0c7d748949"
+      ],
+      "program_sha256": "262e2c219bc9cb19d973920986ea536efc359df073083a609722aa24f5412d98"
+    },
+    {
+      "label": "fp8_single_gradient_control",
+      "input_shapes": [
+        [
+          2,
+          7,
+          256
+        ],
+        [
+          2,
+          256,
+          19
+        ],
+        [
+          2,
+          7,
+          2
+        ],
+        [
+          2,
+          2,
+          1
+        ],
+        [
+          2,
+          7,
+          19
+        ]
+      ],
+      "output_count": 1,
+      "bulk_api_applies": false,
+      "correctness": "independent_before_and_after_each_rotating_transport/public/window",
+      "read_samples_ms": {
+        "serial": [
+          0.116424560546875,
+          0.11787372175604105,
+          0.1509622624143958,
+          0.11762646026909351,
+          0.11672032065689564,
+          0.09605227969586849,
+          0.09514235891401768,
+          0.09752287995070219,
+          0.09594968054443598
+        ],
+        "batched": [
+          0.10392372030764818,
+          0.12188316322863102,
+          0.11907659936696291,
+          0.11773486156016588,
+          0.13834196142852306,
+          0.10417577810585499,
+          0.09872175753116608,
+          0.09929785970598459,
+          0.09424102026969194
+        ]
+      },
+      "read_median_ms": {
+        "serial": 0.116424560546875,
+        "batched": 0.10417577810585499
+      },
+      "read_batched_over_serial": 0.8947921092982061,
+      "public_samples_ms": {
+        "serial": [
+          1.6547463601455092,
+          1.068478252273053,
+          1.0962246567942202,
+          1.0915306978859007,
+          1.1279637576080859,
+          1.035861496347934,
+          1.039153290912509,
+          1.0144181083887815,
+          1.048222102690488
+        ],
+        "batched": [
+          1.425511494744569,
+          1.1206167051568627,
+          1.0859931469894946,
+          1.1057814001105726,
+          1.0960544110275805,
+          1.0478323558345437,
+          1.0509718558751047,
+          1.0757030453532934,
+          1.0462508536875248
+        ]
+      },
+      "public_median_ms": {
+        "serial": 1.068478252273053,
+        "batched": 1.0859931469894946
+      },
+      "public_batched_over_serial": 1.0163923736203155,
+      "native_program_samples_ms": [
+        0.4053580164909363,
+        0.3303043842315674,
+        0.33098289370536804,
+        0.32897862792015076,
+        0.3283194899559021,
+        0.3295341432094574,
+        0.3296647369861603,
+        0.3313943147659302,
+        0.32991498708724976
+      ],
+      "native_program_median_ms": 0.32991498708724976,
+      "image_sha256": [
+        "6652e9db2951cb25abf7794e3ef880a0ceeff18f5162e4ff1b99c1ce6efb8200"
+      ],
+      "program_sha256": "33c1e965a27a9737c6a6a6e1bacbd8eefe36177ebb2a19cfa59d91a8fd902dc4"
+    },
+    {
+      "label": "fp8_primal_control",
+      "input_shapes": [
+        [
+          2,
+          7,
+          256
+        ],
+        [
+          2,
+          256,
+          19
+        ],
+        [
+          2,
+          7,
+          2
+        ],
+        [
+          2,
+          2,
+          1
+        ]
+      ],
+      "output_count": 1,
+      "bulk_api_applies": false,
+      "correctness": "independent_before_and_after_each_rotating_transport/public/window",
+      "read_samples_ms": {
+        "serial": [
+          0.1106363208964467,
+          0.11353701818734407,
+          0.11427646037191153,
+          0.10837599635124207,
+          0.1098233787342906,
+          0.11113204061985016,
+          0.10766522027552128,
+          0.10802352335304022,
+          0.10961496271193027
+        ],
+        "batched": [
+          0.10863035917282104,
+          0.1079624006524682,
+          0.1073512202128768,
+          0.10949794203042984,
+          0.11081946082413197,
+          0.11356750037521124,
+          0.10957947932183743,
+          0.10719711892306805,
+          0.10997483972460032
+        ]
+      },
+      "read_median_ms": {
+        "serial": 0.1098233787342906,
+        "batched": 0.10949794203042984
+      },
+      "read_batched_over_serial": 0.9970367265366318,
+      "public_samples_ms": {
+        "serial": [],
+        "batched": []
+      },
+      "public_median_ms": {},
+      "public_batched_over_serial": null,
+      "native_program_samples_ms": [
+        0.022724445909261703,
+        0.02301897667348385,
+        0.023118264973163605,
+        0.02310693822801113,
+        0.022465750575065613,
+        0.023066921159625053,
+        0.02330949157476425,
+        0.023045828565955162,
+        0.022732233628630638
+      ],
+      "native_program_median_ms": 0.023045828565955162,
+      "image_sha256": [
+        "bcbf0424a66062fdf4f5194bf5dc7ad842f7ffc74b1614596585a50a8ec31d7f"
+      ],
+      "program_sha256": "5ef14f13ca8eedea03163031e0e4b58ece492f8b9781993d491a87f81986cdf3"
+    },
+    {
+      "label": "mxfp8_primal_control",
+      "input_shapes": [
+        [
+          2,
+          7,
+          256
+        ],
+        [
+          2,
+          256,
+          19
+        ],
+        [
+          2,
+          7,
+          8
+        ],
+        [
+          2,
+          8,
+          19
+        ]
+      ],
+      "output_count": 1,
+      "bulk_api_applies": false,
+      "correctness": "independent_before_and_after_each_rotating_transport/public/window",
+      "read_samples_ms": {
+        "serial": [
+          0.11321282014250755,
+          0.12628115713596344,
+          0.13074846006929874,
+          0.13037336058914661,
+          0.1243997598066926,
+          0.12453661765903234,
+          0.12325279880315065,
+          0.10843127965927124,
+          0.1115336176007986
+        ],
+        "batched": [
+          0.10849841870367527,
+          0.12441058177500963,
+          0.13119834009557962,
+          0.12593149673193693,
+          0.12761289719492197,
+          0.12692238204181194,
+          0.12776498217135668,
+          0.11090944055467844,
+          0.11069482192397118
+        ]
+      },
+      "read_median_ms": {
+        "serial": 0.1243997598066926,
+        "batched": 0.12593149673193693
+      },
+      "read_batched_over_serial": 1.012313021565512,
+      "public_samples_ms": {
+        "serial": [],
+        "batched": []
+      },
+      "public_median_ms": {},
+      "public_batched_over_serial": null,
+      "native_program_samples_ms": [
+        0.06292298436164856,
+        0.06356181204319,
+        0.0641627386212349,
+        0.06347818672657013,
+        0.06311905384063721,
+        0.06351178139448166,
+        0.06423423439264297,
+        0.06313080340623856,
+        0.06288602948188782
+      ],
+      "native_program_median_ms": 0.06347818672657013,
+      "image_sha256": [
+        "666e002502a5bf02ecf5ebb3db7a81dc3686e25e43e3bb7ab6649a7bbb49ee90"
+      ],
+      "program_sha256": "747c19ee50cd54b24b5ceac8210fbd1ebd1d1060580b36f19e176127cef60f93"
+    }
+  ],
+  "scope": "nine rotating same-provider/same-image rounds; read-only host transport and completed public native_backward are separate from native program events; single-output arms use the same legacy read symbol"
+}

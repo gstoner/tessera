@@ -60,6 +60,12 @@ int tessera_rocm_program_profile_members(
     uint64_t *generation, float *elapsed_ms);
 int tessera_rocm_program_read(uint64_t handle, uint32_t slot,
                              uint64_t generation, void *output, uint64_t bytes);
+// Distinct returned-output slots and disjoint writable host destinations.
+// Exact byte contracts and generation are checked before copying; all outputs
+// are published only after a single successful private-stream completion.
+int tessera_rocm_program_read_many(
+    uint64_t handle, uint64_t generation, uint32_t count,
+    const uint32_t *slots, void *const *outputs, const uint64_t *bytes);
 int tessera_rocm_program_close(uint64_t handle);
 #ifdef __cplusplus
 }

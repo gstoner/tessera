@@ -797,6 +797,7 @@ rocm,tessera_rocm_program_prepare,rocm_program_prepare,,src/compiler/codegen/Tes
 rocm,tessera_rocm_program_prepare,rocm_program_prepare,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.h
 rocm,tessera_rocm_program_profile_members,rocm_program_profile_members,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
 rocm,tessera_rocm_program_read,rocm_program_read,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
+rocm,tessera_rocm_program_read_many,rocm_program_read_many,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
 rocm,tessera_rocm_program_update,rocm_program_update,,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp
 rocm,tessera_rocm_wmma_flash_attn_bf16,rocm_wmma_flash_attn,bf16,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_flash_attn.cpp
 rocm,tessera_rocm_wmma_flash_attn_f16,rocm_wmma_flash_attn,f16,src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/tessera_rocm_flash_attn.cpp

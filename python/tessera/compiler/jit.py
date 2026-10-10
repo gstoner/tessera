@@ -74,6 +74,7 @@ from .._jit_boundary import TesseraJitError  # noqa: E402,F401 — re-exported
 # single global list) so concurrent traces in different threads don't clobber
 # each other.
 
+import os
 import threading
 
 
@@ -576,6 +577,9 @@ class JitFn:
         self._native_prepared_matmul_calls: Dict[tuple, Any] = {}
         self._native_prepared_attention_calls: Dict[tuple, Any] = {}
         self._native_public_jvp_owners: Dict[tuple, Any] = {}
+        self._native_prepared_jvp_calls: Dict[tuple, Any] = {}
+        self._native_prepared_jvp_lock = threading.RLock()
+        self._native_prepared_jvp_pid: int | None = None
         self._native_descriptor_last_receipt: Any = None
         self._nvidia_rhs_call_signature = (
             inspect.signature(fn) if normalize_target_kind(target) == "nvidia_sm120" else None
@@ -934,6 +938,13 @@ class JitFn:
 
     def close_native_storage(self) -> None:
         """Release the native module; keep the descriptor for lazy rebinding."""
+        prepared_pid = getattr(self, "_native_prepared_jvp_pid", None)
+        if prepared_pid is not None and prepared_pid != os.getpid():
+            raise RuntimeError("retained native JVP cannot cross fork")
+        with self._native_prepared_jvp_lock:
+            for call in self._native_prepared_jvp_calls.values():
+                call.close()
+            self._native_prepared_jvp_calls.clear()
         for name in ("_native_prepared_movement_calls", "_native_prepared_matmul_calls",
                      "_nvidia_lhs_prepared_calls", "_native_prepared_attention_calls"):
             calls = getattr(self, name, {})
@@ -2796,6 +2807,9 @@ class JitFn:
         from .native_jvp_plugins import build_native_jvp_family_artifact
 
         self.last_jvp_execution = None
+        prepared_pid = getattr(self, "_native_prepared_jvp_pid", None)
+        if prepared_pid is not None and prepared_pid != os.getpid():
+            raise RuntimeError("retained native JVP cannot cross fork")
         request = self.differentiation_request
         if request is None or request.mode != "forward":
             raise TesseraJitError(
@@ -2988,6 +3002,22 @@ class JitFn:
                 raise TesseraJitError(str(exc)) from exc
             package_cache[package_key] = package
         family = str(package.contract["family"])
+        if target == "rocm" and family == "scaled_product_program":
+            from .native_scaled_jvp_call import NativeScaledJVPCall
+            if self._native_prepared_jvp_pid is None:
+                self._native_prepared_jvp_pid = os.getpid()
+            with self._native_prepared_jvp_lock:
+                retained_calls = self._native_prepared_jvp_calls
+                retained_call = retained_calls.get(package_key)
+                if retained_call is None:
+                    retained_call = NativeScaledJVPCall(package, launch_values)
+                    if len(retained_calls) >= 8:
+                        retired = next(iter(retained_calls))
+                        retained_calls.pop(retired).close()
+                    retained_calls[package_key] = retained_call
+            outputs = retained_call.invoke(launch_values)
+            self.last_jvp_execution = dict(retained_call.receipt)
+            return outputs
         result = launch(
             RuntimeArtifact(metadata=package.runtime_metadata()),
             launch_values,

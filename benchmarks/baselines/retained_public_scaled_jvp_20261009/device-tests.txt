@@ -1,0 +1,13 @@
+......................................................................   [100%]
+=============================== warnings summary ===============================
+../next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464
+  /home/angstorms/scratch/next-five-compiler-slices-rocm/.venv-movement-capture/lib/python3.14/site-packages/_pytest/config/__init__.py:1464: PytestConfigWarning: Unknown config option: timeout
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+tests/device/rocm/test_public_native_scaled_jvp_transform.py::test_retained_public_jvp_fork_refuses_before_driver_and_locks
+  /home/angstorms/scratch/public-native-scaled-jvp-retained-20261009/tests/device/rocm/test_public_native_scaled_jvp_transform.py:163: DeprecationWarning: This process (pid=644051) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+70 passed, 2 warnings in 26.52s

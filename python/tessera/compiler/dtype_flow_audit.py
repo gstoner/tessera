@@ -44,6 +44,7 @@ REPORT_TARGETS: tuple[str, ...] = (
     "nvidia_sm120",
     "rocm_gfx1151",
     "rocm_gfx1200",
+    "rocm_gfx1201",
     "rocm_gfx1250",
     "rocm_gfx1251",
 )
@@ -58,6 +59,7 @@ _MANIFEST_TARGET_ALIASES: Mapping[str, tuple[str, ...]] = {
     # must not be transferred to later AMD architectures.
     "rocm_gfx1151": ("rocm", "rocm_gfx1151"),
     "rocm_gfx1200": ("rocm_gfx1200",),
+    "rocm_gfx1201": ("rocm_gfx1201",),
     "rocm_gfx1250": ("rocm_gfx1250",),
     "rocm_gfx1251": ("rocm_gfx1251",),
 }
@@ -169,6 +171,8 @@ def _declared_dtypes(
     canonical = canonical_op(graph_name)
     for target in TARGET_CAPABILITIES.values():
         op_cap = target.supported_ops.get(canonical)
+        if op_cap is not None:
+            declared.update(_canonical_dtype(dtype) for dtype in op_cap.graph_only_dtypes)
         if op_cap is not None and not op_cap.dtypes_derived:
             declared.update(_canonical_dtype(dtype) for dtype in op_cap.dtypes)
     # Complex is a Graph-level logical dtype implemented as two real ABI
@@ -282,6 +286,8 @@ def _capability_target_state(graph_name: str, target: str, dtype: str) -> Target
     op_cap = capability.supported_ops.get(canonical_op(graph_name))
     if op_cap is None:
         return None
+    if dtype in {_canonical_dtype(value) for value in op_cap.graph_only_dtypes}:
+        return TargetDtypeState("legal_only", f"capabilities[{target}]:graph_only_dtype")
     dtypes = {_canonical_dtype(value) for value in op_cap.dtypes}
     if dtype not in dtypes:
         return TargetDtypeState("unsupported", f"capabilities[{target}]")

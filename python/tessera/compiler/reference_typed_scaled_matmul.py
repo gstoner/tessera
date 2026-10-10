@@ -31,8 +31,11 @@ def reference_typed_scaled_matmul(a, b, scale_a, scale_b, *, numeric_policy,
         (bb.ndim<3 if rhs_batched else bb.ndim!=2))
     if invalid_rank:
         raise ValueError("typed scaled reference requires matrix operands")
-    if str(aa.dtype)!="float8_e4m3fn" or str(bb.dtype)!="float8_e4m3fn":
-        raise ValueError("typed scaled reference requires rank-two E4M3FN arrays")
+    matrix_storage = (str(aa.dtype), str(bb.dtype))
+    if matrix_storage not in {("float8_e4m3fn", "float8_e4m3fn"), ("float32", "float32")}:
+        raise ValueError("typed scaled reference requires matching E4M3FN or f32 arrays")
+    if matrix_storage == ("float32", "float32") and encoded:
+        raise ValueError("continuous f32 scaled reference requires fp32 scale values")
     scale_dtype = np.dtype(np.uint8 if encoded else np.float32)
     if sa.dtype!=scale_dtype or sb.dtype!=scale_dtype:
         raise ValueError("typed scaled reference scale storage differs from declared format")

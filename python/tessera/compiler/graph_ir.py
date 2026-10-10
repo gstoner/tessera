@@ -4242,12 +4242,14 @@ def _shape_scaled_matmul(operands, attrs):
         policy=attrs["batching"]
         lhs_batched=policy!="shared_lhs"
         rhs_batched=policy!="shared_rhs_rows"
+        floating = a.dtype == b.dtype == "fp32"
+        byte_matrices = a.dtype == b.dtype == "fp8_e4m3"
         if ((a.rank < 3 if lhs_batched else a.rank != 2) or (b.rank < 3 if rhs_batched else b.rank != 2)
                 or sa.rank != a.rank or sb.rank != b.rank
-                or a.dtype != "fp8_e4m3" or b.dtype != "fp8_e4m3" or transpose_a):
-            raise ValueError("typed batches require explicit E4M3 matrix/scale batch storage and no lhs transpose")
+                or not (floating or byte_matrices) or (transpose_a and not floating)):
+            raise ValueError("typed batches require matching E4M3/f32 matrix/scale batch storage; lhs transpose requires f32")
         batch=b.shape[:-2] if not lhs_batched else a.shape[:-2]
-        m,k=a.shape[-2:]
+        m,k=a.shape[-2:][::-1] if transpose_a else a.shape[-2:]
         kb,n=b.shape[-2:][::-1] if transpose_b else b.shape[-2:]
         if ((k != kb and "?" not in (k,kb)) or
                 (lhs_batched and rhs_batched and b.shape[:-2]!=batch)):

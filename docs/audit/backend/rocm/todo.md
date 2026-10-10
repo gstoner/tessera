@@ -5,6 +5,25 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## PUBLIC-FLOATING-REVERSE-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+The public Python/textual reverse owner now traces f32 scaled-product matrices
+and scales into the native Graph/AD/Schedule/Tile/Target/LLVM/HSACO program.
+Python named-batch shape inference matches the native logical transpose rules.
+Frontend differential certification reuses the existing semantic reference;
+returned gradients are computed by native MLIR, with no Python AD backend.
+The capability model separates graph_only_dtypes from declared physical
+storage: Graph-only dtype queries are artifact_only and do not advertise a
+ready primal kernel. The dtype-flow view now includes the existing gfx1201
+target while preserving physical manifest negatives.
+Evidence: benchmarks/baselines/public_floating_reverse_20261009/README.md.
+Owning packet: benchmarks/baselines/public_floating_reverse_20261009/gfx1201.json.
+Generic transforms, f32 vmap wrappers, dynamic/storage/layout widening,
+ordinary f32 primal packaging and sibling consumers remain follow-ups.
+
+Parity validated on gfx1201: 56 public continuous reverse cases and 26 public mapped FP8 regressions pass, with changed seeds, role ordering and warm compilation forbidden. Device/program/public timing domains are recorded separately. gfx1151 consumer/device follow-up remains required; this packet is not gfx1151 evidence.
+
 ## FLOATING-SCALED-ADJOINT-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

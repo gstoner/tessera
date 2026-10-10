@@ -417,7 +417,7 @@ def _scaled_transpose_schedule():
     import os
     schedule = os.environ.get(
         "TESSERA_ROCM_SCALE_VJP_SCHEDULE", "serial_per_scale_element")
-    if schedule not in {"serial_per_scale_element", "wave_per_scale_element"}:
+    if schedule not in {"serial_per_scale_element", "wave_per_scale_element", "auto"}:
         raise TesseraJitError("unsupported native scale-VJP schedule: " + schedule)
     return schedule
 

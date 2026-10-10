@@ -278,7 +278,7 @@ def _cached_manifest_package(key):
     package.validate()
     return package
 
-def _package_native_scaled(graph_ir: str, *, target: str = "rocm_gfx1201", primal: bool = False, transpose: bool = False, project_image_identity: bool = False, profile_policy: bool = False, scale_transpose_wave: bool = False, artifacts=None) -> NativeScaledProgram:
+def _package_native_scaled(graph_ir: str, *, target: str = "rocm_gfx1201", primal: bool = False, transpose: bool = False, project_image_identity: bool = False, profile_policy: bool = False, scale_transpose_wave: bool = False, scale_transpose_auto: bool = False, artifacts=None) -> NativeScaledProgram:
     """Package a native AD-request Graph without Python IR reconstruction."""
     if target != "rocm_gfx1201":
         raise ValueError("native scaled JVP HIP execution requires gfx1201")
@@ -308,7 +308,8 @@ def _package_native_scaled(graph_ir: str, *, target: str = "rocm_gfx1201", prima
         selection = "select-scaled-transpose-member" if transpose else "select-scaled-member"
         prefix = ("builtin.module(" + native_pass + "{" + export + "=true "
             f"{selection}={index}}},tessera-graph-to-schedule" +
-            ("{scale-transpose-wave=true}" if scale_transpose_wave else "") + ",tessera-schedule-to-tile,")
+            ("{scale-transpose-wave=true}" if scale_transpose_wave else
+             "{scale-transpose-auto=true}" if scale_transpose_auto else "") + ",tessera-schedule-to-tile,")
         if project_image_identity and family == "matmul":
             target_ir = compile_pipeline(prefix +
                 "tessera-rocm-executable{family=matmul input=tile output=target arch=gfx1201})")
@@ -341,10 +342,11 @@ def package_native_scaled_jvp(graph_ir: str, *, target: str = "rocm_gfx1201") ->
 
 def package_native_scaled_vjp(graph_ir: str, *, target: str = "rocm_gfx1201", schedule: str = "serial_per_scale_element") -> NativeScaledProgram:
     """Package actual native typed scale-adjoint regions; no Python arithmetic."""
-    if schedule not in {"serial_per_scale_element", "wave_per_scale_element"}:
+    if schedule not in {"serial_per_scale_element", "wave_per_scale_element", "auto"}:
         raise ValueError("unsupported native scale transpose schedule")
     return _package_native_scaled(graph_ir, target=target, transpose=True,
-        scale_transpose_wave=schedule == "wave_per_scale_element")
+        scale_transpose_wave=schedule == "wave_per_scale_element",
+        scale_transpose_auto=schedule == "auto")
 
 def package_native_scaled_primal(graph_ir: str, *, target: str = "rocm_gfx1201", project_image_identity: bool = True, profile_policy: bool = True) -> NativeScaledProgram:
     if type(project_image_identity) is not bool or type(profile_policy) is not bool:

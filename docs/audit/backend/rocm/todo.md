@@ -16273,3 +16273,16 @@ MathRecipe retains per-call Graph/Schedule/Tile and descriptor validation.
 68 host regressions and 19 owning cache tests per architecture pass.
 Owning gfx1151 and gfx1201 parity validated for all six math operations, three storage types and two static profiles per operation. Separate 36-profile A/B packets preserve architecture-specific image/tool hashes. Broader cache families and generic closure remain follow-up required.
 Evidence: benchmarks/baselines/rocm_math_replay_cache_20261008/README.md.
+
+## Named scaled-batch frontend orientation — 2026-10-08
+
+Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.
+Sync SCALED-BATCH-ORIENTATION-20261008.
+Shared eager numerical contract accepts transposed LHS for shared-RHS,
+shared-LHS and independent batches; 24 independent-oracle cases pass.
+385 host WSL frontend/native Graph/registry checks pass without skips.
+rocm physical lowering, admission and runtime ABI: not applicable to
+this reference-only correction. Existing architecture-owned execution
+envelopes remain unchanged; no new exact-device or timing evidence.
+Generic batching and transpose AD closure remain follow-up required.
+Evidence: benchmarks/baselines/scaled_batch_orientation_20261008/README.md.

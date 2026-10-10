@@ -73,44 +73,8 @@ inline int hipEventRecord(void*,void*){return 0;}
 inline int hipEventDestroy(void* p){delete static_cast<int*>(p);return 0;}
 inline int hipEventElapsedTime(float* p,void*,void*){*p=.001f;return 0;}
 inline int hipMemcpyAsync(void* d,const void* s,size_t n,int kind,void*){return hipMemcpy(d,s,n,kind);}
-using hipError_t=int;
-using hipGraphNode_t=void*;using hipGraphNodeType=int;
-constexpr int hipStreamCaptureModeThreadLocal=1,hipGraphNodeTypeKernel=0;
-struct hipGraphRecord {
- struct Launch {void* fn;unsigned gx,bx;void* stream;void** args;};
- std::vector<Launch> nodes;
-};
-using hipGraph_t=hipGraphRecord*;using hipGraphExec_t=hipGraphRecord*;
-inline thread_local hipGraphRecord* capturing=nullptr;
 inline int hipModuleLaunchKernel(hipFunction_t fn,unsigned gx,unsigned,unsigned,
- unsigned bx,unsigned,unsigned,unsigned,void* stream,void** args,void**);
-inline int hipStreamBeginCapture(void*,int){
- if(capturing)return 1;capturing=new hipGraphRecord;return 0;
-}
-inline int hipStreamEndCapture(void*,hipGraph_t* g){
- if(!capturing)return 1;*g=capturing;capturing=nullptr;return 0;
-}
-inline int hipGraphGetNodes(hipGraph_t g,hipGraphNode_t* nodes,size_t* count){
- if(nodes)for(size_t i=0;i<*count&&i<g->nodes.size();++i)nodes[i]=&g->nodes[i];
- *count=g->nodes.size();return 0;
-}
-inline int hipGraphNodeGetType(hipGraphNode_t,hipGraphNodeType* t){*t=hipGraphNodeTypeKernel;return 0;}
-inline int hipGraphInstantiateWithFlags(hipGraphExec_t* e,hipGraph_t g,unsigned long long){
- *e=new hipGraphRecord(*g);return 0;
-}
-inline int hipGraphLaunch(hipGraphExec_t e,void*){
- for(auto& n:e->nodes){
-  auto saved=capturing;capturing=nullptr;
-  int rc=hipModuleLaunchKernel(n.fn,n.gx,1,1,n.bx,1,1,0,n.stream,n.args,nullptr);
-  capturing=saved;if(rc)return rc;
- }
- return 0;
-}
-inline int hipGraphExecDestroy(hipGraphExec_t e){delete e;return 0;}
-inline int hipGraphDestroy(hipGraph_t g){delete g;return 0;}
-inline int hipModuleLaunchKernel(hipFunction_t fn,unsigned gx,unsigned,unsigned,
- unsigned bx,unsigned,unsigned,unsigned,void* stream,void** args,void**){
- if(capturing){capturing->nodes.push_back({fn,gx,bx,stream,args});return 0;}
+ unsigned bx,unsigned,unsigned,unsigned,void*,void** args,void**){
  if(bx!=256||gx==0)return 1;
  if(launchHook)launchHook();
  if(std::strcmp(static_cast<const char*>(fn),"math_sqrt")==0 ||

@@ -1061,9 +1061,15 @@ def verify_matmul_projection(artifact: ScheduledMatmulArtifact) -> None:
     tool = find_tessera_opt()
     if tool is None:
         raise RuntimeError('matmul projection requires native Schedule replay')
-    if run_tessera_opt(tool, artifact.schedule_ir, '--tessera-schedule-to-tile') != artifact.tile_ir:
+    runner = run_tessera_opt
+    if artifact.target == "rocm":
+        from .rocm_pass_cache import run as cached_replay
+
+        def runner(tool, source, option):
+            return cached_replay(tool, source, option, execute=run_tessera_opt)
+    if runner(tool, artifact.schedule_ir, '--tessera-schedule-to-tile') != artifact.tile_ir:
         raise ValueError('matmul Tile product disagrees with native Schedule replay')
-    parent = run_tessera_opt(tool, artifact.schedule_ir, '--canonicalize')
+    parent = runner(tool, artifact.schedule_ir, '--canonicalize')
     header = re.match(r'\s*module attributes \{([^{}]*)\}', parent)
     if header is None:
         raise ValueError('matmul native target header is missing')

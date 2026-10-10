@@ -6,6 +6,20 @@ target: nvidia_sm120
 last_updated: 2026-10-09
 ---
 
+## CONTINUOUS-SCALED-SSA-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / LAYOUT-ALG-1.
+Computed FP32 product operands reach existing native SSA export, retaining
+intermediate lifetime checks and Schedule/Tile/LLVM lowering. Six native
+checks, 566 frontend/AD regressions and two exact gfx1201 public primal/JVP
+cases pass. Tiny ragged frame oracle agreement and separate producer,
+consumer, native and public timings are recorded.
+Reverse residual capture, mapped chains and generic closure remain open.
+Evidence: benchmarks/baselines/gfx1201_continuous_ssa_chain_20261009/README.md.
+
+Not applicable to SM120 physical lowering: this admission feeds gfx1201 only. W1.1 producer/attention routes and CUDA ABI are unchanged; no CUDA parity claim.
+
+
 
 ## ROCM-NVFP4-SOURCE-MIDPOINTS-20261009
 

@@ -13838,6 +13838,16 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 Not applicable to CUDA toolchain/physical schedules: isolated ROCm SDK provisioning leaves SM120 packages and runtime unchanged; existing RTX 5070 proof is retained.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
 
+## Native unary replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.
+Not applicable: the SM120 package verifier does not use the new ROCm replay cache.
+Only successful native MLIR pass output is cached; artifact and descriptor
+validation still run per call. Compiler, loaded-library, environment and full
+IR and working-directory identity participate, with bounded entry/byte retention.
+Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
+and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
+
 ## Named scaled-batch frontend orientation — 2026-10-08
 
 Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

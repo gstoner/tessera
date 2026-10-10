@@ -40,12 +40,18 @@ def payload(program):
     activity="active = ["+", ".join(str(i in active).lower() for i in range(count))+"]"
     if len(contract)!=1 or activity not in contract[0]:
         raise ValueError("portable JVP tangent activity disagrees")
+    if type(program.saved_lse) is not bool:
+        raise ValueError("portable JVP saved-LSE selection must be boolean")
+    saved_lse = program.saved_lse
+    if ("saved_lse = true" in contract[0]) != saved_lse:
+        raise ValueError("portable JVP saved-LSE selection differs from native Schedule")
     bias_shape=tuple(p.get("bias_shape",())) or (dims[0],dims[1],dims[3],dims[4])
     expected_shapes=(*shapes[:3],shapes[3],shapes[4],*shapes[:3],
-        *((bias_shape,bias_shape) if biased else ()),shapes[3])
+        *((bias_shape,bias_shape) if biased else ()),shapes[3],
+        *((shapes[4],) if saved_lse else ()))
     tensor_names=("q","k","v","primal","lse","dq","dk","dv") + (
-        ("bias","dbias") if biased else ()) + ("tangent",)
-    expected=[dict(kind="tensor",name=n,dtype="fp32",shape=list(s),writable=i==len(tensor_names)-1)
+        ("bias","dbias") if biased else ()) + ("tangent",) + (("dlse",) if saved_lse else ())
+    expected=[dict(kind="tensor",name=n,dtype="fp32",shape=list(s),writable=i>=len(tensor_names)-(2 if saved_lse else 1))
               for i,(n,s) in enumerate(zip(tensor_names,expected_shapes,strict=True))]
     expected.append(dict(kind="index",name="scratch",minimum=128,maximum=128))
     manifest=read_tensor_contract(tangent)
@@ -66,6 +72,8 @@ def payload(program):
         result.update(schema="tessera.native_attention_jvp_program.v2")
     else:
         raise ValueError("portable JVP requires a native checkpoint product")
+    if saved_lse:
+        result.update(schema="tessera.native_attention_jvp_program.v3", saved_lse=True)
     return result
 
 def canonical(data):
@@ -95,7 +103,14 @@ def from_json(text,*,expected_digest):
     if not isinstance(data,dict):
         raise ValueError("unsupported portable attention JVP schema")
     schema = data.get("schema")
-    if schema == "tessera.native_attention_jvp_program.v2":
+    saved_lse = schema == "tessera.native_attention_jvp_program.v3"
+    if saved_lse:
+        fields.add("saved_lse")
+        if data.get("saved_lse") is not True:
+            raise ValueError("saved-LSE JVP schema requires its paired output selection")
+        if "backward" not in data:
+            fields.remove("backward")
+    elif schema == "tessera.native_attention_jvp_program.v2":
         fields.remove("backward")
     elif schema != "tessera.native_attention_jvp_program.v1":
         raise ValueError("unsupported portable attention JVP schema")
@@ -108,11 +123,11 @@ def from_json(text,*,expected_digest):
             NativeImageArtifact.from_dict(raw["image"]),LaunchDescriptor.from_dict(raw["descriptor"]))
     tangent=data["tangent"]
     checkpoint = (AttentionCheckpointPair(package(data["forward"]),package(data["backward"]),data["checkpoint_digest"])
-                  if schema == "tessera.native_attention_jvp_program.v1" else
+                  if "backward" in data else
                   AttentionForwardCheckpoint(package(data["forward"]),data["checkpoint_digest"]))
     result=NativeAttentionJVPProgram(
         checkpoint,
         NativeGPUStoragePackage.from_json(canonical(tangent),expected_digest=tangent["binding_digest"]),
-        tuple(data["active"]),tuple(data["frontend_argument_indices"]),tuple(data["frontend_parameter_names"]))
+        tuple(data["active"]),tuple(data["frontend_argument_indices"]),tuple(data["frontend_parameter_names"]),saved_lse)
     payload(result)
     return result

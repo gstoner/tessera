@@ -87,7 +87,10 @@ def materialize_generated(graph_source, dims, scale, causal, *, compiler, llvm_b
     if biased and (len(bias_shape)!=4 or any(type(x) is not int or x not in (1,d)
             for x,d in zip(bias_shape,logical,strict=True))):
         raise ValueError('automatic JVP physical bias shape is invalid')
-    if (contract.get('schema')!=(2 if biased else 1) or
+    saved_lse = contract.get('saved_lse', False)
+    if type(saved_lse) is not bool:
+        raise ValueError('automatic JVP saved-LSE output selection is invalid')
+    if (contract.get('schema')!=(3 if saved_lse else 2 if biased else 1) or
             contract.get('bias_shape',[])!=list(bias_shape) or contract.get('dims')!=list(dims) or
             contract.get('causal') is not causal or
             struct.pack('f',contract['scale'])!=struct.pack('f',scale)):

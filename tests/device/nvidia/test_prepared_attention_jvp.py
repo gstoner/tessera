@@ -16,6 +16,49 @@ ARTIFACTS=ROOT/"benchmarks/baselines/nvidia_public_attention_jvp_20261006/artifa
 pytestmark=pytest.mark.skipif(os.environ.get("TESSERA_NVIDIA_DEVICE_PROOF")!="1",
                               reason="requires owning RTX5070 proof lane")
 
+
+@pytest.fixture(scope="session", autouse=True)
+def generated_prepared_fixtures():
+    """Generate missing owning-device inputs from native Graph AD in fresh checkouts."""
+    from benchmarks.nvidia.benchmark_public_attention_jvp import run as public_run
+    from benchmarks.nvidia.benchmark_bias_attention_jvp import attention, causal_attention, reference
+    import tessera as ts
+    ARTIFACTS.mkdir(parents=True, exist_ok=True)
+    for order, wrt, sk, causal in (
+            (("q", "k", "v"), ("q",), 5, False),
+            (("v", "q", "k"), ("v",), 129, True),
+            (("k", "v", "q"), ("k", "q"), 5, False),
+            (("v", "k", "q"), ("q", "k", "v"), 129, True)):
+        name = "".join(order)+"_"+"_".join(wrt)+f"_{sk}_{int(causal)}"
+        if not (ARTIFACTS/(name+".json")).exists():
+            public_run(order, wrt, sk, causal, ARTIFACTS)
+    biased = ROOT/"benchmarks/baselines/nvidia_bias_jvp_20261006/public-artifacts"
+    biased.mkdir(parents=True, exist_ok=True)
+    cases = (
+        ("k5_c0_1x4x1x5_bias_v_k_q", 5, False, (1, 4, 1, 5), ("bias", "v", "k", "q")),
+        ("k129_c1_2x4x3x129_bias", 129, True, (2, 4, 3, 129), ("bias",)),
+        ("k129_c1_1x4x1x129_v", 129, True, (1, 4, 1, 129), ("v",)),
+    )
+    rng = np.random.default_rng(938)
+    for name, sk, causal, bias_shape, wrt in cases:
+        path = biased/(name+".json")
+        if path.exists():
+            continue
+        shapes = {"bias": bias_shape, "q": (2, 4, 3, 4),
+                  "k": (2, 2, sk, 4), "v": (2, 2, sk, 3)}
+        values = {key: rng.normal(0, .2, shape).astype(np.float32) for key, shape in shapes.items()}
+        directions = {key: rng.normal(0, .1, shape).astype(np.float32) if key in wrt
+                      else np.zeros(shape, np.float32) for key, shape in shapes.items()}
+        fn = ts.jit(target="nvidia_sm120", autodiff="forward", wrt=wrt)(
+            causal_attention if causal else attention)
+        actual = fn.native_jvp(**values, tangents=tuple(directions[key] for key in wrt))
+        expected = reference(values, directions, causal)
+        for output, oracle in zip(actual, expected, strict=True):
+            np.testing.assert_allclose(output, oracle, rtol=3e-5, atol=3e-5)
+        package = next(iter(fn._native_jvp_packages.values()))
+        path.write_text(json.dumps(package.runtime_metadata(), sort_keys=True))
+        fn.close_native_storage()
+
 @pytest.mark.parametrize("name",["qkv_q_5_0","vqk_v_129_1","kvq_k_q_5_0","vkq_q_k_v_129_1"])
 def test_matched_prepared_product_oracle(name):
     row=run(ARTIFACTS/(name+".json"),3)

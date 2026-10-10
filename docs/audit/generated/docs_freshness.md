@@ -6,9 +6,9 @@ Reference date for staleness: **2026-10-09**.
 
 ## Headline
 
-- **160** docs catalogued across the canonical doc tree.
-- **159** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
-- **34** updated within the last 30 days.
+- **161** docs catalogued across the canonical doc tree.
+- **160** carry a `last_updated:` marker; **1** are undated (invisible to the freshness audit until tagged).
+- **35** updated within the last 30 days.
 - **40** older than 90 days; **0** older than 180 days.
 
 ## Undated docs (no parseable `last_updated`)
@@ -206,6 +206,7 @@ These docs need either YAML frontmatter (`last_updated: YYYY-MM-DD`) or a body-f
 | `compiler/W1_1_TYPING_DESIGN.md` | - | 2026-10-02 | 7 | ✓ |
 | `compiler/W4_ADMISSIBLE_EFFECTS_PLAN.md` | - | 2026-08-25 | 45 | ✓ |
 | `compiler/compiler_enhancement.md` | - | 2026-09-08 | 31 | ✓ |
+| `compiler/native_public_jvp_integration_plan.md` | - | 2026-10-09 | 0 | ✓ |
 | `coverage/COVERAGE_AUDIT.md` | - | 2026-09-04 | 35 | ✓ |
 | `domain/DOMAIN_AUDIT.md` | - | 2026-09-16 | 23 | ✓ |
 | `domain/EBM_NATIVE_LOOP_ARCHITECTURE.md` | - | 2026-09-16 | 23 | ✓ |

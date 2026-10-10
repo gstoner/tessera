@@ -229,6 +229,22 @@ int tessera_nvidia_attention_jvp_invoke_resident_ordered(
     uint64_t handle, const void* const* inputs, const size_t* input_bytes,
     size_t input_count, const uint64_t* producer_streams, size_t producer_count,
     void* const* outputs, const size_t* output_bytes, float* device_milliseconds);
+// Paired O/LSE/dO/dLSE spans; preserves the legacy two-output ABI.
+int tessera_nvidia_attention_jvp_prepare_lse(
+    const void* forward_image, size_t forward_bytes, const char* forward_entry,
+    const void* tangent_image, size_t tangent_bytes, const char* tangent_entry,
+    const char* sizer_path, const char* sizer_entry, const int64_t* dims,
+    const int64_t* bias_shape, const int* frontend_mapping,
+    const int* active_roles, size_t active_count, uint64_t* handle);
+int tessera_nvidia_attention_jvp_invoke_lse(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, void* const* outputs, const size_t* output_bytes,
+    size_t output_count, float* device_milliseconds);
+int tessera_nvidia_attention_jvp_invoke_lse_resident_ordered(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, size_t output_count,
+    float* device_milliseconds);
 int tessera_nvidia_attention_jvp_close(uint64_t handle);
 const char* tessera_nvidia_attention_jvp_last_error(void);
 

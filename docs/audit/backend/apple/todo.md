@@ -13444,6 +13444,27 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 Not applicable to Metal toolchain or execution: the Linux CI SDK does not change Apple compiler/runtime contracts; no Mac numerical evidence is inferred.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
 
+## Shared attention sequence-capacity foundation — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Semantic checkpoint verification and native Schedule projection now use one
+IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
+Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
+Not applicable to Metal physical execution: the shared attention semantic verifier uses this resolver, while Apple packages do not consume the SM120 checkpoint/JVP ABI.
+Foundation verification alone does not establish execution; the native evidence is recorded below. Generic scaled-matmul closure remains open.
+
+## Bounded saved-LSE JVP native integration — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Shared contracts: symbolic sequence AD, exact source-shaped inactive zeros,
+schema-2 native tensor manifests and checked actual-size product launch grids.
+574 host WSL regressions pass, zero skipped.
+Not applicable to Metal physical execution: Apple does not consume the CUDA/HIP native-storage tensor manifest or this SM120 JVP image. Shared IR capacity verification is covered; no Mac execution or performance claim.
+Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
+No generic scaled-matmul closure or default-route promotion.
+Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
+
 ## Native unary replay reuse — 2026-10-08
 
 Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.

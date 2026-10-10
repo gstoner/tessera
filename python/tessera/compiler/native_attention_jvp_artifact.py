@@ -41,6 +41,17 @@ def payload(program):
     if len(contract)!=1 or activity not in contract[0]:
         raise ValueError("portable JVP tangent activity disagrees")
     bias_shape=tuple(p.get("bias_shape",())) or (dims[0],dims[1],dims[3],dims[4])
+    bounds=tuple(p.get("shape_bounds",()))
+    if bounds:
+        from .attention_shape_contract import DYNAMIC_DIM
+        symbolic=tuple(p["shape"])
+        b,hq,hkv,sq,sk,d,dv=symbolic
+        sq="query_size" if sq==DYNAMIC_DIM else sq
+        sk="key_size" if sk==DYNAMIC_DIM else sk
+        shapes=((b,hq,sq,d),(b,hkv,sk,d),(b,hkv,sk,dv),(b,hq,sq,dv),(b,hq,sq))
+        symbolic_bias=tuple(p.get("bias_shape",())) or (b,hq,symbolic[3],symbolic[4])
+        bias_shape=tuple(("query_size" if axis==2 else "key_size") if x==DYNAMIC_DIM else x
+                         for axis,x in enumerate(symbolic_bias))
     expected_shapes=(*shapes[:3],shapes[3],shapes[4],*shapes[:3],
         *((bias_shape,bias_shape) if biased else ()),shapes[3])
     tensor_names=("q","k","v","primal","lse","dq","dk","dv") + (
@@ -48,10 +59,17 @@ def payload(program):
     expected=[dict(kind="tensor",name=n,dtype="fp32",shape=list(s),writable=i==len(tensor_names)-1)
               for i,(n,s) in enumerate(zip(tensor_names,expected_shapes,strict=True))]
     expected.append(dict(kind="index",name="scratch",minimum=128,maximum=128))
+    grid=[dims[0]*dims[1]*dims[3],1,1]
+    if bounds:
+        from .attention_shape_contract import DYNAMIC_DIM
+        for axis,name in ((3,"query_size"),(4,"key_size")):
+            expected.append(dict(kind="index",name=name,
+                minimum=1 if symbolic[axis]==DYNAMIC_DIM else symbolic[axis],maximum=bounds[axis]))
+        grid=[dict(product=[dims[0],dims[1],"query_size"]),1,1]
     manifest=read_tensor_contract(tangent)
-    if manifest!={"schema":1,"arguments":expected,"grid":[dims[0]*dims[1]*dims[3],1,1],"block":[128,1,1]}:
+    if manifest!={"schema":2 if bounds else 1,"arguments":expected,"grid":grid,"block":[128,1,1]}:
         raise ValueError("portable JVP native tensor manifest differs from checkpoint")
-    if tangent.abi!=("pointer",)*len(tensor_names)+("index",):
+    if tangent.abi!=("pointer",)*len(tensor_names)+("index",)*(3 if bounds else 1):
         raise ValueError("portable JVP pointer/scalar ABI differs")
     def package(x):
         return dict(tile_ir=x.tile_ir,target_ir=x.target_ir,backend_ir=x.backend_ir,

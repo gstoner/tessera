@@ -5,19 +5,18 @@
 #include "mlir/IR/Builders.h"
 #include "llvm/ADT/SmallVector.h"
 #include "AttentionADContract.h"
+#include "Tessera/IR/AttentionTangentZero.h"
 
 namespace tessera {
 
 llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     mlir::OpBuilder &builder, mlir::ValueRange tangents) {
-  if (!denseAttentionAD(*this, true) || tangents.size() != getNumOperands()) return {};
+  if (!denseAttentionAD(*this, true, false, true) || tangents.size() != getNumOperands()) return {};
   bool scoresActive = false;
   for (auto [index, value] : llvm::enumerate(tangents)) {
     if (index == 2) continue;
     if (!value) continue;
-    auto constant = value.getDefiningOp<mlir::arith::ConstantOp>();
-    auto dense = constant ? mlir::dyn_cast<mlir::DenseFPElementsAttr>(constant.getValue()) : mlir::DenseFPElementsAttr();
-    scoresActive |= !dense || !dense.isSplat() || !dense.getSplatValue<llvm::APFloat>().isZero();
+    scoresActive |= !isAttentionZeroLike(value, getOperand(index));
   }
   if (scoresActive) {
     auto forward=attentionCheckpoint(builder,*this,false,getOperands());
@@ -28,15 +27,12 @@ llvm::SmallVector<mlir::Value> FlashAttnOp::buildTangent(
     auto zeroIfInactive = [&](mlir::Value primal, mlir::Value tangent) {
       if (tangent) return tangent;
       auto type=mlir::cast<mlir::RankedTensorType>(primal.getType());
+      if (!type.hasStaticShape()) return buildAttentionDynamicZero(builder, getLoc(), primal);
       return builder.create<mlir::arith::ConstantOp>(getLoc(),
           mlir::DenseElementsAttr::get(type,builder.getF32FloatAttr(0.0))).getResult();
     };
     for (auto [primal,tangent] : llvm::zip(getOperands().take_front(3),tangents.take_front(3))) {
-      if (!tangent) {
-        auto type=mlir::cast<mlir::RankedTensorType>(primal.getType());
-        tangent=builder.create<mlir::arith::ConstantOp>(getLoc(),
-            mlir::DenseElementsAttr::get(type,builder.getF32FloatAttr(0.0))).getResult();
-      }
+      tangent = zeroIfInactive(primal, tangent);
       state.addOperands(tangent);
     }
     if (getNumOperands()==4) {

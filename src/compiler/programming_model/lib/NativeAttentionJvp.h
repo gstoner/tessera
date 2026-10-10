@@ -8,7 +8,7 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
   auto arch=mod->getAttrOfType<StringAttr>("tessera.arch");
   if (!fn || !fn.getBody().hasOneBlock() || !target || target.getValue()!="nvidia_sm120" ||
       !arch || arch.getValue()!="sm_120" || (op->getNumOperands()!=8 && !bias) || op->getNumResults()!=1)
-    return op->emitError("attention JVP requires the SM120 paired static tensor product"),failure();
+    return op->emitError("attention JVP requires the SM120 paired tensor product"),failure();
   auto primalRef=fn->getAttrOfType<FlatSymbolRefAttr>("tessera.autodiff.forward");
   for (auto sibling:mod.getOps<func::FuncOp>()) {
     if (sibling==fn) continue;
@@ -17,7 +17,22 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
         !jvpRef || jvpRef.getValue()!=fn.getSymName())
       return op->emitError("attention JVP export cannot discard unrelated functions"),failure();
   }
+  // Only exact source-shaped inactive zero regions may be eliminated.
+  // Unrelated generated tensors or dimension reads are not export authority.
+  SmallVector<Operation *> zeroOps;
+  for (unsigned i=0;i<(bias?4u:3u);++i) {
+    Value tangent=op->getOperand(i==3?9:i+5);
+    Value primal=op->getOperand(i==3?8:i);
+    if (auto generated=tangent.getDefiningOp<tensor::GenerateOp>()) {
+      if (!isAttentionZeroLike(tangent,primal))
+        return op->emitError("attention JVP inactive region differs from its primal extent"),failure();
+      zeroOps.push_back(generated.getOperation());
+      for (Value extent:generated.getDynamicExtents())
+        zeroOps.push_back(extent.getDefiningOp());
+    }
+  }
   for (Operation &body:fn.getBody().front()) {
+    if (llvm::is_contained(zeroOps,&body)) continue;
     auto name=body.getName().getStringRef();
     if (name!="tessera_attn.checkpoint_forward" && name!="tessera_attn.checkpoint_jvp" &&
         name!="arith.constant" && name!="func.return" && name!="schedule.artifact" &&
@@ -29,15 +44,8 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
   SmallVector<RankedTensorType> types;
   for (Type t:op->getOperandTypes()) {
     auto tensor=dyn_cast<RankedTensorType>(t);
-    if (!tensor || !tensor.hasStaticShape() || tensor.getEncoding() ||
-        !tensor.getElementType().isF32())
-      return op->emitError("attention JVP requires unencoded static f32 tensors"),failure();
-    uint64_t bytes=4;
-    for (int64_t d:tensor.getShape()) {
-      if (d<=0 || d>65536 || bytes>uint64_t(INT64_MAX)/d)
-        return op->emitError("attention JVP shape exceeds its checked byte envelope"),failure();
-      bytes*=d;
-    }
+    if (!tensor || tensor.getEncoding() || !tensor.getElementType().isF32())
+      return op->emitError("attention JVP requires unencoded f32 tensors"),failure();
     types.push_back(tensor);
   }
   auto q=types[0],k=types[1],v=types[2];
@@ -45,7 +53,28 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
     return op->emitError("attention JVP Q/K/V require rank four"),failure();
   SmallVector<int64_t> dims{q.getDimSize(0),q.getDimSize(1),k.getDimSize(1),
       q.getDimSize(2),k.getDimSize(2),q.getDimSize(3),v.getDimSize(3)};
-  if (dims[0]*dims[1]*dims[3]>INT32_MAX)
+  // One verified policy supplies physical capacities; symbolic sequence
+  // dimensions remain symbolic in the identity and checked scalar ABI.
+  auto shape = resolveNativeAttentionShape(op, dims);
+  if (failed(shape)) return failure();
+  auto capacities=shape->dynamicSequence?shape->bounds.asArrayRef():ArrayRef<int64_t>(dims);
+  for (unsigned i=0;i<types.size();++i) {
+    uint64_t bytes=4;
+    for (auto entry:llvm::enumerate(types[i].getShape())) {
+      int64_t d=entry.value();
+      if (ShapedType::isDynamic(d)) {
+        unsigned axis=entry.index();
+        const bool scoreBias=bias && (i==8 || i==9);
+        if (axis!=2 && !(scoreBias && axis==3))
+          return op->emitError("attention JVP only sequences may be symbolic"),failure();
+        d=capacities[(scoreBias && axis==3) || i==1 || i==2 || i==6 || i==7 ? 4:3];
+      }
+      if (d<=0 || d>65536 || bytes>uint64_t(INT64_MAX)/d)
+        return op->emitError("attention JVP shape exceeds its checked byte envelope"),failure();
+      bytes*=d;
+    }
+  }
+  if (capacities[0]*capacities[1]*capacities[3]>INT32_MAX)
     return op->emitError("attention JVP row grid exceeds its launch envelope"),failure();
   auto scale=op->getAttrOfType<FloatAttr>("scale");
   auto causal=op->getAttrOfType<BoolAttr>("causal");
@@ -107,14 +136,14 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
   OpBuilder b(op);
   SmallVector<Value> directions(op->getOperands().slice(5,3));
   if (bias) directions.push_back(op->getOperand(9));
-  for (Value tangent:directions) {
+  for (auto entry:llvm::enumerate(directions)) {
+    Value tangent=entry.value();
     if (auto arg=dyn_cast<BlockArgument>(tangent)) {
       active.push_back(b.getBoolAttr(true)); roles.push_back(arg.getArgNumber());
     }
     else {
-      auto c=tangent.getDefiningOp<arith::ConstantOp>();
-      auto dense=c ? dyn_cast<DenseFPElementsAttr>(c.getValue()) : DenseFPElementsAttr();
-      if (!dense || !dense.isSplat() || !dense.getSplatValue<APFloat>().isZero())
+      Value primal=op->getOperand(entry.index()==3?8:entry.index());
+      if (!isAttentionZeroLike(tangent,primal))
         return op->emitError("attention JVP tangent must be a direct argument or inactive zero"),failure();
       active.push_back(b.getBoolAttr(false)); roles.push_back(-1);
     }
@@ -129,6 +158,12 @@ static FailureOr<DictionaryAttr> attentionJvpContract(Operation *op) {
       b.getNamedAttr("algorithm",b.getStringAttr(scoresActive ? "cooperative_saved_lse_moments_v1" : "cooperative_saved_lse_value_linear_v1")),
       b.getNamedAttr("workgroup_size",b.getI64IntegerAttr(128)),
       b.getNamedAttr("ownership",b.getStringAttr("private_saved_generation_distinct_tangent"))});
+  if (shape->dynamicSequence) {
+    NamedAttrList attrs(contract);
+    attrs.set("shape_bounds",shape->bounds);
+    attrs.set("shape_policy",b.getStringAttr("bounded_sequences_v1"));
+    contract=attrs.getDictionary(op->getContext());
+  }
   if (bias) {
     NamedAttrList attrs(contract);
     attrs.set("bias_shape",b.getDenseI64ArrayAttr(types[8].getShape()));
@@ -173,6 +208,9 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
       graph->getAttr("schedule.artifact_hash")!=record->getAttr("hash"))
     return record.emitError("attention JVP Schedule contract changed after hashing");
   auto dims=cast<DenseI64ArrayAttr>((*c).get("shape")).asArrayRef();
+  auto bounds=dyn_cast_or_null<DenseI64ArrayAttr>((*c).get("shape_bounds"));
+  const bool dynamic=bool(bounds);
+  auto capacities=dynamic?bounds.asArrayRef():dims;
   auto active=cast<ArrayAttr>((*c).get("active"));
   const bool bias=graph->getNumOperands()==10;
   bool scoresActive=cast<BoolAttr>(active[0]).getValue() || cast<BoolAttr>(active[1]).getValue() ||
@@ -189,13 +227,34 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   names.push_back("tangent");
   llvm::json::Array specs;
   for(unsigned i=0;i<tensorTypes.size();++i) {
-    llvm::json::Array extents;for(int64_t d:tensorTypes[i].getShape())extents.push_back(d);
+    llvm::json::Array extents;
+    for (auto entry:llvm::enumerate(tensorTypes[i].getShape())) {
+      if (!ShapedType::isDynamic(entry.value())) extents.push_back(entry.value());
+      else {
+        const bool keyAxis=(i==1 || i==2 || i==6 || i==7) ||
+                           ((names[i]=="bias" || names[i]=="dbias") && entry.index()==3);
+        extents.push_back(keyAxis?"key_size":"query_size");
+      }
+    }
     specs.push_back(llvm::json::Object{{"kind","tensor"},{"name",names[i]},{"dtype","fp32"},
         {"shape",std::move(extents)},{"writable",i==tensorTypes.size()-1}});
   }
   specs.push_back(llvm::json::Object{{"kind","index"},{"name","scratch"},{"minimum",128},{"maximum",128}});
-  llvm::json::Object manifest{{"schema",1},{"arguments",std::move(specs)},
-      {"grid",llvm::json::Array{dims[0]*dims[1]*dims[3],1,1}},{"block",llvm::json::Array{128,1,1}}};
+  if (dynamic) {
+    StringRef scalarNames[]{"query_size","key_size"};
+    for (auto entry:llvm::enumerate(scalarNames)) {
+      unsigned axis=entry.index()+3;
+      specs.push_back(llvm::json::Object{{"kind","index"},{"name",entry.value()},
+        {"minimum",ShapedType::isDynamic(dims[axis])?1:dims[axis]},
+        {"maximum",capacities[axis]}});
+    }
+  }
+  llvm::json::Array grid;
+  if (dynamic) grid.push_back(llvm::json::Object{{"product",llvm::json::Array{dims[0],dims[1],"query_size"}}});
+  else grid.push_back(dims[0]*dims[1]*dims[3]);
+  grid.push_back(1);grid.push_back(1);
+  llvm::json::Object manifest{{"schema",dynamic?2:1},{"arguments",std::move(specs)},
+      {"grid",std::move(grid)},{"block",llvm::json::Array{128,1,1}}};
   std::string json;llvm::raw_string_ostream jos(json);jos<<llvm::json::Value(std::move(manifest));jos.flush();
   OpBuilder b(mod.getContext());auto loc=graph->getLoc();
   mod->setAttr("tessera.native_tensor_contract",b.getStringAttr(json));
@@ -219,9 +278,15 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   ios<<"\"causal\":"<<(causal?"true":"false")
      <<",\"lse\":\"natural_log\",\"mask_alignment\":\"end_aligned_v1\",\"scale_f32_bits\":\""
      <<llvm::toHex(ArrayRef<uint8_t>(bytes),true)
-     <<"\",\"schema\":\""+std::string(broadcast?"tessera.attention_checkpoint.broadcast.v1":"tessera.attention_checkpoint.v1")+"\",\"shape\":[";
+     <<"\",\"schema\":\""+std::string(dynamic?"tessera.attention_checkpoint.bounded_sequences.v1":broadcast?"tessera.attention_checkpoint.broadcast.v1":"tessera.attention_checkpoint.v1")+"\",\"shape\":[";
   for(unsigned i=0;i<7;++i){if(i)ios<<",";ios<<dims[i];}
-  ios<<"],\"storage\":\"f32\"}";ios.flush();
+  ios<<"]";
+  if (dynamic) {
+    ios<<",\"shape_bounds\":[";
+    for(unsigned i=0;i<7;++i){if(i)ios<<",";ios<<capacities[i];}
+    ios<<"]";
+  }
+  ios<<",\"storage\":\"f32\"}";ios.flush();
   mod->setAttr("tessera.attention_checkpoint_identity",b.getStringAttr(
       llvm::toHex(llvm::SHA256::hash(llvm::arrayRefFromStringRef(identity)),true)));
   b.setInsertionPointToEnd(mod.getBody());
@@ -229,6 +294,7 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   b.setInsertionPointToStart(&gm.getBodyRegion().front());
   auto ptr=LLVM::LLVMPointerType::get(mod.getContext(),1);
   SmallVector<Type> abi(tensorTypes.size(),ptr);abi.push_back(b.getIndexType());
+  if (dynamic) {abi.push_back(b.getIndexType());abi.push_back(b.getIndexType());}
   auto kernel=gpu::GPUFuncOp::create(b,loc,"saved_lse_jvp",b.getFunctionType(abi,{}));
   kernel.setKernelAttr(b.getUnitAttr());
   kernel->setAttr("tessera.schedule_hash",record->getAttr("hash"));
@@ -254,12 +320,20 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   Value zero=arith::ConstantFloatOp::create(b,loc,b.getF32Type(),APFloat(0.0f));
   Value sf=arith::ConstantOp::create(b,loc,scale);
   Value log2e=arith::ConstantFloatOp::create(b,loc,b.getF32Type(),APFloat(1.4426950408889634f));
-  Value qi=rem(row,c64(dims[3])),bh=div(row,c64(dims[3]));
+  Value sq=dynamic?cast64(args[tensorTypes.size()+1]):c64(dims[3]);
+  Value sk=dynamic?cast64(args[tensorTypes.size()+2]):c64(dims[4]);
+  Value keyExtent=dynamic?args[tensorTypes.size()+2]:ci(dims[4]);
+  Value qi=rem(row,sq),bh=div(row,sq);
   Value head=rem(bh,c64(dims[1])),batch=div(bh,c64(dims[1]));
   Value kvhead=div(head,c64(dims[1]/dims[2]));
-  Value kvbase=mul(add(mul(batch,c64(dims[2])),kvhead),c64(dims[4]));
+  Value kvbase=mul(add(mul(batch,c64(dims[2])),kvhead),sk);
   Value qbase=mul(row,c64(dims[5])),obase=mul(row,c64(dims[6]));
-  Value limit=add(qi,c64(std::max<int64_t>(dims[4]-dims[3],0)));
+  Value gap;
+  if (dynamic) {
+    Value positive=arith::CmpIOp::create(b,loc,arith::CmpIPredicate::ugt,sk,sq);
+    gap=arith::SelectOp::create(b,loc,positive,arith::SubIOp::create(b,loc,sk,sq),c64(0));
+  } else gap=c64(std::max<int64_t>(dims[4]-dims[3],0));
+  Value limit=add(qi,gap);
   Value L=load(4,row);
   auto scratchType=MemRefType::get({ShapedType::kDynamic},b.getF32Type());
   SmallVector<Value> scratch;
@@ -271,7 +345,7 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   auto cols=scf::ForOp::create(b,loc,z,ci(dims[6]),one);
   b.setInsertionPointToStart(cols.getBody());
   Value col=cast64(cols.getInductionVar());
-  auto keys=scf::ForOp::create(b,loc,tid,ci(dims[4]),width,ValueRange{zero,zero});
+  auto keys=scf::ForOp::create(b,loc,tid,keyExtent,width,ValueRange{zero,zero});
   b.setInsertionPointToStart(keys.getBody());
   Value key=cast64(keys.getInductionVar());
   Value legal=causal?Value(arith::CmpIOp::create(b,loc,arith::CmpIPredicate::ule,key,limit))
@@ -291,8 +365,10 @@ static LogicalResult lowerNativeAttentionJvp(ModuleOp mod,bool &selected) {
   Value score=fmul(dot.getResult(0),sf),direction=fmul(dot.getResult(1),sf);
   if (bias) {
     Value coordinates[4]={batch,head,qi,key},offset=c64(0);
-    for(unsigned i=0;i<4;++i)
-      offset=add(mul(offset,c64(biasShape[i])),biasShape[i]==1?c64(0):coordinates[i]);
+    for(unsigned i=0;i<4;++i) {
+      Value pitch=ShapedType::isDynamic(biasShape[i])?(i==2?sq:sk):c64(biasShape[i]);
+      offset=add(mul(offset,pitch),biasShape[i]==1?c64(0):coordinates[i]);
+    }
     score=fadd(score,load(8,offset));
     if(cast<BoolAttr>(active[3]).getValue())direction=fadd(direction,load(9,offset));
   }

@@ -17,6 +17,8 @@
 #include "Tessera/IR/TesseraOps.h"
 #include "Tessera/IR/NVFP4IngestContract.h"
 #include "Tessera/IR/ScaledBatchContract.h"
+#include "Tessera/IR/AttentionShapeContract.h"
+#include "Tessera/IR/AttentionTangentZero.h"
 #include "tessera/Dialect/Attn/AttnDialect.h"
 
 #include "mlir/Dialect/Arith/IR/Arith.h"

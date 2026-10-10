@@ -9924,6 +9924,61 @@ ROCm compiler/bitcode tools. No admission, ABI or physical selector changes.
 Not applicable to CPU physical schedules/runtime ABI: upstream LLVM/MLIR remains pinned to 23.1.1 and the ROCm SDK is isolated.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
 
+## Shared attention sequence-capacity foundation — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1. Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Semantic checkpoint verification and native Schedule projection now use one
+IR-owned sequence-capacity resolver; the JVP contract uses the same policy.
+Matching LLVM/MLIR 23.1.1 core/target builds and 574 host WSL regressions pass without skips.
+Not applicable to CPU physical execution: the shared attention semantic verifier uses this resolver, while x86 packages do not consume the SM120 checkpoint/JVP ABI.
+Foundation verification alone does not establish execution; the native evidence is recorded below. Generic scaled-matmul closure remains open.
+
+## Bounded saved-LSE JVP native integration — 2026-10-08
+
+Owner E2E-REAL-6 / AD-RESIDUAL-EVAL-1.
+Sync NVIDIA-BOUNDED-JVP-2026-10-08.
+Shared contracts: symbolic sequence AD, exact source-shaped inactive zeros,
+schema-2 native tensor manifests and checked actual-size product launch grids.
+574 host WSL regressions pass, zero skipped.
+Not applicable to AVX-512 physical execution: the x86 backend does not consume this CUDA/HIP native-storage manifest or SM120 resident JVP image. Shared IR verification is covered; no CPU native execution or performance claim.
+Kernel CUDA-event timing and capture/JVP/close host-wall timing are separate.
+No generic scaled-matmul closure or default-route promotion.
+Evidence: benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
+
+## Native unary replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-NATIVE-REPLAY-CACHE-2026-10-08.
+Not applicable: x86 retains its existing native pass cache.
+Only successful native MLIR pass output is cached; artifact and descriptor
+validation still run per call. Compiler, loaded-library, environment and full
+IR and working-directory identity participate, with bounded entry/byte retention.
+Evidence: benchmarks/baselines/gfx1151_native_replay_cache_20261008/README.md
+and benchmarks/baselines/gfx1201_native_replay_cache_20261008/README.md.
+
+## Matmul native replay reuse — 2026-10-08
+
+Owner E2E-REAL-6. Sync ROCM-MATMUL-REPLAY-CACHE-2026-10-08.
+Not applicable: this backend retains its existing native matmul replay path.
+Only artifact.target == rocm enters the bounded ROCm cache; sibling physical
+schedules and execution capabilities are unchanged.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+ROCM-MATMUL-REPLAY-CACHE-2026-10-08 synchronized rerun: both gfx1151 and
+gfx1201 retain numerical parity, equal images/fingerprints and three-to-one
+replay subprocess counts after PR894 and explicit cwd identity. Owning tests
+pass 23 gfx1151 / 22 gfx1201 (one unavailable NVIDIA-dialect skip).
+Not applicable to x86 physical execution; no sibling performance claim.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
+## Native math Graph replay reuse — 2026-10-08
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1. Sync ROCM-MATH-REPLAY-2026-10-08.
+Shared contract: bounded pure replay additionally admits Graph-to-Schedule;
+MathRecipe retains per-call Graph/Schedule/Tile and descriptor validation.
+68 host regressions and 19 owning cache tests per architecture pass.
+Not applicable: CPU packaging retains its separate native compile cache. No AVX-512 ABI, selector or execution state is changed.
+Evidence: benchmarks/baselines/rocm_math_replay_cache_20261008/README.md.
+
 ## Named scaled-batch frontend orientation — 2026-10-08
 
 Owner FRONTEND-IR-MEDIUM-1 / E2E-REAL-6.

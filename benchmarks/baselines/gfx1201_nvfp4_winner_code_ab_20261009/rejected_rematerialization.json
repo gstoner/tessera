@@ -1,0 +1,2757 @@
+{
+  "schema": "tessera.gfx1201.nvfp4_winner_code_ab.v1",
+  "architecture": "gfx1201",
+  "device": {
+    "name": "AMD Radeon RX 9070 XT",
+    "uuid_hex": "32386439653765666266326566373136"
+  },
+  "compiler_sha256": {
+    "baseline": "947111d6aa8e0d119761332d384995c32260b8692146a34590a78942bd5a8c6e",
+    "candidate": "a338f94e46d31056a4745830b447b0acea11d5f9be63a52893d1946f4f5a3684"
+  },
+  "runtime_sha256": "21199d5f9e3ff3d8b588a0a691cb83dabb385c756ce258ca74b7affef3f4d0fb",
+  "image_runtime_sha256": "cd29afc8e768d6c2e81b79ea3b3c19f91e74b8b9799ebbd1bd12630b48765249",
+  "candidate_source_sha256": "9c133f3b9f191fab7d27e07b8f13d0030e2178af725d48355f1037fabc14ed64",
+  "recorder_sha256": "fcd87d1fd4afb9cee4ee96bd331c98e62a72f59cb9a60db6400edaa204362f7b",
+  "route": "GraphIR->ScheduleIR->TileIR->ROCm Target IR->ROCDL/LLVM->HSACO",
+  "timing_scope": "interleaved paired HIP captured windows; 128 launches; seven rounds; package wall time separate",
+  "claim": "candidate experiment; no selector promotion; converter and combined timings are not summed",
+  "profiles": [
+    {
+      "shape_nk": [
+        32,
+        64
+      ],
+      "compile_process_ms": {
+        "baseline": 3553.3712208271027,
+        "candidate": 3375.6642169319093
+      },
+      "image_digests": {
+        "baseline": [
+          "ca856e0a6471aeffe479087755bc63da743cbc4dea1c4fd3f3617be767371955",
+          "6b1906b9e744d1ea395695a2e8ad574211905306cd4455ea6311000afe25ddf8",
+          "599aa232294c4861fda167b3805b5ba0309d72ed0db0f32fb21ac1603617de23"
+        ],
+        "candidate": [
+          "51139f98cf0b642009f2f12371bfb36738306007bb8d49dede745230315a2bdd",
+          "6b1906b9e744d1ea395695a2e8ad574211905306cd4455ea6311000afe25ddf8",
+          "599aa232294c4861fda167b3805b5ba0309d72ed0db0f32fb21ac1603617de23"
+        ]
+      },
+      "frames": [
+        {
+          "shape_mnk": [
+            17,
+            32,
+            64
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.0840289443731308,
+                0.08742240071296692,
+                0.09476927667856216,
+                0.13056549429893494,
+                0.13060036301612854,
+                0.13024048507213593,
+                0.13008323311805725
+              ],
+              "combined": [
+                0.10320250689983368,
+                0.10788121074438095,
+                0.15432268381118774,
+                0.1542273461818695,
+                0.15402591228485107,
+                0.1538398116827011,
+                0.15361790359020233
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.09494537115097046,
+                0.08678894490003586,
+                0.13493718206882477,
+                0.13488908112049103,
+                0.13472861051559448,
+                0.13463984429836273,
+                0.13429152965545654
+              ],
+              "combined": [
+                0.10715559870004654,
+                0.11219781637191772,
+                0.1599293053150177,
+                0.15929432213306427,
+                0.1589093804359436,
+                0.15897034108638763,
+                0.15949206054210663
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 10.755704879760742,
+                  "per_iteration_ms": 0.0840289443731308
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 11.190067291259766,
+                  "per_iteration_ms": 0.08742240071296692
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 12.130467414855957,
+                  "per_iteration_ms": 0.09476927667856216
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.712383270263672,
+                  "per_iteration_ms": 0.13056549429893494
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.716846466064453,
+                  "per_iteration_ms": 0.13060036301612854
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.6707820892334,
+                  "per_iteration_ms": 0.13024048507213593
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.650653839111328,
+                  "per_iteration_ms": 0.13008323311805725
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 13.209920883178711,
+                  "per_iteration_ms": 0.10320250689983368
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 13.808794975280762,
+                  "per_iteration_ms": 0.10788121074438095
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.75330352783203,
+                  "per_iteration_ms": 0.15432268381118774
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.741100311279297,
+                  "per_iteration_ms": 0.1542273461818695
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.715316772460938,
+                  "per_iteration_ms": 0.15402591228485107
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.691495895385742,
+                  "per_iteration_ms": 0.1538398116827011
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.6630916595459,
+                  "per_iteration_ms": 0.15361790359020233
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 12.153007507324219,
+                  "per_iteration_ms": 0.09494537115097046
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 11.10898494720459,
+                  "per_iteration_ms": 0.08678894490003586
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.27195930480957,
+                  "per_iteration_ms": 0.13493718206882477
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.26580238342285,
+                  "per_iteration_ms": 0.13488908112049103
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.245262145996094,
+                  "per_iteration_ms": 0.13472861051559448
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.23390007019043,
+                  "per_iteration_ms": 0.13463984429836273
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.189315795898438,
+                  "per_iteration_ms": 0.13429152965545654
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 13.715916633605957,
+                  "per_iteration_ms": 0.10715559870004654
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 14.361320495605469,
+                  "per_iteration_ms": 0.11219781637191772
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.470951080322266,
+                  "per_iteration_ms": 0.1599293053150177
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.389673233032227,
+                  "per_iteration_ms": 0.15929432213306427
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.34040069580078,
+                  "per_iteration_ms": 0.1589093804359436
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.348203659057617,
+                  "per_iteration_ms": 0.15897034108638763
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.41498374938965,
+                  "per_iteration_ms": 0.15949206054210663
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.13008323311805725,
+              "combined": 0.1538398116827011
+            },
+            "candidate": {
+              "converter": 0.13463984429836273,
+              "combined": 0.15897034108638763
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.9661570376581244,
+            "combined": 0.9677264993669574
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              12.862920993939042,
+              2.322660991922021,
+              2.2665951400995255,
+              2.2505130618810654,
+              2.2909899707883596,
+              2.3026640992611647,
+              2.3260971065610647
+            ],
+            "candidate": [
+              5.869136890396476,
+              2.3490660823881626,
+              2.2015399299561977,
+              2.258128020912409,
+              2.270991913974285,
+              2.2478781174868345,
+              2.26092291995883
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 2.3026640992611647,
+            "candidate": 2.26092291995883
+          }
+        },
+        {
+          "shape_mnk": [
+            257,
+            32,
+            64
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.13278914988040924,
+                0.13031990826129913,
+                0.13036200404167175,
+                0.13004378974437714,
+                0.13067609071731567,
+                0.1297762095928192,
+                0.12967318296432495
+              ],
+              "combined": [
+                0.15336471796035767,
+                0.15309186279773712,
+                0.15291523933410645,
+                0.1526494324207306,
+                0.15252123773097992,
+                0.15224412083625793,
+                0.15213747322559357
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.13410858809947968,
+                0.13434672355651855,
+                0.1343202292919159,
+                0.13468661904335022,
+                0.13398493826389313,
+                0.13378781080245972,
+                0.1336258500814438
+              ],
+              "combined": [
+                0.15672899782657623,
+                0.1569230556488037,
+                0.15684464573860168,
+                0.1567753702402115,
+                0.15628984570503235,
+                0.15623624622821808,
+                0.15581895411014557
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.997011184692383,
+                  "per_iteration_ms": 0.13278914988040924
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.68094825744629,
+                  "per_iteration_ms": 0.13031990826129913
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.686336517333984,
+                  "per_iteration_ms": 0.13036200404167175
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.645605087280273,
+                  "per_iteration_ms": 0.13004378974437714
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.726539611816406,
+                  "per_iteration_ms": 0.13067609071731567
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.61135482788086,
+                  "per_iteration_ms": 0.1297762095928192
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.598167419433594,
+                  "per_iteration_ms": 0.12967318296432495
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.63068389892578,
+                  "per_iteration_ms": 0.15336471796035767
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.59575843811035,
+                  "per_iteration_ms": 0.15309186279773712
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.573150634765625,
+                  "per_iteration_ms": 0.15291523933410645
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.539127349853516,
+                  "per_iteration_ms": 0.1526494324207306
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.52271842956543,
+                  "per_iteration_ms": 0.15252123773097992
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.487247467041016,
+                  "per_iteration_ms": 0.15224412083625793
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.473596572875977,
+                  "per_iteration_ms": 0.15213747322559357
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.1658992767334,
+                  "per_iteration_ms": 0.13410858809947968
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.196380615234375,
+                  "per_iteration_ms": 0.13434672355651855
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.192989349365234,
+                  "per_iteration_ms": 0.1343202292919159
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.239887237548828,
+                  "per_iteration_ms": 0.13468661904335022
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.15007209777832,
+                  "per_iteration_ms": 0.13398493826389313
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.124839782714844,
+                  "per_iteration_ms": 0.13378781080245972
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.104108810424805,
+                  "per_iteration_ms": 0.1336258500814438
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.061311721801758,
+                  "per_iteration_ms": 0.15672899782657623
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.086151123046875,
+                  "per_iteration_ms": 0.1569230556488037
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.076114654541016,
+                  "per_iteration_ms": 0.15684464573860168
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.06724739074707,
+                  "per_iteration_ms": 0.1567753702402115
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.00510025024414,
+                  "per_iteration_ms": 0.15628984570503235
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.998239517211914,
+                  "per_iteration_ms": 0.15623624622821808
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.944826126098633,
+                  "per_iteration_ms": 0.15581895411014557
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.13031990826129913,
+              "combined": 0.1526494324207306
+            },
+            "candidate": {
+              "converter": 0.13410858809947968,
+              "combined": 0.15672899782657623
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.971749163182822,
+            "combined": 0.9739705768401598
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              6.167320068925619,
+              2.4733280297368765,
+              2.4502738378942013,
+              2.3871029261499643,
+              2.4963021278381348,
+              2.526109106838703,
+              2.454172121360898
+            ],
+            "candidate": [
+              6.729181855916977,
+              2.3412671871483326,
+              2.5742710568010807,
+              2.5481709744781256,
+              2.3448229767382145,
+              2.6542439591139555,
+              2.6451358571648598
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 2.4733280297368765,
+            "candidate": 2.5742710568010807
+          }
+        }
+      ]
+    },
+    {
+      "shape_nk": [
+        80,
+        256
+      ],
+      "compile_process_ms": {
+        "baseline": 3584.528046892956,
+        "candidate": 3359.1392771340907
+      },
+      "image_digests": {
+        "baseline": [
+          "3d491946d5cb3bac1f9d5714cbc8ace8c9cc45b7ff3ee19692c25cc3f1636593",
+          "d40d421e96996e626ea39b754f19cfdf6cfb8a9e163b543c97faded41d01b8a9",
+          "54c5a892e2b3d7a4aee36caaaa37a6d71e915d5432d01b19a1cb75e59d4a6c60"
+        ],
+        "candidate": [
+          "91dabd84d94c2196389f5277f760a1b9e7b9484858ac457240e13f6c4f5775ef",
+          "d40d421e96996e626ea39b754f19cfdf6cfb8a9e163b543c97faded41d01b8a9",
+          "54c5a892e2b3d7a4aee36caaaa37a6d71e915d5432d01b19a1cb75e59d4a6c60"
+        ]
+      },
+      "frames": [
+        {
+          "shape_mnk": [
+            17,
+            80,
+            256
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.1368827074766159,
+                0.12982210516929626,
+                0.130065456032753,
+                0.12981155514717102,
+                0.1296868622303009,
+                0.13011831045150757,
+                0.12936721742153168
+              ],
+              "combined": [
+                0.15209047496318817,
+                0.15252529084682465,
+                0.15259192883968353,
+                0.15206483006477356,
+                0.15187224745750427,
+                0.152323380112648,
+                0.15158340334892273
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.1340891271829605,
+                0.13411115109920502,
+                0.1342078596353531,
+                0.13415059447288513,
+                0.13387872278690338,
+                0.13383258879184723,
+                0.1336343139410019
+              ],
+              "combined": [
+                0.15713606774806976,
+                0.1572924703359604,
+                0.15658161044120789,
+                0.15653619170188904,
+                0.15619386732578278,
+                0.15609298646450043,
+                0.15571768581867218
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.520986557006836,
+                  "per_iteration_ms": 0.1368827074766159
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.617229461669922,
+                  "per_iteration_ms": 0.12982210516929626
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.648378372192383,
+                  "per_iteration_ms": 0.130065456032753
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.61587905883789,
+                  "per_iteration_ms": 0.12981155514717102
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.599918365478516,
+                  "per_iteration_ms": 0.1296868622303009
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.65514373779297,
+                  "per_iteration_ms": 0.13011831045150757
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.559003829956055,
+                  "per_iteration_ms": 0.12936721742153168
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.467580795288086,
+                  "per_iteration_ms": 0.15209047496318817
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.523237228393555,
+                  "per_iteration_ms": 0.15252529084682465
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.531766891479492,
+                  "per_iteration_ms": 0.15259192883968353
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.464298248291016,
+                  "per_iteration_ms": 0.15206483006477356
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.439647674560547,
+                  "per_iteration_ms": 0.15187224745750427
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.497392654418945,
+                  "per_iteration_ms": 0.152323380112648
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.40267562866211,
+                  "per_iteration_ms": 0.15158340334892273
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.163408279418945,
+                  "per_iteration_ms": 0.1340891271829605
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.166227340698242,
+                  "per_iteration_ms": 0.13411115109920502
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.178606033325195,
+                  "per_iteration_ms": 0.1342078596353531
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.171276092529297,
+                  "per_iteration_ms": 0.13415059447288513
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.136476516723633,
+                  "per_iteration_ms": 0.13387872278690338
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.130571365356445,
+                  "per_iteration_ms": 0.13383258879184723
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.105192184448242,
+                  "per_iteration_ms": 0.1336343139410019
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.11341667175293,
+                  "per_iteration_ms": 0.15713606774806976
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.13343620300293,
+                  "per_iteration_ms": 0.1572924703359604
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.04244613647461,
+                  "per_iteration_ms": 0.15658161044120789
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.036632537841797,
+                  "per_iteration_ms": 0.15653619170188904
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.992815017700195,
+                  "per_iteration_ms": 0.15619386732578278
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.979902267456055,
+                  "per_iteration_ms": 0.15609298646450043
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.93186378479004,
+                  "per_iteration_ms": 0.15571768581867218
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.12982210516929626,
+              "combined": 0.15209047496318817
+            },
+            "candidate": {
+              "converter": 0.1340891271829605,
+              "combined": 0.15653619170188904
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.9681777180349453,
+            "combined": 0.971599432116201
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              5.986950825899839,
+              2.1770629100501537,
+              2.1504019387066364,
+              2.2427989169955254,
+              2.3671151138842106,
+              2.1903179585933685,
+              2.2246940061450005
+            ],
+            "candidate": [
+              6.317211082205176,
+              2.313622971996665,
+              2.176803071051836,
+              2.3159480188041925,
+              2.4189550895243883,
+              2.3285718634724617,
+              2.2864120546728373
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 2.2246940061450005,
+            "candidate": 2.3159480188041925
+          }
+        },
+        {
+          "shape_mnk": [
+            257,
+            80,
+            256
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.13268668949604034,
+                0.129513680934906,
+                0.1295185387134552,
+                0.1293288767337799,
+                0.12922954559326172,
+                0.12948845326900482,
+                0.1290970742702484
+              ],
+              "combined": [
+                0.15148353576660156,
+                0.15185612440109253,
+                0.15186919271945953,
+                0.15155772864818573,
+                0.15148845314979553,
+                0.15123502910137177,
+                0.15118683874607086
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.133682981133461,
+                0.13369743525981903,
+                0.13375581800937653,
+                0.13372716307640076,
+                0.13354554772377014,
+                0.13346950709819794,
+                0.13332439959049225
+              ],
+              "combined": [
+                0.1560371369123459,
+                0.15613923966884613,
+                0.1561397910118103,
+                0.15662984549999237,
+                0.15586493909358978,
+                0.15570732951164246,
+                0.155600443482399
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.983896255493164,
+                  "per_iteration_ms": 0.13268668949604034
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.57775115966797,
+                  "per_iteration_ms": 0.129513680934906
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.578372955322266,
+                  "per_iteration_ms": 0.1295185387134552
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.554096221923828,
+                  "per_iteration_ms": 0.1293288767337799
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.5413818359375,
+                  "per_iteration_ms": 0.12922954559326172
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.574522018432617,
+                  "per_iteration_ms": 0.12948845326900482
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.524425506591797,
+                  "per_iteration_ms": 0.1290970742702484
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.389892578125,
+                  "per_iteration_ms": 0.15148353576660156
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.437583923339844,
+                  "per_iteration_ms": 0.15185612440109253
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.43925666809082,
+                  "per_iteration_ms": 0.15186919271945953
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.399389266967773,
+                  "per_iteration_ms": 0.15155772864818573
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.390522003173828,
+                  "per_iteration_ms": 0.15148845314979553
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.358083724975586,
+                  "per_iteration_ms": 0.15123502910137177
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.35191535949707,
+                  "per_iteration_ms": 0.15118683874607086
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.111421585083008,
+                  "per_iteration_ms": 0.133682981133461
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.113271713256836,
+                  "per_iteration_ms": 0.13369743525981903
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.120744705200195,
+                  "per_iteration_ms": 0.13375581800937653
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.117076873779297,
+                  "per_iteration_ms": 0.13372716307640076
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.093830108642578,
+                  "per_iteration_ms": 0.13354554772377014
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.084096908569336,
+                  "per_iteration_ms": 0.13346950709819794
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.065523147583008,
+                  "per_iteration_ms": 0.13332439959049225
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.972753524780273,
+                  "per_iteration_ms": 0.1560371369123459
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.985822677612305,
+                  "per_iteration_ms": 0.15613923966884613
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.98589324951172,
+                  "per_iteration_ms": 0.1561397910118103
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.048620223999023,
+                  "per_iteration_ms": 0.15662984549999237
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.950712203979492,
+                  "per_iteration_ms": 0.15586493909358978
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.930538177490234,
+                  "per_iteration_ms": 0.15570732951164246
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.91685676574707,
+                  "per_iteration_ms": 0.155600443482399
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.12948845326900482,
+              "combined": 0.15148845314979553
+            },
+            "candidate": {
+              "converter": 0.133682981133461,
+              "combined": 0.1560371369123459
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.9686233219150865,
+            "combined": 0.9708487104252266
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              7.677416084334254,
+              3.4858700819313526,
+              3.3900479320436716,
+              3.5224950406700373,
+              3.416632069274783,
+              3.5788030363619328,
+              3.401268972083926
+            ],
+            "candidate": [
+              7.7527048997581005,
+              3.828509012237191,
+              3.423500107601285,
+              3.5627109464257956,
+              3.5307761281728745,
+              3.4770590718835592,
+              3.602071898058057
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 3.4858700819313526,
+            "candidate": 3.5627109464257956
+          }
+        }
+      ]
+    },
+    {
+      "shape_nk": [
+        64,
+        1024
+      ],
+      "compile_process_ms": {
+        "baseline": 3558.9246079325676,
+        "candidate": 3356.9328798912466
+      },
+      "image_digests": {
+        "baseline": [
+          "3c09e7659d9a84ceec1d19f1412de6ee8faacf39cf9ef4371385b2d11cc4f663",
+          "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+          "e383563650dd4eae95fedfd64ee93208862cc629965a23fa6d0d0bb7d6d0853a"
+        ],
+        "candidate": [
+          "5d8fcea5e29aaa3e0a204c459acd70b8ed8f3752af2ba9ddd2ea429f910fb133",
+          "eaf62195bdde7a1500501dcd0bd5722cef9bd3081197b22673acc2e50b346ffd",
+          "e383563650dd4eae95fedfd64ee93208862cc629965a23fa6d0d0bb7d6d0853a"
+        ]
+      },
+      "frames": [
+        {
+          "shape_mnk": [
+            17,
+            64,
+            1024
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.13637800514698029,
+                0.13290685415267944,
+                0.13289111852645874,
+                0.13311271369457245,
+                0.13380412757396698,
+                0.13339218497276306,
+                0.1333981305360794
+              ],
+              "combined": [
+                0.16270720958709717,
+                0.16271695494651794,
+                0.16346585750579834,
+                0.16310769319534302,
+                0.16379691660404205,
+                0.16352605819702148,
+                0.16358858346939087
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.1340513676404953,
+                0.13419879972934723,
+                0.13436655700206757,
+                0.13455000519752502,
+                0.13487406075000763,
+                0.13500085473060608,
+                0.13525740802288055
+              ],
+              "combined": [
+                0.16390806436538696,
+                0.1639968901872635,
+                0.16440702974796295,
+                0.16460256278514862,
+                0.1648717075586319,
+                0.16500791907310486,
+                0.16552893817424774
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.456384658813477,
+                  "per_iteration_ms": 0.13637800514698029
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.01207733154297,
+                  "per_iteration_ms": 0.13290685415267944
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.01006317138672,
+                  "per_iteration_ms": 0.13289111852645874
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.038427352905273,
+                  "per_iteration_ms": 0.13311271369457245
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.126928329467773,
+                  "per_iteration_ms": 0.13380412757396698
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.074199676513672,
+                  "per_iteration_ms": 0.13339218497276306
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.074960708618164,
+                  "per_iteration_ms": 0.1333981305360794
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.826522827148438,
+                  "per_iteration_ms": 0.16270720958709717
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.827770233154297,
+                  "per_iteration_ms": 0.16271695494651794
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.923629760742188,
+                  "per_iteration_ms": 0.16346585750579834
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.877784729003906,
+                  "per_iteration_ms": 0.16310769319534302
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.966005325317383,
+                  "per_iteration_ms": 0.16379691660404205
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.93133544921875,
+                  "per_iteration_ms": 0.16352605819702148
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.93933868408203,
+                  "per_iteration_ms": 0.16358858346939087
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.1585750579834,
+                  "per_iteration_ms": 0.1340513676404953
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.177446365356445,
+                  "per_iteration_ms": 0.13419879972934723
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.19891929626465,
+                  "per_iteration_ms": 0.13436655700206757
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.222400665283203,
+                  "per_iteration_ms": 0.13455000519752502
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.263879776000977,
+                  "per_iteration_ms": 0.13487406075000763
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.280109405517578,
+                  "per_iteration_ms": 0.13500085473060608
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.31294822692871,
+                  "per_iteration_ms": 0.13525740802288055
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.98023223876953,
+                  "per_iteration_ms": 0.16390806436538696
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.991601943969727,
+                  "per_iteration_ms": 0.1639968901872635
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.044099807739258,
+                  "per_iteration_ms": 0.16440702974796295
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.069128036499023,
+                  "per_iteration_ms": 0.16460256278514862
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.103578567504883,
+                  "per_iteration_ms": 0.1648717075586319
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.121013641357422,
+                  "per_iteration_ms": 0.16500791907310486
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.18770408630371,
+                  "per_iteration_ms": 0.16552893817424774
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.13339218497276306,
+              "combined": 0.16346585750579834
+            },
+            "candidate": {
+              "converter": 0.13455000519752502,
+              "combined": 0.16460256278514862
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.9913948704568072,
+            "combined": 0.9930942431264937
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              8.121544029563665,
+              8.016468025743961,
+              7.798436796292663,
+              8.008809061720967,
+              7.965194992721081,
+              8.415650110691786,
+              8.204477140679955
+            ],
+            "candidate": [
+              8.39443295262754,
+              8.039677981287241,
+              8.042067987844348,
+              8.529937826097012,
+              8.12848680652678,
+              8.080701110884547,
+              7.894071051850915
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 8.016468025743961,
+            "candidate": 8.080701110884547
+          }
+        },
+        {
+          "shape_mnk": [
+            257,
+            64,
+            1024
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.13709668815135956,
+                0.13418355584144592,
+                0.13461047410964966,
+                0.13406406342983246,
+                0.13419000804424286,
+                0.13443252444267273,
+                0.13482487201690674
+              ],
+              "combined": [
+                0.16391263902187347,
+                0.16423161327838898,
+                0.16438381373882294,
+                0.16446943581104279,
+                0.16452515125274658,
+                0.16437296569347382,
+                0.16494125127792358
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.135941281914711,
+                0.13630500435829163,
+                0.13697025179862976,
+                0.1362430453300476,
+                0.1365749090909958,
+                0.1368246078491211,
+                0.13716761767864227
+              ],
+              "combined": [
+                0.16592681407928467,
+                0.1670193374156952,
+                0.16673004627227783,
+                0.16703860461711884,
+                0.1667952537536621,
+                0.16684427857398987,
+                0.16684989631175995
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.548376083374023,
+                  "per_iteration_ms": 0.13709668815135956
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.175495147705078,
+                  "per_iteration_ms": 0.13418355584144592
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.230140686035156,
+                  "per_iteration_ms": 0.13461047410964966
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.160200119018555,
+                  "per_iteration_ms": 0.13406406342983246
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.176321029663086,
+                  "per_iteration_ms": 0.13419000804424286
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.20736312866211,
+                  "per_iteration_ms": 0.13443252444267273
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.257583618164062,
+                  "per_iteration_ms": 0.13482487201690674
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.980817794799805,
+                  "per_iteration_ms": 0.16391263902187347
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.02164649963379,
+                  "per_iteration_ms": 0.16423161327838898
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.041128158569336,
+                  "per_iteration_ms": 0.16438381373882294
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.052087783813477,
+                  "per_iteration_ms": 0.16446943581104279
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.059219360351562,
+                  "per_iteration_ms": 0.16452515125274658
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.03973960876465,
+                  "per_iteration_ms": 0.16437296569347382
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.11248016357422,
+                  "per_iteration_ms": 0.16494125127792358
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.400484085083008,
+                  "per_iteration_ms": 0.135941281914711
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.447040557861328,
+                  "per_iteration_ms": 0.13630500435829163
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.53219223022461,
+                  "per_iteration_ms": 0.13697025179862976
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.439109802246094,
+                  "per_iteration_ms": 0.1362430453300476
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.48158836364746,
+                  "per_iteration_ms": 0.1365749090909958
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.5135498046875,
+                  "per_iteration_ms": 0.1368246078491211
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.55745506286621,
+                  "per_iteration_ms": 0.13716761767864227
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.238632202148438,
+                  "per_iteration_ms": 0.16592681407928467
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.378475189208984,
+                  "per_iteration_ms": 0.1670193374156952
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.341445922851562,
+                  "per_iteration_ms": 0.16673004627227783
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.38094139099121,
+                  "per_iteration_ms": 0.16703860461711884
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.34979248046875,
+                  "per_iteration_ms": 0.1667952537536621
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.356067657470703,
+                  "per_iteration_ms": 0.16684427857398987
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 21.356786727905273,
+                  "per_iteration_ms": 0.16684989631175995
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.13443252444267273,
+              "combined": 0.16438381373882294
+            },
+            "candidate": {
+              "converter": 0.1365749090909958,
+              "combined": 0.16684427857398987
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.9843134828894841,
+            "combined": 0.9852529265240834
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              9.706706972792745,
+              10.159021010622382,
+              9.420260787010193,
+              9.515213081613183,
+              9.285054169595242,
+              10.13915496878326,
+              9.079742012545466
+            ],
+            "candidate": [
+              9.739260887727141,
+              9.322925936430693,
+              9.255767101421952,
+              9.558134013786912,
+              9.267430985346437,
+              10.17474289983511,
+              8.992204908281565
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 9.515213081613183,
+            "candidate": 9.322925936430693
+          }
+        }
+      ]
+    },
+    {
+      "shape_nk": [
+        256,
+        2048
+      ],
+      "compile_process_ms": {
+        "baseline": 3712.5934350769967,
+        "candidate": 3565.1165179442614
+      },
+      "image_digests": {
+        "baseline": [
+          "4053e97af531dafe2d5e8082f407a41e7c185a6598025a1ac4a177064dd56b12",
+          "ae29d39b11006c13bbc6504c077da3366c6460af844a6c10648513afbb3888ff",
+          "d598bb4e515cee961293516996db7270285466848653b6faac77a42d2e4a870b"
+        ],
+        "candidate": [
+          "b3b5d402556b00112de4a65224c4a3e7255f980a8dc82f75bcf9b40dd2378240",
+          "ae29d39b11006c13bbc6504c077da3366c6460af844a6c10648513afbb3888ff",
+          "d598bb4e515cee961293516996db7270285466848653b6faac77a42d2e4a870b"
+        ]
+      },
+      "frames": [
+        {
+          "shape_mnk": [
+            17,
+            256,
+            2048
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.14614784717559814,
+                0.11991970986127853,
+                0.14623714983463287,
+                0.12050757557153702,
+                0.14600177109241486,
+                0.11696606874465942,
+                0.11785328388214111
+              ],
+              "combined": [
+                0.13786187767982483,
+                0.15532146394252777,
+                0.13798484206199646,
+                0.15536189079284668,
+                0.15526984632015228,
+                0.13846224546432495,
+                0.13863974809646606
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.1295938491821289,
+                0.1427609622478485,
+                0.1075180172920227,
+                0.14318010210990906,
+                0.14307019114494324,
+                0.129158616065979,
+                0.12949250638484955
+              ],
+              "combined": [
+                0.14305192232131958,
+                0.16212570667266846,
+                0.14358116686344147,
+                0.16210778057575226,
+                0.14347496628761292,
+                0.1592143476009369,
+                0.14387153089046478
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.706924438476562,
+                  "per_iteration_ms": 0.14614784717559814
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.349722862243652,
+                  "per_iteration_ms": 0.11991970986127853
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.718355178833008,
+                  "per_iteration_ms": 0.14623714983463287
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.424969673156738,
+                  "per_iteration_ms": 0.12050757557153702
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.6882266998291,
+                  "per_iteration_ms": 0.14600177109241486
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 14.971656799316406,
+                  "per_iteration_ms": 0.11696606874465942
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.085220336914062,
+                  "per_iteration_ms": 0.11785328388214111
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.646320343017578,
+                  "per_iteration_ms": 0.13786187767982483
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.881147384643555,
+                  "per_iteration_ms": 0.15532146394252777
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.662059783935547,
+                  "per_iteration_ms": 0.13798484206199646
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.886322021484375,
+                  "per_iteration_ms": 0.15536189079284668
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.874540328979492,
+                  "per_iteration_ms": 0.15526984632015228
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.723167419433594,
+                  "per_iteration_ms": 0.13846224546432495
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 17.745887756347656,
+                  "per_iteration_ms": 0.13863974809646606
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.5880126953125,
+                  "per_iteration_ms": 0.1295938491821289
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.27340316772461,
+                  "per_iteration_ms": 0.1427609622478485
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 13.762306213378906,
+                  "per_iteration_ms": 0.1075180172920227
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.32705307006836,
+                  "per_iteration_ms": 0.14318010210990906
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.312984466552734,
+                  "per_iteration_ms": 0.14307019114494324
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.532302856445312,
+                  "per_iteration_ms": 0.129158616065979
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.575040817260742,
+                  "per_iteration_ms": 0.12949250638484955
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.310646057128906,
+                  "per_iteration_ms": 0.14305192232131958
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.752090454101562,
+                  "per_iteration_ms": 0.16212570667266846
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.378389358520508,
+                  "per_iteration_ms": 0.14358116686344147
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.74979591369629,
+                  "per_iteration_ms": 0.16210778057575226
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.364795684814453,
+                  "per_iteration_ms": 0.14347496628761292
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.379436492919922,
+                  "per_iteration_ms": 0.1592143476009369
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.415555953979492,
+                  "per_iteration_ms": 0.14387153089046478
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.12050757557153702,
+              "combined": 0.13863974809646606
+            },
+            "candidate": {
+              "converter": 0.1295938491821289,
+              "combined": 0.14387153089046478
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.9298865365298148,
+            "combined": 0.9636357327845362
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              9.046857943758368,
+              8.859110996127129,
+              8.460290031507611,
+              8.503273129463196,
+              8.381901076063514,
+              9.069571970030665,
+              8.62282095476985
+            ],
+            "candidate": [
+              8.64595896564424,
+              8.971696021035314,
+              9.168951073661447,
+              9.198677958920598,
+              8.331633871421218,
+              8.392118848860264,
+              8.893847931176424
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 8.62282095476985,
+            "candidate": 8.893847931176424
+          }
+        },
+        {
+          "shape_mnk": [
+            257,
+            256,
+            2048
+          ],
+          "max_abs_output_error": {
+            "baseline": 0.0,
+            "candidate": 0.0
+          },
+          "correctness": "bitwise paired packed/exponents/stats; independent oracle at each stage",
+          "event_samples_ms": {
+            "baseline": {
+              "converter": [
+                0.12149490416049957,
+                0.14593949913978577,
+                0.12165525555610657,
+                0.1214391440153122,
+                0.12168163806200027,
+                0.12131305783987045,
+                0.12175346910953522
+              ],
+              "combined": [
+                0.15566961467266083,
+                0.15570096671581268,
+                0.155634343624115,
+                0.15559563040733337,
+                0.15561991930007935,
+                0.15563009679317474,
+                0.1553572565317154
+              ]
+            },
+            "candidate": {
+              "converter": [
+                0.1425314098596573,
+                0.13111726939678192,
+                0.14254730939865112,
+                0.1425619125366211,
+                0.1430429220199585,
+                0.14243921637535095,
+                0.1430349349975586
+              ],
+              "combined": [
+                0.14406171441078186,
+                0.15625685453414917,
+                0.15622662007808685,
+                0.1561764031648636,
+                0.15618713200092316,
+                0.1565268486738205,
+                0.1443435251712799
+              ]
+            }
+          },
+          "captured_windows": {
+            "baseline": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.551347732543945,
+                  "per_iteration_ms": 0.12149490416049957
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.680255889892578,
+                  "per_iteration_ms": 0.14593949913978577
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.57187271118164,
+                  "per_iteration_ms": 0.12165525555610657
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.544210433959961,
+                  "per_iteration_ms": 0.1214391440153122
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.575249671936035,
+                  "per_iteration_ms": 0.12168163806200027
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.528071403503418,
+                  "per_iteration_ms": 0.12131305783987045
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 15.584444046020508,
+                  "per_iteration_ms": 0.12175346910953522
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.925710678100586,
+                  "per_iteration_ms": 0.15566961467266083
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.929723739624023,
+                  "per_iteration_ms": 0.15570096671581268
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.92119598388672,
+                  "per_iteration_ms": 0.155634343624115
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.916240692138672,
+                  "per_iteration_ms": 0.15559563040733337
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.919349670410156,
+                  "per_iteration_ms": 0.15561991930007935
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.920652389526367,
+                  "per_iteration_ms": 0.15563009679317474
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.88572883605957,
+                  "per_iteration_ms": 0.1553572565317154
+                }
+              ]
+            },
+            "candidate": {
+              "converter": [
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.244020462036133,
+                  "per_iteration_ms": 0.1425314098596573
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 16.783010482788086,
+                  "per_iteration_ms": 0.13111726939678192
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.246055603027344,
+                  "per_iteration_ms": 0.14254730939865112
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.2479248046875,
+                  "per_iteration_ms": 0.1425619125366211
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.309494018554688,
+                  "per_iteration_ms": 0.1430429220199585
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.232219696044922,
+                  "per_iteration_ms": 0.14243921637535095
+                },
+                {
+                  "stage": "converter",
+                  "repeats": 128,
+                  "graph_nodes": 128,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.3084716796875,
+                  "per_iteration_ms": 0.1430349349975586
+                }
+              ],
+              "combined": [
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.439899444580078,
+                  "per_iteration_ms": 0.14406171441078186
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.000877380371094,
+                  "per_iteration_ms": 0.15625685453414917
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.997007369995117,
+                  "per_iteration_ms": 0.15622662007808685
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.99057960510254,
+                  "per_iteration_ms": 0.1561764031648636
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 19.991952896118164,
+                  "per_iteration_ms": 0.15618713200092316
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 20.035436630249023,
+                  "per_iteration_ms": 0.1565268486738205
+                },
+                {
+                  "stage": "combined",
+                  "repeats": 128,
+                  "graph_nodes": 384,
+                  "host_graph_submissions": 1,
+                  "window_ms": 18.475971221923828,
+                  "per_iteration_ms": 0.1443435251712799
+                }
+              ]
+            }
+          },
+          "event_median_ms": {
+            "baseline": {
+              "converter": 0.12165525555610657,
+              "combined": 0.15563009679317474
+            },
+            "candidate": {
+              "converter": 0.14254730939865112,
+              "combined": 0.15618713200092316
+            }
+          },
+          "baseline_over_candidate": {
+            "converter": 0.8534377538890099,
+            "combined": 0.9964335396865786
+          },
+          "package_end_to_end_samples_ms": {
+            "baseline": [
+              11.008440051227808,
+              10.856220033019781,
+              10.291151935234666,
+              10.4832099750638,
+              11.220735032111406,
+              10.307994903996587,
+              10.360604850575328
+            ],
+            "candidate": [
+              10.263185016810894,
+              10.446874191984534,
+              10.384650900959969,
+              11.25301793217659,
+              10.258069960400462,
+              11.039159027859569,
+              10.447811800986528
+            ]
+          },
+          "package_end_to_end_median_ms": {
+            "baseline": 10.4832099750638,
+            "candidate": 10.446874191984534
+          }
+        }
+      ]
+    }
+  ]
+}

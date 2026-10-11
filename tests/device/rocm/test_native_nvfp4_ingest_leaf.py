@@ -236,3 +236,15 @@ def test_native_midpoint_adjacent_projection_globals(exponent):
                 f"midpoint_{index}_{side}", mx.pack_e2m1_codes(codes), scales,
                 float(global_scale)))
     run_leaf(projections)
+
+
+@pytest.mark.parametrize("global_scale", [1., .7])
+def test_all_finite_positive_e4m3_scale_pairs(global_scale):
+    """Every finite positive K16 scale pair, with every signed E2M1 code."""
+    raw = np.arange(127, dtype=np.uint8)
+    left, right = np.meshgrid(raw, raw, indexing="ij")
+    scales = np.stack((left.ravel(), right.ravel()), axis=1)
+    codes = np.tile(np.arange(16, dtype=np.uint8), (len(scales), 2))
+    run_leaf([ingest.NVFP4Projection(
+        "all_scale_pairs", mx.pack_e2m1_codes(codes),
+        scales.view(ml_dtypes.float8_e4m3fn), global_scale)])

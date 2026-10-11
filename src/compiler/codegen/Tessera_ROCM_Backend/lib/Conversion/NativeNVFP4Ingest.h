@@ -179,9 +179,13 @@ static mlir::LogicalResult emitNativeNVFP4Ingest(mlir::ModuleOp module,
                     l, arith::CmpFPredicate::OGT, absolute, threshold)));
       Value negative = b.create<arith::CmpFOp>(l, arith::CmpFPredicate::OLT, values[j], cf(0));
       codes.push_back(b.create<arith::OrIOp>(l, magnitude, choose(negative, c32(8), c32(0))));
-      Value decoded = mul(choose(negative, b.create<arith::NegFOp>(
-          l, magnitudeValue(magnitude)), magnitudeValue(magnitude)), scale);
-      Value difference = sub(values[j], decoded);
+      // Squared reconstruction error is invariant under a common sign
+      // change. Score in magnitude units, avoiding signed reconstruction in
+      // each candidate. Both operands are finite nonnegative f64 values;
+      // subtraction differs from the signed form only by sign, including
+      // exact zero. Squaring preserves the same bits and sum32 order.
+      Value decoded = mul(magnitudeValue(magnitude), scale);
+      Value difference = sub(absolute, decoded);
       errors.push_back(mul(difference, difference));
     }
     Value error = sum32(errors);

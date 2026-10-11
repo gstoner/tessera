@@ -1,0 +1,5 @@
+Matching LLVM/MLIR 23.1.1 native core build
+Command: cmake --build .build-winner --target tessera-opt -j6
+Exit: 0
+[2/3] Linking CXX static library src/compiler/codegen/Tessera_ROCM_Backend/lib/Conversion/libTesseraROCMConversion.a
+[3/3] Linking CXX executable tools/tessera-opt/tessera-opt

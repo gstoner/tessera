@@ -1220,7 +1220,11 @@ class JitFn:
             value = name_to_value.get(ir_arg.name)
             if value is None:
                 continue
-            shape = getattr(value, "shape", None)
+            if hasattr(value, "__cuda_array_interface__"):
+                from .resident_nvidia_tensor import cuda_frontend_specs
+                shape = cuda_frontend_specs((value,))[0][0]
+            else:
+                shape = getattr(value, "shape", None)
             if shape is None:
                 continue
             shape = tuple(shape)
@@ -1337,7 +1341,7 @@ class JitFn:
         """
         import hashlib
         import numpy as np
-        from .trace import trace, to_graph_ir_module
+        from .trace import trace, to_graph_ir_module, _np_dtype_to_elem
 
         ordered = self._ordered_inputs(args, kwargs)
         if ordered is None or len(ordered) != len(self.arg_names):
@@ -1346,11 +1350,23 @@ class JitFn:
         for value in ordered:
             if isinstance(value, NVFP4Tensor):
                 value.validate()
-        signature = tuple(
-            (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
-            else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
-            for value in ordered
-        )
+        resident = any(hasattr(value, "__cuda_array_interface__") for value in ordered)
+        resident_specs = None
+        if resident:
+            if (normalize_target_kind(self.target) != "nvidia_sm120"
+                    or not all(hasattr(value, "__cuda_array_interface__") for value in ordered)):
+                raise ValueError("resident frontend requires all roots on native SM120")
+            if require_outputs:
+                raise ValueError("resident frontend numerical certification requires explicit host oracle inputs")
+            from .resident_nvidia_tensor import cuda_frontend_specs
+            resident_specs = cuda_frontend_specs(ordered)
+            signature = tuple((str(dtype),shape) for shape,dtype in resident_specs)
+        else:
+            signature = tuple(
+                (f"{value.dtype}:packed_axis={value.packed_axis}", value.shape) if isinstance(value, NVFP4Tensor)
+                else (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+                for value in ordered
+            )
         cached = self._traced_frontend_specializations.get(signature)
         if cached is not None and not require_outputs:
             return cached, None
@@ -1360,7 +1376,9 @@ class JitFn:
                 from .native_vmap import batch_specs, mixed_batch_policies
                 traced = trace(self._fn, *batch_specs(ordered, batch_axes, depth=self._frontend_batch_depth, broadcast_prefix=mixed_batch_policies(self)))
             else:
-                traced = trace(self._fn, *ordered, evaluate_catalog_outputs=require_outputs)
+                trace_inputs = (tuple((shape, _np_dtype_to_elem(dtype)) for shape, dtype in resident_specs)
+                                if resident_specs is not None else ordered)
+                traced = trace(self._fn, *trace_inputs, evaluate_catalog_outputs=require_outputs)
             # The AST module is a naming convenience here, not an input to the
             # trace: a zero-function one (apple_gpu trace-defer, auto_batch
             # skip) must not fail a capture that never needed it. Both fields
@@ -1439,8 +1457,12 @@ class JitFn:
         from .effects import Effect, infer_graph_effects
 
         ordered = self._ordered_inputs(args, kwargs)
+        resident = ordered is not None and bool(ordered) and any(hasattr(value, "__cuda_array_interface__") for value in ordered)
+        if resident and ordered is not None and (normalize_target_kind(self.target) != "nvidia_sm120"
+                         or not all(hasattr(value, "__cuda_array_interface__") for value in ordered)):
+            raise ValueError("resident frontend requires all roots on native SM120")
         if ordered is None or not ordered or not all(
-            isinstance(value, (np.ndarray, NVFP4Tensor)) for value in ordered
+            isinstance(value, (np.ndarray, NVFP4Tensor)) or resident for value in ordered
         ):
             self.frontend_authority = "legacy_candidate_non_tensor_signature"
             return
@@ -2261,12 +2283,19 @@ class JitFn:
         bound = self._native_frontend_signature().bind(*args, **kwargs)
         bound.apply_defaults()
         ordered = [bound.arguments[name] for name in self.arg_names]
-        if len(ordered) not in {2,3,4} or not all(isinstance(value,np.ndarray) for value in ordered):
+        resident = any(hasattr(value, "__cuda_array_interface__") for value in ordered)
+        if resident and not all(hasattr(value, "__cuda_array_interface__") for value in ordered):
+            raise ValueError("resident frontend requires all roots on native SM120")
+        if len(ordered) not in {2,3,4} or not all(isinstance(value,np.ndarray) or resident for value in ordered):
             return _JIT_FALLBACK
         module = self._traced_autodiff_module(tuple(ordered), {})
         from .nvidia_tensor_lhs import candidate, project_rhs_storage
         if not candidate(module):
             return _JIT_FALLBACK
+        if resident:
+            from .nvidia_tensor_dag import candidate as dag_candidate
+            if not dag_candidate(module):
+                raise ValueError("public resident frontend requires the native two-operand producer DAG")
         # Once this semantic edge matches, compilation/launch failures propagate.
         # They must never be replaced by eager arithmetic.
         module = project_rhs_storage(module, ordered)
@@ -2289,6 +2318,8 @@ class JitFn:
             prepared = (os.environ.get("TESSERA_NVIDIA_PREPARED_LHS", "1").lower()
                         not in {"0", "off", "false"} and lib is not None
                         and hasattr(lib, "tessera_nvidia_matmul_attach_producer"))
+        if not prepared and any(hasattr(value, "__cuda_array_interface__") for value in ordered):
+            raise ValueError("public resident tensor JIT requires its native prepared owner")
         if prepared:
             from .prepared_nvidia_lhs import PreparedLhsCall
             call = self._nvidia_lhs_prepared_calls.get(key)
@@ -2298,7 +2329,10 @@ class JitFn:
                     oldest = next(iter(self._nvidia_lhs_prepared_calls))
                     self._nvidia_lhs_prepared_calls.pop(oldest).close()
                 self._nvidia_lhs_prepared_calls[key] = call
-            _, receipt = call(ordered)
+            if any(hasattr(value, "__cuda_array_interface__") for value in ordered):
+                _, receipt = call.resident_to_host(ordered)
+            else:
+                _, receipt = call(ordered)
         else:
             receipt = rt.launch(runtime_artifact(program), tuple(ordered))
         if receipt.get("ok") is not True or receipt.get("execution_kind") != "native_gpu":

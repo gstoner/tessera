@@ -168,6 +168,39 @@ class PreparedLhsCall(PreparedMatmulCall):
             "native_call_binding":"prepared_cpp_ordered_resident_tensor_dag"}
             for receipt in self.component_receipts)}
 
+    def resident_to_host(self,ordered):
+        """Native owner completes borrowed reads and copies one independent result."""
+        from .nvidia_tensor_dag import _checked_device_arguments
+        from .resident_nvidia_tensor import ordered_resident_views
+        from .prepared_nvidia_matmul import HostView
+        if self.pid != os.getpid() or not self._finalizer.alive:
+            raise ValueError("prepared resident tensor owner is closed or belongs to another process")
+        if not self.program.rhs_chain or self.program!=self.resident_snapshot:
+            raise ValueError("prepared resident DAG package changed or has no RHS chain")
+        # Constructor admission and the exact deep snapshot above seal all
+        # images/contracts. Repeating full IR validation adds host work without
+        # strengthening this unchanged native owner.
+        roots,shape=_checked_device_arguments(self.program,list(ordered))
+        views,streams=ordered_resident_views(roots,None,writable_from=len(roots))
+        declared=(ct.c_uint64*len(streams))(*streams)
+        output=np.empty(shape,self.output_dtype)
+        destination=HostView()
+        destination.data,destination.bytes,destination.rank=output.ctypes.data,output.nbytes,2
+        destination.dtype=2 if output.dtype==np.float16 else 1
+        destination.shape[:]=output.shape;destination.strides[:]=output.strides
+        name="tessera_nvidia_matmul_invoke_dag_resident_to_host_ordered"
+        if not hasattr(self.lib,name):
+            raise RuntimeError("native ordered resident completed-output API unavailable")
+        fn=getattr(self.lib,name)
+        fn.argtypes=[ct.c_uint64,ct.POINTER(HostView),ct.c_size_t,
+                     ct.POINTER(ct.c_uint64),ct.c_size_t,ct.POINTER(HostView)]
+        fn.restype=ct.c_int
+        self._check(fn(self.handle,views,len(roots),declared,len(streams),ct.byref(destination)))
+        receipts=tuple({**receipt,"native_call_binding":"prepared_cpp_ordered_resident_tensor_dag"}
+                       for receipt in self.component_receipts)
+        return output,{**self.receipt_fields,"component_receipts":receipts,"output":output,
+                       "native_call_binding":"prepared_cpp_ordered_resident_tensor_dag"}
+
     def invoke_resident(self,ordered,output,*,stream):
         """Borrow declared CUDA roots through native synchronous completion."""
         return self._resident_call(ordered,output,stream=stream)

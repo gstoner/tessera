@@ -94,7 +94,7 @@ struct Owner {
   CUmodule producerModule = nullptr;
   CUfunction producer = nullptr;
   std::vector<RowProducer> followingProducers, rhsProducers;
-  CUdeviceptr producerScratch = 0, rhsEdge = 0, rhsScratch = 0, ownedLhsEdge = 0;
+  CUdeviceptr producerScratch = 0, rhsEdge = 0, rhsScratch = 0, ownedLhsEdge = 0, ownedResult = 0;
   bool cooperativeProducer = false, invoked = false, rowSymbol = false;
   int dynamicAxes = 0, storage = 0;
   bool macro = false;
@@ -118,6 +118,7 @@ struct Owner {
       if (producerScratch) cuMemFree(producerScratch);
       if (rhsEdge) cuMemFree(rhsEdge);
       if (ownedLhsEdge) cuMemFree(ownedLhsEdge);
+      if (ownedResult) cuMemFree(ownedResult);
       if (rhsScratch) cuMemFree(rhsScratch);
       for (auto &stage : rhsProducers)
         if (stage.module) cuModuleUnload(stage.module);
@@ -639,15 +640,18 @@ static int invokeResident(
     void *launchStream, bool ownedEdge,
     const uint64_t *producerStreams = nullptr, size_t producerCount = 0,
     int profileRepeats = 0, float *stageTimes = nullptr, size_t stageCount = 0,
-    float *programMs = nullptr) {
+    float *programMs = nullptr,
+    const TesseraNvidiaMatmulHostView *hostOutput = nullptr) {
   error.clear();
   if (getpid() != process) return bad("prepared resident tensor cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);
   auto found = owners.find(handle);
   if (found == owners.end()) return bad("prepared resident tensor is closed or unknown");
   Owner &owner = *found->second;
-  if (!owner.producer || !views || count != owner.count + (ownedEdge ? 0 : 1) || !launchStream ||
-      (ownedEdge && owner.rhsProducers.empty()))
+  if (!owner.producer || !views ||
+      count != owner.count + (ownedEdge ? 0 : 1) - (hostOutput ? 1 : 0) ||
+      (!launchStream && !hostOutput) ||
+      (ownedEdge && owner.rhsProducers.empty()) || (hostOutput && !ownedEdge))
     return bad("prepared resident tensor buffer/stream arity");
   const size_t stages = size_t(bool(owner.producer)) + owner.followingProducers.size() +
                         owner.rhsProducers.size() + 1;
@@ -657,7 +661,7 @@ static int invokeResident(
     return bad("ordered resident profiling stage/count ABI mismatch");
   CUcontext context = nullptr, streamContext = nullptr;
   unsigned long long identity = 0;
-  CUstream stream = static_cast<CUstream>(launchStream);
+  CUstream stream = hostOutput ? owner.stream : static_cast<CUstream>(launchStream);
   if (!ok(cuCtxGetCurrent(&context), "get resident context") ||
       context != owner.context ||
       !ok(cuCtxGetId(context, &identity), "resident context identity") ||
@@ -677,6 +681,24 @@ static int invokeResident(
       (owner.residual && !view(frame, 1, 2, m, n, false)) ||
       !view(frame, owner.halfOutput ? 2 : 1, 2, m, n, false))
     return bad("prepared resident frame capacity overflow");
+  std::array<TesseraNvidiaMatmulHostView, 6> resultViews{};
+  if (hostOutput) {
+    const auto &expected = frame.expected[owner.count-1];
+    const size_t width = expected.dtype == 1 ? 4 : 2;
+    if (!hostOutput->data || reinterpret_cast<uintptr_t>(hostOutput->data) % width ||
+        hostOutput->bytes != expected.bytes || hostOutput->dtype != expected.dtype ||
+        hostOutput->rank != expected.rank || hostOutput->shape[0] != expected.shape[0] ||
+        hostOutput->shape[1] != expected.shape[1] ||
+        (expected.shape[0] > 1 && hostOutput->strides[0] != expected.strides[0]) ||
+        (expected.shape[1] > 1 && hostOutput->strides[1] != expected.strides[1]))
+      return bad("ordered resident host result storage mismatch");
+    if (!owner.ownedResult && !ok(cuMemAlloc(&owner.ownedResult,owner.bytes[owner.count-1]),
+                                  "allocate native resident result capacity")) return 1;
+    for (size_t i = 0; i < count; ++i) resultViews[i] = views[i];
+    resultViews[count] = expected;
+    resultViews[count].data = reinterpret_cast<void *>(owner.ownedResult);
+    ++count; views = resultViews.data();
+  }
   std::array<TesseraNvidiaMatmulHostView, 6> ownedViews{};
   if (ownedEdge) {
     if (!owner.ownedLhsEdge && !ok(cuMemAlloc(&owner.ownedLhsEdge,owner.bytes[0]),
@@ -805,7 +827,10 @@ static int invokeResident(
   const std::string launchError = error;
   const bool completed = ok(cuStreamSynchronize(stream), "complete resident tensor/matmul");
   if (!submitted) { error = launchError; return 1; }
-  return completed ? 0 : 1;
+  if (!completed) return 1;
+  if (hostOutput && !ok(cuMemcpyDtoH(hostOutput->data,owner.ownedResult,hostOutput->bytes),
+                        "copy completed ordered resident result")) return 1;
+  return 0;
 }
 extern "C" int tessera_nvidia_matmul_invoke_resident(
     uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count, void *stream) {
@@ -823,6 +848,17 @@ extern "C" int tessera_nvidia_matmul_invoke_dag_resident_ordered(
     return bad("ordered resident producer streams are required");
   }
   return invokeResident(handle, views, count, stream, true, producerStreams, producerCount);
+}
+extern "C" int tessera_nvidia_matmul_invoke_dag_resident_to_host_ordered(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *roots, size_t count,
+    const uint64_t *producerStreams, size_t producerCount,
+    const TesseraNvidiaMatmulHostView *output) {
+  if (!producerStreams || !producerCount || !output) {
+    error.clear();
+    return bad("ordered resident roots, streams and host result are required");
+  }
+  return invokeResident(handle,roots,count,nullptr,true,producerStreams,producerCount,
+                        0,nullptr,0,nullptr,output);
 }
 extern "C" int tessera_nvidia_matmul_profile_dag_resident_ordered(
     uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
@@ -852,7 +888,8 @@ extern "C" int tessera_nvidia_matmul_scratch_stats(
   if (found == owners.end() || !capacity || !allocations)
     return bad("invalid prepared matmul scratch query");
   if (!ok(cuStreamQuery(found->second->stream), "query retired matmul stream")) return 1;
-  *capacity = found->second->arena->capacity;
-  *allocations = found->second->arena->allocations;
+  const Owner &owner = *found->second;
+  *capacity = owner.arena->capacity + (owner.ownedResult ? owner.bytes[owner.count-1] : 0);
+  *allocations = owner.arena->allocations + size_t(bool(owner.ownedResult));
   return 0;
 }

@@ -65,6 +65,13 @@ int tessera_nvidia_matmul_invoke_dag_resident(uint64_t handle,
 int tessera_nvidia_matmul_invoke_dag_resident_ordered(uint64_t handle,
     const TesseraNvidiaMatmulHostView *views, size_t count,
     const uint64_t *producer_streams, size_t producer_count, void *stream);
+// Ordered borrowed roots with an independent completed host result. Native
+// ownership retains the bounded device result and uses its own launch stream.
+// The invocation mutex covers execution, completion and download atomically.
+int tessera_nvidia_matmul_invoke_dag_resident_to_host_ordered(uint64_t handle,
+    const TesseraNvidiaMatmulHostView *roots, size_t count,
+    const uint64_t *producer_streams, size_t producer_count,
+    const TesseraNvidiaMatmulHostView *output);
 // Profile the current borrowed resident frame while holding the same lease.
 // Full-program and grouped-stage event windows are independent, not additive.
 // Producer event waits precede the program start timestamp.

@@ -23,7 +23,8 @@ def ordered_resident_views(values,stream,*,writable_from):
     streams=tuple(interface.get("stream") for interface in interfaces[:writable_from])
     if any(type(value) is not int or not 0 < value < 2**64 for value in streams):
         raise ValueError("ordered resident CUDA roots require explicit producer streams")
-    rt._validate_nvidia_cuda_buffer_streams(interfaces[writable_from:],stream)
+    if writable_from < len(interfaces):
+        rt._validate_nvidia_cuda_buffer_streams(interfaces[writable_from:],stream)
     return _project_views(values,interfaces,writable_from),streams
 
 
@@ -38,6 +39,44 @@ def _cuda_metadata_dtype(value,interface):
             raise ValueError("opaque CUDA storage requires an explicit BF16 dtype")
         return declared
     return physical
+
+
+def cuda_frontend_specs(values):
+    """Read strict compact CUDA storage metadata for abstract frontend tracing."""
+    import math
+    specs=[]
+    for value in values:
+        interface=value.__cuda_array_interface__
+        if not isinstance(interface,dict) or type(interface.get("version")) is not int or interface["version"]!=3:
+            raise ValueError("resident frontend requires version-three CUDA metadata")
+        shape=interface.get("shape")
+        if (not isinstance(shape,(tuple,list)) or not 1<=len(shape)<=2
+                or any(type(d) is not int or not 0<d<2**63 for d in shape)):
+            raise ValueError("resident frontend CUDA shape is malformed")
+        try:
+            dtype=_cuda_metadata_dtype(value,interface)
+        except (TypeError,ValueError,KeyError) as error:
+            raise ValueError("resident frontend CUDA dtype is malformed") from error
+        if dtype.name not in {"float16","bfloat16","float32"} or not dtype.isnative:
+            raise ValueError("resident frontend CUDA storage is unsupported")
+        if math.prod(shape)*dtype.itemsize>=2**63:
+            raise ValueError("resident frontend CUDA byte capacity overflows")
+        data=interface.get("data")
+        if (not isinstance(data,(tuple,list)) or len(data)!=2 or type(data[0]) is not int
+                or not 0<data[0]<2**64 or type(data[1]) is not bool):
+            raise ValueError("resident frontend CUDA pointer metadata is malformed")
+        dense=(dtype.itemsize,) if len(shape)==1 else (shape[1]*dtype.itemsize,dtype.itemsize)
+        strides=interface.get("strides")
+        if strides is not None and (
+                not isinstance(strides,(tuple,list)) or len(strides)!=len(shape)
+                or any(type(s) is not int or s<=0 or s%dtype.itemsize for s in strides)
+                or any(d>1 and actual!=expected for d,actual,expected in zip(shape,strides,dense,strict=True))):
+            raise ValueError("resident frontend requires compact row-major CUDA roots")
+        stream=interface.get("stream")
+        if type(stream) is not int or not 0<stream<2**64:
+            raise ValueError("resident frontend requires explicit CUDA producer streams")
+        specs.append((tuple(shape),dtype))
+    return tuple(specs)
 
 
 def _project_views(values,interfaces,writable_from):

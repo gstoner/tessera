@@ -5,6 +5,21 @@ owner: Apple backend
 target: apple_gpu
 last_updated: 2026-10-09
 ---
+## SM120-PUBLIC-RESIDENT-TENSOR-FRONTEND-20261009
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Ordinary public JIT accepts validated compact resident FP16/BF16 roots and
+abstractly traces the complete producer DAG into existing native MLIR packages.
+A prepared C++ output owner orders producer streams, checks buffer contracts
+and downloads independent results under its invocation mutex.
+456 focused host gates and 106 owning SM120 device tests pass.
+Two isolated packets separate native member/program events from public
+completed-call wall time; resident input is not a general speedup claim.
+Evidence: benchmarks/baselines/sm120_public_resident_tensor_frontend_20261009/README.md.
+
+Not applicable to Metal physical lowering: this admission selects SM120 CUDA roots only. Apple resident producer/JIT/AD execution remains follow-up required; no Mac numerical evidence is transferred.
+
+
 ## MAPPED-SCALED-RESHAPE-INTEGRATION-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6 / LAYOUT-ALG-1.

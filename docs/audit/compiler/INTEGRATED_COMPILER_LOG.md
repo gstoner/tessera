@@ -11923,7 +11923,7 @@ Evidence: benchmarks/baselines/sm120_resident_attention_forward_20261009/README.
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
 Shared: AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
-PRs: pending; sync PUBLIC-NATIVE-JVP-20261009.
+PRs: [#933](https://github.com/gstoner/tessera/pull/933); sync PUBLIC-NATIVE-JVP-20261009.
 
 Outcome: Public JVP binds frontend intent to a separate native Graph AD owner
 while preserving the caller graph and constraints. Typed paired O/LSE tangents
@@ -11956,7 +11956,7 @@ run1.json and run2.json; native_public_jvp_integration_plan.md.
 
 Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
 Shared: AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
-PRs: pending; sync PUBLIC-NATIVE-JVP-GFX1201-20261009
+PRs: [#934](https://github.com/gstoner/tessera/pull/934); sync PUBLIC-NATIVE-JVP-GFX1201-20261009
 (shared PUBLIC-NATIVE-JVP-20261009).
 
 Outcome: 36 owning RX 9070 XT/gfx1201 public JVP tests pass with the matching
@@ -11975,4 +11975,27 @@ and the broader five-slice obligations. All four backend queues assessed.
 
 Evidence: benchmarks/baselines/public_native_scaled_jvp_20261009/README.md,
 run1.json, run2.json, device-tests.txt.
+<!-- entry-fields:end -->
+
+### 2026-10-09 — retained checked GFX1201 public JVP plan
+
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+PRs: pending; sync GFX1201-RETAINED-PUBLIC-JVP-20261009.
+
+Outcome: One caller-owned sealed native program retains C++ buffers,
+generations and module ownership. Warm binding avoids repeated serialized
+validation/preparation; metadata mutation cannot rebind the owned snapshot.
+Bounded caches, transactional frames, process checks and guarded explicit/GC
+cleanup preserve ownership. 70 gfx1201 numerical/admission/lifetime/FP8
+regression cases and 50 SM120 shared-lifecycle cases pass.
+Matched A/B/B/A packets preserve all 36 native program and member-image hashes.
+Public median ratios are 0.370–0.681 and 0.380–0.659; geometric means
+0.508/0.514. Maximum error remains 8.189881861575543e-8.
+No native kernel speedup claimed; all four sibling queues assessed.
+
+Remaining: Public overhead, generic scaled batching/transpose, mixed/general
+composition, wider quantized AD and the larger five-slice obligations.
+
+Evidence: benchmarks/baselines/retained_public_scaled_jvp_20261009/README.md,
+control1.json, candidate1.json, candidate2.json, control2.json.
 <!-- entry-fields:end -->

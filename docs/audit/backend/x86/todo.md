@@ -7,6 +7,24 @@ target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
 
+## GFX1201-RETAINED-PUBLIC-JVP-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+A caller-owned sealed native scaled JVP plan retains checked C++ program
+storage. Cold admission verifies exact parent/child lineage and operand
+binding; warm calls perform checked movement/native dispatch/readback without
+artifact reserialization or repeated native preparation. Private frames are
+transactional, caches bounded, and PID/close/finalization guards preserved.
+70 owning gfx1201 cases and 50 shared-lifecycle SM120 regressions pass.
+Matched A/B/B/A packets retain identical native program/image identities in
+all 36 profiles. Candidate/control public medians span 0.370–0.681 and
+0.380–0.659; geometric means are 0.508 and 0.514. The named public-call
+improvement is 31.9–63.0%; no native kernel speedup is claimed.
+Maximum absolute error remains 8.189881861575543e-8.
+Evidence: benchmarks/baselines/retained_public_scaled_jvp_20261009/README.md.
+Shared synchronization key: PUBLIC-NATIVE-JVP-20261009.
+Follow-up required: exact AVX-512 proof for the shared JIT lifecycle changes and a native scaled-product owner. CPU/reference host checks are not x86 native execution evidence.
+
 ## PUBLIC-NATIVE-JVP-GFX1201-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

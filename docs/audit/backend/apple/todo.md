@@ -6,6 +6,24 @@ target: apple_gpu
 last_updated: 2026-10-09
 ---
 
+## GFX1201-RETAINED-PUBLIC-JVP-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+A caller-owned sealed native scaled JVP plan retains checked C++ program
+storage. Cold admission verifies exact parent/child lineage and operand
+binding; warm calls perform checked movement/native dispatch/readback without
+artifact reserialization or repeated native preparation. Private frames are
+transactional, caches bounded, and PID/close/finalization guards preserved.
+70 owning gfx1201 cases and 50 shared-lifecycle SM120 regressions pass.
+Matched A/B/B/A packets retain identical native program/image identities in
+all 36 profiles. Candidate/control public medians span 0.370–0.681 and
+0.380–0.659; geometric means are 0.508 and 0.514. The named public-call
+improvement is 31.9–63.0%; no native kernel speedup is claimed.
+Maximum absolute error remains 8.189881861575543e-8.
+Evidence: benchmarks/baselines/retained_public_scaled_jvp_20261009/README.md.
+Shared synchronization key: PUBLIC-NATIVE-JVP-20261009.
+Follow-up required: exact Metal proof for the shared JIT lifecycle changes and an Apple native scaled-product owner. No AMD numerical or timing claim transfers to Apple.
+
 ## PUBLIC-NATIVE-JVP-GFX1201-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

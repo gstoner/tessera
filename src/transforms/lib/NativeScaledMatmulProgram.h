@@ -325,11 +325,14 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       cloned = body.create(state);
     } else cloned = body.clone(*op, map);
     body.create<func::ReturnOp>(op->getLoc(), cloned->getResults());
-    if (isNativeFloatingScaledProduct(cloned) &&
-        failed(expandNativeFloatingScaledProduct(cloned)))
+    // The expansion erases `cloned`, so it must not be inspected again; a
+    // product is never a carrier, making the second test an `else`.
+    if (isNativeFloatingScaledProduct(cloned)) {
+      if (failed(expandNativeFloatingScaledProduct(cloned))) return failure();
+    } else if (isNativeScaledCarrier(cloned) &&
+               failed(expandNativeScaledCarrier(cloned))) {
       return failure();
-    if (isNativeScaledCarrier(cloned) && failed(expandNativeScaledCarrier(cloned)))
-      return failure();
+    }
     steps.push_back(b.getDictionaryAttr({
         b.getNamedAttr("member", FlatSymbolRefAttr::get(member)),
         b.getNamedAttr("inputs", b.getDenseI64ArrayAttr(inputs)),

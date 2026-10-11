@@ -13,6 +13,7 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <vector>
 namespace {
 std::mutex ownerMutex;
 thread_local std::string ownerError;
@@ -31,6 +32,7 @@ struct Owner {
   CUmodule forwardModule=nullptr,tangentModule=nullptr;
   CUfunction forward=nullptr,tangent=nullptr;
   CUdeviceptr arena=0;
+  size_t arenaBytes=0;
   void *hostArena=nullptr;
   std::array<size_t,12> hostOffsets{};
   std::array<CUdeviceptr,12> buffers{};
@@ -186,6 +188,7 @@ static int prepareAttentionJvp(
     if(shared>limit-staticBytes)return bad("native shared exceeds device");
     state->shared=unsigned(shared);
     if(shared && !ok(cuFuncSetAttribute(state->tangent,CU_FUNC_ATTRIBUTE_MAX_DYNAMIC_SHARED_SIZE_BYTES,int(shared)),"dynamic shared"))return 3;
+    state->arenaBytes=total;
     if(!ok(cuStreamCreate(&state->stream,CU_STREAM_NON_BLOCKING),"create product stream") ||
        !ok(cuMemAlloc(&state->arena,total),"allocate arena") ||
        !ok(cuMemHostAlloc(&state->hostArena,total,0),"allocate product staging") ||
@@ -218,9 +221,10 @@ extern "C" int tessera_nvidia_attention_jvp_prepare_bias(
   return prepareAttentionJvp(fimage,fbytes,fentry,timage,tbytes,tentry,
     sizerPath,sizerEntry,dims,biasShape,mapping,roles,activeCount,handle);
 }
-extern "C" int tessera_nvidia_attention_jvp_invoke(
+static int invokeAttentionJvp(
   uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
-  void *const *outputs,const size_t *outputBytes,float *deviceMilliseconds){
+  void *const *outputs,const size_t *outputBytes,float *deviceMilliseconds,
+  const uint64_t *producerStreams=nullptr,size_t producerCount=0){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
@@ -246,11 +250,58 @@ extern "C" int tessera_nvidia_attention_jvp_invoke(
   for(size_t i=0;i<s.activeCount;++i)
     if(!inputs[primals+i] || inputBytes[primals+i]!=s.bytes[tangentSlot(s.roles[i])])
       return bad("tangent extent disagrees");
+  // Validate every borrowed allocation and stream before queueing any work.
+  // The snapshots remain private until both saved-LSE products complete.
+  struct OrderingEvents {
+    std::vector<CUevent> values;
+    ~OrderingEvents(){for(auto event:values)cuEventDestroy(event);}
+  } ordering;
+  std::vector<CUstream> producers;
+  if(producerStreams){
+    if(producerCount!=inputCount)return bad("resident stream count disagrees");
+    for(size_t i=0;i<inputCount;++i){
+      CUdeviceptr pointer=reinterpret_cast<uintptr_t>(inputs[i]),base=0;
+      size_t capacity=0;CUcontext allocationContext=nullptr,streamContext=nullptr;
+      unsigned memoryType=0;
+      if(pointer%sizeof(float) || pointer>UINTPTR_MAX-inputBytes[i])
+        return bad("resident attention pointer alignment or extent disagrees");
+      if(!ok(cuPointerGetAttribute(&allocationContext,CU_POINTER_ATTRIBUTE_CONTEXT,pointer),"resident context") ||
+         !ok(cuPointerGetAttribute(&memoryType,CU_POINTER_ATTRIBUTE_MEMORY_TYPE,pointer),"resident memory type") ||
+         !ok(cuMemGetAddressRange(&base,&capacity,pointer),"resident allocation capacity"))return 3;
+      if(allocationContext!=s.context || memoryType!=CU_MEMORYTYPE_DEVICE ||
+         pointer<base || pointer-base>capacity || inputBytes[i]>capacity-(pointer-base))
+        return bad("resident attention allocation contract disagrees");
+      // No caller can borrow private O/LSE or tangent scratch as a root.
+      if(s.arena && pointer<s.arena+s.arenaBytes && s.arena<pointer+inputBytes[i])
+        return bad("resident attention root aliases private arena");
+      if(!producerStreams[i])return bad("resident attention requires an explicit producer stream");
+      CUstream producer=reinterpret_cast<CUstream>(uintptr_t(producerStreams[i]));
+      if(!ok(cuStreamGetCtx(producer,&streamContext),"resident producer stream context"))return 3;
+      if(streamContext!=s.context)return bad("resident producer stream context disagrees");
+      bool seen=false;for(auto prior:producers)seen|=prior==producer;
+      if(!seen)producers.push_back(producer);
+    }
+    for(auto producer:producers){
+      CUevent event=nullptr;
+      if(!ok(cuEventCreate(&event,CU_EVENT_DISABLE_TIMING),"create producer event"))return 3;
+      ordering.values.push_back(event);
+    }
+  } else if(producerCount)return bad("resident producer streams are missing");
+  // Drain queued dependencies/copies before the event owner retires on error.
   StreamDrain drain{s.stream};
+  for(size_t i=0;i<producers.size();++i)
+    if(!ok(cuEventRecord(ordering.values[i],producers[i]),"record producer event") ||
+       !ok(cuStreamWaitEvent(s.stream,ordering.values[i],0),"wait producer event"))return 3;
+  auto snapshot=[&](size_t slot,size_t index){
+    return producerStreams ?
+      ok(cuMemcpyDtoDAsync(s.buffers[slot],reinterpret_cast<uintptr_t>(inputs[index]),
+                          s.bytes[slot],s.stream),"snapshot resident attention") :
+      stageUpload(s,slot,inputs[index]);
+  };
   for(size_t i=0;i<primals;++i)
-    if(!stageUpload(s,primalSlot(i),inputs[s.mapping[i]]))return 3;
+    if(!snapshot(primalSlot(i),s.mapping[i]))return 3;
   for(size_t i=0;i<s.activeCount;++i)
-    if(!stageUpload(s,tangentSlot(s.roles[i]),inputs[primals+i]))return 3;
+    if(!snapshot(tangentSlot(s.roles[i]),primals+i))return 3;
   void *fa[17];size_t arg=0;
   for(size_t i=0;i<3;++i)fa[arg++]=&s.buffers[i];
   if(s.bias)fa[arg++]=&s.buffers[8];
@@ -277,6 +328,19 @@ extern "C" int tessera_nvidia_attention_jvp_invoke(
      (!ok(cuEventElapsedTime(&deviceMilliseconds[0],s.events[0],s.events[1]),"forward elapsed") ||
       !ok(cuEventElapsedTime(&deviceMilliseconds[1],s.events[2],s.events[3]),"tangent elapsed")))return 3;
   return 0;
+}
+extern "C" int tessera_nvidia_attention_jvp_invoke(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  void *const *outputs,const size_t *outputBytes,float *deviceMilliseconds){
+  return invokeAttentionJvp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,deviceMilliseconds);
+}
+extern "C" int tessera_nvidia_attention_jvp_invoke_resident_ordered(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,float *deviceMilliseconds){
+  if(!producerStreams || !producerCount)return bad("resident producer streams are missing");
+  return invokeAttentionJvp(handle,inputs,inputBytes,inputCount,outputs,outputBytes,
+                            deviceMilliseconds,producerStreams,producerCount);
 }
 extern "C" int tessera_nvidia_attention_jvp_close(uint64_t handle){
   ownerError.clear();

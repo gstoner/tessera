@@ -1221,8 +1221,7 @@ class JitFn:
             if value is None:
                 continue
             if hasattr(value, "__cuda_array_interface__"):
-                from .resident_nvidia_tensor import cuda_frontend_specs
-                shape = cuda_frontend_specs((value,))[0][0]
+                shape = self._resident_frontend_specs((value,))[0][0]
             else:
                 shape = getattr(value, "shape", None)
             if shape is None:
@@ -1267,6 +1266,12 @@ class JitFn:
         self.constraints.check(resolved)
         cache.add(cache_key)
 
+    def _resident_frontend_specs(self,ordered):
+        from .resident_nvidia_tensor import cuda_frontend_specs
+        from .nvidia_native import requests_attention
+        ranks=(1,2,3,4) if requests_attention(self._ensure_legacy_graph_ir()) else (1,2)
+        return cuda_frontend_specs(ordered,ranks=ranks)
+
     def _specialized_autodiff_module(
         self, args: Tuple[Any, ...], kwargs: Dict[str, Any]
     ) -> GraphIRModule:
@@ -1282,15 +1287,25 @@ class JitFn:
         ordered = self._ordered_inputs(args, kwargs)
         if ordered is None or len(ordered) != len(self.arg_names):
             raise TesseraJitError("autodiff specialization requires every argument")
-        signature = tuple(
-            (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
-            for value in ordered
-        )
+        resident=any(hasattr(value,"__cuda_array_interface__") for value in ordered)
+        if resident:
+            if normalize_target_kind(self.target)!="nvidia_sm120" or not all(
+                    hasattr(value,"__cuda_array_interface__") for value in ordered):
+                raise ValueError("resident AD requires all roots on native SM120")
+            specs=self._resident_frontend_specs(ordered)
+            signature=tuple((str(dtype),shape) for shape,dtype in specs)
+        else:
+            signature = tuple(
+                (str(np.asarray(value).dtype), tuple(int(d) for d in np.asarray(value).shape))
+                for value in ordered
+            )
         cached = self._autodiff_specializations.get(signature)
         if cached is not None:
             return cached
         values = dict(zip(self.arg_names, ordered))
-        if ordered and all(isinstance(value, np.ndarray) for value in ordered):
+        if resident:
+            specialized=self._trace_frontend_capture(args,kwargs)[0]
+        elif ordered and all(isinstance(value, np.ndarray) for value in ordered):
             try:
                 specialized = self._trace_frontend_capture(args, kwargs)[0]
             except TesseraJitError:
@@ -1358,8 +1373,7 @@ class JitFn:
                 raise ValueError("resident frontend requires all roots on native SM120")
             if require_outputs:
                 raise ValueError("resident frontend numerical certification requires explicit host oracle inputs")
-            from .resident_nvidia_tensor import cuda_frontend_specs
-            resident_specs = cuda_frontend_specs(ordered)
+            resident_specs = self._resident_frontend_specs(ordered)
             signature = tuple((str(dtype),shape) for shape,dtype in resident_specs)
         else:
             signature = tuple(
@@ -2713,6 +2727,15 @@ class JitFn:
         tangent_values = tangents if isinstance(tangents, (tuple, list)) else (tangents,)
         if len(tangent_values) != len(request.wrt_indices):
             raise TesseraJitError("native_jvp requires one tangent per active input")
+        resident_attention=any(hasattr(value,"__cuda_array_interface__") for value in (*ordered,*tangent_values))
+        if resident_attention:
+            if normalize_target_kind(self.target)!="nvidia_sm120" or not all(
+                    hasattr(value,"__cuda_array_interface__") for value in (*ordered,*tangent_values)):
+                raise TesseraJitError("resident attention AD requires all primal/tangent CUDA roots")
+            resident_specs=self._resident_frontend_specs(ordered)
+            tangent_specs=self._resident_frontend_specs(tangent_values)
+            if any(dtype!=np.dtype("float32") for _,dtype in (*resident_specs,*tangent_specs)):
+                raise TesseraJitError("resident attention AD requires fp32 storage")
         from .rocm_typed_scaled_native import (
             requests_typed_scaled, requests_composed_typed_scaled, requests_floating_scaled,
         )
@@ -2756,9 +2779,20 @@ class JitFn:
             policy=graph_ops[0].kwargs
             if float(policy.get("dropout_p",0.0))==0.0:
                 permitted_effect_ops=("tessera.flash_attn",)
-        self.frontend_differential(
-            *args, _permitted_effect_ops=permitted_effect_ops, **kwargs
-        )
+        resident_certificate=None
+        if resident_attention:
+            if (len(graph_ops)!=1 or graph_ops[0].op_name not in {"tessera.flash_attn","tessera.attention"}
+                    or float(graph_ops[0].kwargs.get("dropout_p",0.0))!=0.0):
+                raise TesseraJitError("resident JVP requires one zero-dropout native attention Graph")
+            from .frontend_authority import certify_resident_frontends
+            resident_certificate=certify_resident_frontends(
+                legacy_module=self._ensure_legacy_graph_ir(),tracer_module=traced_module,
+                signature=resident_specs,graph_consumers=(graph_ops[0].op_name,))
+            self.last_frontend_differential=resident_certificate
+        else:
+            self.frontend_differential(
+                *args, _permitted_effect_ops=permitted_effect_ops, **kwargs
+            )
         from .native_vmap import mixed_batch_policies, normalize_mixed_batch_inputs
         if mixed_batch_policies(self):
             raw_seed_values = self._ordered_inputs(args, kwargs, normalize_batch=False)
@@ -2774,7 +2808,12 @@ class JitFn:
         # The scaled program's checked native owner materializes primal and
         # tangent bytes. Keep alias views at this binding layer; other family
         # ABIs retain their existing compact host-frame contract.
-        if native_scaled_frame:
+        if resident_attention:
+            from types import SimpleNamespace
+            primal_inputs=[SimpleNamespace(shape=shape,dtype=dtype) for shape,dtype in resident_specs]
+            tangent_inputs={index:SimpleNamespace(shape=shape,dtype=dtype)
+                            for index,(shape,dtype) in zip(request.wrt_indices,tangent_specs,strict=True)}
+        elif native_scaled_frame:
             # checked_host_span has already established ndarray storage.
             primal_inputs = list(ordered)
             tangent_inputs = dict(zip(request.wrt_indices, tangent_values, strict=True))
@@ -2830,9 +2869,8 @@ class JitFn:
         launch_names = tuple(f"primal_{index}" for index in range(len(primal_inputs))) + tuple(
             f"tangent_{index}" for index in request.wrt_indices
         )
-        launch_values = tuple(primal_inputs) + tuple(
-            tangent_inputs[index] for index in request.wrt_indices
-        )
+        launch_values = ((*ordered,*tangent_values) if resident_attention else
+                         tuple(primal_inputs) + tuple(tangent_inputs[index] for index in request.wrt_indices))
         # Every member of a composed Graph participates in package identity;
         # the first product's policy alone cannot identify the native program.
         composed_graph_ir = traced_module.to_mlir(target=target) if len(graph_ops) > 1 else None
@@ -2891,8 +2929,9 @@ class JitFn:
             "tile_program_digest": package.contract["tile_program"]["digest"],
             "frontend_authority": "tracer",
             "family": family,
-            "host_preparation": ("native_checked_view_pack" if native_scaled_frame
-                                 else "compact_host_frame"),
+            "host_preparation": ("native_ordered_resident_snapshot" if resident_attention else
+                                 "native_checked_view_pack" if native_scaled_frame else "compact_host_frame"),
+            **({"frontend_certificate":dict(resident_certificate.contract)} if resident_certificate is not None else {}),
         }
         primal, tangent = result["output"]
         return primal, tangent

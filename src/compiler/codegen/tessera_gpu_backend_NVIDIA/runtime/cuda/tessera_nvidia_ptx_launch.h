@@ -207,6 +207,12 @@ int tessera_nvidia_attention_jvp_invoke(
     uint64_t handle, const void* const* inputs, const size_t* input_bytes,
     size_t input_count, void* const* outputs, const size_t* output_bytes,
     float* device_milliseconds);
+// Borrowed compact device roots are ordered then snapshotted into the private
+// arena. Both products and independent host outputs complete before return.
+int tessera_nvidia_attention_jvp_invoke_resident_ordered(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, float* device_milliseconds);
 int tessera_nvidia_attention_jvp_close(uint64_t handle);
 const char* tessera_nvidia_attention_jvp_last_error(void);
 

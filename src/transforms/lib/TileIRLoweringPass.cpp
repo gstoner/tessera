@@ -175,6 +175,19 @@ static Value deriveDistributionInstanceIndex(OpBuilder &b, Location loc,
 // softmax, boundary/dropout counters, ragged zero-fill, async tokens, and
 // pipeline state.  Backends therefore see distribution wrapped around the
 // same recurrence instead of a second rank-4 attention implementation.
+static bool supportsAttentionResultStorage(Operation *op, RankedTensorType q,
+                                           RankedTensorType k, RankedTensorType v,
+                                           RankedTensorType result) {
+  if (result.getElementType().isF32()) return true;
+  auto module = op->getParentOfType<ModuleOp>();
+  auto target = module ? module->getAttrOfType<StringAttr>("tessera.target") : StringAttr();
+  auto arch = module ? module->getAttrOfType<StringAttr>("tessera.arch") : StringAttr();
+  Type storage = q.getElementType();
+  return target && target.getValue() == "nvidia_sm120" && arch && arch.getValue() == "sm_120" &&
+         (storage.isF16() || storage.isBF16()) && k.getElementType() == storage &&
+         v.getElementType() == storage && result.getElementType() == storage;
+}
+
 struct DistributeRank4FlashAttn : public RewritePattern {
   DistributeRank4FlashAttn(MLIRContext *ctx)
       : RewritePattern("tessera.flash_attn", /*benefit=*/3, ctx) {}
@@ -252,7 +265,7 @@ struct DistributeRank4FlashAttn : public RewritePattern {
         outType.getDimSize(1) != queryHeads ||
         outType.getDimSize(2) != queryRows ||
         outType.getDimSize(3) != valueDim ||
-        !outType.getElementType().isF32())
+        !supportsAttentionResultStorage(op, qType, kType, vType, outType))
       return failure();
 
     Location loc = op->getLoc();
@@ -450,7 +463,7 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     if (qRows <= 0 || sk <= 0 || d <= 0 || dv <= 0 ||
         kType.getDimSize(1) != d || vType.getDimSize(0) != sk ||
         outType.getDimSize(0) != qRows || outType.getDimSize(1) != dv ||
-        !outType.getElementType().isF32())
+        !supportsAttentionResultStorage(op, qType, kType, vType, outType))
       return failure();
 
     bool causal = false;
@@ -541,8 +554,9 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
                                   /*negative=*/true)));
     Value zero = arith::ConstantOp::create(
         rewriter, loc, statsType, rewriter.getZeroAttr(statsType));
+    auto accType = RankedTensorType::get(outType.getShape(), rewriter.getF32Type());
     Value accInit = arith::ConstantOp::create(
-        rewriter, loc, outType, rewriter.getZeroAttr(outType));
+        rewriter, loc, accType, rewriter.getZeroAttr(accType));
 
     auto makePipelineInit = [&](StringRef role, int64_t phase) -> Value {
       OperationState state(loc, "tile.pipeline_init");
@@ -711,7 +725,7 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
       Operation *update = emitAttnOp(
           rewriter, loc, "tessera_attn.streaming_update",
           {scores, cpV->getResult(0), runningM, runningL, acc},
-          {outType, statsType, statsType});
+          {accType, statsType, statsType});
 
       OperationState consumerAdvance(loc, "tile.pipeline_advance");
       consumerAdvance.addOperands(
@@ -733,11 +747,14 @@ struct LowerFlashAttnToTileIR : public RewritePattern {
     Operation *lseAcc = emitAttnOp(
         rewriter, loc, "tessera_attn.lse_accumulate",
         {kvLoop.getResult(0), kvLoop.getResult(1), kvLoop.getResult(2)},
-        {outType, statsType});
+        {accType, statsType});
 
-    // Replace flash_attn result with normalised output.
+    // Preserve FP32 recurrence and normalization; round only the final result.
+    Value normalized = lseAcc->getResult(0);
+    if (outType.getElementType() != accType.getElementType())
+      normalized = arith::TruncFOp::create(rewriter, loc, outType, normalized);
     if (!op->getResults().empty())
-      rewriter.replaceOp(op, lseAcc->getResult(0));
+      rewriter.replaceOp(op, normalized);
     else
       rewriter.eraseOp(op);
 

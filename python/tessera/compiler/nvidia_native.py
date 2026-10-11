@@ -127,6 +127,10 @@ SM120_NORM_BF16_ABI = "tessera.nvidia.norm.x_o_rows_columns.bf16_f32acc.v1"
 SM120_NORM_F32_ABI = "tessera.nvidia.norm.x_o_rows_columns.f32_f32acc.v1"
 SM120_ATTN_F16_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc.v1"
 SM120_ATTN_BF16_ABI = "tessera.nvidia.attention.q_k_v_o_dims.bf16_f32acc.v2"
+SM120_ATTN_F16_RESULT_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f16_f32acc_f16out.v1"
+SM120_ATTN_BF16_RESULT_ABI = "tessera.nvidia.attention.q_k_v_o_dims.bf16_f32acc_bf16out.v1"
+SM120_ATTN_BIAS_F16_RESULT_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f16_f32acc_f16out.v1"
+SM120_ATTN_BIAS_BF16_RESULT_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.bf16_f32acc_bf16out.v1"
 SM120_ATTN_F32_ABI = "tessera.nvidia.attention.q_k_v_o_dims.f32_f32acc.v1"
 SM120_ATTN_BIAS_F16_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.f16_f32acc.v1"
 SM120_ATTN_BIAS_BF16_ABI = "tessera.nvidia.attention.q_k_v_bias_o_dims.bf16_f32acc.v2"
@@ -2019,7 +2023,7 @@ def _attention_contract(
         result_shape = tuple(int(dim) for dim in result.shape)
     except (TypeError, ValueError):
         return None
-    if result.dtype != "fp32" or result_shape != (b, hq, sq, dv):
+    if (result.dtype != "fp32" and result.dtype != storage) or result_shape != (b, hq, sq, dv):
         return None
     bias_name = op.operands[3].removeprefix("%") if len(op.operands) == 4 else None
     if bias_name is not None:
@@ -3913,7 +3917,11 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
     storage_ir = {"fp16": "f16", "bf16": "bf16", "fp32": "f32"}.get(storage)
     if storage_ir is None or storage_ir != artifact.storage or len(dims) != 7 or any(type(d) is not int or d <= 0 for d in dims):
         raise ValueError("unsupported NVIDIA scheduled attention shape/storage")
-    entry = f"tessera_tile_attention_{storage_ir}_{'causal' if causal else 'full'}_{artifact.schedule_digest[:10]}"
+    output_dtype = artifact.output_dtype
+    if output_dtype not in ("fp32", storage):
+        raise ValueError("scheduled attention result storage differs from inputs")
+    output_suffix = f"out_{storage_ir}_" if output_dtype != "fp32" else ""
+    entry = f"tessera_tile_attention_{storage_ir}_{'causal' if causal else 'full'}_{output_suffix}{artifact.schedule_digest[:10]}"
     if artifact.function_name != entry:
         raise ValueError("scheduled attention entry disagrees")
     for field, value in {"causal": str(causal).lower(), "bias": str(bias_name is not None).lower(),
@@ -3949,6 +3957,14 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
         "bf16": SM120_ATTN_BF16_ABI,
         "fp32": SM120_ATTN_F32_ABI,
     })[storage]
+    if output_dtype != "fp32":
+        abi_id = ({
+            "fp16": SM120_ATTN_BIAS_F16_RESULT_ABI,
+            "bf16": SM120_ATTN_BIAS_BF16_RESULT_ABI,
+        } if bias_name else {
+            "fp16": SM120_ATTN_F16_RESULT_ABI,
+            "bf16": SM120_ATTN_BF16_RESULT_ABI,
+        })[storage]
     broadcast = bias_name is not None and artifact.bias_shape != (b, hq, sq, sk)
     if broadcast:
         if storage != "fp32":
@@ -3987,7 +4003,7 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
             BufferBinding(1, k_name, "input", storage, 4, "row_major", alignment),
             BufferBinding(2, v_name, "input", storage, 4, "row_major", alignment),
         ] + ([BufferBinding(3, bias_name, "input", "fp32", 4, "row_major", 4)] if bias_name else [])
-          + [BufferBinding(3 + int(bias_name is not None), output_name, "output", "fp32", 4, "row_major", 4)]),
+          + [BufferBinding(3 + int(bias_name is not None), output_name, "output", output_dtype, 4, "row_major", 4 if output_dtype == "fp32" else 2)]),
         scalars=tuple(
             ScalarArgument(4 + int(bias_name is not None) + index, name, "int64")
             for index, name in enumerate(("B", "Hq", "Hkv", "Sq", "Sk", "D", "Dv")
@@ -4021,7 +4037,7 @@ def package_scheduled_attention(artifact: ScheduledAttentionArtifact, *, pipelin
             "schedule": "thread_per_output_128",
             "storage": storage_ir,
             "accum": "f32",
-            "output": "f32",
+            "output": {"fp32": "f32", "fp16": "f16", "bf16": "bf16"}[output_dtype],
             "shape": list(dims),
             "scale": scale,
             "causal": causal,
@@ -4819,6 +4835,10 @@ def package_bf16_softmax(
 
 __all__ = [
     "NVIDIANativePackage",
+    "SM120_ATTN_F16_RESULT_ABI",
+    "SM120_ATTN_BF16_RESULT_ABI",
+    "SM120_ATTN_BIAS_F16_RESULT_ABI",
+    "SM120_ATTN_BIAS_BF16_RESULT_ABI",
     "SM120_ATTN_F16_ABI",
     "SM120_ATTN_BF16_ABI",
     "SM120_ATTN_F32_ABI",

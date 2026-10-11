@@ -190,6 +190,22 @@ int tessera_nvidia_register_ptx_launcher(void);
 
 // Native prepared saved-LSE attention product; host fp32 storage, frontend
 // primals followed by requested physical tangent roles. Compiler-owned images.
+// Retained native forward image, static checked storage ABI and private O/LSE.
+// storage/result_storage: 1=f32, 2=f16, 3=bf16. Half O matches input storage;
+// saved row LSE requires f32 Q/K/V/O. Null producer streams select
+// host staging, otherwise every input needs an explicit ordered CUDA stream.
+int tessera_nvidia_attention_forward_prepare(
+    const void* image, size_t image_bytes, const char* entry, const int64_t* dims,
+    const int64_t* bias_shape, int storage, int result_storage, int saved_lse, int bias_scalars,
+    uint64_t* handle);
+int tessera_nvidia_attention_forward_invoke(
+    uint64_t handle, const void* const* inputs, const size_t* input_bytes,
+    size_t input_count, const uint64_t* producer_streams, size_t producer_count,
+    void* const* outputs, const size_t* output_bytes, size_t output_count,
+    float* device_milliseconds);
+int tessera_nvidia_attention_forward_close(uint64_t handle);
+const char* tessera_nvidia_attention_forward_last_error(void);
+
 int tessera_nvidia_attention_jvp_prepare(
     const void* forward_image, size_t forward_bytes, const char* forward_entry,
     const void* tangent_image, size_t tangent_bytes, const char* tangent_entry,

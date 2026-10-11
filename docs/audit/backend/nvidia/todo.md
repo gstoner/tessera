@@ -5,6 +5,31 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-09
 ---
+## SM120-RESIDENT-ATTENTION-FORWARD-20261009
+
+Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
+Ordinary compact resident FP32 and FP16/BF16 forward now executes through
+typed Graph/Schedule/Tile/Target/LLVM-PTX packages and a retained C++ owner.
+Half results have distinct descriptor/entry identities and two-byte stores;
+FP32 recurrence and normalization precede final native truncation.
+Dense FP32 bias is supported for ordinary forward; saved-LSE output/broadcast
+bias uses the existing FP32 tuple contract. Private input snapshots order
+producer streams; warm public calls neither retrace nor evaluate roots.
+56 forward/component/adjacent JVP/VJP device cases and four serialized
+half-result byte-boundary cases pass on RTX5070. 519 focused shared drift
+gates pass (six skips); 61 additional semantic/packaging cases pass
+(six skips). Ruff and focused mypy pass; full CI is not established.
+Two fresh twelve-profile source/tool/provider-pinned packets check independent
+FP64 output/LSE, rounded to declared result storage, before timing.
+Resident/host completed-call ratios span 1.050–1.253; no speedup is claimed.
+Matching LLVM/MLIR 23.1.1 tools build. The shared FA-4 semantic pass admits
+half results only for NVIDIA SM120; sibling FP32 result gates are preserved.
+Dynamic/composed/nested tuple and half saved-LSE/AD integration remain open.
+110 final claim/generated-registry/audit/runtime ABI cases and all 32 generated-document drift checks pass.
+Evidence: benchmarks/baselines/sm120_resident_attention_forward_20261009/README.md.
+
+Parity validated for the named static compact FP32/FP16/BF16 ordinary resident and FP32 saved-LSE profiles, including private ownership and serialized half-output byte spans. Follow-up required for dynamic/composed tuples, half saved-LSE/AD and binding performance.
+
 ## SM120-RESIDENT-ATTENTION-VJP-20261009
 
 Owner E2E-REAL-6 / FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.

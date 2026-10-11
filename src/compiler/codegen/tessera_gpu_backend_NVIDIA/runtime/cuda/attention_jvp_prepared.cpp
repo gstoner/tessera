@@ -40,7 +40,8 @@ struct Owner {
   std::array<int64_t,7> dims{};
   std::array<int,4> mapping{},roles{};
   size_t activeCount=0;
-  bool reverse=false,bias=false;
+  bool reverse=false,bias=false,forwardOnly=false,savedLse=false,forwardBiasScalars=false;
+  int storage=1,outputStorage=1;
   CUstream stream=nullptr;
   std::array<int64_t,4> biasShape{};
   unsigned reverseGrid=0,reverseThreads=128;
@@ -104,7 +105,7 @@ int prepareResidentDependencies(Owner &s,const void *const *inputs,
       CUdeviceptr pointer=reinterpret_cast<uintptr_t>(inputs[i]),base=0;
       size_t capacity=0;CUcontext allocationContext=nullptr,streamContext=nullptr;
       unsigned memoryType=0;
-      if(pointer%sizeof(float) || pointer>UINTPTR_MAX-inputBytes[i])
+      if(pointer%(s.forwardOnly && i<3 && s.storage!=1?2:4) || pointer>UINTPTR_MAX-inputBytes[i])
         return bad("resident attention pointer alignment or extent disagrees");
       if(!ok(cuPointerGetAttribute(&allocationContext,CU_POINTER_ATTRIBUTE_CONTEXT,pointer),"resident context") ||
          !ok(cuPointerGetAttribute(&memoryType,CU_POINTER_ATTRIBUTE_MEMORY_TYPE,pointer),"resident memory type") ||
@@ -267,7 +268,7 @@ static int invokeAttentionJvp(
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
-  auto found=owners.find(handle);if(found==owners.end() || found->second->reverse)return bad("prepared attention is closed or wrong product");
+  auto found=owners.find(handle);if(found==owners.end() || found->second->reverse || found->second->forwardOnly)return bad("prepared attention is closed or wrong product");
   auto &s=*found->second;CUcontext context=nullptr;
   if(!ok(cuCtxGetCurrent(&context),"get current context"))return 3;
   if(context!=s.context)return bad("prepared attention context disagrees");
@@ -353,7 +354,7 @@ extern "C" int tessera_nvidia_attention_jvp_close(uint64_t handle){
   ownerError.clear();
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
-  auto found=owners.find(handle);if(found==owners.end() || found->second->reverse)return bad("prepared attention is closed or wrong product");
+  auto found=owners.find(handle);if(found==owners.end() || found->second->reverse || found->second->forwardOnly)return bad("prepared attention is closed or wrong product");
   owners.erase(found);return 0;
 }
 
@@ -477,7 +478,7 @@ static int invokeAttentionVjp(
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   auto found=owners.find(handle);
-  if(found==owners.end() || !found->second->reverse)return bad("prepared reverse is closed or wrong product");
+  if(found==owners.end() || !found->second->reverse || found->second->forwardOnly)return bad("prepared reverse is closed or wrong product");
   auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
   if(!ok(cuCtxGetCurrent(&context),"reverse current context") ||
      !ok(cuCtxGetId(s.context,&identity),"reverse context generation"))return 3;
@@ -580,6 +581,138 @@ extern "C" int tessera_nvidia_attention_vjp_close(uint64_t handle){
   if(getpid()!=ownerProcess)return bad("prepared attention cannot cross fork");
   std::lock_guard<std::mutex> lock(ownerMutex);
   auto found=owners.find(handle);
-  if(found==owners.end() || !found->second->reverse)return bad("prepared reverse is closed or wrong product");
+  if(found==owners.end() || !found->second->reverse || found->second->forwardOnly)return bad("prepared reverse is closed or wrong product");
+  owners.erase(found);return 0;
+}
+
+extern "C" const char *tessera_nvidia_attention_forward_last_error(){return ownerError.c_str();}
+extern "C" int tessera_nvidia_attention_forward_prepare(
+  const void *image,size_t imageBytes,const char *entry,const int64_t *dims,
+  const int64_t *biasShape,int storage,int outputStorage,int savedLse,int biasScalars,uint64_t *handle){
+  ownerError.clear();if(handle)*handle=0;
+  if(getpid()!=ownerProcess)return bad("prepared forward cannot cross fork");
+  if(!image || !imageBytes || !entry || !dims || !handle || storage<1 || storage>3 ||
+     (savedLse!=0 && savedLse!=1) || (biasScalars!=0 && biasScalars!=1) ||
+     (savedLse && (storage!=1 || outputStorage!=1)) || (biasScalars && !biasShape) ||
+     outputStorage<1 || outputStorage>3 || (outputStorage!=1 && outputStorage!=storage))
+
+    return bad("prepared forward registration disagrees");
+  bool namedF16=std::strstr(entry,"_out_f16_"),namedBF16=std::strstr(entry,"_out_bf16_");
+  if ((outputStorage==2)!=namedF16 || (outputStorage==3)!=namedBF16)
+    return bad("prepared forward result storage differs from entry");
+  std::lock_guard<std::mutex> lock(ownerMutex);
+  try{
+    auto state=std::make_unique<Owner>();
+    state->forwardOnly=true;state->savedLse=savedLse;state->storage=storage;
+    state->outputStorage=outputStorage;
+    state->bias=biasShape;state->forwardBiasScalars=biasScalars;
+    for(size_t i=0;i<7;++i){
+      if(dims[i]<=0 || dims[i]>65536)return bad("prepared forward dimensions disagree");
+      state->dims[i]=dims[i];
+    }
+    const auto b=dims[0],hq=dims[1],hkv=dims[2],sq=dims[3],sk=dims[4],d=dims[5],dv=dims[6];
+    if(hq%hkv)return bad("prepared forward head grouping disagrees");
+    if(!extent({b,hq,sq,d},state->bytes[0]) ||
+       !extent({b,hkv,sk,d},state->bytes[1]) ||
+       !extent({b,hkv,sk,dv},state->bytes[2]))return bad("prepared forward input extent overflows");
+    if(storage!=1)for(size_t i=0;i<3;++i)state->bytes[i]/=2;
+    const size_t primals=3+unsigned(state->bias),outputs=1+unsigned(state->savedLse);
+    if(state->bias){
+      const int64_t score[4]={b,hq,sq,sk};
+      for(size_t i=0;i<4;++i){
+        if(biasShape[i]!=1 && biasShape[i]!=score[i])return bad("prepared forward bias dimensions disagree");
+        if(!biasScalars && biasShape[i]!=score[i])return bad("prepared forward needs physical bias scalars");
+        state->biasShape[i]=biasShape[i];
+      }
+      if(!extent({biasShape[0],biasShape[1],biasShape[2],biasShape[3]},state->bytes[3]))
+        return bad("prepared forward bias extent overflows");
+    }
+    if(!extent({b,hq,sq,dv},state->bytes[primals]) ||
+       (savedLse && !extent({b,hq,sq},state->bytes[primals+1])))
+      return bad("prepared forward output extent overflows");
+    const size_t grid=(state->bytes[primals]/4+127)/128;
+    if(outputStorage!=1)state->bytes[primals]/=2;
+    if(grid>UINT_MAX)return bad("prepared forward launch extent overflows");
+    state->forwardGrid=unsigned(grid);
+    size_t total=0;
+    for(size_t i=0;i<primals+outputs;++i){
+      if(total>SIZE_MAX-255)return bad("prepared forward alignment overflows");
+      total=(total+255)&~size_t(255);state->hostOffsets[i]=total;
+      if(state->bytes[i]>SIZE_MAX-total)return bad("prepared forward arena overflows");
+      total+=state->bytes[i];
+    }
+    state->arenaBytes=total;
+    if(!currentContext(state->context))return bad("prepared forward requires current SM120");
+    if(!ok(cuCtxGetId(state->context,&state->contextIdentity),"forward context identity") ||
+       !ok(cuModuleLoadData(&state->forwardModule,image),"load retained forward") ||
+       !ok(cuModuleGetFunction(&state->forward,state->forwardModule,entry),"resolve retained forward") ||
+       !ok(cuStreamCreate(&state->stream,CU_STREAM_NON_BLOCKING),"create retained forward stream") ||
+       !ok(cuMemAlloc(&state->arena,total),"allocate retained forward arena") ||
+       !ok(cuMemHostAlloc(&state->hostArena,total,0),"allocate retained forward staging"))return 3;
+    for(size_t i=0;i<primals+outputs;++i)state->buffers[i]=state->arena+state->hostOffsets[i];
+    for(size_t i=0;i<2;++i)if(!ok(cuEventCreate(&state->events[i],CU_EVENT_DEFAULT),"create forward event"))return 3;
+    if(nextOwner==0)return bad("forward owner identity exhausted");
+    uint64_t id=nextOwner++;owners.emplace(id,std::move(state));*handle=id;return 0;
+  }catch(...){return bad("prepared forward allocation failed");}
+}
+extern "C" int tessera_nvidia_attention_forward_invoke(
+  uint64_t handle,const void *const *inputs,const size_t *inputBytes,size_t inputCount,
+  const uint64_t *producerStreams,size_t producerCount,
+  void *const *outputs,const size_t *outputBytes,size_t outputCount,float *deviceMilliseconds){
+  ownerError.clear();
+  if(getpid()!=ownerProcess)return bad("prepared forward cannot cross fork");
+  std::lock_guard<std::mutex> lock(ownerMutex);auto found=owners.find(handle);
+  if(found==owners.end() || !found->second->forwardOnly)return bad("prepared forward is closed or wrong product");
+  auto &s=*found->second;CUcontext context=nullptr;unsigned long long identity=0;
+  if(!ok(cuCtxGetCurrent(&context),"forward current context") ||
+     !ok(cuCtxGetId(s.context,&identity),"forward context identity"))return 3;
+  if(context!=s.context || identity!=s.contextIdentity)return bad("prepared forward context generation disagrees");
+  const size_t primals=3+unsigned(s.bias),results=1+unsigned(s.savedLse);
+  if(!inputs || !inputBytes || inputCount!=primals || !outputs || !outputBytes || outputCount!=results)
+    return bad("prepared forward ABI count disagrees");
+  for(size_t i=0;i<primals;++i)
+    if(!inputs[i] || inputBytes[i]!=s.bytes[i])return bad("prepared forward input extent disagrees");
+  for(size_t i=0;i<results;++i){
+    auto pointer=reinterpret_cast<uintptr_t>(outputs[i]);
+    if(!pointer || outputBytes[i]!=s.bytes[primals+i] || pointer>UINTPTR_MAX-outputBytes[i])
+      return bad("prepared forward output extent disagrees");
+    for(size_t j=0;j<i;++j){
+      auto prior=reinterpret_cast<uintptr_t>(outputs[j]);
+      if(pointer<prior+outputBytes[j] && prior<pointer+outputBytes[i])
+        return bad("prepared forward outputs overlap");
+    }
+  }
+  OrderingEvents ordering;std::vector<CUstream> producers;
+  int dependencies=prepareResidentDependencies(s,inputs,inputBytes,inputCount,
+    producerStreams,producerCount,ordering,producers);
+  if(dependencies)return dependencies;
+  StreamDrain drain{s.stream};
+  for(size_t i=0;i<producers.size();++i)
+    if(!ok(cuEventRecord(ordering.values[i],producers[i]),"record forward producer") ||
+       !ok(cuStreamWaitEvent(s.stream,ordering.values[i],0),"wait forward producer"))return 3;
+  for(size_t i=0;i<primals;++i){
+    if(producerStreams){
+      if(!ok(cuMemcpyDtoDAsync(s.buffers[i],reinterpret_cast<uintptr_t>(inputs[i]),
+                              s.bytes[i],s.stream),"snapshot resident forward"))return 3;
+    }else if(!stageUpload(s,i,inputs[i]))return 3;
+  }
+  void *arguments[17]{};size_t count=0;
+  for(size_t i=0;i<primals+results;++i)arguments[count++]=&s.buffers[i];
+  for(size_t i=0;i<7;++i)arguments[count++]=&s.dims[i];
+  if(s.forwardBiasScalars)for(size_t i=0;i<4;++i)arguments[count++]=&s.biasShape[i];
+  if(!ok(cuEventRecord(s.events[0],s.stream),"start retained forward") ||
+     !ok(cuLaunchKernel(s.forward,s.forwardGrid,1,1,128,1,1,0,s.stream,arguments,nullptr),"launch retained forward") ||
+     !ok(cuEventRecord(s.events[1],s.stream),"end retained forward"))return 3;
+  for(size_t i=0;i<results;++i)if(!stageDownload(s,primals+i))return 3;
+  if(!ok(cuStreamSynchronize(s.stream),"complete retained forward"))return 3;
+  drain.armed=false;
+  for(size_t i=0;i<results;++i)copyOutput(s,primals+i,outputs[i]);
+  if(deviceMilliseconds && !ok(cuEventElapsedTime(deviceMilliseconds,s.events[0],s.events[1]),"retained forward elapsed"))return 3;
+  return 0;
+}
+extern "C" int tessera_nvidia_attention_forward_close(uint64_t handle){
+  ownerError.clear();if(getpid()!=ownerProcess)return bad("prepared forward cannot cross fork");
+  std::lock_guard<std::mutex> lock(ownerMutex);auto found=owners.find(handle);
+  if(found==owners.end() || !found->second->forwardOnly)return bad("prepared forward is closed or wrong product");
   owners.erase(found);return 0;
 }

@@ -574,6 +574,7 @@ class JitFn:
         self._native_descriptor_artifacts: Dict[str, Any] = {}
         self._native_prepared_movement_calls: Dict[tuple, Any] = {}
         self._native_prepared_matmul_calls: Dict[tuple, Any] = {}
+        self._native_prepared_attention_calls: Dict[tuple, Any] = {}
         self._native_descriptor_last_receipt: Any = None
         self._nvidia_rhs_call_signature = (
             inspect.signature(fn) if normalize_target_kind(target) == "nvidia_sm120" else None
@@ -933,7 +934,7 @@ class JitFn:
     def close_native_storage(self) -> None:
         """Release the native module; keep the descriptor for lazy rebinding."""
         for name in ("_native_prepared_movement_calls", "_native_prepared_matmul_calls",
-                     "_nvidia_lhs_prepared_calls"):
+                     "_nvidia_lhs_prepared_calls", "_native_prepared_attention_calls"):
             calls = getattr(self, name, {})
             for call in calls.values():
                 call.close()
@@ -1006,6 +1007,9 @@ class JitFn:
                     raise ValueError("no oracle-verified native storage candidate")
                 return winner.run(region, *inputs)[0]
             return native_storage(*args, **kwargs)
+        prepared_attention = self._try_prepared_attention_call(args, kwargs)
+        if prepared_attention is not _JIT_FALLBACK:
+            return prepared_attention
         prepared_matmul = self._try_prepared_matmul_call(args, kwargs)
         if prepared_matmul is not _JIT_FALLBACK:
             from . import compile_report as _cr
@@ -1793,6 +1797,33 @@ class JitFn:
         self.last_fallback_reason = None
         return array
 
+    def _try_prepared_attention_call(self, args, kwargs):
+        """Bind a previously verified attention package from tensor metadata."""
+        if (normalize_target_kind(self.target) != "nvidia_sm120"
+                or self.differentiation_request is not None
+                or not self._native_prepared_attention_calls):
+            return _JIT_FALLBACK
+        from .prepared_attention_forward import input_signature
+        bound = self._native_frontend_signature().bind(*args, **kwargs)
+        bound.apply_defaults()
+        ordered = tuple(bound.arguments[name] for name in self.arg_names)
+        signature = input_signature(ordered)
+        call = self._native_prepared_attention_calls.get(signature)
+        if call is None:
+            return _JIT_FALLBACK
+        captured = self._traced_frontend_specializations.get(signature)
+        if captured is None or not call.matches(captured):
+            call.close()
+            del self._native_prepared_attention_calls[signature]
+            return _JIT_FALLBACK
+        result, receipt = call(ordered)
+        self.graph_ir = captured
+        self.compile_result, self.compile_bundle = call.compiled, call.compiled.bundle
+        self._native_descriptor_last_receipt = receipt
+        self._cached_artifact = call.artifact
+        self.last_fallback_reason = None
+        return result
+
     def _try_native_descriptor_call(self, args, kwargs):
         """Bind host tensors to a canonical compiler-owned static descriptor.
 
@@ -1849,10 +1880,21 @@ class JitFn:
         bound = signature_binding.bind(*args, **kwargs)
         bound.apply_defaults()
         ordered = tuple(bound.arguments[name] for name in self.arg_names)
-        if not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
+        resident_attention = attention and any(hasattr(value, "__cuda_array_interface__") for value in ordered)
+        if resident_attention:
+            from .prepared_attention_forward import input_signature
+            input_signature(ordered)
+        if not resident_attention and not all(isinstance(value, (np.ndarray, NVFP4Tensor)) if nvfp4 else isinstance(value, np.ndarray) for value in ordered):
             if movement or matmul:
                 return _JIT_FALLBACK
             raise TypeError("native descriptor JIT expects host tensor inputs")
+        prepared_attention = False
+        if attention:
+            attention_library = rt._load_nvidia_ptx_launch()
+            prepared_attention = attention_library is not None and hasattr(
+                attention_library, "tessera_nvidia_attention_forward_prepare")
+            if resident_attention and not prepared_attention:
+                raise RuntimeError("resident attention requires the native forward owner")
         matmul_signature = tuple((value.dtype.str, value.shape, value.strides) for value in ordered) if matmul else ()
         prepared_matmul = matmul and os.environ.get(
             "TESSERA_NVIDIA_PREPARED_MATMUL", "1").lower() not in {"0", "off", "false"}
@@ -1885,6 +1927,8 @@ class JitFn:
         if native_math and not supports_math(module):
             raise ValueError("native math requires explicit f32 Graph computation and supported input storage")
         if attention and not (supports_attention(module) or supports_attention_lse(module)):
+            if resident_attention:
+                raise ValueError("resident attention result storage requires a matching native output ABI")
             return _JIT_FALLBACK
         if matmul:
             # Frontend storage facts, not a Python schedule/algorithm decision.
@@ -1905,8 +1949,12 @@ class JitFn:
         if movement and requests_paged_kv_read(module):
             from .scheduled_paged_kv import project_paged_host_storage
             module = project_paged_host_storage(module, ordered)
-        signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str,
-                           value.shape, *((value.strides,) if movement else ())) for value in ordered)
+        if attention:
+            from .prepared_attention_forward import input_signature
+            signature = input_signature(ordered)
+        else:
+            signature = tuple((value.dtype if isinstance(value, NVFP4Tensor) else value.dtype.str,
+                               value.shape, *((value.strides,) if movement else ())) for value in ordered)
         prepared_enabled = movement and os.environ.get(
             "TESSERA_ROCM_PREPARED_MOVEMENT", "1").lower() not in {"0", "off", "false"}
         lib = rt._load_rocm_native_movement_runtime() if prepared_enabled else None
@@ -2040,6 +2088,8 @@ class JitFn:
                 _attention_contract, _attention_lse_contract,
                 SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI,
                 SM120_ATTN_F16_ABI, SM120_ATTN_BF16_ABI,
+                SM120_ATTN_F16_RESULT_ABI, SM120_ATTN_BF16_RESULT_ABI,
+                SM120_ATTN_BIAS_F16_RESULT_ABI, SM120_ATTN_BIAS_BF16_RESULT_ABI,
                 SM120_ATTN_F32_ABI, SM120_ATTN_BIAS_F16_ABI,
                 SM120_ATTN_BIAS_BF16_ABI, SM120_ATTN_BIAS_F32_ABI,
             )
@@ -2054,6 +2104,8 @@ class JitFn:
                 scalar_names += ("BiasB","BiasH","BiasQ","BiasK")
             attention_abis = ({SM120_ATTN_LSE_F32_ABI, SM120_ATTN_LSE_BIAS_F32_ABI, SM120_ATTN_LSE_BCAST_F32_ABI}
                 if attention_saved_lse else {SM120_ATTN_F16_ABI,SM120_ATTN_BF16_ABI,SM120_ATTN_F32_ABI,
+                    SM120_ATTN_F16_RESULT_ABI, SM120_ATTN_BF16_RESULT_ABI,
+                    SM120_ATTN_BIAS_F16_RESULT_ABI, SM120_ATTN_BIAS_BF16_RESULT_ABI,
                     SM120_ATTN_BIAS_F16_ABI,SM120_ATTN_BIAS_BF16_ABI,SM120_ATTN_BIAS_F32_ABI})
             if (attention_contract is None or descriptor.abi_id not in attention_abis
                     or tuple(item.name for item in declared)!=scalar_names
@@ -2071,6 +2123,30 @@ class JitFn:
         arguments = dict(zip((arg.name for arg in module.functions[0].args), ordered, strict=True))
         if set(arguments) != {item.name for item in inputs}:
             raise ValueError("descriptor input bindings differ from traced argument names")
+        if prepared_attention:
+            from .prepared_attention_forward import PreparedAttentionForward
+            artifact = self._native_descriptor_artifacts.get(key)
+            if artifact is None:
+                artifact = compiled.to_runtime_artifact()
+                self._native_descriptor_artifacts[key] = artifact
+            call = PreparedAttentionForward(compiled, artifact, module)
+            try:
+                result, receipt = call(ordered)
+            except Exception:
+                call.close()
+                raise
+            if len(self._native_prepared_attention_calls) >= 24:
+                retired = next(iter(self._native_prepared_attention_calls))
+                self._native_prepared_attention_calls.pop(retired).close()
+            prior = self._native_prepared_attention_calls.get(signature)
+            if prior is not None:
+                prior.close()
+            self._native_prepared_attention_calls[signature] = call
+            self.compile_result, self.compile_bundle = compiled, compiled.bundle
+            self._native_descriptor_last_receipt = receipt
+            self._cached_artifact = artifact
+            self.last_fallback_reason = None
+            return result
         buffers = {name: value.storage if isinstance(value, NVFP4Tensor) else value
                    for name, value in arguments.items()}
         if typed_scaled and any(not value.flags.c_contiguous for value in buffers.values()):

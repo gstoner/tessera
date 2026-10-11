@@ -432,9 +432,20 @@ class TestG4NvidiaLitFixtures:
             "tessera-nvidia-pipeline",
             "tessera-nvidia-pipeline-sm90",
             "tessera-nvidia-pipeline-sm100",
-            "tessera-nvidia-pipeline-sm120",
         ):
             assert f"--{alias}" in body
+        # The SM120 route needs the registered NVIDIA Target IR dialect, so it
+        # is split into its own gated fixture instead of gating the core aliases.
+        assert "--tessera-nvidia-pipeline-sm120" not in body
+
+    def test_sm120_pipeline_alias_fixture_is_backend_gated(self):
+        fixture = (
+            TESSERA_IR_FIXTURES / "phase3" / "cuda13"
+            / "nvidia_pipeline_alias_sm120.mlir"
+        )
+        body = fixture.read_text()
+        assert "REQUIRES: tessera-nvidia-backend" in body
+        assert "--tessera-nvidia-pipeline-sm120" in body
 
 
 # ──────────────────────────────────────────────────────────────────────────

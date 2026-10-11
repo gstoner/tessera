@@ -8,8 +8,12 @@
 // its tensor value and leave an operand-indexed physical binding contract on
 // the target consumer. NVIDIA materializes the physical contract directly as
 // structured #tile.layout; Apple/x86 retain their architecture-owned strings.
-// The SM120 tile-lowering half needs the NVIDIA backend and an explicit SM120
-// target, so it lives in layout_target_materializers_nvidia_tile.mlir.
+// This fixture checks the materializers only. It deliberately does not claim the
+// layout survives SM120 tile lowering: measured 2026-10-11 on The-Super-Bear, the
+// SM120 route emits byte-identical output for a row_major and a col_major cast
+// (it re-synthesizes the row-major composed layout from the operand shape). That
+// drop is recorded as a required follow-up in docs/audit/backend/nvidia/todo.md
+// (sync HOST-AWARE-SKIPS-2026-10-11).
 
 // APPLE-LABEL: func.func @matmul_layout
 // APPLE-NOT: "tessera.cast"

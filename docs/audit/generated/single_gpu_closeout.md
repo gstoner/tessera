@@ -14,11 +14,11 @@ test, ABI, and surface dashboards.
 
 | Area | Rows | Buckets | Owners |
 |---|---:|---|---|
-| `backend_kernel` | 424 | backend_pathway_owned=409, multi_gpu_deferred=15 | backend_codegen=409, distributed_validation=15 |
+| `backend_kernel` | 428 | backend_pathway_owned=413, multi_gpu_deferred=15 | backend_codegen=413, distributed_validation=15 |
 | `benchmark_evidence` | 2 | benchmark_required=2 | benchmarks=2 |
 | `sharding_rule` | 61 | local_layout_transform=2, multi_gpu_deferred=2, needs_mesh_or_domain_proof=50, single_device_identity=7 | compiler_middle_end=2, distributed_validation=2, primitive_registry=57 |
-| `target_ir` | 25 | architecture_evidence_gated=20, multi_gpu_deferred=4, single_gpu_promote=1 | backend_codegen=21, distributed_validation=4 |
-| `tile_ir` | 21 | architecture_evidence_gated=20, single_gpu_closeable=1 | backend_codegen=20, compiler_middle_end=1 |
+| `target_ir` | 29 | architecture_evidence_gated=24, multi_gpu_deferred=4, single_gpu_promote=1 | backend_codegen=25, distributed_validation=4 |
+| `tile_ir` | 25 | architecture_evidence_gated=24, single_gpu_closeable=1 | backend_codegen=24, compiler_middle_end=1 |
 
 ## Rows
 
@@ -245,7 +245,9 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `scaled_matmul` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `tridiagonal_solve` | loop_nest | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `asymmetric_bce` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `binary_brier_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `binary_cross_entropy_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `brier_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `contrastive_divergence_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `contrastive_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `cosine_embedding_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -265,10 +267,12 @@ test, ABI, and surface dashboards.
 | `backend_kernel` | `mae_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `mse_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `nt_xent_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `ordinal_logistic_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `persistent_cd_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `score_matching_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `seq2seq_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `smooth_l1_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
+| `backend_kernel` | `soft_binned_ece` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `triplet_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `vlb_loss` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
 | `backend_kernel` | `wasserstein_distance` | loss | partial | `backend_pathway_owned` | backend_codegen | Promote by backend/pathway evidence; keep registry axis conservative until target proof is complete. |
@@ -533,6 +537,10 @@ test, ABI, and surface dashboards.
 | `target_ir` | `kron` | linalg_multilinear | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
 | `target_ir` | `trace` | linalg_multilinear | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
 | `target_ir` | `solve` | linalg_solver | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Target IR lane is a separate per-op decision. |
+| `target_ir` | `binary_brier_loss` | loss | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: no Target IR lane is claimed; the loss device lanes cover cross-entropy/BCE families only, and extending one to a new scoring rule needs its own exact-device proof. |
+| `target_ir` | `brier_loss` | loss | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: no Target IR lane is claimed; the loss device lanes cover cross-entropy/BCE families only, and extending one to a new scoring rule needs its own exact-device proof. |
+| `target_ir` | `ordinal_logistic_loss` | loss | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: no Target IR lane is claimed; the loss device lanes cover cross-entropy/BCE families only, and extending one to a new scoring rule needs its own exact-device proof. |
+| `target_ir` | `soft_binned_ece` | loss | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: no Target IR lane is claimed; the loss device lanes cover cross-entropy/BCE families only, and extending one to a new scoring rule needs its own exact-device proof. |
 | `target_ir` | `ntk_rope` | position_encoding | reference | `single_gpu_promote` | backend_codegen | Promote to native/fused Target IR for the selected one-GPU backend or mark intentional reference-only. |
 | `target_ir` | `game_mex` | segment_reduce | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
 | `target_ir` | `game_coalition_marginal` | spectral | reference | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G5 registers the per-target arbiter lanes; hold until that phase lands. |
@@ -554,6 +562,10 @@ test, ABI, and surface dashboards.
 | `tile_ir` | `kron` | linalg_multilinear | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
 | `tile_ir` | `trace` | linalg_multilinear | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
 | `tile_ir` | `solve` | linalg_solver | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by design: MC1 shipped the derivative contract (closed-form VJP+JVP, law-swept), not a device lane; a native Tile lowering is a separate per-op decision. |
+| `tile_ir` | `binary_brier_loss` | loss | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: the calibrated-decision-heads change ships the mathematical surface (definition-checked, VJP+JVP law-swept); a Tile IR lowering is a separate backend decision with its own device evidence. |
+| `tile_ir` | `brier_loss` | loss | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: the calibrated-decision-heads change ships the mathematical surface (definition-checked, VJP+JVP law-swept); a Tile IR lowering is a separate backend decision with its own device evidence. |
+| `tile_ir` | `ordinal_logistic_loss` | loss | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: the calibrated-decision-heads change ships the mathematical surface (definition-checked, VJP+JVP law-swept); a Tile IR lowering is a separate backend decision with its own device evidence. |
+| `tile_ir` | `soft_binned_ece` | loss | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: the calibrated-decision-heads change ships the mathematical surface (definition-checked, VJP+JVP law-swept); a Tile IR lowering is a separate backend decision with its own device evidence. |
 | `tile_ir` | `ntk_rope` | position_encoding | partial | `single_gpu_closeable` | compiler_middle_end | Add Tile IR lowering or explicitly mark fused/not-applicable with a generator-backed rationale. |
 | `tile_ir` | `game_mex` | segment_reduce | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |
 | `tile_ir` | `game_coalition_marginal` | spectral | partial | `architecture_evidence_gated` | backend_codegen | Reference tier by plan: GAME_THEORY_PLAN.md G1b owns the shared butterfly Tile lowering; hold until that phase lands. |

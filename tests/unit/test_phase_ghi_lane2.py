@@ -67,11 +67,17 @@ class TestG5PipelineAlias:
         assert "PTX ISA 9.4" in body
 
     def test_lit_fixture_for_pipeline_alias_exists(self):
-        fixture = REPO / "tests" / "tessera-ir" / "phase3" / "cuda13" / \
-                  "nvidia_pipeline_alias.mlir"
-        assert fixture.exists()
-        body = fixture.read_text()
-        # The fixture should exercise all four aliases.
+        # The SM120 RUN lives in its own fixture (it needs the tessera_nvidia
+        # backend); the core aliases stay in the ungated fixture.
+        cuda13 = REPO / "tests" / "tessera-ir" / "phase3" / "cuda13"
+        fixtures = (
+            cuda13 / "nvidia_pipeline_alias.mlir",
+            cuda13 / "nvidia_pipeline_alias_sm120.mlir",
+        )
+        for fixture in fixtures:
+            assert fixture.exists(), fixture
+        body = "\n".join(f.read_text() for f in fixtures)
+        # Between them the fixtures should exercise all four aliases.
         for alias in (
             "tessera-nvidia-pipeline",
             "tessera-nvidia-pipeline-sm90",

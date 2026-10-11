@@ -92,10 +92,18 @@ this axis and admitted them. `_apply_category_overrides` now takes a required
 row has a Graph op: its own `graph_name`, an `op_catalog` OpSpec (the GA4/EBM
 `_planned` rows), a tracer emission (`_TRACED_GRAPH_LOWERINGS`:
 `fori_loop`/`cond`/`while_loop`/`scan` → `tessera.control_*`), or a
-domain-dialect op (`_DIALECT_GRAPH_LOWERINGS`: `tessera_ebm.energy` /
-`decode_init` / `partition_z` / `langevin_step`, `tessera_clifford.integral`).
-Each table entry is checked against the tracer or the ODS file by
-`test_graphless_lowering_rule_gate.py`. **100 rows reopened** (94 `partial`, 6
+domain-dialect op that a producer actually emits (`_DIALECT_GRAPH_LOWERINGS`:
+`tessera_ebm.energy` and `tessera_ebm.langevin_step{manifold=sphere|bivector}`,
+both emitted by `ebm/native_langevin.langevin_loop_module`).
+`test_graphless_lowering_rule_gate.py` traces each control-flow entry, calls
+each dialect producer and checks the op is in its output, and re-derives each
+dialect op's tier from `ods_consumer_audit` (must be `compiler`). An ODS
+declaration alone is not evidence (review of PR #941): `tessera_ebm.partition_z`
+is `fixture_only`, `tessera_clifford.integral` is `unreferenced`, and
+`tessera_ebm.decode_init` is read by a pass but emitted by nothing, so
+`ebm_partition_{exact,monte_carlo,ais}`, `clifford_integral` and
+`ebm_decode_init` stay open; a negative test pins them, including that
+`pipeline_gates` legality refuses them. **105 rows reopened** (94 `partial`, 11
 `planned`); each carries `metadata.lowering_rule_reason`, and its
 `graph_ir_lowering` moves from `registered` to `stub_required` (the same claim
 one field over). `memory_read` / `memory_write` / `memory_evict`, whose Graph
@@ -111,15 +119,15 @@ not a lowering. Re-promote a reopened row by giving it a Graph op, not by
 editing the category table.
 
 Checked in the same pass, **not changed here** (recorded for follow-up), on the
-100 reopened rows:
+105 reopened rows:
 
-- `sharding_rule` is `complete` on 96 of them, from the category table. No
+- `sharding_rule` is `complete` on 101 of them, from the category table. No
   per-primitive consumer reads this axis (`python/tessera/sharding.py` never
   consults the registry), so for a Graph-less row it states a rule nothing
   propagates. Same overstatement class.
-- `transpose_rule` is `complete` on 65 of them, 26 of which have no `complete`
+- `transpose_rule` is `complete` on 66 of them, 27 of which have no `complete`
   `vjp`: those rows claim a linear transpose with no registered VJP to derive it from.
-- `shape_rule` / `batching_rule` are `complete` on all 100, but both axes
+- `shape_rule` / `batching_rule` are `complete` on all 105, but both axes
   already carry `AXIS_CONSUMER_WAIVERS` in `test_governance_declarations.py`
   for every row (no consumer anywhere), so they are a known registry-wide
   debt, not specific to Graph-less rows.
@@ -131,12 +139,30 @@ Checked in the same pass, **not changed here** (recorded for follow-up), on the
   `online_softmax_state`) yet read `lowering_rule: complete`; the three Block
   AttnRes ops are already reopened by name, and `selective_ssm` has an OpSpec.
 
+**Frontend gap (measured 2026-10-11).** A native-target `@jit` over a
+`tessera.ops` name with no `op_catalog` spec emits an empty Graph IR function
+(effect `top`) and runs eagerly with no `last_fallback_reason`, reproduced on
+`main` with the pre-existing `jepa_l2_loss`.
+
+**Calibrated decision heads (added 2026-10-11).** Proper scoring rules and
+calibration measurement for bounded-choice heads: `losses.brier_loss`,
+`binary_brier_loss`, `ordinal_logistic_loss` (CORAL-style) and
+`ordinal_probs`; `tessera.calibration` for top-label ECE/MCE, reliability
+bins, the differentiable `soft_binned_ece` penalty, and post-hoc
+`fit_temperature`. Python reference with analytic VJP/JVP rules swept by the
+autodiff law engine. `brier_loss`, `binary_brier_loss`, `ordinal_logistic_loss`
+and `soft_binned_ece` are `op_catalog` Graph ops (`tessera.loss.*`);
+`ordinal_probs` is not. No lowering or device result is claimed beyond what
+the generated rows show; native lowering is a backend-proof queue item.
+
 ## VLM status
 
 The June VLM connector audit is historical. Its useful result was the addition
 of explicit preprocessing, modality-splice, position, resampling, and
-cross-attention vocabulary. Those operations now have canonical Graph
-dispositions and the project-wide `lowering_rule` axis is closed.
+cross-attention vocabulary. Those operations have Graph dispositions, but
+`lowering_rule` is not closed for all of them: `image_resize` and
+`interpolate` have no Graph op and were reopened by GRAPHLESS-LOWERING-1
+(their structured-compute lane dispatches back to the numpy reference).
 
 The remaining VLM work is physical and model-level:
 

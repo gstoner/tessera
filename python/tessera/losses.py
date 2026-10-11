@@ -202,6 +202,152 @@ def binary_cross_entropy_loss(logits, targets, reduction: str = "mean"):
     return _reduce(loss, reduction)
 
 
+def _class_targets(targets: np.ndarray, shape: tuple[int, ...], ignore_index: int):
+    """Integer class targets → ``(one_hot, valid)`` against a trailing class axis.
+
+    Range-checked so numpy's negative-index wraparound can never turn the
+    ``ignore_index`` padding convention into a real class (the defect
+    ``focal_loss`` once had). ``valid`` marks the scoring positions.
+    """
+    classes = shape[-1]
+    if targets.shape != shape[:-1]:
+        raise ValueError(
+            f"integer targets of shape {targets.shape} do not match the "
+            f"leading shape {shape[:-1]} of the scores")
+    idx = targets.reshape(-1).astype(np.int64)
+    valid = idx != int(ignore_index)
+    if np.any(valid & ((idx < 0) | (idx >= classes))):
+        raise ValueError("target class index out of range")
+    one_hot = np.zeros((idx.size, classes), dtype=np.float64)
+    one_hot[np.arange(idx.size), np.where(valid, idx, 0)] = 1.0
+    one_hot[~valid] = 0.0
+    return one_hot.reshape(shape), valid.reshape(shape[:-1])
+
+
+def _masked_reduce(loss: np.ndarray, valid: np.ndarray | None, reduction: str):
+    """``_reduce`` that excludes ignored positions from the mean's denominator."""
+    if valid is None:
+        return _reduce(loss, reduction)
+    loss = np.where(valid, loss, 0.0)
+    if reduction == "mean":
+        n = int(np.count_nonzero(valid))
+        return np.float64(loss.sum() / n) if n else np.float64(0.0)
+    return _reduce(loss, reduction)
+
+
+def brier_loss(logits, targets, reduction: str = "mean", *, ignore_index: int = -100):
+    """Multiclass Brier score from LOGITS: ``Σ_k (softmax(z)_k − y_k)²``.
+
+    The quadratic strictly proper scoring rule: its expectation under the
+    data distribution ``q`` is minimized exactly at ``softmax(z) = q``, so it
+    rewards calibrated probabilities, not just a correct argmax. Per-example
+    values lie in ``[0, 2]`` — bounded, unlike the logarithmic score
+    (``cross_entropy_loss``), which is unbounded as a true class's
+    probability goes to 0.
+
+    ``targets`` are either integer class indices over the leading axes (with
+    ``ignore_index`` honoured: ignored positions score 0 and leave the mean's
+    denominator) or a target distribution with ``logits``' shape. The class
+    axis is the last axis.
+    """
+    z = _asarray(logits).astype(np.float64, copy=False)
+    if z.ndim == 0:
+        raise ValueError("brier_loss needs a trailing class axis")
+    t = _asarray(targets)
+    p = np.exp(_log_softmax(z, axis=-1))
+    if t.dtype.kind in "iu":
+        y, valid = _class_targets(t, z.shape, ignore_index)
+    else:
+        y = t.astype(np.float64, copy=False)
+        if y.shape != z.shape:
+            raise ValueError(
+                f"distribution targets of shape {y.shape} must match logits "
+                f"{z.shape}; pass integer class indices for hard labels")
+        valid = None
+    return _masked_reduce(np.sum((p - y) ** 2, axis=-1), valid, reduction)
+
+
+def binary_brier_loss(logits, targets, reduction: str = "mean"):
+    """Binary Brier score from LOGITS: ``(sigmoid(z) − t)²``.
+
+    The Bernoulli case of :func:`brier_loss` for a single true/false
+    assertion. Note it is half the two-class :func:`brier_loss`, which counts
+    the error on both the "true" and "false" probabilities. ``targets`` may
+    be hard ``{0, 1}`` labels or soft probabilities in ``[0, 1]``.
+    """
+    z = _asarray(logits).astype(np.float64, copy=False)
+    t = _asarray(targets).astype(np.float64, copy=False)
+    p = 0.5 * (1.0 + np.tanh(0.5 * z))   # overflow-free sigmoid
+    return _reduce((p - t) ** 2, reduction)
+
+
+def _ordinal_indicators(targets: np.ndarray, shape: tuple[int, ...], ignore_index: int):
+    """``b[..., j] = 1[target > j]`` for ``j < K−1`` plus the scoring mask."""
+    thresholds = shape[-1]
+    if targets.shape != shape[:-1]:
+        raise ValueError(
+            f"ordinal targets of shape {targets.shape} do not match the "
+            f"leading shape {shape[:-1]} of the threshold logits")
+    if targets.dtype.kind not in "iu":
+        raise ValueError("ordinal targets must be integer levels in [0, K-1]")
+    idx = targets.astype(np.int64)
+    valid = idx != int(ignore_index)
+    if np.any(valid & ((idx < 0) | (idx > thresholds))):
+        raise ValueError(
+            f"ordinal target out of range: levels are 0..{thresholds} for "
+            f"{thresholds} threshold logits")
+    b = (idx[..., None] > np.arange(thresholds)).astype(np.float64)
+    return b, valid
+
+
+def ordinal_logistic_loss(logits, targets, reduction: str = "mean", *,
+                          ignore_index: int = -100):
+    """Ordinal regression loss by binary decomposition (CORAL-style).
+
+    For ``K`` ordered levels the head emits ``K−1`` threshold logits
+    ``z_j`` scoring ``P(level > j) = sigmoid(z_j)``. The loss is the summed
+    binary cross-entropy of each threshold against ``1[target > j]``::
+
+        L = Σ_j  softplus(z_j) − 1[target > j] · z_j
+
+    ``targets`` are integer levels in ``[0, K−1]`` over the leading axes;
+    ``ignore_index`` positions score 0 and leave the mean's denominator.
+    Rank consistency (non-increasing ``P(level > j)``) is a property of the
+    *head* (CORAL shares one weight vector across thresholds), not of this
+    loss; :func:`ordinal_probs` enforces it at read-out either way.
+    """
+    z = _asarray(logits).astype(np.float64, copy=False)
+    if z.ndim == 0 or z.shape[-1] < 1:
+        raise ValueError("ordinal_logistic_loss needs >= 1 threshold logit "
+                         "on the trailing axis (K >= 2 levels)")
+    b, valid = _ordinal_indicators(_asarray(targets), z.shape, ignore_index)
+    per_threshold = np.maximum(z, 0.0) - z * b + np.log1p(np.exp(-np.abs(z)))
+    return _masked_reduce(np.sum(per_threshold, axis=-1), valid, reduction)
+
+
+def ordinal_probs(logits):
+    """Per-level probabilities ``(..., K)`` from ``K−1`` threshold logits.
+
+    ``P(level > j) = sigmoid(z_j)`` is made non-increasing in ``j`` by a
+    running minimum (an unconstrained head can violate it), then
+    ``P(level = k) = P(level > k−1) − P(level > k)`` with the boundary
+    conventions ``P(level > −1) = 1`` and ``P(level > K−1) = 0``. The result
+    is non-negative and sums to 1. The running minimum is a read-out repair,
+    not a differentiable training path — train with
+    :func:`ordinal_logistic_loss`.
+    """
+    z = _asarray(logits).astype(np.float64, copy=False)
+    if z.ndim == 0 or z.shape[-1] < 1:
+        raise ValueError("ordinal_probs needs >= 1 threshold logit on the "
+                         "trailing axis (K >= 2 levels)")
+    survival = np.minimum.accumulate(0.5 * (1.0 + np.tanh(0.5 * z)), axis=-1)
+    ones = np.ones(z.shape[:-1] + (1,), dtype=np.float64)
+    zeros = np.zeros_like(ones)
+    upper = np.concatenate([ones, survival], axis=-1)
+    lower = np.concatenate([survival, zeros], axis=-1)
+    return upper - lower
+
+
 def asymmetric_bce(
     logits,
     targets,
@@ -856,7 +1002,9 @@ def softmax_fy_loss(theta, y, *, axis: int = -1, reduction: str = "mean"):
 
 __all__ = [
     "asymmetric_bce",
+    "binary_brier_loss",
     "binary_cross_entropy_loss",
+    "brier_loss",
     "fenchel_young_loss",
     "fy_loss_and_grad",
     "sparsemax_loss",
@@ -879,6 +1027,8 @@ __all__ = [
     "mse_loss",
     "mtp_e2e_tv_loss",
     "nt_xent_loss",
+    "ordinal_logistic_loss",
+    "ordinal_probs",
     "score_matching_loss",
     "seq2seq_loss",
     "smooth_l1_loss",

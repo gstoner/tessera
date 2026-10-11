@@ -1063,6 +1063,90 @@ def jvp_load_balance_loss(primals, tangents, *, assignment=None, reduction="mean
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Calibrated decision heads — proper scoring rules + soft calibration error.
+# Analytic; paired with the VJPs of the same names in vjp.py.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _float_tangent(tangents, i, like):
+    """Tangent ``i`` as float64, or zeros when absent (non-differentiable arg)."""
+    if len(tangents) <= i or tangents[i] is None:
+        return np.zeros_like(like, dtype=np.float64)
+    return np.asarray(tangents[i], dtype=np.float64)
+
+
+@_jvp("brier_loss")
+def jvp_brier_loss(primals, tangents, *, reduction="mean", ignore_index=-100, **_):
+    from tessera.losses import _class_targets, _masked_reduce
+
+    logits, targets = primals
+    z = np.asarray(logits, dtype=np.float64)
+    t = np.asarray(targets)
+    dz = _float_tangent(tangents, 0, z)
+    m = z.max(axis=-1, keepdims=True)
+    e = np.exp(z - m)
+    p = e / e.sum(axis=-1, keepdims=True)
+    if t.dtype.kind in "iu":
+        y, valid = _class_targets(t, z.shape, ignore_index)
+        dy = np.zeros_like(y)
+    else:
+        y, valid = t.astype(np.float64), None
+        dy = _float_tangent(tangents, 1, y)
+    dp = p * (dz - np.sum(p * dz, axis=-1, keepdims=True))
+    loss = np.sum((p - y) ** 2, axis=-1)
+    tangent = np.sum(2.0 * (p - y) * (dp - dy), axis=-1)
+    return (_masked_reduce(loss, valid, reduction),
+            _masked_reduce(tangent, valid, reduction))
+
+
+@_jvp("binary_brier_loss")
+def jvp_binary_brier_loss(primals, tangents, *, reduction="mean", **_):
+    logits, targets = primals
+    z = np.asarray(logits, dtype=np.float64)
+    t = np.asarray(targets, dtype=np.float64)
+    dz = _float_tangent(tangents, 0, z)
+    dt = _float_tangent(tangents, 1, t)
+    s = 0.5 * (1.0 + np.tanh(0.5 * z))
+    loss = (s - t) ** 2
+    tangent = 2.0 * (s - t) * (s * (1.0 - s) * dz - dt)
+    return _reduce_loss(loss, tangent, reduction)
+
+
+@_jvp("ordinal_logistic_loss")
+def jvp_ordinal_logistic_loss(primals, tangents, *, reduction="mean",
+                              ignore_index=-100, **_):
+    from tessera.losses import _masked_reduce, _ordinal_indicators
+
+    logits, targets = primals
+    z = np.asarray(logits, dtype=np.float64)
+    dz = _float_tangent(tangents, 0, z)
+    b, valid = _ordinal_indicators(np.asarray(targets), z.shape, ignore_index)
+    s = 0.5 * (1.0 + np.tanh(0.5 * z))
+    loss = np.sum(np.maximum(z, 0.0) - z * b + np.log1p(np.exp(-np.abs(z))), axis=-1)
+    tangent = np.sum((s - b) * dz, axis=-1)
+    return (_masked_reduce(loss, valid, reduction),
+            _masked_reduce(tangent, valid, reduction))
+
+
+@_jvp("soft_binned_ece")
+def jvp_soft_binned_ece(primals, tangents, *, n_bins=15, temperature=1e-3, **_):
+    from tessera.calibration import _check_n_bins, _soft_memberships
+
+    confidences, correct = primals
+    c = np.asarray(confidences, dtype=np.float64).reshape(-1)
+    a = np.asarray(correct, dtype=np.float64).reshape(-1)
+    dc = _float_tangent(tangents, 0, np.asarray(confidences)).reshape(-1)
+    da = _float_tangent(tangents, 1, np.asarray(correct)).reshape(-1)
+    u, dl = _soft_memberships(c, _check_n_bins(n_bins), float(temperature))
+    d = a - c
+    r = u.T @ d
+    du = u * (dl - np.sum(u * dl, axis=-1, keepdims=True)) * dc[:, None]
+    dr = du.T @ d + u.T @ (da - dc)
+    return (np.float64(np.sum(np.abs(r)) / c.size),
+            np.float64(np.sum(np.sign(r) * dr) / c.size))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Clifford / GA primitives (Cl(3,0)). Linear ops: tangent = op(tangent). Bilinear
 # ops f(a,b): tangent = f(da, b) + f(a, db). Norms: directional derivative.
 # Validated against finite-difference in tests/unit/test_clifford_ops_autodiff.py.

@@ -98,13 +98,13 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `tan` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `tanh` | elementwise | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `ebm_bivector_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
-| `ebm_decode_init` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
+| `ebm_decode_init` | energy_based_models | public | public | not_applicable | planned | fused | fused | fused | benchmarked |
 | `ebm_energy` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
 | `ebm_energy_quadratic` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_inner_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_langevin_step` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_langevin_step_philox` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | none |
-| `ebm_partition_exact` | energy_based_models | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
+| `ebm_partition_exact` | energy_based_models | public | public | not_applicable | planned | fused | fused | fused | benchmarked |
 | `ebm_refinement` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_self_verify` | energy_based_models | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `ebm_sphere_langevin` | energy_based_models | public | public | not_applicable | not_applicable | fused | fused | fused | benchmarked |
@@ -129,7 +129,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `clifford_grade_projection` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_hodge_star` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_inner` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
-| `clifford_integral` | geometric_algebra | public | public | not_applicable | complete | fused | fused | fused | benchmarked |
+| `clifford_integral` | geometric_algebra | public | public | not_applicable | planned | fused | fused | fused | benchmarked |
 | `clifford_left_contraction` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_log` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
 | `clifford_norm` | geometric_algebra | public | public | not_applicable | complete | fused | fused | ready | benchmarked |
@@ -226,7 +226,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `scaled_matmul` | loop_nest | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `tridiagonal_solve` | loop_nest | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `asymmetric_bce` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `binary_brier_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `brier_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `contrastive_divergence_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `cross_entropy_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `ddpm_noise_pred_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -240,9 +242,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `log_cosh_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `mae_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `mse_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `ordinal_logistic_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `persistent_cd_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `score_matching_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `smooth_l1_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `soft_binned_ece` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `vlb_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `z_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `linear_general` | model_layer | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -383,10 +387,10 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | comparison | 6 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | contraction | 4 | PPGCFCN· PPGCpRN· PPGCpRN· PPGCpRN· |
 | elementwise | 37 | PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCFCNB PPGCFHN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCNB PPGCFCN· PPGCFCN· PPGCFCNB |
-| energy_based_models | 11 | PPnnFFFB PPnCFFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPnCFFFB PPnCFFNB PPnCFFNB PPnnFFFB |
+| energy_based_models | 11 | PPnnFFFB PPn·FFFB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFN· PPn·FFFB PPnCFFNB PPnCFFNB PPnnFFFB |
 | functional_optimizer_step | 11 | PPGCpRN· PPGCFCNB PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· |
 | fused_epilogue | 1 | PPGCFCN· |
-| geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
+| geometric_algebra | 18 | PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPn·FFFB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB PPnCFFNB |
 | indexing | 16 | PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCFFNB PPGCFFNB PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB |
 | layout_transform | 33 | PPGCnnN· PPGCnnN· PPGCFFNB PPGCFCN· PPGCFFNB PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCnnN· PPGCnnN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCFCN· PPGCnnN· PPGCFCN· PPGCFCN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCFCN· PPGCnnN· PPGCFCN· PPGCFnN· PPGCFFNB PPGCFFNB PPGCnnN· PPGCpRN· PPGCnnN· |
 | linalg_decomposition | 5 | PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· |
@@ -395,7 +399,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_solver | 3 | PPGCFCN· PPGCpRN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | loop_nest | 15 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· PPGCFCNB PPGCFCN· |
-| loss | 20 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| loss | 24 | PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· |
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |
 | moe_transport | 2 | PPGCFCN· PPGCFCN· |

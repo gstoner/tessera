@@ -2709,22 +2709,27 @@ _TRACED_GRAPH_LOWERINGS: dict[str, str] = {
     "scan":       "tessera.control_scan",   # Tracer.record_scan
 }
 
-#: Graph-less GA/EBM rows whose Graph-level op lives in a domain dialect rather
-#: than `op_catalog` (`src/solvers/{ebm,clifford}/lib/Dialect/*/*Ops.td`).  The
-#: value is the ODS op mnemonic plus, where one op serves several rows, the
-#: semantic attribute that selects this row.  `test_graphless_lowering_rule_gate`
-#: asserts each op is declared in its ODS file.  The ``*_langevin_sample``
-#: drivers are deliberately absent: they are loops over ``langevin_step`` with
-#: no op of their own.
-_DIALECT_GRAPH_LOWERINGS: dict[str, str] = {
-    "clifford_integral":          "tessera_clifford.integral",
-    "ebm_energy":                 "tessera_ebm.energy",
-    "ebm_decode_init":            "tessera_ebm.decode_init",
-    "ebm_partition_exact":        'tessera_ebm.partition_z method="exact"',
-    "ebm_partition_monte_carlo":  'tessera_ebm.partition_z method="monte_carlo"',
-    "ebm_partition_ais":          'tessera_ebm.partition_z method="annealed"',
-    "ebm_sphere_langevin_step":   'tessera_ebm.langevin_step manifold="sphere"',
-    "ebm_bivector_langevin_step": 'tessera_ebm.langevin_step manifold="bivector"',
+#: Graph-less EBM rows whose Graph-level op lives in a domain dialect rather
+#: than `op_catalog`, and which a real producer EMITS.  Declaration in ODS is
+#: not evidence (Decision #29): an entry needs a compiler producer, and the
+#: value names it.  `test_graphless_lowering_rule_gate` calls each producer and
+#: asserts the op (with this row's semantic attribute) is in its output, and
+#: re-derives each op's tier from `ods_consumer_audit` (Decision #30), which
+#: must be ``compiler``.  Deliberately absent, measured 2026-10-11 with that
+#: audit: ``tessera_ebm.partition_z`` (ebm_partition_exact / _monte_carlo /
+#: _ais) is ``fixture_only``; ``tessera_clifford.integral`` is ``unreferenced``;
+#: ``tessera_ebm.decode_init`` has a consuming pass (PipelineCandidates) but no
+#: producer; the ``*_langevin_sample`` drivers have no op of their own.
+_DIALECT_GRAPH_LOWERINGS: dict[str, tuple[str, str]] = {
+    # name: (op [semantic attr], producer)
+    "ebm_energy": (
+        "tessera_ebm.energy", "tessera.ebm.native_langevin.langevin_loop_module"),
+    "ebm_sphere_langevin_step": (
+        'tessera_ebm.langevin_step manifold="sphere"',
+        "tessera.ebm.native_langevin.langevin_loop_module"),
+    "ebm_bivector_langevin_step": (
+        'tessera_ebm.langevin_step manifold="bivector"',
+        "tessera.ebm.native_langevin.langevin_loop_module"),
 }
 
 #: Recorded on a row's ``metadata["lowering_rule_reason"]`` when the row has no
@@ -2743,7 +2748,7 @@ def _has_graph_lowering(name: str, graph_name: str | None) -> bool:
     Evidence, in order: the row's own ``graph_name``; an `op_catalog` OpSpec
     under the public name (the GA4/EBM `_planned` rows skip the OpSpec import
     but the op exists); a tracer emission recorded in
-    ``_TRACED_GRAPH_LOWERINGS``; or a domain-dialect op recorded in
+    ``_TRACED_GRAPH_LOWERINGS``; or a produced domain-dialect op recorded in
     ``_DIALECT_GRAPH_LOWERINGS``.
     """
     if graph_name is not None:
@@ -3236,6 +3241,15 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "karras_sigma_schedule": ("diffusion_schedule", "EDM Karras ρ=7 inference σ discretization — landed 2026-06-21"),
         "ctc_loss": ("loss", "small CPU-reference CTC loss — S11 landed 2026-05-10"),
         "seq2seq_loss": ("loss", "masked seq2seq cross-entropy loss — S11 landed 2026-05-10"),
+        # Calibrated decision heads (2026-10-11): strictly proper scoring rules
+        # for bounded categorical / Bernoulli / ordinal heads, plus the soft-
+        # binned ECE training penalty (python/tessera/{losses,calibration}.py).
+        # Python reference + analytic VJP/JVP only; NOT op_catalog Graph ops,
+        # so no Graph IR, lowering or backend kernel is claimed.
+        "brier_loss": ("loss", "multiclass Brier score from logits (quadratic proper scoring rule) — Python reference, landed 2026-10-11"),
+        "binary_brier_loss": ("loss", "binary Brier score from logits — Python reference, landed 2026-10-11"),
+        "ordinal_logistic_loss": ("loss", "CORAL-style ordinal loss over K-1 threshold logits — Python reference, landed 2026-10-11"),
+        "soft_binned_ece": ("loss", "differentiable soft-binned expected calibration error (training penalty) — Python reference, landed 2026-10-11"),
         # S12 — serialization + checkpointing (python/tessera/checkpoint.py)
         "save_state": ("serialization", "versioned state-tree binary save — S12 landed 2026-05-10"),
         "load_state": ("serialization", "versioned state-tree binary load — S12 landed 2026-05-10"),

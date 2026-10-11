@@ -14,11 +14,11 @@
 
 | Axis | Open (partial+planned) | Complete |
 |---|---:|---:|
-| `batching_rule` | 1 | 523 |
-| `transpose_rule` | 1 | 523 |
-| `sharding_rule` | 61 | 463 |
-| `lowering_rule` | 103 | 421 |
-| `backend_kernel` | 424 | 100 |
+| `batching_rule` | 1 | 527 |
+| `transpose_rule` | 1 | 527 |
+| `sharding_rule` | 61 | 467 |
+| `lowering_rule` | 108 | 420 |
+| `backend_kernel` | 428 | 100 |
 
 ## Backend Proof By Target
 
@@ -26,17 +26,17 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `cpu` | 370 | 0 | 0 | 370 | 0 | 0 | 154 |
-| `x86` | 350 | 294 | 49 | 7 | 0 | 0 | 174 |
-| `apple_cpu` | 406 | 0 | 4 | 399 | 3 | 0 | 118 |
-| `apple_gpu` | 211 | 148 | 52 | 4 | 7 | 0 | 313 |
-| `rocm` | 356 | 346 | 0 | 2 | 8 | 0 | 168 |
-| `nvidia_sm80` | 75 | 0 | 0 | 0 | 75 | 0 | 449 |
-| `nvidia_sm90` | 108 | 0 | 0 | 2 | 106 | 0 | 416 |
-| `nvidia_sm100` | 75 | 0 | 0 | 0 | 75 | 0 | 449 |
-| `nvidia_sm120` | 137 | 71 | 0 | 0 | 66 | 0 | 387 |
-| `rocm_gfx1151` | 8 | 8 | 0 | 0 | 0 | 0 | 516 |
-| `rocm_gfx1201` | 10 | 10 | 0 | 0 | 0 | 0 | 514 |
+| `cpu` | 374 | 0 | 0 | 374 | 0 | 0 | 154 |
+| `x86` | 354 | 294 | 49 | 11 | 0 | 0 | 174 |
+| `apple_cpu` | 410 | 0 | 4 | 403 | 3 | 0 | 118 |
+| `apple_gpu` | 211 | 148 | 52 | 4 | 7 | 0 | 317 |
+| `rocm` | 360 | 346 | 0 | 2 | 12 | 0 | 168 |
+| `nvidia_sm80` | 79 | 0 | 0 | 0 | 79 | 0 | 449 |
+| `nvidia_sm90` | 112 | 0 | 0 | 2 | 110 | 0 | 416 |
+| `nvidia_sm100` | 79 | 0 | 0 | 0 | 79 | 0 | 449 |
+| `nvidia_sm120` | 141 | 71 | 0 | 0 | 70 | 0 | 387 |
+| `rocm_gfx1151` | 8 | 8 | 0 | 0 | 0 | 0 | 520 |
+| `rocm_gfx1201` | 10 | 10 | 0 | 0 | 0 | 0 | 518 |
 
 ## Per-category breakdown
 
@@ -51,13 +51,13 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S7 | `position_encoding` | 3 | — | — | — | 1 | 3 |
 | S7 | `normalization` | 12 | — | — | — | 1 | 12 |
 | S7 | `memory` | 3 | — | — | — | — | 1 |
-| S7 | `geometric_algebra` | 17 | — | — | — | — | 17 |
+| S7 | `geometric_algebra` | 17 | — | — | — | 1 | 17 |
 | S10 | `optimizer` | 5 | — | — | — | 3 | 4 |
 | S10 | `schedule` | 8 | — | — | — | — | — |
 | S10 | `grad_transform` | 7 | — | — | — | 7 | — |
-| S11 | `loss` | 29 | — | — | — | 9 | 29 |
+| S11 | `loss` | 33 | — | — | — | 9 | 33 |
 | S11 | `rl_loss` | 4 | — | — | — | — | 4 |
-| M6 | `ebm` | 15 | — | — | 7 | 2 | 15 |
+| M6 | `ebm` | 15 | — | — | 7 | 6 | 15 |
 | S15 | `data` | 11 | — | — | — | — | — |
 | S15 | `tokenizer` | 5 | — | — | — | — | — |
 | other | `acceptance_verification` | 4 | — | — | — | — | 4 |
@@ -114,13 +114,13 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 | S5 | 7 | 0 | 0 | 0 | 0 |
 | S7 | 65 | 0 | 0 | 16 | 63 |
 | S10 | 20 | 0 | 0 | 0 | 4 |
-| S11 | 33 | 0 | 0 | 0 | 33 |
+| S11 | 37 | 0 | 0 | 0 | 37 |
 | S15 | 16 | 0 | 0 | 0 | 0 |
 | M6 | 15 | 0 | 0 | 7 | 15 |
 | other | 312 | 1 | 1 | 38 | 260 |
 
 ## Closure trajectory
 
-* `lowering_rule` has 103 open rows. 100 are Graph-less Python references that used to read `complete` off a category or per-name rule; with no Graph IR op there is nothing for a decomposition to be consumed by, so each row records `metadata.lowering_rule_reason` (GRAPHLESS-LOWERING-1, 2026-10-11). The rest are named exceptions in `test_s_series_status_dashboard.py`.
+* `lowering_rule` has 108 open rows. 105 are Graph-less Python references that used to read `complete` off a category or per-name rule; with no Graph IR op there is nothing for a decomposition to be consumed by, so each row records `metadata.lowering_rule_reason` (GRAPHLESS-LOWERING-1, 2026-10-11). The rest are named exceptions in `test_s_series_status_dashboard.py`.
 * `backend_kernel` is a conservative registry-level compatibility axis, not the architecture completion signal.  Read **Backend Proof By Target** for ROCm/x86/Apple/NVIDIA status.
 * `batching_rule` / `transpose_rule` / `sharding_rule` are the closable axes today.  A category-by-category promotion sprint should focus on the rows above with `priority ≤ 50`.

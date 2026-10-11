@@ -11,7 +11,7 @@ of those had no Graph op by any route (e.g. ``wasserstein_distance``, an
 
 from __future__ import annotations
 
-import re
+import importlib
 from pathlib import Path
 
 import numpy as np
@@ -119,25 +119,84 @@ def test_pipeline_legality_refuses_graphless_reference() -> None:
 
 
 _REPO = Path(__file__).resolve().parents[2]
-_DIALECT_ODS = {
-    "tessera_ebm": (_REPO / "src/solvers/ebm/lib/Dialect/EBM/EBMOps.td", "EBMOp"),
-    "tessera_clifford": (
-        _REPO / "src/solvers/clifford/lib/Dialect/Clifford/CliffordOps.td", "CliffordOp"),
+
+#: Inputs that make each producer emit the row's op.
+_PRODUCER_ARGS = {
+    "ebm_energy": dict(shape=(2, 4), manifold="euclidean"),
+    "ebm_sphere_langevin_step": dict(shape=(2, 4), manifold="sphere"),
+    "ebm_bivector_langevin_step": dict(shape=(2, 8), manifold="bivector"),
 }
 
 
+def _producer(path: str):
+    module, _, attr = path.rpartition(".")
+    return getattr(importlib.import_module(module), attr)
+
+
+def test_dialect_lowering_table_is_fully_exercised() -> None:
+    assert set(_PRODUCER_ARGS) == set(pc._DIALECT_GRAPH_LOWERINGS)
+
+
 @pytest.mark.parametrize("name", sorted(pc._DIALECT_GRAPH_LOWERINGS))
-def test_dialect_lowering_table_names_a_declared_op(name: str) -> None:
-    op, *selector = pc._DIALECT_GRAPH_LOWERINGS[name].split(" ", 1)
-    dialect, mnemonic = op.split(".", 1)
-    ods, base = _DIALECT_ODS[dialect]
-    text = ods.read_text()
-    assert re.search(rf'def \w+ : {base}<"{re.escape(mnemonic)}"', text), (name, op)
+def test_dialect_lowering_table_names_a_real_producer(name: str) -> None:
+    """Evidence is emission, not declaration: the named producer must put the
+    op -- with this row's semantic attribute -- into the IR it builds."""
+    op_spec, producer = pc._DIALECT_GRAPH_LOWERINGS[name]
+    op, *selector = op_spec.split(" ", 1)
+    text = _producer(producer)(
+        **_PRODUCER_ARGS[name], eta=0.1, temperature=1.0, steps=2)
+    assert f'"{op}"' in text, (name, op)
     if selector:
-        # The semantic attribute that picks this row must be documented on
-        # the op (e.g. partition_z's `method`, langevin_step's `manifold`).
         attr, value = selector[0].split("=", 1)
-        assert f"${attr}" in text and value.strip('"') in text, (name, selector)
+        assert f"{attr} = {value}" in text, (name, selector)
     entry = pc.coverage_for(name)
     assert entry.contract_status["lowering_rule"] == "complete"
     assert "lowering_rule_reason" not in entry.metadata
+
+
+@pytest.fixture(scope="module")
+def ods_tiers() -> dict[str, str]:
+    """Each dialect op's tier from the ODS consumer audit (Decision #30: reuse
+    it, do not hand-roll a walker). The registry module itself is excluded so
+    its own table strings cannot vouch for the ops it lists."""
+    from tessera.compiler import ods_consumer_audit as audit
+
+    ops = audit.declared_ops()
+    corpus = audit.build_corpus(
+        exclude=[_REPO / "python/tessera/compiler/primitive_coverage.py",
+                 Path(__file__).resolve()],
+        names={op.full_name for op in ops})
+    tiers = audit.classify(ops, corpus)
+    return {op.full_name: tiers[op.key] for op in ops}
+
+
+@pytest.mark.parametrize("name", sorted(pc._DIALECT_GRAPH_LOWERINGS))
+def test_dialect_lowering_ops_are_compiler_tier(name: str, ods_tiers) -> None:
+    op = pc._DIALECT_GRAPH_LOWERINGS[name][0].split(" ", 1)[0]
+    assert ods_tiers[op] == "compiler", (name, op, ods_tiers[op])
+
+
+# (dialect, mnemonic) rather than the dotted name: this test never builds the
+# op, and spelling it whole would make `test_ods_op_has_consumer`'s scan count
+# this file as a fixture reference and move `integral` off `unreferenced`.
+@pytest.mark.parametrize("name,dialect,mnemonic", [
+    ("ebm_partition_exact", "tessera_ebm", "partition_z"),
+    ("ebm_partition_monte_carlo", "tessera_ebm", "partition_z"),
+    ("ebm_partition_ais", "tessera_ebm", "partition_z"),
+    ("clifford_integral", "tessera_clifford", "integral"),
+    ("ebm_decode_init", "tessera_ebm", "decode_init"),
+])
+def test_declared_but_unproduced_dialect_op_does_not_admit_lowering(
+        name: str, dialect: str, mnemonic: str, ods_tiers) -> None:
+    """An op that exists only in ODS (fixture_only / unreferenced), or is read
+    by a pass (PipelineCandidates reads decode_init) but emitted by nothing, is
+    not evidence a row lowers."""
+    op = f"{dialect}.{mnemonic}"
+    if mnemonic != "decode_init":
+        assert ods_tiers[op] in {"fixture_only", "unreferenced"}, (op, ods_tiers[op])
+    assert name not in pc._DIALECT_GRAPH_LOWERINGS
+    entry = pc.coverage_for(name)
+    assert entry.contract_status["lowering_rule"] in {"partial", "planned"}
+    assert entry.metadata["lowering_rule_reason"] == pc.GRAPHLESS_LOWERING_REASON
+    refused = pipeline_gates._eval_legality("x86", name)
+    assert refused.status == pipeline_gates.STATUS_FAIL

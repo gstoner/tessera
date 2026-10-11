@@ -96,8 +96,12 @@ tensor,avg_pool,chain,not_applicable,0
 tensor,batched_gemm,adjoint,pass,4
 tensor,batched_gemm,chain,pass,2
 tensor,bidirectional_scan,adjoint,no_spec,0
+tensor,binary_brier_loss,adjoint,pass,4
+tensor,binary_brier_loss,chain,pass,2
 tensor,binary_cross_entropy_loss,adjoint,pass,4
 tensor,binary_cross_entropy_loss,chain,pass,2
+tensor,brier_loss,adjoint,pass,4
+tensor,brier_loss,chain,pass,2
 tensor,broadcast,adjoint,pass,4
 tensor,broadcast,chain,pass,2
 tensor,broadcast_to_axis,adjoint,pass,4
@@ -453,6 +457,7 @@ tensor,ntk_rope,chain,pass,2
 tensor,online_softmax,adjoint,pass,4
 tensor,online_softmax,chain,pass,2
 tensor,online_softmax_state,adjoint,pass,4
+tensor,ordinal_logistic_loss,adjoint,pass,4
 tensor,pad,adjoint,pass,4
 tensor,pad,chain,pass,2
 tensor,patchify,adjoint,pass,4
@@ -560,6 +565,8 @@ tensor,slice,adjoint,pass,4
 tensor,slice,chain,pass,2
 tensor,smooth_l1_loss,adjoint,pass,4
 tensor,smooth_l1_loss,chain,pass,2
+tensor,soft_binned_ece,adjoint,pass,4
+tensor,soft_binned_ece,chain,pass,2
 tensor,soft_top_k,adjoint,pass,4
 tensor,soft_top_k,chain,pass,2
 tensor,softcap,adjoint,pass,4

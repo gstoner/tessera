@@ -5,6 +5,23 @@ plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
 
+## PUBLIC-NATIVE-JVP-GFX1201-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+The public JVP projection executes named continuous FP32 scaled products on
+GFX1201 through typed Graph AD/native Schedule/Tile/ROCm/LLVM/HSACO and checked
+HIP ownership. Caller Graph/request identity is preserved. 36 exact-device
+tests cover both operand transpose flags, direct/nested leading maps,
+non-leading output placement, inactive tangents and warm compiler refusal.
+A fresh matching compiler and fresh providers execute both 36-profile packets.
+All 23 source pins match. Maximum absolute error is 8.189881861575543e-8.
+Completed public medians span 1.065–2.643 ms; native interleaved event medians
+span 4.072–25.124 us. Captured member windows exceed 3.170 ms and retain
+their separate diagnostic schedule. No speedup or generic closure is claimed.
+Evidence: benchmarks/baselines/public_native_scaled_jvp_20261009/README.md.
+Shared synchronization key: PUBLIC-NATIVE-JVP-20261009.
+Parity validated for this named gfx1201 continuous FP32 envelope. Follow-up required: public preparation/binding overhead, mixed-axis/general compositions, generic batching/transpose closure and quantized AD. gfx1151 has no execution claim here.
+
 ## PUBLIC-NATIVE-JVP-20261009
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.

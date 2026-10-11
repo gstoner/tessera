@@ -1365,6 +1365,12 @@ class GraphIRModule:
     meshes: List[GraphIRMesh] = field(default_factory=list)
     type_aliases: List[GraphIRTypeAlias] = field(default_factory=list)
     constants: List[GraphIRConstant] = field(default_factory=list)
+    #: Frontend provenance, never printed: the dotted spelling of every call
+    #: the AST front end could not map to a Graph op and therefore dropped.
+    #: Kept on the module (not only in builder diagnostics) so it survives
+    #: the Graph IR cache, whose hits carry no diagnostics; ``@jit`` reads it
+    #: to refuse a native target that would otherwise run the call eagerly.
+    frontend_unlowered_calls: List[str] = field(default_factory=list)
 
     def verify(self, *, target: object = "cpu") -> "GraphIRVerificationResult":
         return GraphIRVerifier().verify_module(self, target=target)
@@ -1832,6 +1838,9 @@ class _OpExtractor(ast.NodeVisitor):
                  const_env: Optional[Dict[str, Any]] = None) -> None:
         self.ops: List[IROp] = []
         self.diagnostics: List[GraphIRDiagnostic] = []
+        # Dotted spellings of calls dropped as "not a registered Graph
+        # operation"; surfaced on the module as ``frontend_unlowered_calls``.
+        self.unlowered_calls: List[str] = []
         self._counter = 0
         self._arg_names = set(arg_names)
         # Scalar constants captured from the function's closure / module globals
@@ -2388,6 +2397,9 @@ class _OpExtractor(ast.NodeVisitor):
         if isinstance(node, ast.Call):
             op = self._try_map_call(node)
             if op is None:
+                callee = self._resolve_name(node.func)
+                if callee:
+                    self.unlowered_calls.append(callee)
                 self._unsupported(
                     node,
                     "call target is not a registered Graph operation",
@@ -4908,6 +4920,8 @@ class GraphIRBuilder:
                     break
 
         self.diagnostics.extend(extractor.diagnostics)
+        self.context.module.frontend_unlowered_calls.extend(
+            extractor.unlowered_calls)
         self._last_return_values = list(extractor.return_values)
         self._last_return_types = list(extractor.return_result_types)
         return extractor.ops

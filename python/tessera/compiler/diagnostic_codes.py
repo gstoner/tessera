@@ -831,6 +831,28 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
         status="implemented",
     ),
     DiagnosticCode(
+        code="JIT_UNLOWERED_OP_NATIVE_TARGET",
+        pass_origin="tessera.compiler.JitDiagnosticCode",
+        severity="error",
+        summary=(
+            "@jit(target=...) named a native target, but the body calls a "
+            "`tessera.ops` callable the Graph IR front end could not lower "
+            "(no op_catalog OpSpec, or an unrecognized spelling). The op is "
+            "absent from Graph IR, so nothing compiles and the call would "
+            "silently execute eager Python while looking like a compiled "
+            "run. Decision #21: refuse, naming the op and the target."
+        ),
+        fix_hint=(
+            "Register the op in `op_catalog` with a Graph IR lowering for "
+            "the target, express it through catalogued `tessera.ops.*` "
+            "calls, or drop `target=` to run on the reference lane."
+        ),
+        spec=None,
+        sprint="JIT-UNLOWERED-OP-2026-10-11",
+        language="python",
+        status="implemented",
+    ),
+    DiagnosticCode(
         code="JIT_APPLE_GPU_AUTO_BATCH",
         pass_origin="tessera.compiler.JitDiagnosticCode",
         # Registry severity is warning per the registry's accepted set; the

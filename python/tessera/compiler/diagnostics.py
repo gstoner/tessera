@@ -131,6 +131,14 @@ class JitDiagnosticCode(str, Enum):
     #: ``TesseraTraceError`` is NOT lifted -- it already names the construct.
     APPLE_GPU_TRACE_FAILED = "JIT_APPLE_GPU_TRACE_FAILED"
 
+    #: Error-level: ``@jit(target=<native>)`` was requested for a body that
+    #: calls a ``tessera.ops`` callable the Graph IR front end dropped (no
+    #: ``op_catalog`` OpSpec, or a spelling the front end does not resolve).
+    #: Without the op in Graph IR nothing compiles and the call would run as
+    #: eager Python while reporting no fallback. Raised at decoration time,
+    #: mirroring the source-unavailable refusal (Decision #21).
+    UNLOWERED_OP_NATIVE_TARGET = "JIT_UNLOWERED_OP_NATIVE_TARGET"
+
 
 class FrontendDiagnosticCode(str, Enum):
     """Textual-DSL frontend (``tessera.compiler.frontend.parser``).

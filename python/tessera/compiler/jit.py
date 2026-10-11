@@ -4346,6 +4346,81 @@ def _jit_analyze_frontend(
     return _FrontendAnalysis(solver=solver, inferred_effect=inferred_effect)
 
 
+def _resolve_tessera_ops_callee(fn: Callable, dotted: str) -> Optional[str]:
+    """Return the ``tessera.ops`` public name a dropped call resolves to.
+
+    Resolution is by object identity against ``fn``'s globals and closure, so
+    every spelling counts (``ts.ops.x``, ``import tessera as T``,
+    ``from tessera.ops import x as y``). Only module attributes are traversed
+    (and ``SimpleNamespace``, which is what ``tessera.ops`` is) between the
+    root and the leaf: a dotted name through a user object is
+    never evaluated, since an attribute read there may run arbitrary code.
+    Returns ``None`` when the name does not resolve to a ``tessera.ops``
+    callable (a local, a numpy call, a user helper).
+    """
+    import types
+
+    from .. import ops as _ops
+
+    parts = dotted.split(".")
+    scope: Dict[str, Any] = dict(getattr(fn, "__globals__", {}) or {})
+    try:
+        scope.update(inspect.getclosurevars(fn).nonlocals)
+    except (TypeError, ValueError):
+        pass
+    if parts[0] not in scope:
+        return None
+    obj: Any = scope[parts[0]]
+    for part in parts[1:]:
+        if not isinstance(obj, (types.ModuleType, types.SimpleNamespace)):
+            return None
+        obj = getattr(obj, part, None)
+        if obj is None:
+            return None
+    if not callable(obj) or isinstance(obj, (types.ModuleType, type)):
+        return None
+    leaf = parts[-1]
+    if getattr(_ops, leaf, None) is obj:
+        return leaf
+    for name in dir(_ops):
+        if not name.startswith("_") and getattr(_ops, name, None) is obj:
+            return name
+    return None
+
+
+def _refuse_unlowered_ops_for_native_target(
+    fn: Callable, target: Any, unlowered_calls: Sequence[str],
+) -> None:
+    """Raise ``JIT_UNLOWERED_OP_NATIVE_TARGET`` for dropped ``tessera.ops`` calls."""
+    from .op_catalog import get_op_spec
+
+    dropped: Dict[str, str] = {}
+    for dotted in unlowered_calls:
+        name = _resolve_tessera_ops_callee(fn, dotted)
+        if name is not None and name not in dropped:
+            dropped[name] = dotted
+    if not dropped:
+        return
+    reasons = []
+    for name, dotted in dropped.items():
+        if get_op_spec(name) is None:
+            reasons.append(f"tessera.ops.{name} (called as {dotted!r}) has no op_catalog OpSpec")
+        else:
+            reasons.append(
+                f"tessera.ops.{name} (called as {dotted!r}) is catalogued, but the "
+                f"Graph IR front end does not resolve that spelling")
+    raise TesseraJitError(
+        f"[{JitDiagnosticCode.UNLOWERED_OP_NATIVE_TARGET.value}] "
+        f"@jit(target={target!r}) was requested for {fn.__name__!r}, but the "
+        f"Graph IR front end could not lower: {'; '.join(reasons)}. The call "
+        f"is absent from Graph IR, so nothing would compile for this target "
+        f"and the function would silently run as eager Python -- giving the "
+        f"appearance of a compiled run. Register the op in op_catalog with a "
+        f"lowering for this target, express it with catalogued tessera.ops "
+        f"calls, or drop target= to run on the reference lane."
+    )
+
+
 def _frontend_jit_diagnostics(builder: GraphIRBuilder) -> List[JitDiagnostic]:
     """Lift a builder's AST-lowering diagnostics into JitDiagnostics."""
     return [
@@ -4407,6 +4482,9 @@ def _jit_emit_graph_ir(
     # construct the AST front end could not lower, and the verifier error that
     # actually raises names only the dangling operand it left behind.
     frontend_diagnostics: list[JitDiagnostic] = []
+    # Calls the front end dropped, read off the module (cache hits included)
+    # so a verifier failure they caused is reported as the dropped op.
+    unlowered_calls: list[str] = []
     # Hoisted out of the try so the trace-defer handler can re-lower with the
     # same inputs rather than recomputing them. Safe to move: both are total
     # over an already-validated ``target`` (``normalize_target_kind`` ran and
@@ -4458,6 +4536,7 @@ def _jit_emit_graph_ir(
                 source_location=source_location,
                 constant_environment=constant_environment,
             )
+        unlowered_calls = list(module.frontend_unlowered_calls)
         diagnostics: list[JitDiagnostic] = list(frontend_diagnostics)
         if source_text is None:
             diagnostics.append(JitDiagnostic(
@@ -4535,6 +4614,14 @@ def _jit_emit_graph_ir(
         # graph_ir), so a body the AST can't emit still decorates and runs via
         # the tracer at call time. Other targets depend on the IR → re-raise.
         if target_kind != "apple_gpu":
+            # A dropped tessera.ops call surfaces here as the dangling operand
+            # it left behind; name the op, not the symptom.
+            if target is not None and target_kind != "cpu":
+                try:
+                    _refuse_unlowered_ops_for_native_target(
+                        fn, target, unlowered_calls)
+                except TesseraJitError as refusal:
+                    raise refusal from exc
             raise TesseraJitError(
                 f"Graph IR emission failed for {fn.__name__!r}: {exc}"
             ) from exc
@@ -4755,6 +4842,29 @@ def jit(
         compile_result = emission.compile_result
         diagnostics = emission.diagnostics
         _trace_deferred = emission.trace_deferred
+
+        # ── Step 6a: refuse a native target that would drop a tessera.ops call ─
+        # Same failure as the Step 0 source refusal, reached by a different
+        # road: the AST front end drops any call it cannot map to a Graph op
+        # (an uncatalogued ``tessera.ops`` name, or an unrecognized spelling),
+        # the unknown call joins the effect to ``top`` so no tracer captures
+        # it either, and ``__call__`` ends at ``self._fn`` -- eager numpy with
+        # ``last_fallback_reason`` None. Reference execution (no target, or
+        # ``cpu``) keeps that eager path, exactly as Step 0 does. An apple_gpu
+        # body routed to the Phase-F tracer (trace-deferred, or control flow)
+        # is left to the tracer: it is that body's call-time authority, runs
+        # the ops it models on the device, and fails as
+        # JIT_APPLE_GPU_TRACE_FAILED rather than falling back. The
+        # emission-failure path of other targets refuses inside
+        # ``_jit_emit_graph_ir``.
+        if target is not None and target_kind != "cpu":
+            _tracer_routed = False
+            if target_kind == "apple_gpu":
+                from .trace import function_needs_tracer
+                _tracer_routed = _trace_deferred or function_needs_tracer(module, fn)
+            if not _tracer_routed:
+                _refuse_unlowered_ops_for_native_target(
+                    fn, target, module.frontend_unlowered_calls)
 
         # PK8a wiring (2026-06-02) — recognize whether this module's compute
         # region is an authorable Apple-GPU packaged kernel (matmul / a single

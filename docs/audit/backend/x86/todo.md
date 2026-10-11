@@ -10633,3 +10633,10 @@ Not applicable to x86 execution: these schema IDs describe the SM120 attention J
 Owner: none. No work item covers host-aware test skips, so this records the shared change under its own sync key (nearest family: the evidence-governance gates, GOV-ODS-CONSUMER-1). Shared change: `tests/conftest.py` now converts a failure to a skip when `tests/_support/backend_absence.py` matches a known backend-absent message **and** a probe of the running host confirms the dialect, pass or tool is missing; fixture setup is covered too. Two lit fixtures that mixed backends were split. A host that has the backend never skips: the message there stays a failure.
 
 Not applicable to x86 execution: no x86 lane matches the hook's NVIDIA/ROCm patterns, and no x86 test changed. The x86 fixtures touched indirectly are unchanged: `layout_target_materializers.mlir` keeps its x86 materializer RUN, passing on the Mac and on The-Super-Bear (x86 RUN by hand). No AVX-512 execution evidence is claimed or affected.
+
+
+## JIT-UNLOWERED-OP-2026-10-11
+
+Owner: none (frontend; nearest family: E2E-REAL-6 frontend authority). Shared change: `@jit(target=<native>)` now raises `JIT_UNLOWERED_OP_NATIVE_TARGET` at decoration when the body calls a `tessera.ops` callable the AST Graph IR front end dropped (no `op_catalog` OpSpec, or a spelling it does not resolve). Before, the call left an empty `func.func` body, the effect joined to `top` so no tracer captured it, and `JitFn.__call__` returned eager numpy with `last_fallback_reason` None and no artifact. The dropped spellings ride on `GraphIRModule.frontend_unlowered_calls` so the refusal survives Graph IR cache hits; resolution is by object identity, so aliases count. No target and `target="cpu"` keep the eager reference path. Non-`tessera.ops` calls (numpy, user helpers) are out of scope and still fall back eagerly: recorded follow-up, not closed. Test: `tests/unit/test_jit_unlowered_op_native_target.py`.
+
+x86: `target="x86"` refuses like every native target; `target="cpu"` (the reference lane) is unchanged. No AVX-512 execution evidence is claimed or affected.

@@ -376,14 +376,23 @@ def test_fit_temperature_all_constant_rows_stay_unidentifiable_not_separable():
         ([-0.1], [1.0], "confidences"),
         ([np.nan], [1.0], "confidences"),
         ([np.inf], [1.0], "confidences"),
-        ([0.5], [2.0], "correct"),
-        ([0.5], [-1.0], "correct"),
         ([0.5], [np.nan], "correct"),
+        ([0.5], [np.inf], "correct"),
     ],
 )
 def test_soft_binned_ece_rejects_malformed_probabilities(confidences, correct, fragment):
     with pytest.raises(ValueError, match=fragment):
         cal.soft_binned_ece(confidences, correct)
+
+
+def test_soft_binned_ece_differentiates_correct_past_hard_labels():
+    """`correct` is checked for finiteness only. The rule differentiates it, and
+    the chain law's finite difference at a hard 0/1 label steps just outside
+    [0, 1]; rejecting that turned the law sweep into a rule_error (CI on PR
+    #938, commit c50074d9f)."""
+    conf = np.array([0.3, 0.8])
+    out = cal.soft_binned_ece(conf, np.array([1.0 + 1e-6, -1e-6]))
+    assert np.isfinite(out)
 
 
 def test_soft_binned_ece_accepts_the_closed_unit_interval():

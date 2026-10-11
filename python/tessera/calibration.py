@@ -216,7 +216,11 @@ def soft_binned_ece(confidences, correct, *, n_bins: int = 15,
     if c.size == 0:
         raise ValueError("soft_binned_ece needs at least one prediction")
     _check_unit_interval("confidences", c, hint=" — were logits passed? apply softmax / sigmoid first")
-    _check_unit_interval("correct", a)
+    # `correct` is checked for finiteness only: the rule differentiates it
+    # (soft / label-smoothed outcomes), and a derivative at a hard 0/1 label
+    # must be able to step just outside [0, 1].
+    if not np.all(np.isfinite(a)):
+        raise ValueError("correct must be finite")
     u, _ = _soft_memberships(c, m, float(temperature))
     r = u.T @ (a - c)
     return np.float64(np.sum(np.abs(r)) / c.size)

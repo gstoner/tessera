@@ -27,15 +27,8 @@ those is the coarse-grid relative error, not a tolerance.
 | adjoint | no_spec | 8 |
 | adjoint | pass | 314 |
 | chain | not_applicable | 36 |
-| chain | pass | 226 |
-| chain | rule_error | 1 |
+| chain | pass | 227 |
 | kink | pass | 12 |
-
-**Flagged (findings — triage before trusting the affected rules):**
-
-| Op | Law | Status | Detail |
-|---|---|---|---|
-| `soft_binned_ece` | chain | rule_error | ValueError: correct must be finite and lie in [0, 1] |
 
 ## `geometric` registry
 

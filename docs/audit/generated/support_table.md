@@ -226,7 +226,9 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `scaled_matmul` | loop_nest | public | public | registered | complete | fused | device_verified_jit | ready | benchmarked |
 | `tridiagonal_solve` | loop_nest | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `asymmetric_bce` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `binary_brier_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `binary_cross_entropy_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `brier_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `contrastive_divergence_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `cross_entropy_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `ddpm_noise_pred_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -240,9 +242,11 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | `log_cosh_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `mae_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `mse_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `ordinal_logistic_loss` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `persistent_cd_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `score_matching_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `smooth_l1_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
+| `soft_binned_ece` | loss | public | public | registered | complete | partial | reference | ready | none |
 | `vlb_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `z_loss` | loss | public | public | registered | complete | fused | device_verified_jit | ready | none |
 | `linear_general` | model_layer | public | public | registered | complete | fused | device_verified_jit | ready | none |
@@ -395,7 +399,7 @@ only · `N` native runtime · `B` benchmarked · `·` planned / none / missing.
 | linalg_solver | 3 | PPGCFCN· PPGCpRN· PPGCFCN· |
 | logical | 8 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
 | loop_nest | 15 | PPGCFFN· PPGCFCN· PPGCFFNB PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFCN· PPGCFCN· PPGCFCN· PPGCFHNB PPGCFFNB PPGCFHN· PPGCFCNB PPGCFCN· |
-| loss | 20 | PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· |
+| loss | 24 | PPGCFCN· PPGCpRN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· PPGCFCN· PPGCpRN· PPGCFCN· PPGCFCN· |
 | model_layer | 1 | PPGCFCN· |
 | moe | 1 | PPGCFCN· |
 | moe_transport | 2 | PPGCFCN· PPGCFCN· |

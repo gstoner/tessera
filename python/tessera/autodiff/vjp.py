@@ -3196,6 +3196,92 @@ def vjp_load_balance_loss(dout, router_probs, *, assignment=None, reduction="mea
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+# Calibrated decision heads — proper scoring rules + soft calibration error.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+def _masked_loss_cotangent(dout, shape, valid, reduction):
+    """Per-example cotangent; ignored positions get 0, "mean" counts valid only."""
+    if valid is None:
+        return np.asarray(_reduction_cotangent(dout, shape, reduction), dtype=np.float64)
+    do = np.asarray(dout, dtype=np.float64)
+    if reduction == "mean":
+        scale = np.ones(shape) * do / max(int(np.count_nonzero(valid)), 1)
+    else:
+        scale = np.asarray(_reduction_cotangent(dout, shape, reduction), dtype=np.float64)
+    return np.where(valid, scale, 0.0)
+
+
+@_vjp("brier_loss")
+def vjp_brier_loss(dout, logits, targets, *, reduction="mean", ignore_index=-100, **_):
+    # L = Σ_k (p_k − y_k)²,  p = softmax(z).  g = 2(p − y);
+    #   dL/dz = p ⊙ (g − <p, g>)          (softmax Jacobian, symmetric)
+    #   dL/dy = −g                         (distribution targets only)
+    from tessera.losses import _class_targets
+
+    z = np.asarray(logits, dtype=np.float64)
+    t = np.asarray(targets)
+    m = z.max(axis=-1, keepdims=True)
+    e = np.exp(z - m)
+    p = e / e.sum(axis=-1, keepdims=True)
+    if t.dtype.kind in "iu":
+        y, valid = _class_targets(t, z.shape, ignore_index)
+    else:
+        y, valid = t.astype(np.float64), None
+    g = 2.0 * (p - y)
+    scale = _masked_loss_cotangent(dout, z.shape[:-1], valid, reduction)[..., None]
+    grad_z = p * (g - np.sum(p * g, axis=-1, keepdims=True)) * scale
+    grad_y = None if valid is not None else -g * scale
+    return (grad_z, grad_y)
+
+
+@_vjp("binary_brier_loss")
+def vjp_binary_brier_loss(dout, logits, targets, *, reduction="mean", **_):
+    # L = (σ(z) − t)²:  dL/dz = 2(σ − t)·σ(1 − σ),  dL/dt = −2(σ − t)
+    z = np.asarray(logits, dtype=np.float64)
+    t = np.asarray(targets, dtype=np.float64)
+    s = 0.5 * (1.0 + np.tanh(0.5 * z))
+    shape = np.broadcast_shapes(z.shape, t.shape)
+    scale = _reduction_cotangent(dout, shape, reduction)
+    r = 2.0 * (s - t) * scale
+    return (_sum_to_shape(r * s * (1.0 - s), z.shape), _sum_to_shape(-r, t.shape))
+
+
+@_vjp("ordinal_logistic_loss")
+def vjp_ordinal_logistic_loss(dout, logits, targets, *, reduction="mean",
+                              ignore_index=-100, **_):
+    # L = Σ_j softplus(z_j) − b_j z_j,  b_j = 1[target > j]:  dL/dz_j = σ(z_j) − b_j
+    from tessera.losses import _ordinal_indicators
+
+    z = np.asarray(logits, dtype=np.float64)
+    b, valid = _ordinal_indicators(np.asarray(targets), z.shape, ignore_index)
+    s = 0.5 * (1.0 + np.tanh(0.5 * z))
+    scale = _masked_loss_cotangent(dout, z.shape[:-1], valid, reduction)[..., None]
+    return ((s - b) * scale, None)
+
+
+@_vjp("soft_binned_ece")
+def vjp_soft_binned_ece(dout, confidences, correct, *, n_bins=15, temperature=1e-3, **_):
+    # E = (1/N) Σ_m |r_m|,  r_m = Σ_i u_im d_i,  d_i = a_i − c_i,
+    # u_i· = softmax(ℓ_i·),  ∂ℓ_im/∂c_i = −2(c_i − μ_m)/T.
+    #   ∂E/∂c_i = (1/N) Σ_m s_m [ u_im (ℓ'_im − <u_i, ℓ'_i>) d_i − u_im ]
+    #   ∂E/∂a_i = (1/N) Σ_m s_m u_im          (s_m = sign r_m)
+    from tessera.calibration import _check_n_bins, _soft_memberships
+
+    c_arr = np.asarray(confidences, dtype=np.float64)
+    a_arr = np.asarray(correct, dtype=np.float64)
+    c, a = c_arr.reshape(-1), a_arr.reshape(-1)
+    u, dl = _soft_memberships(c, _check_n_bins(n_bins), float(temperature))
+    d = a - c
+    sgn = np.sign(u.T @ d)
+    du = u * (dl - np.sum(u * dl, axis=-1, keepdims=True))     # ∂u_im/∂c_i
+    k = float(np.asarray(dout)) / c.size
+    grad_c = k * ((du @ sgn) * d - u @ sgn)
+    grad_a = k * (u @ sgn)
+    return (grad_c.reshape(c_arr.shape), grad_a.reshape(a_arr.shape))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
 # Clifford / GA primitives (Cl(3,0), flat 8-coefficient lane — see _clifford_ops)
 #
 # All adjoints below are closed-form and validated against multivector_check_grad

@@ -25,11 +25,11 @@ each row into a single E2E tier.
 | Tier | Count |
 |---|---:|
 | ``complete`` | 298 |
-| ``runnable_reference`` | 25 |
+| ``runnable_reference`` | 29 |
 | ``artifact_only`` | 0 |
 | ``partial`` | 34 |
 | ``planned`` | 0 |
-| **total** | **357** |
+| **total** | **361** |
 
 ## complete (298)
 
@@ -334,7 +334,7 @@ each row into a single E2E tier.
 | ``mobius`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 | ``stereographic`` | visual_complex | public | public | not_applicable | fused | fused | ready | benchmarked |
 
-## runnable_reference (25)
+## runnable_reference (29)
 
 | Op | Family | api | frontend | graph_ir | tile_ir | target_ir | runtime | bench |
 |---|---|---|---|---|---|---|---|---|
@@ -360,6 +360,10 @@ each row into a single E2E tier.
 | ``kron`` | linalg_multilinear | public | public | registered | partial | reference | ready | none |
 | ``trace`` | linalg_multilinear | public | public | registered | partial | reference | ready | none |
 | ``solve`` | linalg_solver | public | public | registered | partial | reference | ready | none |
+| ``binary_brier_loss`` | loss | public | public | registered | partial | reference | ready | none |
+| ``brier_loss`` | loss | public | public | registered | partial | reference | ready | none |
+| ``ordinal_logistic_loss`` | loss | public | public | registered | partial | reference | ready | none |
+| ``soft_binned_ece`` | loss | public | public | registered | partial | reference | ready | none |
 | ``ntk_rope`` | position_encoding | public | public | registered | partial | reference | ready | none |
 | ``game_mex`` | segment_reduce | public | public | registered | partial | reference | ready | none |
 | ``game_coalition_marginal`` | spectral | public | public | registered | partial | reference | ready | none |

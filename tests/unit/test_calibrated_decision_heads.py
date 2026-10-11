@@ -1,8 +1,10 @@
 """Calibrated decision heads — proper scoring rules, ordinal heads, calibration.
 
 Covers ``tessera.losses.{brier_loss, binary_brier_loss, ordinal_logistic_loss,
-ordinal_probs}`` and ``tessera.calibration``. Python reference only: these are
-not ``op_catalog`` Graph ops and no lowering or device result is claimed here.
+ordinal_probs}`` and ``tessera.calibration``. The four public ops are in the
+canonical ``op_catalog`` (so tracing emits a Graph IR op for each) but remain
+reference-tier: no lowering or device result is claimed here, and the backend
+manifest records every device target as ``planned``.
 
 The VJP/JVP pairs are also swept by the autodiff law engine
 (``test_autodiff_laws.py``); the tests below pin what the law sweep cannot —
@@ -343,3 +345,98 @@ def test_fit_temperature_rejects_invalid_inputs():
         cal.fit_temperature(np.zeros((2, 1)), np.array([0, 0]))
     with pytest.raises(ValueError, match="bounds"):
         cal.fit_temperature(np.zeros((2, 3)), np.array([0, 1]), bounds=(2.0, 1.0))
+
+
+# ── review-driven regressions ────────────────────────────────────────────────
+
+
+def test_fit_temperature_treats_a_tied_top_label_as_separable():
+    # Every label is a row maximum (one strict, one tied with everything), so
+    # dNLL/dβ <= 0 everywhere and the NLL falls monotonically as T -> 0. A
+    # strict-argmax-only check let Newton stop at an arbitrary interior T.
+    logits = np.array([[5.0, 0.0], [0.0, 0.0]])
+    labels = np.array([0, 0])
+    with pytest.warns(RuntimeWarning, match="separable"):
+        t = cal.fit_temperature(logits, labels)
+    assert t == pytest.approx(1e-2)
+    with pytest.warns(RuntimeWarning, match="separable"):
+        t_tied_top = cal.fit_temperature(np.array([[3.0, 3.0, 0.0]]), np.array([0]))
+    assert t_tied_top == pytest.approx(1e-2)
+
+
+def test_fit_temperature_all_constant_rows_stay_unidentifiable_not_separable():
+    with pytest.warns(RuntimeWarning, match="unidentifiable"):
+        assert cal.fit_temperature(np.zeros((3, 4)), np.array([0, 1, 2])) == 1.0
+
+
+@pytest.mark.parametrize(
+    "confidences, correct, fragment",
+    [
+        ([2.0], [1.0], "confidences"),          # logits passed as probabilities
+        ([-0.1], [1.0], "confidences"),
+        ([np.nan], [1.0], "confidences"),
+        ([np.inf], [1.0], "confidences"),
+        ([0.5], [2.0], "correct"),
+        ([0.5], [-1.0], "correct"),
+        ([0.5], [np.nan], "correct"),
+    ],
+)
+def test_soft_binned_ece_rejects_malformed_probabilities(confidences, correct, fragment):
+    with pytest.raises(ValueError, match=fragment):
+        cal.soft_binned_ece(confidences, correct)
+
+
+def test_soft_binned_ece_accepts_the_closed_unit_interval():
+    # Boundary values are valid probabilities and outcomes.
+    value = cal.soft_binned_ece([0.0, 1.0, 0.5], [0.0, 1.0, 1.0])
+    assert np.isfinite(value) and value >= 0.0
+
+
+_NEW_PUBLIC_OPS = {
+    "brier_loss": "tessera.loss.brier",
+    "binary_brier_loss": "tessera.loss.binary_brier",
+    "ordinal_logistic_loss": "tessera.loss.ordinal_logistic",
+    "soft_binned_ece": "tessera.loss.soft_binned_ece",
+}
+
+
+@pytest.mark.parametrize("public, graph", sorted(_NEW_PUBLIC_OPS.items()))
+def test_new_public_ops_are_registered_in_the_canonical_catalog(public, graph):
+    from tessera.compiler.op_catalog import OP_SPECS
+
+    spec = OP_SPECS[public]
+    assert spec.graph_name == graph
+    assert spec.effect == "pure" and spec.lowering == "loss"
+    assert spec.valid_arity(2) and not spec.valid_arity(1)
+
+
+@pytest.mark.parametrize("public", sorted(_NEW_PUBLIC_OPS))
+def test_new_public_ops_declare_explicit_non_native_execution_states(public):
+    # Reference on the host-portable lanes, planned on every device target:
+    # an explicit state, never an implied native lane.
+    from tessera.compiler import backend_manifest as bm
+
+    by_target = {e.target: e.status for e in bm.manifest_for(public)}
+    assert by_target["cpu"] == "reference"
+    device = {t: st for t, st in by_target.items()
+              if t.startswith(("nvidia", "rocm"))}
+    assert device and set(device.values()) == {"planned"}, device
+    assert all(st in {"reference", "planned"} for st in by_target.values()), by_target
+
+
+
+@ts.jit
+def _traced_brier(z, y):
+    return ts.ops.brier_loss(z, y)
+
+
+def test_traced_jit_emits_the_brier_loss_graph_op():
+    # Without a catalog entry the tracer had no Graph op to emit for these
+    # public names and the loss could silently vanish from the graph.
+    z = np.random.default_rng(3).normal(size=(4, 3)).astype(np.float32)
+    y = np.array([0, 1, 2, 1])
+    value = float(_traced_brier(z, y))
+    assert value == pytest.approx(float(L.brier_loss(z, y)), rel=1e-5)
+    text = _traced_brier.graph_ir.to_mlir()
+    assert "tessera.loss.brier" in text
+    assert 'tessera.effect_kind = "pure"' in text

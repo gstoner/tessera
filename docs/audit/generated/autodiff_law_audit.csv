@@ -566,7 +566,7 @@ tensor,slice,chain,pass,2
 tensor,smooth_l1_loss,adjoint,pass,4
 tensor,smooth_l1_loss,chain,pass,2
 tensor,soft_binned_ece,adjoint,pass,4
-tensor,soft_binned_ece,chain,pass,2
+tensor,soft_binned_ece,chain,rule_error,0
 tensor,soft_top_k,adjoint,pass,4
 tensor,soft_top_k,chain,pass,2
 tensor,softcap,adjoint,pass,4

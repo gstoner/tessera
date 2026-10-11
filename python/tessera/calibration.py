@@ -51,6 +51,16 @@ def _check_n_bins(n_bins: int) -> int:
     return n
 
 
+def _check_unit_interval(name: str, x: np.ndarray, *, hint: str = "") -> None:
+    """Reject non-finite values and values outside ``[0, 1]``.
+
+    A logit passed where a probability is expected is the common mistake, and
+    it must raise rather than produce a finite-looking score.
+    """
+    if not np.all(np.isfinite(x)) or np.any(x < 0.0) or np.any(x > 1.0):
+        raise ValueError(f"{name} must be finite and lie in [0, 1]{hint}")
+
+
 def top_label_confidence(probs, labels) -> tuple[np.ndarray, np.ndarray]:
     """Flattened ``(confidence, correct)`` pairs for the top-label metrics.
 
@@ -129,8 +139,7 @@ def reliability_bins(confidences, correct, n_bins: int = 15) -> ReliabilityBins:
             f"confidences ({c.size}) and correct ({a.size}) differ in length")
     if c.size == 0:
         raise ValueError("calibration metrics need at least one prediction")
-    if not np.all(np.isfinite(c)) or np.any(c < 0.0) or np.any(c > 1.0):
-        raise ValueError("confidences must be finite and lie in [0, 1]")
+    _check_unit_interval("confidences", c)
     edges = np.linspace(0.0, 1.0, m + 1)
     # searchsorted(side="left") over the interior edges yields right-closed
     # bins ((m-1)/M, m/M] that agree with the reported `edges` exactly —
@@ -206,6 +215,8 @@ def soft_binned_ece(confidences, correct, *, n_bins: int = 15,
             f"confidences ({c.size}) and correct ({a.size}) differ in length")
     if c.size == 0:
         raise ValueError("soft_binned_ece needs at least one prediction")
+    _check_unit_interval("confidences", c, hint=" — were logits passed? apply softmax / sigmoid first")
+    _check_unit_interval("correct", a)
     u, _ = _soft_memberships(c, m, float(temperature))
     r = u.T @ (a - c)
     return np.float64(np.sum(np.abs(r)) / c.size)
@@ -270,17 +281,21 @@ def fit_temperature(logits, labels, *, max_iter: int = 100, tol: float = 1e-10,
     # Two cases have no finite optimum, and Newton cannot see either: its
     # gradient decays like exp(−margin·β), so it stops at `tol` somewhere
     # arbitrary. Decide them from the data instead.
-    others = np.where(np.arange(k)[None, :] == y[:, None], -np.inf, z)
-    if np.all(zy > others.max(axis=-1)):
-        # Every label is its row's strict argmax: dNLL/dβ < 0 for all β, so
-        # the NLL falls monotonically as T → 0.
+    # Per row, dNLL/dβ = E_p[z] − z_y, which is <= 0 whenever the label's
+    # logit equals the row maximum (strict or tied) and < 0 unless the row is
+    # constant. A tie for the top still leaves the NLL falling as T → 0 (toward
+    # log of the tie count), so ties belong with strict maxima here.
+    label_is_top = zy >= z.max(axis=-1)
+    row_is_constant = np.ptp(z, axis=-1) == 0.0
+    if np.all(label_is_top) and not np.all(row_is_constant):
         warnings.warn(
             f"fit_temperature: the held-out set is separable (every label is "
-            f"its row's strict argmax), so the NLL has no finite minimizer; "
-            f"returning the lower bound T={t_lo:.6g}. Fit on data the model "
-            f"gets wrong sometimes.", RuntimeWarning, stacklevel=2)
+            f"a top-scoring class in its row, ties included), so the NLL has "
+            f"no finite minimizer; returning the lower bound T={t_lo:.6g}. "
+            f"Fit on data the model gets wrong sometimes.",
+            RuntimeWarning, stacklevel=2)
         return t_lo
-    if np.all(np.ptp(z, axis=-1) == 0.0):
+    if np.all(row_is_constant):
         warnings.warn(
             "fit_temperature: logits are constant within every row, so the "
             "temperature is unidentifiable; returning T=1.0",

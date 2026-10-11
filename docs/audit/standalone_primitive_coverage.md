@@ -202,18 +202,18 @@ or gfx1151 implementation—and prevents one target's success from being read as
 universal support.
 
 <!-- BEGIN GENERATED COMPILER FOUNDATION SUMMARY -->
-The compiler-facing table contains **357** callable/IR rows; the remaining **171** registry entries are host APIs, runtime-only surfaces, or planned domain primitives. The aggregate table chooses the strongest evidence across targets and must not be read as support on every architecture.
+The compiler-facing table contains **361** callable/IR rows; the remaining **167** registry entries are host APIs, runtime-only surfaces, or planned domain primitives. The aggregate table chooses the strongest evidence across targets and must not be read as support on every architecture.
 
 | Compiler layer | Live status counts |
 |---|---|
-| `api` | `public` 357 |
-| `frontend` | `public` 357 |
-| `graph_ir` | `registered` 324, `not_applicable` 33 |
-| `schedule_ir` | `not_applicable` 2, `complete` 355 |
-| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 21, `fused` 299, `no_kernel_required` 7 |
-| `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 26, `device_verified_jit` 199, `reference` 25, `no_kernel_required` 8 |
-| `runtime` | `fused` 6, `ready` 351 |
-| `bench` | `benchmarked` 106, `none` 251 |
+| `api` | `public` 361 |
+| `frontend` | `public` 361 |
+| `graph_ir` | `registered` 328, `not_applicable` 33 |
+| `schedule_ir` | `not_applicable` 2, `complete` 359 |
+| `tile_ir` | `not_applicable` 26, `complete` 4, `partial` 25, `fused` 299, `no_kernel_required` 7 |
+| `target_ir` | `not_applicable` 26, `fused` 73, `device_verified_abi` 26, `device_verified_jit` 199, `reference` 29, `no_kernel_required` 8 |
+| `runtime` | `fused` 6, `ready` 355 |
+| `bench` | `benchmarked` 106, `none` 255 |
 
 Exact-target backend-manifest rows:
 
@@ -235,7 +235,7 @@ Current open queues derived from the same sources:
 
 | Queue | Count | Scope |
 |---|---:|---|
-| Tile IR partial | 21 | `adadelta`, `adagrad`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `ntk_rope`, `rmsprop`, `shampoo`, `solve`, `trace`, `vec` |
+| Tile IR partial | 25 | `adadelta`, `adagrad`, `binary_brier_loss`, `brier_loss`, `depth_attn`, `det`, `eigh`, `game_boltzmann_value`, `game_coalition_excess`, `game_coalition_marginal`, `game_mex`, `game_semivalue`, `inv`, `kron`, `logdet`, `matrix_power`, `norm`, `ntk_rope`, `ordinal_logistic_loss`, `rmsprop`, `shampoo`, `soft_binned_ece`, `solve`, `trace`, `vec` |
 | Backend contract planned | 9 | `broadcast_to_axis`, `collective_permute`, `named_sharding`, `partition_spec`, `pmax`, `pmean`, `pmin`, `psum`, `shard_map` |
 | Native/fused aggregate rows without benchmark inventory | 197 | See generated support table; this is an evidence queue, not proof of a missing kernel. |
 | VJP / JVP planned | 43 / 43 | Autodiff rules, not forward compiler execution. |

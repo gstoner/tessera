@@ -27,11 +27,13 @@ attn_local_window_2d,state,,1,1,1
 attn_sliding_window,state,,1,1,1
 attn_top_k_blocks,state,,1,1,1
 batched_gemm,pure,,1,1,0
+binary_brier_loss,pure,,1,1,0
 binary_cross_entropy_loss,pure,,1,1,0
 bitwise_and,pure,,1,1,0
 bitwise_not,pure,,1,1,0
 bitwise_or,pure,,1,1,0
 bitwise_xor,pure,,1,1,0
+brier_loss,pure,,1,1,0
 broadcast,pure,,1,1,0
 bsmm,pure,,1,1,0
 cache_commit,state,,1,1,0
@@ -240,6 +242,7 @@ norm,pure,,1,1,0
 normalize_group_advantages,pure,,1,1,0
 ntk_rope,pure,,1,1,0
 nvfp4_requantize,pure,,1,1,0
+ordinal_logistic_loss,pure,,1,1,0
 pack,movement,,1,1,0
 pad,pure,,1,1,0
 permute,pure,,1,1,0
@@ -300,6 +303,7 @@ sin,pure,,1,1,0
 sinh,pure,,1,1,0
 slice,pure,,1,1,0
 smooth_l1_loss,pure,,1,1,0
+soft_binned_ece,pure,,1,1,0
 soft_top_k,pure,,1,1,0
 softcap,pure,,1,1,0
 softmax,pure,pure,1,1,1

@@ -185,6 +185,28 @@ _PHASED_REFERENCE_RATIONALE.update({
     for op in ("adagrad", "rmsprop", "adadelta", "shampoo")
 })
 
+# Calibrated decision heads. Proper scoring rules and a differentiable
+# calibration penalty, shipped as the mathematical surface (each transcribed
+# from its definition, with a registered VJP+JVP checked under the law sweep).
+# No device lane was attempted and missed, so these are not newly created
+# single-GPU debt; a Tile/Target lane is a separate backend decision with its
+# own device evidence. brier/binary_brier/ordinal_logistic are per-element
+# transcendental chains the existing loss lanes could host; soft_binned_ece is
+# a dataset-level binned reduction with no existing lane to extend.
+_CALIBRATION_REFERENCE_RATIONALE = (
+    "Reference tier by plan: the calibrated-decision-heads change ships the "
+    "mathematical surface (definition-checked, VJP+JVP law-swept); a Tile IR "
+    "lowering is a separate backend decision with its own device evidence.",
+    "Reference tier by plan: no Target IR lane is claimed; the loss "
+    "device lanes cover cross-entropy/BCE families only, and extending one to "
+    "a new scoring rule needs its own exact-device proof.",
+)
+_PHASED_REFERENCE_RATIONALE.update({
+    op: _CALIBRATION_REFERENCE_RATIONALE
+    for op in ("brier_loss", "binary_brier_loss", "ordinal_logistic_loss",
+               "soft_binned_ece")
+})
+
 _PHASED_REFERENCE_OPS = frozenset(_PHASED_REFERENCE_RATIONALE)
 
 

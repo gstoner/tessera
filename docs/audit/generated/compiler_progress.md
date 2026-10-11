@@ -12,7 +12,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 
 | Item | Status | Ready | Total | Open | Detail | Next |
 |---|---|---:|---:|---:|---|---|
-| `End-to-end optimizing compiler dashboard checks` | mixed | 8 | 27 | 19 | dashboard_checks_closed=8, mixed=16, open=3, primary_open=backend_kernel, Direct test evidence, ROCm target-map native promotion | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
+| `End-to-end optimizing compiler dashboard checks` | mixed | 7 | 27 | 20 | dashboard_checks_closed=7, mixed=17, open=3, primary_open=backend_kernel, Direct test evidence, ROCm target-map native promotion | Drive the largest open-work rows without collapsing backend promotion into all-up compiler status. |
 
 ## Compiler Phase And IR State
 
@@ -21,7 +21,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `Public Python API` | closed | 361 | 361 | 0 | public=361 | Keep this layer drift-gated through support_table.csv. |
 | `Frontend capture` | closed | 361 | 361 | 0 | public=361 | Keep this layer drift-gated through support_table.csv. |
 | `Graph IR registration` | closed | 361 | 361 | 0 | not_applicable=33, registered=328 | Keep this layer drift-gated through support_table.csv. |
-| `Schedule IR` | closed | 361 | 361 | 0 | complete=359, not_applicable=2 | Keep this layer drift-gated through support_table.csv. |
+| `Schedule IR` | mixed | 358 | 361 | 3 | complete=356, not_applicable=2, planned=3 | Keep this layer drift-gated through support_table.csv. |
 | `Tile IR` | mixed | 336 | 361 | 25 | complete=4, fused=299, no_kernel_required=7, not_applicable=26, partial=25 | Close partial Tile IR rows or explicitly classify them as fused/not-applicable. |
 | `Target IR native/fused codegen` | mixed | 332 | 361 | 29 | device_verified_abi=26, device_verified_jit=199, fused=73, no_kernel_required=8, not_applicable=26, reference=29 | Promote high-use reference rows into native/fused Target IR or mark intentional reference-only lanes. |
 | `Runtime dispatch readiness` | closed | 361 | 361 | 0 | fused=6, ready=355 | Keep this layer drift-gated through support_table.csv. |
@@ -34,7 +34,7 @@ A row is not marked incomplete merely because Apple, x86, ROCm, and CUDA are not
 | `batching_rule` | mixed | 527 | 528 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `transpose_rule` | mixed | 527 | 528 | 1 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `sharding_rule` | mixed | 467 | 528 | 61 | primitive contract axis; open means partial or planned, not necessarily missing API support | Prioritize model-facing collectives, layout, memory, and optimizer rows. |
-| `lowering_rule` | mixed | 525 | 528 | 3 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
+| `lowering_rule` | mixed | 420 | 528 | 108 | primitive contract axis; open means partial or planned, not necessarily missing API support | No action unless this row reopens. |
 | `backend_kernel` | mixed | 100 | 528 | 428 | primitive contract axis; open means partial or planned, not necessarily missing API support | Promote by backend/pathway; do not treat every target as an all-up compiler veto. |
 
 ## Compiler Integration Evidence

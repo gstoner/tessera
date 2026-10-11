@@ -12,7 +12,8 @@ from the primitive_coverage registry by
   3. The on-disk file matches the freshly-generated output (the same
      contract the support_table drift gate uses).
   4. The known structural invariants hold:
-       - ``lowering_rule`` aggregate open == 0  (Sprint A1+ closure).
+       - ``lowering_rule`` aggregate open == named exceptions + Graph-less rows
+         carrying ``lowering_rule_reason`` (GRAPHLESS-LOWERING-1).
        - architecture-specific backend proof is rendered separately from the
          conservative registry-level ``backend_kernel`` axis.
        - Every priority-≤50 category is the high-use S-series surface
@@ -102,9 +103,20 @@ def test_lowering_rule_is_closed_project_wide() -> None:
 
     for name in _KNOWN_OPEN_LOWERING_RULE:
         assert pc.coverage_for(name).contract_status["lowering_rule"] == "partial", name
+    # GRAPHLESS-LOWERING-1 (2026-10-11): rows with no Graph IR op are reopened
+    # on purpose -- the category table stamped them `complete` with nothing to
+    # lower to.  Each carries its reason; that reason is what admits it here.
+    graphless = {
+        name for name, entry in pc.all_primitive_coverages().items()
+        if entry.metadata.get("lowering_rule_reason") == pc.GRAPHLESS_LOWERING_REASON
+    }
+    for name in graphless:
+        entry = pc.coverage_for(name)
+        assert entry.contract_status["lowering_rule"] in {"partial", "planned"}, name
+        assert entry.graph_name is None, name
     rows = tally_by_category()
     total_open = sum(int(r["lowering_rule_open"]) for r in rows)
-    total_open -= len(_KNOWN_OPEN_LOWERING_RULE)
+    total_open -= len(_KNOWN_OPEN_LOWERING_RULE) + len(graphless)
     assert total_open == 0, (
         f"lowering_rule has {total_open} open entries; the multi-axis "
         "classifier was supposed to close this axis.  "
@@ -189,7 +201,7 @@ def test_dashboard_calls_out_backend_target_view_explicitly() -> None:
     future readers don't misread backend_kernel as 'ROCm is missing everything'."""
     text = render_markdown()
     assert "Backend Proof By Target" in text
-    assert "lowering_rule` is closed" in text
+    assert "lowering_rule_reason" in text
 
 
 def test_sprint_19_bucket_a_sharding_promotions_are_closed() -> None:

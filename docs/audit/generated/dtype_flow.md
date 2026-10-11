@@ -19,7 +19,7 @@ packet to resolve the supported envelope.
 - Operators: **361**
 - TSOL operators: **51**
 - Operator/logical-dtype rows: **978**
-- Rows retaining at least one compiler/evidence gap: **392**
+- Rows retaining at least one compiler/evidence gap: **395**
 
 The CSV companion is the canonical normalized matrix: one row per
 `(operator, logical dtype)`, with ABI storage and independent states
@@ -126,13 +126,13 @@ for the complete per-dtype and per-target matrix.
 | `score_combine` | elementwise | no | bf16,fp32 | direct_test,physical,tile |
 | `softcap` | elementwise | no | bf16,fp32 | direct_test,physical,tile |
 | `ebm_bivector_langevin` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
-| `ebm_decode_init` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
+| `ebm_decode_init` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,schedule,tile |
 | `ebm_energy` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_energy_quadratic` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_inner_step` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_langevin_step` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_langevin_step_philox` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
-| `ebm_partition_exact` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
+| `ebm_partition_exact` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,schedule,tile |
 | `ebm_refinement` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_self_verify` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `ebm_sphere_langevin` | energy_based_models | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
@@ -156,7 +156,7 @@ for the complete per-dtype and per-target matrix.
 | `clifford_grade_projection` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `clifford_hodge_star` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `clifford_inner` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
-| `clifford_integral` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
+| `clifford_integral` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,schedule,tile |
 | `clifford_left_contraction` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `clifford_log` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |
 | `clifford_norm` | geometric_algebra | no | bf16,fp16,fp32,fp64 | direct_test,physical,tile |

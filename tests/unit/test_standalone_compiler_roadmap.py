@@ -185,10 +185,20 @@ def test_graph_ir_classifier_has_no_false_missing_or_stub_rows():
     states = {name: entry.metadata.get("graph_ir_lowering")
               for name, entry in entries.items()}
     assert "missing" not in states.values()
-    assert "stub_required" not in states.values()
-    for name in ("clifford_geometric_product", "ebm_energy_quadratic",
-                 "image_resize", "interpolate", "edm_precondition"):
+    # GRAPHLESS-LOWERING-1 (2026-10-11): `stub_required` is now the honest
+    # state for a row with no Graph op by any route, and only such a row may
+    # carry it -- the reason is recorded on the row. image_resize, interpolate
+    # and edm_precondition used to read `registered` off their category; their
+    # only "lowering" was a structured-compute artifact that dispatches back to
+    # the numpy reference.
+    for name, entry in entries.items():
+        if states[name] == "stub_required":
+            assert entry.metadata.get("lowering_rule_reason"), name
+            assert entry.graph_name is None, name
+    for name in ("clifford_geometric_product", "ebm_energy_quadratic"):
         assert states[name] == "registered"
+    for name in ("image_resize", "interpolate", "edm_precondition"):
+        assert states[name] == "stub_required"
     for name in ("karras_sigma_schedule", "equiprob_band_partition"):
         assert states[name] == "host_materialized"
 
@@ -198,7 +208,8 @@ def test_graph_ir_dispositions_do_not_use_ambiguous_not_applicable():
     states = {entry.metadata.get("graph_ir_lowering")
               for entry in entries.values()}
     assert "not_applicable" not in states
-    assert states <= {"registered", "host_materialized", "runtime_only"}
+    # stub_required: Graph-less rows, see the GRAPHLESS-LOWERING-1 note above.
+    assert states <= {"registered", "host_materialized", "runtime_only", "stub_required"}
 
 
 def test_speculative_and_varlen_contracts_are_semantically_hardened():

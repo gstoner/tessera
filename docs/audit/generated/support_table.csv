@@ -82,13 +82,13 @@ sub,elementwise,public,public,registered,complete,fused,device_verified_jit,read
 tan,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,none
 tanh,elementwise,public,public,registered,complete,fused,device_verified_jit,ready,benchmarked
 ebm_bivector_langevin,energy_based_models,public,public,not_applicable,not_applicable,fused,fused,fused,benchmarked
-ebm_decode_init,energy_based_models,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+ebm_decode_init,energy_based_models,public,public,not_applicable,planned,fused,fused,fused,benchmarked
 ebm_energy,energy_based_models,public,public,not_applicable,complete,fused,fused,fused,benchmarked
 ebm_energy_quadratic,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_inner_step,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_langevin_step,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_langevin_step_philox,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,none
-ebm_partition_exact,energy_based_models,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+ebm_partition_exact,energy_based_models,public,public,not_applicable,planned,fused,fused,fused,benchmarked
 ebm_refinement,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_self_verify,energy_based_models,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 ebm_sphere_langevin,energy_based_models,public,public,not_applicable,not_applicable,fused,fused,fused,benchmarked
@@ -113,7 +113,7 @@ clifford_grade_involution,geometric_algebra,public,public,not_applicable,complet
 clifford_grade_projection,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_hodge_star,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_inner,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
-clifford_integral,geometric_algebra,public,public,not_applicable,complete,fused,fused,fused,benchmarked
+clifford_integral,geometric_algebra,public,public,not_applicable,planned,fused,fused,fused,benchmarked
 clifford_left_contraction,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_log,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked
 clifford_norm,geometric_algebra,public,public,not_applicable,complete,fused,fused,ready,benchmarked

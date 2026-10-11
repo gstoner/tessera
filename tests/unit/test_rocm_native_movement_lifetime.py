@@ -18,6 +18,7 @@ def test_native_movement_capacity_context_completion_and_failure_recovery(tmp_pa
 #include <cstring>
 #include <cmath>
 #include <map>
+#include <vector>
 using hipCtx_t=void*;using hipFunction_t=void*;
 constexpr int hipSuccess=0,hipMemcpyHostToDevice=1,hipMemcpyDeviceToHost=2;
 struct hipDeviceProp_t {char gcnArchName[256];};

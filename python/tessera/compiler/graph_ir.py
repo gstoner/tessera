@@ -1839,8 +1839,15 @@ class _OpExtractor(ast.NodeVisitor):
         self.ops: List[IROp] = []
         self.diagnostics: List[GraphIRDiagnostic] = []
         # Dotted spellings of calls dropped as "not a registered Graph
-        # operation"; surfaced on the module as ``frontend_unlowered_calls``.
+        # operation" in the traced function's own scope. A drop inside a
+        # nested ``def`` (or a lambda bound to a name) is attributed to that
+        # helper instead, and counts only if the body invokes the helper:
+        # an uninvoked helper never executes. ``resolved_unlowered_calls``
+        # expands invocations; the module carries the result as
+        # ``frontend_unlowered_calls``.
         self.unlowered_calls: List[str] = []
+        self._scope_stack: List[str] = []
+        self._nested_unlowered: Dict[str, List[str]] = {}
         self._counter = 0
         self._arg_names = set(arg_names)
         # Scalar constants captured from the function's closure / module globals
@@ -1911,11 +1918,58 @@ class _OpExtractor(ast.NodeVisitor):
             return f"{parent}.{node.attr}" if parent else node.attr
         return None
 
+    def _record_unlowered(self, callee: str) -> None:
+        if self._scope_stack:
+            self._nested_unlowered.setdefault(self._scope_stack[-1], []).append(callee)
+        else:
+            self.unlowered_calls.append(callee)
+
+    def _visit_nested_def(self, node: ast.AST, name: str) -> None:
+        self._nested_unlowered.setdefault(name, [])
+        self._scope_stack.append(name)
+        try:
+            self.generic_visit(node)
+        finally:
+            self._scope_stack.pop()
+
+    def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+        self._visit_nested_def(node, node.name)
+
+    def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+        self._visit_nested_def(node, node.name)
+
+    def resolved_unlowered_calls(self) -> List[str]:
+        """Dropped calls reachable from the traced body.
+
+        A call to a nested helper is replaced by the helper's own dropped
+        calls (transitively, cycle-safe); helpers the body never invokes
+        contribute nothing.
+        """
+        def expand(names: List[str], active: frozenset) -> List[str]:
+            out: List[str] = []
+            for name in names:
+                if name in self._nested_unlowered:
+                    if name not in active:
+                        out.extend(expand(self._nested_unlowered[name], active | {name}))
+                else:
+                    out.append(name)
+            return out
+        return expand(self.unlowered_calls, frozenset())
+
     def visit_Assign(self, node: ast.Assign) -> None:
         """Handle `Y[:] = expr` or `result = expr`."""
         if not node.targets:
             return
         tgt = node.targets[0]
+        if isinstance(tgt, ast.Name) and isinstance(node.value, ast.Lambda):
+            # A lambda body is never lowered; record the calls it would make
+            # under its bound name so invoking it counts like a nested def.
+            calls = self._nested_unlowered.setdefault(tgt.id, [])
+            for sub in ast.walk(node.value.body):
+                if isinstance(sub, ast.Call):
+                    callee = self._resolve_name(sub.func)
+                    if callee:
+                        calls.append(callee)
         if isinstance(tgt, ast.Name):
             if isinstance(node.value, ast.Name):
                 components = self._tuple_alias.get(node.value.id)
@@ -2399,7 +2453,7 @@ class _OpExtractor(ast.NodeVisitor):
             if op is None:
                 callee = self._resolve_name(node.func)
                 if callee:
-                    self.unlowered_calls.append(callee)
+                    self._record_unlowered(callee)
                 self._unsupported(
                     node,
                     "call target is not a registered Graph operation",
@@ -4921,7 +4975,7 @@ class GraphIRBuilder:
 
         self.diagnostics.extend(extractor.diagnostics)
         self.context.module.frontend_unlowered_calls.extend(
-            extractor.unlowered_calls)
+            extractor.resolved_unlowered_calls())
         self._last_return_values = list(extractor.return_values)
         self._last_return_types = list(extractor.return_result_types)
         return extractor.ops

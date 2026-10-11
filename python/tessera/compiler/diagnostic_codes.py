@@ -847,7 +847,7 @@ REGISTERED_CODES: tuple[DiagnosticCode, ...] = (
             "the target, express it through catalogued `tessera.ops.*` "
             "calls, or drop `target=` to run on the reference lane."
         ),
-        spec=None,
+        spec="docs/spec/PYTHON_API_SPEC.md §2.1.1",
         sprint="JIT-UNLOWERED-OP-2026-10-11",
         language="python",
         status="implemented",

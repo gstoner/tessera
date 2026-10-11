@@ -19,8 +19,12 @@ the target, mirroring the source-unavailable refusal. Pinned here:
   diagnostics;
 * the reference lane (no target, or ``cpu``) keeps the eager path and still
   computes the reference value;
-* Decision #10a negative fixture: a native-target body built only from
-  catalogued ops is NOT refused.
+* Decision #10a negative fixtures: a native-target body built only from
+  catalogued ops is NOT refused, and neither is one whose uncatalogued op
+  sits in a nested ``def``/lambda the body never invokes;
+* an invoked nested helper (one or two levels, ``def`` or lambda) IS
+  refused: the frontend does not inline helpers, so the helper's dropped
+  calls are what would run eagerly.
 
 No device is touched: refusals happen at decoration, and the tracer case
 fails while tracing, before any dispatch.
@@ -64,6 +68,56 @@ def _nested_in_catalogued(a):
 
 def _catalogued_only(a):
     return ts.ops.relu(a)
+
+
+def _uninvoked_nested_def(a):
+    def helper(x):
+        return ts.ops.jepa_l2_loss(x, x + 1)
+
+    return ts.ops.relu(a)
+
+
+def _invoked_nested_def(a):
+    def helper(x):
+        return ts.ops.jepa_l2_loss(x, x + 1)
+
+    return helper(a)
+
+
+def _invoked_two_level_helper(a):
+    def inner(x):
+        return ts.ops.jepa_l2_loss(x, x + 1)
+
+    def outer(x):
+        return inner(x)
+
+    return outer(a)
+
+
+def _uninvoked_lambda(a):
+    helper = lambda x: ts.ops.jepa_l2_loss(x, x + 1)  # noqa: E731
+    return ts.ops.relu(a)
+
+
+def _invoked_lambda(a):
+    helper = lambda x: ts.ops.jepa_l2_loss(x, x + 1)  # noqa: E731
+    return helper(a)
+
+
+def _brier(p, y):
+    return ts.ops.brier_loss(p, y)
+
+
+def _binary_brier(p, y):
+    return ts.ops.binary_brier_loss(p, y)
+
+
+def _ordinal_logistic(p, y):
+    return ts.ops.ordinal_logistic_loss(p, y)
+
+
+def _soft_binned_ece(p, y):
+    return ts.ops.soft_binned_ece(p, y)
 
 
 def test_fixture_op_is_uncatalogued() -> None:
@@ -142,3 +196,42 @@ def test_catalogued_body_is_not_refused(target) -> None:
     # refusal and nothing recorded as dropped.
     fn = ts.jit(target=target)(_catalogued_only)
     assert fn.graph_ir.frontend_unlowered_calls == []
+
+
+@pytest.mark.parametrize("target", NATIVE_TARGETS)
+@pytest.mark.parametrize("body", (_uninvoked_nested_def, _uninvoked_lambda))
+def test_uninvoked_nested_helper_is_not_refused(body, target) -> None:
+    # Decision #10a: a helper the body never calls never executes, so its
+    # uncatalogued op is not a reason to refuse the outer function.
+    fn = ts.jit(target=target)(body)
+    assert fn.graph_ir.frontend_unlowered_calls == []
+
+
+@pytest.mark.parametrize("target", NATIVE_TARGETS)
+@pytest.mark.parametrize(
+    "body", (_invoked_nested_def, _invoked_two_level_helper, _invoked_lambda))
+def test_invoked_nested_helper_is_refused(body, target) -> None:
+    # The frontend does not inline helpers, so invoking one drops the call;
+    # the helper's own dropped tessera.ops calls are what would run eagerly.
+    with pytest.raises(TesseraJitError) as info:
+        ts.jit(target=target)(body)
+    assert f"[{CODE}]" in str(info.value)
+    assert f"tessera.ops.{UNCATALOGUED}" in str(info.value)
+
+
+@pytest.mark.parametrize("target", NATIVE_TARGETS)
+@pytest.mark.parametrize(
+    "body,op",
+    [
+        (_brier, "brier_loss"),
+        (_binary_brier, "binary_brier_loss"),
+        (_ordinal_logistic, "ordinal_logistic_loss"),
+        (_soft_binned_ece, "soft_binned_ece"),
+    ],
+)
+def test_catalogued_decision_head_losses_pass_the_gate(body, op, target) -> None:
+    # gstoner/tessera#938 catalogued these; the gate must not refuse them.
+    assert get_op_spec(op) is not None
+    fn = ts.jit(target=target)(body)
+    assert fn.graph_ir.frontend_unlowered_calls == []
+    assert len(fn.graph_ir.functions[0].body) == 1

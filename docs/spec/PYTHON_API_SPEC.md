@@ -415,7 +415,27 @@ assert mm.source_origin == "explicit"
 ```
 
 If no source can be inspected or supplied, `.explain_lowering()` includes
-`JIT_SOURCE_UNAVAILABLE` and the wrapper uses the eager fallback.
+`JIT_SOURCE_UNAVAILABLE` and the wrapper uses the eager fallback. That
+applies to the reference lane only; see §2.1.1 for a native target.
+
+#### 2.1.1 Native targets refuse instead of falling back eagerly
+
+With no `target`, or `target="cpu"`, a body the frontend cannot lower runs as
+eager Python, and that is the reference lane. When `target=` names a native
+backend, decoration raises `TesseraJitError` instead, because an eager result
+there would look like a compiled run. Two refusals implement this:
+
+| Code | Raised when |
+|------|-------------|
+| *(message names `source could not be inspected`)* | No source can be inspected or supplied, so no Graph IR can be emitted. |
+| `JIT_UNLOWERED_OP_NATIVE_TARGET` | The body calls a `tessera.ops` callable that the Graph IR frontend drops: it has no `op_catalog` OpSpec, or its spelling is not one the frontend resolves. The call is matched by object identity, so aliases count. The message names the op, how it was called, and the target. A verifier failure that the dropped call causes is reported as this code. |
+
+Calls inside a nested `def` or `lambda` are not candidates, because the
+frontend does not lower nested scopes and an uninvoked helper never runs. An
+`apple_gpu` body routed to the Phase-F tracer (control flow, or AST emission
+deferred) is left to the tracer; it fails as `JIT_APPLE_GPU_TRACE_FAILED`
+rather than falling back. Calls outside `tessera.ops` (numpy, user helpers)
+are not yet covered by this refusal.
 
 ---
 

@@ -641,7 +641,8 @@ static int invokeResident(
     const uint64_t *producerStreams = nullptr, size_t producerCount = 0,
     int profileRepeats = 0, float *stageTimes = nullptr, size_t stageCount = 0,
     float *programMs = nullptr,
-    const TesseraNvidiaMatmulHostView *hostOutput = nullptr) {
+    const TesseraNvidiaMatmulHostView *hostOutput = nullptr,
+    bool singleSided = false) {
   error.clear();
   if (getpid() != process) return bad("prepared resident tensor cannot cross fork");
   std::lock_guard<std::mutex> lock(mutex);
@@ -651,7 +652,9 @@ static int invokeResident(
   if (!owner.producer || !views ||
       count != owner.count + (ownedEdge ? 0 : 1) - (hostOutput ? 1 : 0) ||
       (!launchStream && !hostOutput) ||
-      (ownedEdge && owner.rhsProducers.empty()) || (hostOutput && !ownedEdge))
+      (ownedEdge && owner.rhsProducers.empty() && !singleSided) ||
+      (singleSided && (!ownedEdge || !owner.rhsProducers.empty() || !owner.rowB)) ||
+      (hostOutput && !ownedEdge))
     return bad("prepared resident tensor buffer/stream arity");
   const size_t stages = size_t(bool(owner.producer)) + owner.followingProducers.size() +
                         owner.rhsProducers.size() + 1;
@@ -870,6 +873,35 @@ extern "C" int tessera_nvidia_matmul_profile_dag_resident_ordered(
   }
   return invokeResident(handle, views, count, stream, true, producerStreams,
                         producerCount, repeats, stageMs, stageCount, programMs);
+}
+extern "C" int tessera_nvidia_matmul_invoke_lhs_resident_ordered(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producerStreams, size_t producerCount, void *stream) {
+  if (!producerStreams || !producerCount) {
+    error.clear(); return bad("ordered resident producer streams are required");
+  }
+  return invokeResident(handle, views, count, stream, true, producerStreams,
+                        producerCount, 0, nullptr, 0, nullptr, nullptr, true);
+}
+extern "C" int tessera_nvidia_matmul_invoke_lhs_resident_to_host_ordered(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *roots, size_t count,
+    const uint64_t *producerStreams, size_t producerCount,
+    const TesseraNvidiaMatmulHostView *output) {
+  if (!producerStreams || !producerCount || !output) {
+    error.clear(); return bad("ordered resident roots, streams and host result are required");
+  }
+  return invokeResident(handle, roots, count, nullptr, true, producerStreams,
+                        producerCount, 0, nullptr, 0, nullptr, output, true);
+}
+extern "C" int tessera_nvidia_matmul_profile_lhs_resident_ordered(
+    uint64_t handle, const TesseraNvidiaMatmulHostView *views, size_t count,
+    const uint64_t *producerStreams, size_t producerCount, void *stream,
+    int repeats, float *stageMs, size_t stageCount, float *programMs) {
+  if (!producerStreams || !producerCount) {
+    error.clear(); return bad("ordered resident producer streams are required");
+  }
+  return invokeResident(handle, views, count, stream, true, producerStreams,
+                        producerCount, repeats, stageMs, stageCount, programMs, nullptr, true);
 }
 extern "C" int tessera_nvidia_matmul_close(uint64_t handle) {
   error.clear();

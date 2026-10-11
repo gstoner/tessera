@@ -4,6 +4,23 @@ audit_role: plan
 plan_state: landing
 scope: ROCm backend implementation and exact-device proof
 ---
+## SM120-SINGLE-SIDED-RESIDENT-PRODUCERS-20261009
+
+Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.
+Public static/bounded JIT now integrates single-sided normalization/softmax
+producer chains with raw resident row-major RHS through existing native
+Graph/Schedule/Tile/Target/LLVM-PTX packages and ordered C++ ownership.
+542 host gates and 44 new RTX5070 device cases pass. Native mode/capacity,
+pending raw-RHS writes, fused epilogues and host-first layout migration are
+proved; column and row packages remain separate physical specializations.
+Two isolated 30-frame packets separate native program/member events from
+completed public calls. Wall ratios span 0.966–1.230; no general speedup
+or quantized physical-schedule promotion is claimed.
+Evidence: benchmarks/baselines/sm120_single_sided_resident_tensor_20261009/README.md.
+
+Follow-up required for gfx1151/gfx1201 resident producer frontend integration. Shared metadata/layout specialization is assessed; new ordered LHS exports are CUDA-only and do not establish HIP execution parity or alter AMD physical schedules.
+
+
 ## SM120-BOUNDED-RESIDENT-FRONTEND-20261009
 
 Owner W1.1 / E2E-REAL-6 / FRONTEND-IR-MEDIUM-1.

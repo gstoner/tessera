@@ -8,7 +8,7 @@ from dataclasses import asdict
 import json
 import re
 from .native_gpu_storage import _decode_image
-from .native_gpu_tensor import IndexSpec, TensorSpec, NativeTensorCall
+from .native_gpu_tensor import IndexSpec, TensorSpec, NativeTensorCall, GridProduct, geometry_json, geometry_from_json
 
 ATTRIBUTE = 'tessera.native_tensor_contract'
 
@@ -17,9 +17,9 @@ def attach_tensor_contract(source: str, specs, *, grid, block) -> str:
     """Producer seam: emit the ABI once alongside its native kernel recipe."""
     if ATTRIBUTE in source:
         raise ValueError('native source already has a tensor contract')
-    data = {'schema': 1, 'arguments': [dict(kind='tensor' if isinstance(s, TensorSpec) else 'index',
+    data = {'schema': 2 if any(isinstance(d, GridProduct) for d in grid) else 1, 'arguments': [dict(kind='tensor' if isinstance(s, TensorSpec) else 'index',
                                           **asdict(s)) for s in specs],
-            'grid': list(grid), 'block': list(block)}
+            'grid': geometry_json(grid), 'block': geometry_json(block)}
     encoded = json.dumps(data, sort_keys=True, separators=(',', ':'), allow_nan=False)
     encoded = encoded.replace('\\', '\\5C').replace('"', '\\22')
     result, count = re.subn(r'(?m)^module \{', lambda _: f'module attributes {{{ATTRIBUTE} = "{encoded}"}} {{', source)
@@ -40,7 +40,7 @@ def read_tensor_contract(package):
     if len(matches) != 1:
         raise ValueError('native package requires exactly one compiler-preserved tensor manifest')
     data = json.loads(_decode_image(matches[0]).decode('utf8'))
-    if set(data) != {'schema', 'arguments', 'grid', 'block'} or type(data['schema']) is not int or data['schema'] != 1:
+    if set(data) != {'schema', 'arguments', 'grid', 'block'} or type(data['schema']) is not int or data['schema'] not in (1, 2):
         raise ValueError('unsupported native tensor manifest')
     return data
 
@@ -64,4 +64,5 @@ def tensor_contract_specs(data):
 
 def generate_tensor_binding(package, signature) -> NativeTensorCall:
     data = read_tensor_contract(package)
-    return NativeTensorCall(package, signature, tensor_contract_specs(data), grid=tuple(data['grid']), block=tuple(data['block']))
+    return NativeTensorCall(package, signature, tensor_contract_specs(data), grid=geometry_from_json(data['grid'], schema=data['schema']),
+                            block=geometry_from_json(data['block'], schema=1))

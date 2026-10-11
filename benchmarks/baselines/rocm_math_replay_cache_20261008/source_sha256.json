@@ -1,0 +1,6 @@
+{
+  "python/tessera/compiler/rocm_pass_cache.py": "9748c2ab380eb97a46d2cc483c5feba547e1059b759fedcbb49062d036467b89",
+  "python/tessera/compiler/rocm_math_native.py": "6ddb8a07035f28224edc20cbba72379d990f657c647b2358e0f25c39a796f534",
+  "tests/unit/test_rocm_math_replay_cache.py": "35fdcb82bc3ad2ad941bde67029d97c51e2399b931ea1ea010a70a006bea6b17",
+  "benchmarks/rocm/record_rocm_matmul_replay_cache.py": "a5978ea9135351a3a290815150c5e50a91aef6a239d9ba5732af0f755d040987"
+}

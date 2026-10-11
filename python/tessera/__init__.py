@@ -4999,6 +4999,11 @@ def _make_ops_namespace() -> types.SimpleNamespace:
     binary_cross_entropy_loss_ref = _lazy_module_fn("losses", "binary_cross_entropy_loss")
     asymmetric_bce_ref = _lazy_module_fn("losses", "asymmetric_bce")
     z_loss_ref = _lazy_module_fn("losses", "z_loss")
+    # Calibrated decision heads — proper scoring rules + soft calibration error.
+    brier_loss_ref = _lazy_module_fn("losses", "brier_loss")
+    binary_brier_loss_ref = _lazy_module_fn("losses", "binary_brier_loss")
+    ordinal_logistic_loss_ref = _lazy_module_fn("losses", "ordinal_logistic_loss")
+    soft_binned_ece_ref = _lazy_module_fn("calibration", "soft_binned_ece")
     load_balance_loss_ref = _lazy_module_fn("losses", "load_balance_loss")
     ddpm_noise_pred_loss_ref = _lazy_module_fn("losses", "ddpm_noise_pred_loss")
     score_matching_loss_ref = _lazy_module_fn("losses", "score_matching_loss")
@@ -5290,6 +5295,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         "weight_norm": weight_norm_ref,
         "asymmetric_bce": asymmetric_bce_ref,
         "z_loss": z_loss_ref,
+        "brier_loss": brier_loss_ref,
+        "binary_brier_loss": binary_brier_loss_ref,
+        "ordinal_logistic_loss": ordinal_logistic_loss_ref,
+        "soft_binned_ece": soft_binned_ece_ref,
         "load_balance_loss": load_balance_loss_ref,
         "ddpm_noise_pred_loss": ddpm_noise_pred_loss_ref,
         "score_matching_loss": score_matching_loss_ref,
@@ -5931,6 +5940,10 @@ def _make_ops_namespace() -> types.SimpleNamespace:
         weight_norm=weight_norm_ref,
         asymmetric_bce=asymmetric_bce_ref,
         z_loss=z_loss_ref,
+        brier_loss=brier_loss_ref,
+        binary_brier_loss=binary_brier_loss_ref,
+        ordinal_logistic_loss=ordinal_logistic_loss_ref,
+        soft_binned_ece=soft_binned_ece_ref,
         load_balance_loss=load_balance_loss_ref,
         ddpm_noise_pred_loss=ddpm_noise_pred_loss_ref,
         score_matching_loss=score_matching_loss_ref,

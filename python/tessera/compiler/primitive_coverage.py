@@ -3134,6 +3134,15 @@ def _existing_coverage() -> dict[str, PrimitiveCoverage]:
         "karras_sigma_schedule": ("diffusion_schedule", "EDM Karras ρ=7 inference σ discretization — landed 2026-06-21"),
         "ctc_loss": ("loss", "small CPU-reference CTC loss — S11 landed 2026-05-10"),
         "seq2seq_loss": ("loss", "masked seq2seq cross-entropy loss — S11 landed 2026-05-10"),
+        # Calibrated decision heads (2026-10-11): strictly proper scoring rules
+        # for bounded categorical / Bernoulli / ordinal heads, plus the soft-
+        # binned ECE training penalty (python/tessera/{losses,calibration}.py).
+        # Python reference + analytic VJP/JVP only; NOT op_catalog Graph ops,
+        # so no Graph IR, lowering or backend kernel is claimed.
+        "brier_loss": ("loss", "multiclass Brier score from logits (quadratic proper scoring rule) — Python reference, landed 2026-10-11"),
+        "binary_brier_loss": ("loss", "binary Brier score from logits — Python reference, landed 2026-10-11"),
+        "ordinal_logistic_loss": ("loss", "CORAL-style ordinal loss over K-1 threshold logits — Python reference, landed 2026-10-11"),
+        "soft_binned_ece": ("loss", "differentiable soft-binned expected calibration error (training penalty) — Python reference, landed 2026-10-11"),
         # S12 — serialization + checkpointing (python/tessera/checkpoint.py)
         "save_state": ("serialization", "versioned state-tree binary save — S12 landed 2026-05-10"),
         "load_state": ("serialization", "versioned state-tree binary load — S12 landed 2026-05-10"),

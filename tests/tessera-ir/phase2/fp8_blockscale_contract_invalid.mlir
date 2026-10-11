@@ -36,19 +36,11 @@ module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
 
 // -----
 
-// A trailing partial group has no defined scale.
-module attributes {tessera.target = "rocm", tessera.arch = "gfx1201"} {
-  func.func @ragged_group(%a: tensor<32x192xf8E4M3FN>, %b: tensor<192x64xf8E4M3FN>,
-                          %sa: tensor<32x2xf32>, %sb: tensor<2x1xf32>) -> tensor<32x64xf32> {
-    // expected-error @+2 {{ROCM_FP8_BLOCKSCALE_CONTRACT: K=192 is not a whole number of scale groups of 128}}
-    // expected-error @+1 {{E2E-REAL-2 Graph->Schedule requires}}
-    %0 = tessera.scaled_matmul %a, %b scales(%sa, %sb) {
-      scale_layout = {granularity = "block", block = [128, 128], format = "fp32"}
-    } : (tensor<32x192xf8E4M3FN>, tensor<192x64xf8E4M3FN>, tensor<32x2xf32>,
-         tensor<2x1xf32>) -> tensor<32x64xf32>
-    return %0 : tensor<32x64xf32>
-  }
-}
+// A trailing partial K group is no longer refused on a plain rank-2 e4m3 op:
+// since the scalar-scaled-plane lane (ScaledBatchContract.h) it schedules as an
+// independent plane. That positive contract is pinned by
+// fp8_blockscale_ragged_k_scalar_plane.mlir; the refusal in
+// deriveFp8W8A8BlockScale now guards only ops outside that lane.
 
 // -----
 

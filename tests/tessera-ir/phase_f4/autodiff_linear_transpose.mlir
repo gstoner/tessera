@@ -24,5 +24,5 @@ module {
 
 // PAIRED-LABEL: func.func @linear__bwd
 // PAIRED: %[[RESHAPED:.*]] = tessera.reshape {{.*}} : (tensor<6xf32>) -> tensor<3x2xf32>
-// PAIRED: %[[TRANSPOSED:.*]] = tessera.transpose %[[RESHAPED]] : (tensor<3x2xf32>) -> tensor<2x3xf32>
+// PAIRED: %[[TRANSPOSED:.*]] = tessera.transpose %[[RESHAPED]] {permutation = array<i64: 1, 0>{{.*}}} : (tensor<3x2xf32>) -> tensor<2x3xf32>
 // PAIRED: return %[[TRANSPOSED]] : tensor<2x3xf32>

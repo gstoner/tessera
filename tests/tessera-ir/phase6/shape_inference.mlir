@@ -43,7 +43,7 @@ func.func @test_transpose_shape(%a : tensor<8x16xf32>) -> tensor<16x8xf32> {
 
   // CHECK: tessera.inferred_shape = [16, 8]
   %out = "tessera.transpose"(%a) {
-      "tessera.perm" = [1 : i64, 0 : i64]
+      permutation = array<i64: 1, 0>
   } : (tensor<8x16xf32>) -> tensor<16x8xf32>
 
   return %out : tensor<16x8xf32>

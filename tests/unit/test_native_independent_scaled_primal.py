@@ -92,7 +92,11 @@ def test_native_scale_jvp_independent_primal_members():
 def independent_target():
     text=source(((),(),(2,3),()),tb=True)
     pipeline="builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile,tessera-rocm-executable{family=matmul input=tile output=target arch=gfx1201})"
-    result=subprocess.run([os.environ["TESSERA_OPT"],"--pass-pipeline="+pipeline],
+    # Module scope runs before `production_compiler` exports TESSERA_OPT, so
+    # resolve a driver that registers the ROCm pass (skips on a host without it).
+    from tests._support.compiler_tool import require_tessera_opt
+    tool=require_tessera_opt("tessera-rocm-executable")
+    result=subprocess.run([str(tool),"--pass-pipeline="+pipeline],
                           input=text,text=True,capture_output=True,timeout=180)
     assert result.returncode==0,result.stderr
     return result.stdout

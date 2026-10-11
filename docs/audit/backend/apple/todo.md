@@ -14221,3 +14221,9 @@ and wider AD/composition obligations remain required follow-ups.
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Not applicable to apple execution: these schema IDs describe the SM120 attention JVP contract. Existing apple target and runtime ABIs are unchanged; no device parity is inferred.
+
+## HOST-AWARE-SKIPS-2026-10-11
+
+Owner: none. No work item covers host-aware test skips, so this records the shared change under its own sync key (nearest family: the evidence-governance gates, GOV-ODS-CONSUMER-1). Shared change: `tests/conftest.py` now converts a failure to a skip when `tests/_support/backend_absence.py` matches a known backend-absent message **and** a probe of the running host confirms the dialect, pass or tool is missing; fixture setup is covered too. Two lit fixtures that mixed backends were split. A host that has the backend never skips: the message there stays a failure.
+
+Not applicable to apple execution: the guard matches only the NVIDIA dialect, ROCm pass and NVIDIA tool messages, so no Apple lane is skipped or hidden. Follow-up required (Apple-owned, unchanged by this change and now easier to see in a Mac sweep): `test_apple_legacy_retune_benchmark` (ledger context fingerprint mismatch) and the two `test_apple_philox_graph_runtime` cases that need `TESSERA_APPLE_GPU_RUNTIME_LIB`. Mac full lit run is clean.

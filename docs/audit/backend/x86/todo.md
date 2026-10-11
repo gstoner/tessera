@@ -10627,3 +10627,9 @@ projection remains restricted to NVIDIA; CPU package/cache obligations are uncha
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Not applicable to x86 execution: these schema IDs describe the SM120 attention JVP contract. Existing x86 target and runtime ABIs are unchanged; no device parity is inferred.
+
+## HOST-AWARE-SKIPS-2026-10-11
+
+Owner: none. No work item covers host-aware test skips, so this records the shared change under its own sync key (nearest family: the evidence-governance gates, GOV-ODS-CONSUMER-1). Shared change: `tests/conftest.py` now converts a failure to a skip when `tests/_support/backend_absence.py` matches a known backend-absent message **and** a probe of the running host confirms the dialect, pass or tool is missing; fixture setup is covered too. Two lit fixtures that mixed backends were split. A host that has the backend never skips: the message there stays a failure.
+
+Not applicable to x86 execution: no x86 lane matches the hook's NVIDIA/ROCm patterns, and no x86 test changed. The x86 fixtures touched indirectly are unchanged: `layout_target_materializers.mlir` keeps its x86 materializer RUN, passing on the Mac and on The-Super-Bear (x86 RUN by hand). No AVX-512 execution evidence is claimed or affected.

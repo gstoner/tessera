@@ -181,6 +181,12 @@ _NO_LANE_DOTTED: frozenset[str] = frozenset(
         ("training", "loss_adamw"), ("training", "loss_sgd"),
         ("rl", "cispo_policy_loss"), ("rl", "grpo_policy_loss"),
         ("rl", "normalize_group_advantages"), ("rl", "ppo_policy_loss"),
+        # Calibrated decision heads (2026-10-11, PR #938): catalogued so tracing
+        # emits their Graph op, but Python-reference only on every target — no
+        # Apple GPU lane is claimed. A Metal lane would mirror the loss-family
+        # exp/log + reduce composition and needs its own execute-and-compare.
+        ("loss", "brier"), ("loss", "binary_brier"),
+        ("loss", "ordinal_logistic"), ("loss", "soft_binned_ece"),
     }
 )
 

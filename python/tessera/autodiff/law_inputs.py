@@ -326,6 +326,26 @@ LAW_INPUT_SPECS: dict[str, InputSpec] = {
             for _ in range(2)), {}),
         diff_args=(0,), note="rule contract: gradient w.r.t. p only"),
     "z_loss": S(lambda rng: ((rng.standard_normal((3, 6)),), {})),
+    # calibrated decision heads (proper scoring rules + soft ECE)
+    "brier_loss": S(
+        lambda rng: ((rng.standard_normal((4, 5)),
+                      (lambda q: q / q.sum(axis=-1, keepdims=True))(
+                          0.1 + rng.random((4, 5)))), {}),
+        note="distribution targets: both args differentiable; the integer-"
+             "target path is FD-checked in test_calibrated_decision_heads.py"),
+    "binary_brier_loss": S(
+        lambda rng: ((rng.standard_normal((3, 4)), rng.random((3, 4))), {}),
+        note="soft targets in [0, 1]; both args differentiable"),
+    "ordinal_logistic_loss": S(
+        lambda rng: ((rng.standard_normal((4, 3)),
+                      rng.integers(0, 4, size=(4,))), {}),
+        diff_args=(0,), chain=False,
+        note="integer levels are non-differentiable"),
+    "soft_binned_ece": S(
+        lambda rng: ((0.05 + 0.9 * rng.random((12,)),
+                      (rng.random((12,)) > 0.4).astype(np.float64)),
+                     {"n_bins": 5, "temperature": 5e-3}),
+        note="|r_m| kinks only at r_m = 0, which random draws avoid"),
     "label_smoothed_cross_entropy": S(
         lambda rng: ((rng.standard_normal((4, 6)),
                       rng.integers(0, 6, size=(4,))), {}),

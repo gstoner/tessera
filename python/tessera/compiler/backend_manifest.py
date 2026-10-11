@@ -6108,6 +6108,12 @@ _SINGLE_GPU_COMPUTE_REFERENCE_OPS: frozenset[str] = frozenset(
         "rng_truncated_normal",
         # loss
         "ctc_loss",
+        # calibrated decision heads (2026-10-11): Python reference only;
+        # native lowering is an open backend-proof item, not claimed here.
+        "brier_loss",
+        "binary_brier_loss",
+        "ordinal_logistic_loss",
+        "soft_binned_ece",
         # vision / pooling
         "center_crop",
         "image_resize",

@@ -549,6 +549,10 @@ _SPECS = [
     OpSpec("label_smoothed_cross_entropy", "tessera.loss.cross_entropy", 2, 2, lowering="loss"),
     OpSpec("binary_cross_entropy_loss", "tessera.loss.binary_cross_entropy", 2, 2, lowering="loss"),
     OpSpec("asymmetric_bce", "tessera.loss.asymmetric_bce", 2, 2, lowering="loss"),
+    OpSpec("brier_loss", "tessera.loss.brier", 2, 2, lowering="loss"),
+    OpSpec("binary_brier_loss", "tessera.loss.binary_brier", 2, 2, lowering="loss"),
+    OpSpec("ordinal_logistic_loss", "tessera.loss.ordinal_logistic", 2, 2, lowering="loss"),
+    OpSpec("soft_binned_ece", "tessera.loss.soft_binned_ece", 2, 2, lowering="loss"),
     OpSpec("z_loss", "tessera.loss.z_loss", 1, 1, lowering="loss"),
     OpSpec("load_balance_loss", "tessera.loss.load_balance_loss", 1, 1, lowering="loss"),
     OpSpec("ddpm_noise_pred_loss", "tessera.loss.ddpm_noise_pred", 2, 2, lowering="loss"),
@@ -874,7 +878,8 @@ OP_SHAPE_RULE: dict = {
        ("mse", "mae", "huber", "smooth_l1", "log_cosh", "cross_entropy",
         "binary_cross_entropy", "asymmetric_bce", "kl_divergence",
         "js_divergence", "contrastive_divergence", "persistent_cd",
-        "ddpm_noise_pred", "score_matching", "vlb")},
+        "ddpm_noise_pred", "score_matching", "vlb",
+        "brier", "binary_brier", "ordinal_logistic", "soft_binned_ece")},
 
     # ── Probed at f32 / bf16 / fp16; several ignored the input dtype ─────
     # These returned float64 for EVERY input dtype -- f32, bf16 and fp16 alike.

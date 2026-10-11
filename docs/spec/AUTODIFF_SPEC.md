@@ -136,6 +136,7 @@ regardless of the exact counts.
 | Position encodings (`rope`/`rope_split`/`rope_merge`/`alibi`/`ntk_rope`) | ✅ complete |
 | Losses (`mse_loss`/`mae_loss`/`huber_loss`/`smooth_l1_loss`/`log_cosh_loss`/`cross_entropy_loss`/`binary_cross_entropy_loss`/`focal_loss`/`label_smoothed_cross_entropy`/`kl_divergence`/`js_divergence`/`wasserstein_distance`/`triplet_loss`/`contrastive_loss`/`cosine_embedding_loss`/`info_nce_loss`/`nt_xent_loss`/`ddpm_noise_pred_loss`/`score_matching_loss`/`vlb_loss`/`ctc_loss`/`seq2seq_loss`) | ✅ complete |
 | RL policy losses (`ppo_policy_loss`/`grpo_policy_loss`/`cispo_policy_loss`) | ✅ complete |
+| Calibrated decision heads (`brier_loss`/`binary_brier_loss`/`ordinal_logistic_loss`/`soft_binned_ece`; added 2026-10-11) — analytic Python-reference rules, law-swept; not `op_catalog` Graph ops, so no Graph IR or native backward | ✅ complete |
 | MoE routing (`moe`/`moe_dispatch`/`moe_combine`/`mor_router`/`mor_partition`/`mor_scatter`) | ✅ complete |
 | MLA family (`latent_kv_compress`/`latent_kv_expand_k`/`latent_kv_expand_v`/`mla_decode`/`mla_decode_fused`) | ✅ complete |
 | Collectives — `psum`/`pmean`/`pmax`/`pmin`/`collective_permute`/`broadcast_to_axis` | ✅ complete |

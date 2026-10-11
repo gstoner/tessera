@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-09-04
+last_updated: 2026-10-11
 audit_role: theme
 ---
 
@@ -78,6 +78,28 @@ operation has meaningful value semantics. Add performance packets only for
 native/fused paths whose selection or promotion depends on timing. Host-only
 metadata constructors, serialization, and structural transforms should not be
 forced into artificial kernel benchmarks.
+
+**`lowering_rule` overstates Python-reference losses (measured 2026-10-11).**
+`primitive_coverage`'s `loss`-category override stamps `lowering_rule`
+(and the shape / batching / transpose / sharding axes) `complete` on loss
+primitives that have **no Graph op at all** (`graph_name=None`) — e.g.
+`wasserstein_distance`, `ctc_loss`, `triplet_loss`, and the calibrated
+decision-head losses below. For those rows the axis means "the category has
+a rule", not "this op lowers". Read `graph_name` before treating such a row as
+compiler-reachable. Related frontend gap, same date: a native-target `@jit`
+over a `tessera.ops` name with no `op_catalog` spec emits an empty Graph IR
+function (effect `top`) and runs eagerly with no `last_fallback_reason`,
+reproduced on `main` with the pre-existing `jepa_l2_loss`.
+
+**Calibrated decision heads (added 2026-10-11).** Proper scoring rules and
+calibration measurement for bounded-choice heads: `losses.brier_loss`,
+`binary_brier_loss`, `ordinal_logistic_loss` (CORAL-style) and
+`ordinal_probs`; `tessera.calibration` for top-label ECE/MCE, reliability
+bins, the differentiable `soft_binned_ece` penalty, and post-hoc
+`fit_temperature`. Python reference with analytic VJP/JVP rules swept by the
+autodiff law engine; not `op_catalog` Graph ops, so no Graph IR, lowering or
+device result is claimed. Native lowering is a backend-proof queue item, not
+implied by these rows.
 
 ## VLM status
 

@@ -1,3 +1,4 @@
+#include "Tessera/IR/AttentionShapeContract.h"
 #include <limits>
 //===- AttnOps.cpp — FA-4 attention op verifiers + helpers ───────────────===//
 //
@@ -646,40 +647,9 @@ static mlir::LogicalResult verifyCheckpointTensorOp(mlir::Operation *op, bool ba
   int64_t b=q.getDimSize(0), hq=q.getDimSize(1), sq=q.getDimSize(2), d=q.getDimSize(3);
   int64_t hkv=k.getDimSize(1), sk=k.getDimSize(2), dv=v.getDimSize(3);
 
-  // Capacity is a native contract, never an inferred launch-time relabeling.
-  auto shapeModule = op->getParentOfType<ModuleOp>();
-  auto boundsRaw = shapeModule ? shapeModule->getAttr("tessera.attention_shape_bounds") : Attribute();
-  auto bounds = dyn_cast_or_null<DenseI64ArrayAttr>(boundsRaw);
-  bool dynamicSequence = ShapedType::isDynamic(sq) || ShapedType::isDynamic(sk);
   SmallVector<int64_t> symbolic{b,hq,hkv,sq,sk,d,dv};
-  if (boundsRaw && (!bounds || bounds.size() != 7))
-    return op->emitOpError("checkpoint sequence bounds require seven i64 capacities");
-  if (dynamicSequence != bool(bounds))
-    return op->emitOpError("dynamic checkpoint sequences require explicit native shape bounds");
-  for (unsigned axis = 0; axis < symbolic.size(); ++axis) {
-    bool dynamic = ShapedType::isDynamic(symbolic[axis]);
-    if ((dynamic && axis != 3 && axis != 4) || (!dynamic && symbolic[axis] <= 0))
-      return op->emitOpError("checkpoint only sequence axes may be dynamic");
-    if (bounds && (bounds[axis] <= 0 || (!dynamic && bounds[axis] != symbolic[axis])))
-      return op->emitOpError("checkpoint capacity must preserve fixed dimensions");
-  }
-  if (bounds) {
-    // Reject capacity products that overflow the checked byte-address ABI.
-    // Check each physical tensor, rather than multiplying unrelated roles.
-    for (SmallVector<unsigned> axes : {SmallVector<unsigned>{0,1,3,5},
-                                      SmallVector<unsigned>{0,2,4,5},
-                                      SmallVector<unsigned>{0,2,4,6},
-                                      SmallVector<unsigned>{0,1,3,6},
-                                      SmallVector<unsigned>{0,1,3,4}}) {
-      int64_t capacity = 4;
-      for (unsigned axis : axes) {
-        int64_t extent = bounds[axis];
-        if (extent > std::numeric_limits<int64_t>::max() / capacity)
-        return op->emitOpError("checkpoint capacity exceeds the byte-address ABI");
-        capacity *= extent;
-      }
-    }
-  }
+  auto shape = tessera::resolveNativeAttentionShape(op, symbolic);
+  if (failed(shape)) return failure();
 
   auto tensor = [&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
   auto output=tensor({b,hq,sq,dv}), lse=tensor({b,hq,sq});
@@ -719,14 +689,17 @@ mlir::LogicalResult CheckpointJVPOp::verify() {
   SmallVector<RankedTensorType> types;
   for (Type type : getOperandTypes()) {
     auto tensor = dyn_cast<RankedTensorType>(type);
-    if (!tensor || !tensor.hasStaticShape() || !tensor.getElementType().isF32() ||
-        llvm::any_of(tensor.getShape(), [](int64_t d) { return d <= 0; }))
-      return emitOpError("JVP operands require positive static f32 tensors");
+    if (!tensor || tensor.getEncoding() || !tensor.getElementType().isF32() ||
+        llvm::any_of(tensor.getShape(), [](int64_t d) { return !ShapedType::isDynamic(d) && d <= 0; }))
+      return emitOpError("JVP operands require positive or bounded f32 tensors");
     types.push_back(tensor);
   }
   auto q=types[0], k=types[1], v=types[2];
   if (q.getRank()!=4 || k.getRank()!=4 || v.getRank()!=4)
     return emitOpError("JVP Q/K/V require rank four");
+  SmallVector<int64_t> dimensions{q.getDimSize(0), q.getDimSize(1), k.getDimSize(1),
+      q.getDimSize(2), k.getDimSize(2), q.getDimSize(3), v.getDimSize(3)};
+  if (failed(tessera::resolveNativeAttentionShape(*this, dimensions))) return failure();
   auto tensor=[&](ArrayRef<int64_t> shape) { return RankedTensorType::get(shape,q.getElementType()); };
   auto b=q.getDimSize(0), h=q.getDimSize(1), n=q.getDimSize(2);
   if (k.getDimSize(0)!=b || v.getDimSize(0)!=b || h%k.getDimSize(1) ||

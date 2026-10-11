@@ -1,0 +1,5 @@
+{
+  "python/tessera/compiler/rocm_pass_cache.py": "432d205abf4210ab5b22443df53a51ec88e6a32d8fbb86d47e8608ebcadbed3a",
+  "python/tessera/compiler/native_unary_contract.py": "19858eca0699f842cba382e56af4ef6bb757e5e44a7a7f0eac86ab0bd85ca2c2",
+  "tests/unit/test_rocm_pass_cache.py": "e74c33cab64b969c34b246d05134bbb3933c520c72a7996e6769d9aaf095b5c8"
+}

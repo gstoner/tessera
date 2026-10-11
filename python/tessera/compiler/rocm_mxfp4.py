@@ -312,7 +312,10 @@ def _validate_scale_plane(codes: np.ndarray, scale_exponents: np.ndarray) -> tup
 def _e8m0_factor(exponents: np.ndarray) -> np.ndarray:
     e = np.asarray(exponents, dtype=np.uint8)
     # Encoding zero is reserved for a zero block in the physical route.
-    return np.where(e == 0, np.float32(0.0), np.exp2(e.astype(np.float32) - 127.0))
+    # ldexp builds each power of two exactly; a float32 exp2 is only accurate
+    # to the last bit on some CPU/numpy SIMD paths (2**126 came back one ulp off).
+    exact = np.ldexp(np.float64(1.0), e.astype(np.int32) - 127)
+    return np.where(e == 0, np.float32(0.0), exact.astype(np.float32))
 
 
 def exact_weights(codes: np.ndarray, scale_exponents: np.ndarray, *,

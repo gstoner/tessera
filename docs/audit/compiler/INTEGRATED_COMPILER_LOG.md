@@ -8,7 +8,8 @@ audit_role: reference
 
 ### 2026-10-09 — public native paired saved-LSE JVP
 
-Owner: FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
+Owner: [FRONTEND-IR-MEDIUM-1](INTEGRATED_COMPILER_PLAN.md#frontend-ir-medium-1)
+Shared: AD-RESIDUAL-EVAL-1 / E2E-REAL-6.
 PRs: pending; sync PUBLIC-NATIVE-JVP-20261009.
 
 Outcome: Public JVP binds frontend intent to a separate native Graph AD owner
@@ -23,7 +24,10 @@ and 359 focused registry/AD/audit/metadata gates pass.
 Two fresh six-profile packets validate four outputs against an independent FP64
 oracle before separate native events and completed-call timing. Maximum error
 is 6.167596078299198e-7. Resident/host ratios span 1.187–1.300; no speedup claimed.
-All 25 source pins match the current worktree. All four backend queues assessed.
+The 25 source pins identify the measured static generation. Subsequent schema
+reconciliation is recorded in native_public_jvp_integration_plan.md; these
+receipts do not prove its combined bounded saved-LSE route. All four backend
+queues assessed.
 
 Remaining: GFX1201 public parity, generic scaled_matmul batching/transpose,
 dynamic/composed/higher-order products, half-storage AD and resident overhead.

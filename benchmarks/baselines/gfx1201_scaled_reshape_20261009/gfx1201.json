@@ -1,0 +1,5042 @@
+{
+  "architecture": "gfx1201",
+  "device": "AMD Radeon RX 9070 XT",
+  "uuid_hex": "32386439653765666266326566373136",
+  "route": "Frontend semantic projection->Graph->native AD->Schedule->Tile->ROCm Target->LLVM->HSACO->checked HIP ABI",
+  "correctness": "Independent float64 block-product/JVP/transpose oracle before and after every timing window",
+  "member_timing_scope": "Grouped repeated members including HIP graph dispatch; not additive interleaved program time",
+  "public_scope": "Compilation warm; includes preparation and allocation; no speedup claim",
+  "sources": {
+    "python/tessera/compiler/trace.py": "bc08f63526db80d97c75ce73b814665f3ff9694b60bdcc41b8a5cf51c9bea3c7",
+    "python/tessera/compiler/rocm_typed_scaled_native.py": "2d66da475a61dbffa828da5d25e12ba91a07a5976cb612219040e5ce77620a66",
+    "python/tessera/compiler/native_scaled_program.py": "dd4d7b09884d5c2d43a933db85c8821711bab410b07452f548c1f54697b5863c",
+    "src/transforms/lib/NativeScaledCarrier.h": "d98721d007c2350e42ce1a62694d6b7fc4ca2f22fd348a81887798e7978e9370",
+    "src/transforms/lib/NativeScaledMatmulProgram.h": "44d0f62ebd24e0ef743369f48972ea67b072e191dde38593a56e077c7f2ef5aa",
+    "src/compiler/programming_model/lib/NativeScaleTranspose.h": "572c6ef8fb8dbce1d007f6a110e7f72fe4cb77cd3f9fd2f5a0cd7b189b7d9a93",
+    "python/tessera/compiler/paged_host_span.py": "713a2f51e023535eff14b1f6422f16449be56d7235e882f6431a1b7a2985ec9e",
+    "python/tessera/compiler/jit.py": "e4a26dc076ebe35da646945a09a82f7c5af015c96f159b3c76dad904626e6dd8",
+    "src/compiler/codegen/Tessera_ROCM_Backend/runtime/hip/native_program_runtime.cpp": "a8dc4b41f67bea2370b2857926af6a88b70886957db29c9aa4ca528cc418b230",
+    "tests/unit/test_scaled_reshape_carrier.py": "a4685170ffa04567ad3bbe9f717c126b90feaea5a270f1a4ef5a37a805f6a104",
+    "tests/device/rocm/test_scaled_reshape_carrier.py": "a94e07f56b2a864f79d733e747d1e695fa2d048edfef3c2e357687b33238603d",
+    "benchmarks/rocm/record_scaled_reshape_carrier.py": "22547f8bc9c39cbb47b7d2ede2567d822743b1c78a272d8fb1510c9085525eb7"
+  },
+  "tools": {
+    "TESSERA_OPT": "947111d6aa8e0d119761332d384995c32260b8692146a34590a78942bd5a8c6e",
+    "TESSERA_ROCM_NATIVE_MOVEMENT_LIB": "21199d5f9e3ff3d8b588a0a691cb83dabb385c756ce258ca74b7affef3f4d0fb"
+  },
+  "rows": [
+    {
+      "output_shape": [
+        15
+      ],
+      "mode": "primal",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "cold_compile_and_call_ms": 403.1041089911014,
+      "native_program_samples_ms": [
+        0.010808374732732773,
+        0.011154234409332275,
+        0.01117032766342163,
+        0.010922202840447426,
+        0.011352437548339367,
+        0.01077196840196848,
+        0.010974468663334846
+      ],
+      "native_program_median_ms": 0.010974468663334846,
+      "member_samples_ms": [
+        [
+          0.0018889609491452575,
+          0.002018960891291499,
+          0.0017377890180796385,
+          0.0018184140790253878,
+          0.0019031015690416098,
+          0.0017202890012413263
+        ],
+        [
+          0.001790937501937151,
+          0.0017215624684467912,
+          0.00173656246624887,
+          0.0018159374594688416,
+          0.0019068749388679862,
+          0.001756250043399632
+        ],
+        [
+          0.001788749941624701,
+          0.0017368750413879752,
+          0.0017434374894946814,
+          0.0018056250410154462,
+          0.0019281250424683094,
+          0.0017159375129267573
+        ],
+        [
+          0.0017937499796971679,
+          0.001713437493890524,
+          0.0017412500455975533,
+          0.0018149999668821692,
+          0.0018934374675154686,
+          0.0017506249714642763
+        ],
+        [
+          0.0017903202679008245,
+          0.0017178202979266644,
+          0.0017346952809020877,
+          0.0018181328196078539,
+          0.001930320286192,
+          0.0017534453654661775
+        ],
+        [
+          0.0017868827562779188,
+          0.0017131250351667404,
+          0.0017340624472126365,
+          0.0018093750113621354,
+          0.0019068749388679862,
+          0.00172125780954957
+        ],
+        [
+          0.0017934375209733844,
+          0.001713437493890524,
+          0.001735937548801303,
+          0.0018162500346079469,
+          0.0019243749557062984,
+          0.0017209375509992242
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        11.800826992839575,
+        1.7577330581843853,
+        1.6774898394942284,
+        1.7213239334523678,
+        1.7442379612475634,
+        1.7488161101937294,
+        1.6985198017209768
+      ],
+      "public_compile_warm_median_ms": 1.7442379612475634,
+      "program": {
+        "argument_count": 4,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 4,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 1,
+            "id": 5,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 2,
+            "id": 6,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 3,
+            "id": 7,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 4,
+            "id": 8,
+            "last_read": 5,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 5,
+            "id": 9,
+            "last_read": 6,
+            "ownership": 2,
+            "shape": [
+              15
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "primal",
+        "outputs": [
+          9
+        ],
+        "root": "reshaped",
+        "root_ir": "func.func @reshaped(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>) -> tensor<15xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"c36f10eb32579d443baf4dff0eb7690cd4f53f5a57ce1193a70b5fae3bc2b833\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %2 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %3 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %4 = tessera.scaled_matmul %0, %1 scales(%2, %3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %5 = tessera.reshape %4 {shape = [15], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<15xf32>\n  return %5 : tensor<15xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_0",
+            "operation": "tessera.reshape",
+            "output": 4,
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_1",
+            "operation": "tessera.reshape",
+            "output": 5,
+            "step": 1
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_2",
+            "operation": "tessera.reshape",
+            "output": 6,
+            "step": 2
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_3",
+            "operation": "tessera.reshape",
+            "output": 7,
+            "step": 3
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              4,
+              5,
+              6,
+              7
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__member_4",
+            "operation": "tessera.scaled_matmul",
+            "output": 8,
+            "step": 4
+          },
+          {
+            "inputs": [
+              8
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_5",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 5
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "bf755a3c8d15abe445758cfceda05d2df8549ea6191a65738c055fe2cc9de97c"
+      ]
+    },
+    {
+      "output_shape": [
+        15
+      ],
+      "mode": "forward",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "cold_compile_and_call_ms": 605.8973129838705,
+      "native_program_samples_ms": [
+        0.05722830444574356,
+        0.06071396917104721,
+        0.060451991856098175,
+        0.06004896014928818,
+        0.06040383502840996,
+        0.06009876728057861,
+        0.06053314730525017
+      ],
+      "native_program_median_ms": 0.06040383502840996,
+      "member_samples_ms": [
+        [
+          0.0031844063196331263,
+          0.0033559766598045826,
+          0.003274093847721815,
+          0.0032750312238931656,
+          0.003315968671813607,
+          0.003313156310468912,
+          0.003433781210333109,
+          0.0034494062419980764,
+          0.0036634686402976513,
+          0.0036059764679521322,
+          0.0036359764635562897,
+          0.0033806641586124897,
+          0.0036109688226133585,
+          0.0033359688241034746,
+          0.003661601571366191,
+          0.003379414090886712,
+          0.003253781236708164,
+          0.003283468773588538
+        ],
+        [
+          0.003365578129887581,
+          0.00334964063949883,
+          0.0032662032172083855,
+          0.0032755781430751085,
+          0.003321515629068017,
+          0.003308703191578388,
+          0.003433078061789274,
+          0.0034471405670046806,
+          0.0037062030751258135,
+          0.003605265635997057,
+          0.003627765690907836,
+          0.003252460854128003,
+          0.0036143281031399965,
+          0.0032896483317017555,
+          0.003671203041449189,
+          0.003252140711992979,
+          0.0032624530140310526,
+          0.003270586021244526
+        ],
+        [
+          0.0033587110228836536,
+          0.0033543359022587538,
+          0.0032705781050026417,
+          0.0032787031959742308,
+          0.003319648327305913,
+          0.0035272110253572464,
+          0.003438078099861741,
+          0.0034455780405551195,
+          0.003670578124001622,
+          0.0035965624265372753,
+          0.0036346795968711376,
+          0.003254062496125698,
+          0.0036115546245127916,
+          0.003332492196932435,
+          0.003655304666608572,
+          0.003273117123171687,
+          0.003263117279857397,
+          0.0032778047025203705
+        ],
+        [
+          0.0033631171099841595,
+          0.0033424922730773687,
+          0.003257500007748604,
+          0.0032768750097602606,
+          0.0033206171356141567,
+          0.003296242095530033,
+          0.003435929771512747,
+          0.0034399922005832195,
+          0.003656867193058133,
+          0.0036237500607967377,
+          0.003638429567217827,
+          0.003249992150813341,
+          0.0036190624814480543,
+          0.0032828047405928373,
+          0.003659999929368496,
+          0.003254367271438241,
+          0.003254992188885808,
+          0.003277773503214121
+        ],
+        [
+          0.003351835999637842,
+          0.003360578091815114,
+          0.003257765667513013,
+          0.0032762109767645597,
+          0.0033183905761688948,
+          0.0033246406819671392,
+          0.0034396485425531864,
+          0.0034458907321095467,
+          0.0037149530835449696,
+          0.0036049531772732735,
+          0.003632140578702092,
+          0.0032462109811604023,
+          0.003603078192099929,
+          0.0032905780244618654,
+          0.0036583906039595604,
+          0.0032630781643092632,
+          0.0032652735244482756,
+          0.003274960909038782
+        ],
+        [
+          0.003346562385559082,
+          0.0033459297847002745,
+          0.0032681170850992203,
+          0.0032799921464174986,
+          0.003317179623991251,
+          0.003319367067888379,
+          0.003433742094784975,
+          0.0034559296909719706,
+          0.003666242118924856,
+          0.0035962422844022512,
+          0.003626554738730192,
+          0.003254054579883814,
+          0.003606554586440325,
+          0.0032921796664595604,
+          0.003649679711088538,
+          0.003257500007748604,
+          0.003247179789468646,
+          0.00327249220572412
+        ],
+        [
+          0.003351242281496525,
+          0.0033399921376258135,
+          0.003263742197304964,
+          0.0033456170931458473,
+          0.003321554744616151,
+          0.0032993671484291553,
+          0.0034334296360611916,
+          0.003445929614827037,
+          0.0036534296814352274,
+          0.003599375020712614,
+          0.003636250039562583,
+          0.0032490547746419907,
+          0.003614679677411914,
+          0.0032840624917298555,
+          0.003659999929368496,
+          0.003256554715335369,
+          0.003262812504544854,
+          0.0032784296199679375
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        7.595679955556989,
+        3.751335898414254,
+        3.694176906719804,
+        4.098629113286734,
+        3.6202461924403906,
+        3.5837169270962477,
+        3.66104394197464
+      ],
+      "public_compile_warm_median_ms": 3.694176906719804,
+      "program": {
+        "argument_count": 8,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 4,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 6,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 4,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 5,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 6,
+            "last_read": 5,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 7,
+            "last_read": 7,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 8,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 1,
+            "id": 9,
+            "last_read": 9,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 2,
+            "id": 10,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 3,
+            "id": 11,
+            "last_read": 10,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 4,
+            "id": 12,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 5,
+            "id": 13,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 6,
+            "id": 14,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 7,
+            "id": 15,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 8,
+            "id": 16,
+            "last_read": 16,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 9,
+            "id": 17,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 10,
+            "id": 18,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 11,
+            "id": 19,
+            "last_read": 13,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 12,
+            "id": 20,
+            "last_read": 13,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 13,
+            "id": 21,
+            "last_read": 15,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 14,
+            "id": 22,
+            "last_read": 15,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 15,
+            "id": 23,
+            "last_read": 17,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 16,
+            "id": 24,
+            "last_read": 18,
+            "ownership": 2,
+            "shape": [
+              15
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 17,
+            "id": 25,
+            "last_read": 18,
+            "ownership": 2,
+            "shape": [
+              15
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "outputs": [
+          24,
+          25
+        ],
+        "root": "reshaped__jvp",
+        "root_ir": "func.func private @reshaped__jvp(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>, %arg4: tensor<21xf32>, %arg5: tensor<35xf32>, %arg6: tensor<6xf32>, %arg7: tensor<6xf32>) -> (tensor<15xf32>, tensor<15xf32>) attributes {tessera.autodiff.forward = @reshaped, tessera.autodiff.role = \"jvp\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg4 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %2 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %3 = tessera.reshape %arg5 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %4 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %5 = tessera.reshape %arg6 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %6 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %7 = tessera.reshape %arg7 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %8 = tessera.scaled_matmul %0, %2 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %9 = tessera.scaled_matmul %1, %2 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %10 = tessera.scaled_matmul %0, %3 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %11 = tessera.add %9, %10 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %12 = tessera.scaled_matmul %0, %2 scales(%5, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %13 = tessera.add %11, %12 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %14 = tessera.scaled_matmul %0, %2 scales(%4, %7) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %15 = tessera.add %13, %14 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %16 = tessera.reshape %8 {shape = [15], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<15xf32>\n  %17 = tessera.reshape %15 {shape = [15], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<15xf32>\n  return %16, %17 : tensor<15xf32>, tensor<15xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_0",
+            "operation": "tessera.reshape",
+            "output": 8,
+            "step": 0
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_1",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_2",
+            "operation": "tessera.reshape",
+            "output": 10,
+            "step": 2
+          },
+          {
+            "inputs": [
+              5
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_3",
+            "operation": "tessera.reshape",
+            "output": 11,
+            "step": 3
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_4",
+            "operation": "tessera.reshape",
+            "output": 12,
+            "step": 4
+          },
+          {
+            "inputs": [
+              6
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_5",
+            "operation": "tessera.reshape",
+            "output": 13,
+            "step": 5
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_6",
+            "operation": "tessera.reshape",
+            "output": 14,
+            "step": 6
+          },
+          {
+            "inputs": [
+              7
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_7",
+            "operation": "tessera.reshape",
+            "output": 15,
+            "step": 7
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_8",
+            "operation": "tessera.scaled_matmul",
+            "output": 16,
+            "step": 8
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              9,
+              10,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_9",
+            "operation": "tessera.scaled_matmul",
+            "output": 17,
+            "step": 9
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              11,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_10",
+            "operation": "tessera.scaled_matmul",
+            "output": 18,
+            "step": 10
+          },
+          {
+            "inputs": [
+              17,
+              18
+            ],
+            "member": "reshaped__jvp__member_11",
+            "operation": "tessera.add",
+            "output": 19,
+            "step": 11
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              13,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_12",
+            "operation": "tessera.scaled_matmul",
+            "output": 20,
+            "step": 12
+          },
+          {
+            "inputs": [
+              19,
+              20
+            ],
+            "member": "reshaped__jvp__member_13",
+            "operation": "tessera.add",
+            "output": 21,
+            "step": 13
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              12,
+              15
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_14",
+            "operation": "tessera.scaled_matmul",
+            "output": 22,
+            "step": 14
+          },
+          {
+            "inputs": [
+              21,
+              22
+            ],
+            "member": "reshaped__jvp__member_15",
+            "operation": "tessera.add",
+            "output": 23,
+            "step": 15
+          },
+          {
+            "inputs": [
+              16
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_16",
+            "operation": "tessera.reshape",
+            "output": 24,
+            "step": 16
+          },
+          {
+            "inputs": [
+              23
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_17",
+            "operation": "tessera.reshape",
+            "output": 25,
+            "step": 17
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "bf755a3c8d15abe445758cfceda05d2df8549ea6191a65738c055fe2cc9de97c",
+        "bf755a3c8d15abe445758cfceda05d2df8549ea6191a65738c055fe2cc9de97c"
+      ]
+    },
+    {
+      "output_shape": [
+        15
+      ],
+      "mode": "reverse",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 1.862645149230957e-09,
+      "cold_compile_and_call_ms": 455.55290719494224,
+      "native_program_samples_ms": [
+        0.05271799862384796,
+        0.05176573246717453,
+        0.051252398639917374,
+        0.05115090683102608,
+        0.051336709409952164,
+        0.05163303762674332,
+        0.05159029737114906
+      ],
+      "native_program_median_ms": 0.05159029737114906,
+      "member_samples_ms": [
+        [
+          0.003380054607987404,
+          0.0033184844069182873,
+          0.003336296882480383,
+          0.0034494218416512012,
+          0.003205663990229368,
+          0.0062113357707858086,
+          0.007947921752929688,
+          0.003999750129878521,
+          0.0036703592631965876,
+          0.0034241171088069677,
+          0.003642242169007659,
+          0.003588093677535653,
+          0.003781929612159729
+        ],
+        [
+          0.0033837968949228525,
+          0.003315359354019165,
+          0.003335359273478389,
+          0.0034403593745082617,
+          0.0033316093031316996,
+          0.006206960882991552,
+          0.007886046543717384,
+          0.004116077907383442,
+          0.0038497422356158495,
+          0.0036274921149015427,
+          0.0038105312269181013,
+          0.0032593593932688236,
+          0.0037684219423681498
+        ],
+        [
+          0.003375609405338764,
+          0.003331867279484868,
+          0.0033278046175837517,
+          0.00344185926951468,
+          0.0033346719574183226,
+          0.006210601422935724,
+          0.007898719049990177,
+          0.0040995157323777676,
+          0.0038422499783337116,
+          0.0036410000175237656,
+          0.003259992226958275,
+          0.003796390723437071,
+          0.0038927968125790358
+        ],
+        [
+          0.0033721718937158585,
+          0.0033156094141304493,
+          0.0033749921713024378,
+          0.003444984322413802,
+          0.0033278046175837517,
+          0.006338734179735184,
+          0.007933726534247398,
+          0.004116781055927277,
+          0.003659679787233472,
+          0.003487484296783805,
+          0.003497171914204955,
+          0.003491312498226762,
+          0.003965375013649464
+        ],
+        [
+          0.003376554697751999,
+          0.0033162422478199005,
+          0.003338117152452469,
+          0.0034402969758957624,
+          0.003299679607152939,
+          0.006339359562844038,
+          0.007886851206421852,
+          0.003932796884328127,
+          0.003694671904668212,
+          0.0034240547101944685,
+          0.003476859303191304,
+          0.0037989686243236065,
+          0.004062172025442123
+        ],
+        [
+          0.003376554697751999,
+          0.0033296719193458557,
+          0.0033368670847266912,
+          0.0034478046000003815,
+          0.003341242205351591,
+          0.006331539247184992,
+          0.007933413609862328,
+          0.004122406244277954,
+          0.003871078137308359,
+          0.0034296719823032618,
+          0.0038259217981249094,
+          0.003382796887308359,
+          0.0037939688190817833
+        ],
+        [
+          0.0033718671184033155,
+          0.0033552967943251133,
+          0.0033337422646582127,
+          0.003440304659307003,
+          0.003340304596349597,
+          0.006198101677000523,
+          0.007949968799948692,
+          0.004136625211685896,
+          0.0038606952875852585,
+          0.00363663281314075,
+          0.0034024843480437994,
+          0.0035759296733886003,
+          0.0037763905711472034
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        6.352327996864915,
+        2.1399520337581635,
+        2.1038888953626156,
+        2.2197598591446877,
+        2.2165640257298946,
+        1.8585559446364641,
+        2.1198890171945095
+      ],
+      "public_compile_warm_median_ms": 2.1399520337581635,
+      "program": {
+        "argument_count": 5,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": -1,
+            "id": 4,
+            "last_read": 4,
+            "ownership": 0,
+            "shape": [
+              15
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 5,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 1,
+            "id": 6,
+            "last_read": 7,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 2,
+            "id": 7,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 3,
+            "id": 8,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 4,
+            "id": 9,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 5,
+            "id": 10,
+            "last_read": 10,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 6,
+            "id": 11,
+            "last_read": 9,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 7,
+            "id": 12,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 8,
+            "id": 13,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 9,
+            "id": 14,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 10,
+            "id": 15,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 11,
+            "id": 16,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 12,
+            "id": 17,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          }
+        ],
+        "dependency_policy": "native_recompute_prefix_v1",
+        "gradient_roles": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "kind": "scale_vjp",
+        "outputs": [
+          17,
+          16,
+          15,
+          14
+        ],
+        "root": "reshaped__bwd",
+        "root_ir": "func.func @reshaped__bwd(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>, %arg4: tensor<15xf32>) -> (tensor<21xf32>, tensor<35xf32>, tensor<6xf32>, tensor<6xf32>) attributes {tessera.autodiff.forward = @reshaped, tessera.autodiff.residual_policy = \"recompute_all\", tessera.autodiff.role = \"backward\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %2 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %3 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %4 = tessera.scaled_matmul %0, %1 scales(%2, %3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %5 = tessera.reshape %4 {shape = [15], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<15xf32>\n  %6 = tessera.reshape %arg4 : (tensor<15xf32>) -> tensor<3x5xf32>\n  %generated = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %cst = arith.constant 0.000000e+00 : f32\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %c4 = arith.constant 4 : index\n    %11 = arith.muli %arg6, %c4 : index\n    %c7 = arith.constant 7 : index\n    %12 = arith.subi %c7, %11 : index\n    %c4_3 = arith.constant 4 : index\n    %13 = arith.minui %c4_3, %12 : index\n    %14 = arith.addi %11, %13 : index\n    %c5 = arith.constant 5 : index\n    %15 = scf.for %arg7 = %c0 to %c5 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %16 = scf.for %arg9 = %11 to %14 step %c1 iter_args(%arg10 = %cst) -> (f32) {\n        %extracted_5 = tensor.extract %0[%arg5, %arg9] : tensor<3x7xf32>\n        %extracted_6 = tensor.extract %1[%arg9, %arg7] : tensor<7x5xf32>\n        %21 = arith.mulf %extracted_5, %extracted_6 : f32\n        %22 = arith.addf %arg10, %21 : f32\n        scf.yield %22 : f32\n      }\n      %c2 = arith.constant 2 : index\n      %17 = arith.divui %arg7, %c2 : index\n      %extracted = tensor.extract %3[%arg6, %17] : tensor<2x3xf32>\n      %extracted_4 = tensor.extract %6[%arg5, %arg7] : tensor<3x5xf32>\n      %18 = arith.mulf %16, %extracted : f32\n      %19 = arith.mulf %18, %extracted_4 : f32\n      %20 = arith.addf %arg8, %19 : f32\n      scf.yield %20 : f32\n    }\n    tensor.yield %15 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"lhs_scale\"} : tensor<3x2xf32>\n  %generated_0 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %cst = arith.constant 0.000000e+00 : f32\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %c4 = arith.constant 4 : index\n    %11 = arith.muli %arg5, %c4 : index\n    %c7 = arith.constant 7 : index\n    %12 = arith.subi %c7, %11 : index\n    %c4_3 = arith.constant 4 : index\n    %13 = arith.minui %c4_3, %12 : index\n    %14 = arith.addi %11, %13 : index\n    %c2 = arith.constant 2 : index\n    %15 = arith.muli %arg6, %c2 : index\n    %c5 = arith.constant 5 : index\n    %16 = arith.subi %c5, %15 : index\n    %c2_4 = arith.constant 2 : index\n    %17 = arith.minui %c2_4, %16 : index\n    %18 = arith.addi %15, %17 : index\n    %c3 = arith.constant 3 : index\n    %19 = scf.for %arg7 = %c0 to %c3 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %20 = scf.for %arg9 = %15 to %18 step %c1 iter_args(%arg10 = %arg8) -> (f32) {\n        %21 = scf.for %arg11 = %11 to %14 step %c1 iter_args(%arg12 = %cst) -> (f32) {\n          %extracted_7 = tensor.extract %0[%arg7, %arg11] : tensor<3x7xf32>\n          %extracted_8 = tensor.extract %1[%arg11, %arg9] : tensor<7x5xf32>\n          %26 = arith.mulf %extracted_7, %extracted_8 : f32\n          %27 = arith.addf %arg12, %26 : f32\n          scf.yield %27 : f32\n        }\n        %c2_5 = arith.constant 2 : index\n        %22 = arith.divui %arg9, %c2_5 : index\n        %extracted = tensor.extract %2[%arg7, %arg5] : tensor<3x2xf32>\n        %extracted_6 = tensor.extract %6[%arg7, %arg9] : tensor<3x5xf32>\n        %23 = arith.mulf %21, %extracted : f32\n        %24 = arith.mulf %23, %extracted_6 : f32\n        %25 = arith.addf %arg10, %24 : f32\n        scf.yield %25 : f32\n      }\n      scf.yield %20 : f32\n    }\n    tensor.yield %19 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"rhs_scale\"} : tensor<2x3xf32>\n  %generated_1 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %cst = arith.constant 0.000000e+00 : f32\n    %c4 = arith.constant 4 : index\n    %11 = arith.divui %arg6, %c4 : index\n    %c5 = arith.constant 5 : index\n    %12 = scf.for %arg7 = %c0 to %c5 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %c2 = arith.constant 2 : index\n      %13 = arith.divui %arg7, %c2 : index\n      %extracted = tensor.extract %1[%arg6, %arg7] : tensor<7x5xf32>\n      %extracted_3 = tensor.extract %2[%arg5, %11] : tensor<3x2xf32>\n      %extracted_4 = tensor.extract %3[%11, %13] : tensor<2x3xf32>\n      %extracted_5 = tensor.extract %6[%arg5, %arg7] : tensor<3x5xf32>\n      %14 = arith.mulf %extracted, %extracted_3 : f32\n      %15 = arith.mulf %14, %extracted_4 : f32\n      %16 = arith.mulf %15, %extracted_5 : f32\n      %17 = arith.addf %arg8, %16 : f32\n      scf.yield %17 : f32\n    }\n    tensor.yield %12 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"lhs_matrix\"} : tensor<3x7xf32>\n  %generated_2 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %cst = arith.constant 0.000000e+00 : f32\n    %c4 = arith.constant 4 : index\n    %11 = arith.divui %arg5, %c4 : index\n    %c3 = arith.constant 3 : index\n    %12 = scf.for %arg7 = %c0 to %c3 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %c2 = arith.constant 2 : index\n      %13 = arith.divui %arg6, %c2 : index\n      %extracted = tensor.extract %0[%arg7, %arg5] : tensor<3x7xf32>\n      %extracted_3 = tensor.extract %2[%arg7, %11] : tensor<3x2xf32>\n      %extracted_4 = tensor.extract %3[%11, %13] : tensor<2x3xf32>\n      %extracted_5 = tensor.extract %6[%arg7, %arg6] : tensor<3x5xf32>\n      %14 = arith.mulf %extracted, %extracted_3 : f32\n      %15 = arith.mulf %14, %extracted_4 : f32\n      %16 = arith.mulf %15, %extracted_5 : f32\n      %17 = arith.addf %arg8, %16 : f32\n      scf.yield %17 : f32\n    }\n    tensor.yield %12 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"rhs_matrix\"} : tensor<7x5xf32>\n  %7 = tessera.reshape %generated_0 : (tensor<2x3xf32>) -> tensor<6xf32>\n  %8 = tessera.reshape %generated : (tensor<3x2xf32>) -> tensor<6xf32>\n  %9 = tessera.reshape %generated_2 : (tensor<7x5xf32>) -> tensor<35xf32>\n  %10 = tessera.reshape %generated_1 : (tensor<3x7xf32>) -> tensor<21xf32>\n  return %10, %9, %8, %7 : tensor<21xf32>, tensor<35xf32>, tensor<6xf32>, tensor<6xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_0",
+            "operation": "tessera.reshape",
+            "output": 5,
+            "step": 0
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_1",
+            "operation": "tessera.reshape",
+            "output": 6,
+            "step": 1
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_2",
+            "operation": "tessera.reshape",
+            "output": 7,
+            "step": 2
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_3",
+            "operation": "tessera.reshape",
+            "output": 8,
+            "step": 3
+          },
+          {
+            "dependency_kind": "cotangent",
+            "inputs": [
+              4
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_4",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 4
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "lhs_scale",
+            "inputs": [
+              5,
+              6,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_5",
+            "operation": "tensor.generate",
+            "output": 10,
+            "seed_input": 9,
+            "step": 5
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "rhs_scale",
+            "inputs": [
+              5,
+              6,
+              7,
+              9
+            ],
+            "member": "reshaped__bwd__member_6",
+            "operation": "tensor.generate",
+            "output": 11,
+            "seed_input": 9,
+            "step": 6
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "lhs_matrix",
+            "inputs": [
+              6,
+              7,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_7",
+            "operation": "tensor.generate",
+            "output": 12,
+            "seed_input": 9,
+            "step": 7
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "rhs_matrix",
+            "inputs": [
+              5,
+              7,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_8",
+            "operation": "tensor.generate",
+            "output": 13,
+            "seed_input": 9,
+            "step": 8
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 3,
+            "inputs": [
+              11
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_9",
+            "operation": "tessera.reshape",
+            "output": 14,
+            "step": 9
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 2,
+            "inputs": [
+              10
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_10",
+            "operation": "tessera.reshape",
+            "output": 15,
+            "step": 10
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 1,
+            "inputs": [
+              13
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_11",
+            "operation": "tessera.reshape",
+            "output": 16,
+            "step": 11
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 0,
+            "inputs": [
+              12
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_12",
+            "operation": "tessera.reshape",
+            "output": 17,
+            "step": 12
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "54633b983b76fe4ddac0a053c87a5ad984ba94a41ffbe2b75b7f80a549b12029",
+        "5ee74fc273e1444f33c65b4aeb8ba7123a60bc03cfb991b244f05ce3841a0a49",
+        "00b7e366a47d9f1a266abeae641b22f7ad38a3890fabd0d7f8f23a3ff3bfcde7",
+        "462a49b039196a0796727c909aff56f5a4abbea07af90a67f0546fd4c19106c0",
+        "592f8db80289f4abd97976125df5a30c09f32bc31c80c19370cdd38056f3d121",
+        "7c2466d802f574049b7cd02edc9be7375d2cea3c1ff5d33cbef4f1f022adbec5",
+        "d4865295d5cc051be838f1d460365b2a89ba002f5b7cacab23757ce07696015e",
+        "bf9768ef4fbad4b05912d34578e7e8de224765ff608f58117311561bf1fbf6c5",
+        "420a7fa0e339a462b4a971db44c14f90f353a2f0446df711212e674d21c2adc4"
+      ]
+    },
+    {
+      "output_shape": [
+        5,
+        3
+      ],
+      "mode": "primal",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "cold_compile_and_call_ms": 197.09393195807934,
+      "native_program_samples_ms": [
+        0.02016839012503624,
+        0.019987601786851883,
+        0.019850265234708786,
+        0.020217444747686386,
+        0.019757194444537163,
+        0.019957516342401505,
+        0.019928842782974243
+      ],
+      "native_program_median_ms": 0.019957516342401505,
+      "member_samples_ms": [
+        [
+          0.0033937422558665276,
+          0.0032371797133237123,
+          0.0032756172586232424,
+          0.0034465547651052475,
+          0.0036578045692294836,
+          0.003230929607525468
+        ],
+        [
+          0.0034959218464791775,
+          0.0032646795734763145,
+          0.0032793672289699316,
+          0.003449679585173726,
+          0.0036862422712147236,
+          0.0035260000731796026
+        ],
+        [
+          0.0033878046087920666,
+          0.003244054736569524,
+          0.003294054651632905,
+          0.003439679741859436,
+          0.003624992212280631,
+          0.004281476605683565
+        ],
+        [
+          0.0033824921119958162,
+          0.003287492087110877,
+          0.0032859297934919596,
+          0.0034862421452999115,
+          0.003624992212280631,
+          0.0035758514422923326
+        ],
+        [
+          0.003405617084354162,
+          0.003263117279857397,
+          0.0032834296580404043,
+          0.003448421834036708,
+          0.0036528047639876604,
+          0.003586085978895426
+        ],
+        [
+          0.00338904676027596,
+          0.0032553046476095915,
+          0.0032771718688309193,
+          0.0034434297122061253,
+          0.0036549842916429043,
+          0.0035584219731390476
+        ],
+        [
+          0.0034343593288213015,
+          0.0032418672926723957,
+          0.0032918592914938927,
+          0.003446867223829031,
+          0.0036303047090768814,
+          0.003580148331820965
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        6.916389102116227,
+        1.8151728436350822,
+        1.9514719024300575,
+        1.9194309134036303,
+        1.8810289911925793,
+        1.8994729034602642,
+        1.9635600037872791
+      ],
+      "public_compile_warm_median_ms": 1.9194309134036303,
+      "program": {
+        "argument_count": 4,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 4,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 1,
+            "id": 5,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 2,
+            "id": 6,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 3,
+            "id": 7,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 4,
+            "id": 8,
+            "last_read": 5,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 5,
+            "id": 9,
+            "last_read": 6,
+            "ownership": 2,
+            "shape": [
+              5,
+              3
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "primal",
+        "outputs": [
+          9
+        ],
+        "root": "reshaped",
+        "root_ir": "func.func @reshaped(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>) -> tensor<5x3xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"c36f10eb32579d443baf4dff0eb7690cd4f53f5a57ce1193a70b5fae3bc2b833\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %2 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %3 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %4 = tessera.scaled_matmul %0, %1 scales(%2, %3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %5 = tessera.reshape %4 {shape = [5, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<5x3xf32>\n  return %5 : tensor<5x3xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_0",
+            "operation": "tessera.reshape",
+            "output": 4,
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_1",
+            "operation": "tessera.reshape",
+            "output": 5,
+            "step": 1
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_2",
+            "operation": "tessera.reshape",
+            "output": 6,
+            "step": 2
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_3",
+            "operation": "tessera.reshape",
+            "output": 7,
+            "step": 3
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              4,
+              5,
+              6,
+              7
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__member_4",
+            "operation": "tessera.scaled_matmul",
+            "output": 8,
+            "step": 4
+          },
+          {
+            "inputs": [
+              8
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_5",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 5
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "3988761ec145f80dfce38e9f77fba99cf54a3b941c1e95b93a59a5e6bbc660ef"
+      ]
+    },
+    {
+      "output_shape": [
+        5,
+        3
+      ],
+      "mode": "forward",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "cold_compile_and_call_ms": 588.2190940901637,
+      "native_program_samples_ms": [
+        0.04188321903347969,
+        0.041541654616594315,
+        0.04106162488460541,
+        0.04144204780459404,
+        0.041536882519721985,
+        0.04150836542248726,
+        0.041342172771692276
+      ],
+      "native_program_median_ms": 0.04150836542248726,
+      "member_samples_ms": [
+        [
+          0.002266867086291313,
+          0.002240929752588272,
+          0.002171242143958807,
+          0.0021918672136962414,
+          0.002259679604321718,
+          0.0022281170822679996,
+          0.002299992134794593,
+          0.002324054716154933,
+          0.002413117093965411,
+          0.0024381172843277454,
+          0.003074054606258869,
+          0.0021543672773987055,
+          0.002374054631218314,
+          0.0022474920842796564,
+          0.0024628047831356525,
+          0.0022037422750145197,
+          0.0021218671463429928,
+          0.002634601667523384
+        ],
+        [
+          0.0022665546275675297,
+          0.00223342957906425,
+          0.0021684374660253525,
+          0.002199062379077077,
+          0.0022653124760836363,
+          0.002229062607511878,
+          0.002302812412381172,
+          0.002330312505364418,
+          0.0024481250438839197,
+          0.002408437430858612,
+          0.0024187499657273293,
+          0.002450156258419156,
+          0.002403437392786145,
+          0.0022575780749320984,
+          0.002435312606394291,
+          0.0021309375297278166,
+          0.0025171092711389065,
+          0.0025400780141353607
+        ],
+        [
+          0.0022621797397732735,
+          0.0022331250365823507,
+          0.0021668749395757914,
+          0.002205624943599105,
+          0.0022946875542402267,
+          0.0022278125397861004,
+          0.002301249885931611,
+          0.0023365546949207783,
+          0.00245343754068017,
+          0.0024115624837577343,
+          0.002394367242231965,
+          0.0022123437374830246,
+          0.0023725000210106373,
+          0.002271406352519989,
+          0.002486242214217782,
+          0.002187179634347558,
+          0.0025134296156466007,
+          0.002138742245733738
+        ],
+        [
+          0.002267796779051423,
+          0.002234992105513811,
+          0.002171242143958807,
+          0.0022134296596050262,
+          0.0022693672217428684,
+          0.0022315545938909054,
+          0.002302179578691721,
+          0.0023212421219795942,
+          0.002456554677337408,
+          0.002402179641649127,
+          0.0023921795655041933,
+          0.0022094452288001776,
+          0.002403117250651121,
+          0.0022318672854453325,
+          0.0024656171444803476,
+          0.002131242072209716,
+          0.0031583516392856836,
+          0.0030048280023038387
+        ],
+        [
+          0.002271242206916213,
+          0.0022324922028928995,
+          0.002169054700061679,
+          0.002200929680839181,
+          0.00227186712436378,
+          0.002234367188066244,
+          0.00229592970572412,
+          0.002318117069080472,
+          0.002499679569154978,
+          0.0023890547454357147,
+          0.0023821797221899033,
+          0.0021071797236800194,
+          0.0023731172550469637,
+          0.002379445359110832,
+          0.0025074922014027834,
+          0.0022869452368468046,
+          0.002114687580615282,
+          0.0026170234195888042
+        ],
+        [
+          0.0022684296127408743,
+          0.0022315545938909054,
+          0.002168429782614112,
+          0.0021903046872466803,
+          0.0022671797778457403,
+          0.002224054653197527,
+          0.0023003045935183764,
+          0.0023237422574311495,
+          0.0024859297554939985,
+          0.0024293672759085894,
+          0.0023924922570586205,
+          0.0021049922797828913,
+          0.0024465546011924744,
+          0.0022203046828508377,
+          0.0024959295988082886,
+          0.0022389765363186598,
+          0.0025065545924007893,
+          0.0030927187763154507
+        ],
+        [
+          0.002263117115944624,
+          0.0022387420758605003,
+          0.002169679617509246,
+          0.0021949922665953636,
+          0.002269054763019085,
+          0.0022268672473728657,
+          0.0023028047289699316,
+          0.0023215545807033777,
+          0.002487171906977892,
+          0.002455929759889841,
+          0.0024187422823160887,
+          0.002200304763391614,
+          0.002447179751470685,
+          0.002266164170578122,
+          0.0024265467654913664,
+          0.002134367125108838,
+          0.002588968724012375,
+          0.002714836038649082
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        7.338678929954767,
+        3.546555992215872,
+        3.5228508058935404,
+        3.482143161818385,
+        4.034315934404731,
+        3.507430898025632,
+        4.012082936242223
+      ],
+      "public_compile_warm_median_ms": 3.546555992215872,
+      "program": {
+        "argument_count": 8,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 4,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 6,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 4,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 5,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 6,
+            "last_read": 5,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 7,
+            "last_read": 7,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 8,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 1,
+            "id": 9,
+            "last_read": 9,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 2,
+            "id": 10,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 3,
+            "id": 11,
+            "last_read": 10,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 4,
+            "id": 12,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 5,
+            "id": 13,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 6,
+            "id": 14,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 7,
+            "id": 15,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 8,
+            "id": 16,
+            "last_read": 16,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 9,
+            "id": 17,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 10,
+            "id": 18,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 11,
+            "id": 19,
+            "last_read": 13,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 12,
+            "id": 20,
+            "last_read": 13,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 13,
+            "id": 21,
+            "last_read": 15,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 14,
+            "id": 22,
+            "last_read": 15,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 15,
+            "id": 23,
+            "last_read": 17,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 16,
+            "id": 24,
+            "last_read": 18,
+            "ownership": 2,
+            "shape": [
+              5,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 17,
+            "id": 25,
+            "last_read": 18,
+            "ownership": 2,
+            "shape": [
+              5,
+              3
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "outputs": [
+          24,
+          25
+        ],
+        "root": "reshaped__jvp",
+        "root_ir": "func.func private @reshaped__jvp(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>, %arg4: tensor<21xf32>, %arg5: tensor<35xf32>, %arg6: tensor<6xf32>, %arg7: tensor<6xf32>) -> (tensor<5x3xf32>, tensor<5x3xf32>) attributes {tessera.autodiff.forward = @reshaped, tessera.autodiff.role = \"jvp\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg4 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %2 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %3 = tessera.reshape %arg5 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %4 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %5 = tessera.reshape %arg6 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %6 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %7 = tessera.reshape %arg7 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %8 = tessera.scaled_matmul %0, %2 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %9 = tessera.scaled_matmul %1, %2 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %10 = tessera.scaled_matmul %0, %3 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %11 = tessera.add %9, %10 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %12 = tessera.scaled_matmul %0, %2 scales(%5, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %13 = tessera.add %11, %12 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %14 = tessera.scaled_matmul %0, %2 scales(%4, %7) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %15 = tessera.add %13, %14 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %16 = tessera.reshape %8 {shape = [5, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<5x3xf32>\n  %17 = tessera.reshape %15 {shape = [5, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<5x3xf32>\n  return %16, %17 : tensor<5x3xf32>, tensor<5x3xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_0",
+            "operation": "tessera.reshape",
+            "output": 8,
+            "step": 0
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_1",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_2",
+            "operation": "tessera.reshape",
+            "output": 10,
+            "step": 2
+          },
+          {
+            "inputs": [
+              5
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_3",
+            "operation": "tessera.reshape",
+            "output": 11,
+            "step": 3
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_4",
+            "operation": "tessera.reshape",
+            "output": 12,
+            "step": 4
+          },
+          {
+            "inputs": [
+              6
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_5",
+            "operation": "tessera.reshape",
+            "output": 13,
+            "step": 5
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_6",
+            "operation": "tessera.reshape",
+            "output": 14,
+            "step": 6
+          },
+          {
+            "inputs": [
+              7
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_7",
+            "operation": "tessera.reshape",
+            "output": 15,
+            "step": 7
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_8",
+            "operation": "tessera.scaled_matmul",
+            "output": 16,
+            "step": 8
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              9,
+              10,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_9",
+            "operation": "tessera.scaled_matmul",
+            "output": 17,
+            "step": 9
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              11,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_10",
+            "operation": "tessera.scaled_matmul",
+            "output": 18,
+            "step": 10
+          },
+          {
+            "inputs": [
+              17,
+              18
+            ],
+            "member": "reshaped__jvp__member_11",
+            "operation": "tessera.add",
+            "output": 19,
+            "step": 11
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              13,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_12",
+            "operation": "tessera.scaled_matmul",
+            "output": 20,
+            "step": 12
+          },
+          {
+            "inputs": [
+              19,
+              20
+            ],
+            "member": "reshaped__jvp__member_13",
+            "operation": "tessera.add",
+            "output": 21,
+            "step": 13
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              12,
+              15
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_14",
+            "operation": "tessera.scaled_matmul",
+            "output": 22,
+            "step": 14
+          },
+          {
+            "inputs": [
+              21,
+              22
+            ],
+            "member": "reshaped__jvp__member_15",
+            "operation": "tessera.add",
+            "output": 23,
+            "step": 15
+          },
+          {
+            "inputs": [
+              16
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_16",
+            "operation": "tessera.reshape",
+            "output": 24,
+            "step": 16
+          },
+          {
+            "inputs": [
+              23
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_17",
+            "operation": "tessera.reshape",
+            "output": 25,
+            "step": 17
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "3988761ec145f80dfce38e9f77fba99cf54a3b941c1e95b93a59a5e6bbc660ef",
+        "3988761ec145f80dfce38e9f77fba99cf54a3b941c1e95b93a59a5e6bbc660ef"
+      ]
+    },
+    {
+      "output_shape": [
+        5,
+        3
+      ],
+      "mode": "reverse",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 1.862645149230957e-09,
+      "cold_compile_and_call_ms": 446.38364599086344,
+      "native_program_samples_ms": [
+        0.05178670957684517,
+        0.05121374875307083,
+        0.05160452425479889,
+        0.05153576657176018,
+        0.05170731991529465,
+        0.051713570952415466,
+        0.051276836544275284
+      ],
+      "native_program_median_ms": 0.05160452425479889,
+      "member_samples_ms": [
+        [
+          0.0033971797674894333,
+          0.0033334295731037855,
+          0.0033352968748658895,
+          0.003441242268308997,
+          0.0035487422719597816,
+          0.006348421797156334,
+          0.007922164164483547,
+          0.0041193594224750996,
+          0.0037231093738228083,
+          0.003603039076551795,
+          0.0032531172037124634,
+          0.004003734327852726,
+          0.0036684295628219843
+        ],
+        [
+          0.0033752969466149807,
+          0.003314367262646556,
+          0.0034009297378361225,
+          0.0034393593668937683,
+          0.003560148412361741,
+          0.0062106093391776085,
+          0.00791653897613287,
+          0.004056867212057114,
+          0.0037562421057373285,
+          0.003608671948313713,
+          0.0034623360261321068,
+          0.0032568671740591526,
+          0.004593976773321629
+        ],
+        [
+          0.003372179577127099,
+          0.0036371094174683094,
+          0.0033328046556562185,
+          0.0034515545703470707,
+          0.003542492166161537,
+          0.006338117178529501,
+          0.007761859335005283,
+          0.004020617343485355,
+          0.003793742274865508,
+          0.003562492085620761,
+          0.0034529687836766243,
+          0.00346616399474442,
+          0.0034509296528995037
+        ],
+        [
+          0.0034668671432882547,
+          0.003306867089122534,
+          0.003333117114380002,
+          0.003438750049099326,
+          0.003230312606319785,
+          0.006348421797156334,
+          0.007876538671553135,
+          0.004040922038257122,
+          0.0037981094792485237,
+          0.0035712344106286764,
+          0.003455609316006303,
+          0.003478351514786482,
+          0.0034606093540787697
+        ],
+        [
+          0.0034131172578781843,
+          0.0035538123920559883,
+          0.0033315469045192003,
+          0.0034449922386556864,
+          0.003562249941751361,
+          0.006295913830399513,
+          0.007764039095491171,
+          0.003922171890735626,
+          0.003871234366670251,
+          0.0038795156870037317,
+          0.0034545157104730606,
+          0.0032503046095371246,
+          0.004025140777230263
+        ],
+        [
+          0.003366859396919608,
+          0.0033153046388179064,
+          0.003338742069900036,
+          0.003444359404966235,
+          0.003222492290660739,
+          0.006228101439774036,
+          0.0077512264251708984,
+          0.004017796833068132,
+          0.0038049842696636915,
+          0.00359678128734231,
+          0.003481085877865553,
+          0.0034563906956464052,
+          0.0034552968572825193
+        ],
+        [
+          0.003366554621607065,
+          0.0033128047361969948,
+          0.003336546942591667,
+          0.003444679779931903,
+          0.003549835877493024,
+          0.006323726382106543,
+          0.007772163953632116,
+          0.004065297078341246,
+          0.0037977967876940966,
+          0.0035834219306707382,
+          0.0034781876020133495,
+          0.0034648359287530184,
+          0.0034481093753129244
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        6.183976074680686,
+        2.135865157470107,
+        2.185109071433544,
+        2.086180029436946,
+        2.1983638871461153,
+        2.256333827972412,
+        2.115105977281928
+      ],
+      "public_compile_warm_median_ms": 2.185109071433544,
+      "program": {
+        "argument_count": 5,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": -1,
+            "id": 4,
+            "last_read": 4,
+            "ownership": 0,
+            "shape": [
+              5,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 5,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 1,
+            "id": 6,
+            "last_read": 7,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 2,
+            "id": 7,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 3,
+            "id": 8,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 4,
+            "id": 9,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 5,
+            "id": 10,
+            "last_read": 10,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 6,
+            "id": 11,
+            "last_read": 9,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 7,
+            "id": 12,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 8,
+            "id": 13,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 9,
+            "id": 14,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 10,
+            "id": 15,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 11,
+            "id": 16,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 12,
+            "id": 17,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          }
+        ],
+        "dependency_policy": "native_recompute_prefix_v1",
+        "gradient_roles": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "kind": "scale_vjp",
+        "outputs": [
+          17,
+          16,
+          15,
+          14
+        ],
+        "root": "reshaped__bwd",
+        "root_ir": "func.func @reshaped__bwd(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>, %arg4: tensor<5x3xf32>) -> (tensor<21xf32>, tensor<35xf32>, tensor<6xf32>, tensor<6xf32>) attributes {tessera.autodiff.forward = @reshaped, tessera.autodiff.residual_policy = \"recompute_all\", tessera.autodiff.role = \"backward\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %2 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %3 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %4 = tessera.scaled_matmul %0, %1 scales(%2, %3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %5 = tessera.reshape %4 {shape = [5, 3], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<5x3xf32>\n  %6 = tessera.reshape %arg4 : (tensor<5x3xf32>) -> tensor<3x5xf32>\n  %generated = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %cst = arith.constant 0.000000e+00 : f32\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %c4 = arith.constant 4 : index\n    %11 = arith.muli %arg6, %c4 : index\n    %c7 = arith.constant 7 : index\n    %12 = arith.subi %c7, %11 : index\n    %c4_3 = arith.constant 4 : index\n    %13 = arith.minui %c4_3, %12 : index\n    %14 = arith.addi %11, %13 : index\n    %c5 = arith.constant 5 : index\n    %15 = scf.for %arg7 = %c0 to %c5 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %16 = scf.for %arg9 = %11 to %14 step %c1 iter_args(%arg10 = %cst) -> (f32) {\n        %extracted_5 = tensor.extract %0[%arg5, %arg9] : tensor<3x7xf32>\n        %extracted_6 = tensor.extract %1[%arg9, %arg7] : tensor<7x5xf32>\n        %21 = arith.mulf %extracted_5, %extracted_6 : f32\n        %22 = arith.addf %arg10, %21 : f32\n        scf.yield %22 : f32\n      }\n      %c2 = arith.constant 2 : index\n      %17 = arith.divui %arg7, %c2 : index\n      %extracted = tensor.extract %3[%arg6, %17] : tensor<2x3xf32>\n      %extracted_4 = tensor.extract %6[%arg5, %arg7] : tensor<3x5xf32>\n      %18 = arith.mulf %16, %extracted : f32\n      %19 = arith.mulf %18, %extracted_4 : f32\n      %20 = arith.addf %arg8, %19 : f32\n      scf.yield %20 : f32\n    }\n    tensor.yield %15 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"lhs_scale\"} : tensor<3x2xf32>\n  %generated_0 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %cst = arith.constant 0.000000e+00 : f32\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %c4 = arith.constant 4 : index\n    %11 = arith.muli %arg5, %c4 : index\n    %c7 = arith.constant 7 : index\n    %12 = arith.subi %c7, %11 : index\n    %c4_3 = arith.constant 4 : index\n    %13 = arith.minui %c4_3, %12 : index\n    %14 = arith.addi %11, %13 : index\n    %c2 = arith.constant 2 : index\n    %15 = arith.muli %arg6, %c2 : index\n    %c5 = arith.constant 5 : index\n    %16 = arith.subi %c5, %15 : index\n    %c2_4 = arith.constant 2 : index\n    %17 = arith.minui %c2_4, %16 : index\n    %18 = arith.addi %15, %17 : index\n    %c3 = arith.constant 3 : index\n    %19 = scf.for %arg7 = %c0 to %c3 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %20 = scf.for %arg9 = %15 to %18 step %c1 iter_args(%arg10 = %arg8) -> (f32) {\n        %21 = scf.for %arg11 = %11 to %14 step %c1 iter_args(%arg12 = %cst) -> (f32) {\n          %extracted_7 = tensor.extract %0[%arg7, %arg11] : tensor<3x7xf32>\n          %extracted_8 = tensor.extract %1[%arg11, %arg9] : tensor<7x5xf32>\n          %26 = arith.mulf %extracted_7, %extracted_8 : f32\n          %27 = arith.addf %arg12, %26 : f32\n          scf.yield %27 : f32\n        }\n        %c2_5 = arith.constant 2 : index\n        %22 = arith.divui %arg9, %c2_5 : index\n        %extracted = tensor.extract %2[%arg7, %arg5] : tensor<3x2xf32>\n        %extracted_6 = tensor.extract %6[%arg7, %arg9] : tensor<3x5xf32>\n        %23 = arith.mulf %21, %extracted : f32\n        %24 = arith.mulf %23, %extracted_6 : f32\n        %25 = arith.addf %arg10, %24 : f32\n        scf.yield %25 : f32\n      }\n      scf.yield %20 : f32\n    }\n    tensor.yield %19 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"rhs_scale\"} : tensor<2x3xf32>\n  %generated_1 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %cst = arith.constant 0.000000e+00 : f32\n    %c4 = arith.constant 4 : index\n    %11 = arith.divui %arg6, %c4 : index\n    %c5 = arith.constant 5 : index\n    %12 = scf.for %arg7 = %c0 to %c5 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %c2 = arith.constant 2 : index\n      %13 = arith.divui %arg7, %c2 : index\n      %extracted = tensor.extract %1[%arg6, %arg7] : tensor<7x5xf32>\n      %extracted_3 = tensor.extract %2[%arg5, %11] : tensor<3x2xf32>\n      %extracted_4 = tensor.extract %3[%11, %13] : tensor<2x3xf32>\n      %extracted_5 = tensor.extract %6[%arg5, %arg7] : tensor<3x5xf32>\n      %14 = arith.mulf %extracted, %extracted_3 : f32\n      %15 = arith.mulf %14, %extracted_4 : f32\n      %16 = arith.mulf %15, %extracted_5 : f32\n      %17 = arith.addf %arg8, %16 : f32\n      scf.yield %17 : f32\n    }\n    tensor.yield %12 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"lhs_matrix\"} : tensor<3x7xf32>\n  %generated_2 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %cst = arith.constant 0.000000e+00 : f32\n    %c4 = arith.constant 4 : index\n    %11 = arith.divui %arg5, %c4 : index\n    %c3 = arith.constant 3 : index\n    %12 = scf.for %arg7 = %c0 to %c3 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %c2 = arith.constant 2 : index\n      %13 = arith.divui %arg6, %c2 : index\n      %extracted = tensor.extract %0[%arg7, %arg5] : tensor<3x7xf32>\n      %extracted_3 = tensor.extract %2[%arg7, %11] : tensor<3x2xf32>\n      %extracted_4 = tensor.extract %3[%11, %13] : tensor<2x3xf32>\n      %extracted_5 = tensor.extract %6[%arg7, %arg6] : tensor<3x5xf32>\n      %14 = arith.mulf %extracted, %extracted_3 : f32\n      %15 = arith.mulf %14, %extracted_4 : f32\n      %16 = arith.mulf %15, %extracted_5 : f32\n      %17 = arith.addf %arg8, %16 : f32\n      scf.yield %17 : f32\n    }\n    tensor.yield %12 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"rhs_matrix\"} : tensor<7x5xf32>\n  %7 = tessera.reshape %generated_0 : (tensor<2x3xf32>) -> tensor<6xf32>\n  %8 = tessera.reshape %generated : (tensor<3x2xf32>) -> tensor<6xf32>\n  %9 = tessera.reshape %generated_2 : (tensor<7x5xf32>) -> tensor<35xf32>\n  %10 = tessera.reshape %generated_1 : (tensor<3x7xf32>) -> tensor<21xf32>\n  return %10, %9, %8, %7 : tensor<21xf32>, tensor<35xf32>, tensor<6xf32>, tensor<6xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_0",
+            "operation": "tessera.reshape",
+            "output": 5,
+            "step": 0
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_1",
+            "operation": "tessera.reshape",
+            "output": 6,
+            "step": 1
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_2",
+            "operation": "tessera.reshape",
+            "output": 7,
+            "step": 2
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_3",
+            "operation": "tessera.reshape",
+            "output": 8,
+            "step": 3
+          },
+          {
+            "dependency_kind": "cotangent",
+            "inputs": [
+              4
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_4",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 4
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "lhs_scale",
+            "inputs": [
+              5,
+              6,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_5",
+            "operation": "tensor.generate",
+            "output": 10,
+            "seed_input": 9,
+            "step": 5
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "rhs_scale",
+            "inputs": [
+              5,
+              6,
+              7,
+              9
+            ],
+            "member": "reshaped__bwd__member_6",
+            "operation": "tensor.generate",
+            "output": 11,
+            "seed_input": 9,
+            "step": 6
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "lhs_matrix",
+            "inputs": [
+              6,
+              7,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_7",
+            "operation": "tensor.generate",
+            "output": 12,
+            "seed_input": 9,
+            "step": 7
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "rhs_matrix",
+            "inputs": [
+              5,
+              7,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_8",
+            "operation": "tensor.generate",
+            "output": 13,
+            "seed_input": 9,
+            "step": 8
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 3,
+            "inputs": [
+              11
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_9",
+            "operation": "tessera.reshape",
+            "output": 14,
+            "step": 9
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 2,
+            "inputs": [
+              10
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_10",
+            "operation": "tessera.reshape",
+            "output": 15,
+            "step": 10
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 1,
+            "inputs": [
+              13
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_11",
+            "operation": "tessera.reshape",
+            "output": 16,
+            "step": 11
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 0,
+            "inputs": [
+              12
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_12",
+            "operation": "tessera.reshape",
+            "output": 17,
+            "step": 12
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "e6291a9421f4cacfd196d715613cf2b5b28738da0217560957317d5cef13995a",
+        "5ee74fc273e1444f33c65b4aeb8ba7123a60bc03cfb991b244f05ce3841a0a49",
+        "00b7e366a47d9f1a266abeae641b22f7ad38a3890fabd0d7f8f23a3ff3bfcde7",
+        "462a49b039196a0796727c909aff56f5a4abbea07af90a67f0546fd4c19106c0",
+        "592f8db80289f4abd97976125df5a30c09f32bc31c80c19370cdd38056f3d121",
+        "7c2466d802f574049b7cd02edc9be7375d2cea3c1ff5d33cbef4f1f022adbec5",
+        "d4865295d5cc051be838f1d460365b2a89ba002f5b7cacab23757ce07696015e",
+        "bf9768ef4fbad4b05912d34578e7e8de224765ff608f58117311561bf1fbf6c5",
+        "420a7fa0e339a462b4a971db44c14f90f353a2f0446df711212e674d21c2adc4"
+      ]
+    },
+    {
+      "output_shape": [
+        1,
+        3,
+        5
+      ],
+      "mode": "primal",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "cold_compile_and_call_ms": 198.58578918501735,
+      "native_program_samples_ms": [
+        0.020756976678967476,
+        0.01997634395956993,
+        0.019621968269348145,
+        0.019770491868257523,
+        0.019651180133223534,
+        0.019862351939082146,
+        0.019641023129224777
+      ],
+      "native_program_median_ms": 0.019770491868257523,
+      "member_samples_ms": [
+        [
+          0.0033949920907616615,
+          0.0032802969217300415,
+          0.0032712421379983425,
+          0.003441234352067113,
+          0.0036590546369552612,
+          0.003228421788662672
+        ],
+        [
+          0.0033831093460321426,
+          0.0032381094060838223,
+          0.003270304761826992,
+          0.0034440546296536922,
+          0.0036190468817949295,
+          0.003521867096424103
+        ],
+        [
+          0.0033871796913444996,
+          0.0032481171656399965,
+          0.0032771797850728035,
+          0.00344530469737947,
+          0.003614359302446246,
+          0.004647726658731699
+        ],
+        [
+          0.0034371796064078808,
+          0.003240617224946618,
+          0.0032753045670688152,
+          0.0034468593075871468,
+          0.003666242118924856,
+          0.0035270233638584614
+        ],
+        [
+          0.0033943671733140945,
+          0.0032378046307712793,
+          0.0032749921083450317,
+          0.0034434297122061253,
+          0.00361998425796628,
+          0.003828351618722081
+        ],
+        [
+          0.0033865547738969326,
+          0.0032424842938780785,
+          0.0032874844036996365,
+          0.0034374843817204237,
+          0.00366279692389071,
+          0.003851476591080427
+        ],
+        [
+          0.003375609405338764,
+          0.0032377969473600388,
+          0.0032734295818954706,
+          0.0034440546296536922,
+          0.003616546979174018,
+          0.003524125088006258
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        6.954331882297993,
+        1.9978559575974941,
+        1.943106995895505,
+        1.8334079068154097,
+        1.8238690681755543,
+        2.00100801885128,
+        2.0080399699509144
+      ],
+      "public_compile_warm_median_ms": 1.9978559575974941,
+      "program": {
+        "argument_count": 4,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 4,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 1,
+            "id": 5,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 2,
+            "id": 6,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 3,
+            "id": 7,
+            "last_read": 4,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 4,
+            "id": 8,
+            "last_read": 5,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 5,
+            "id": 9,
+            "last_read": 6,
+            "ownership": 2,
+            "shape": [
+              1,
+              3,
+              5
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "primal",
+        "outputs": [
+          9
+        ],
+        "root": "reshaped",
+        "root_ir": "func.func @reshaped(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>) -> tensor<1x3x5xf32> attributes {tessera.frontend.authority = \"tracer\", tessera.structured_cfg.blocks = 2 : i64, tessera.structured_cfg.digest = \"c36f10eb32579d443baf4dff0eb7690cd4f53f5a57ce1193a70b5fae3bc2b833\", tessera.structured_cfg.schema = \"tessera.structured_cfg.v1\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %2 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %3 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %4 = tessera.scaled_matmul %0, %1 scales(%2, %3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %5 = tessera.reshape %4 {shape = [1, 3, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<1x3x5xf32>\n  return %5 : tensor<1x3x5xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_0",
+            "operation": "tessera.reshape",
+            "output": 4,
+            "step": 0
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_1",
+            "operation": "tessera.reshape",
+            "output": 5,
+            "step": 1
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_2",
+            "operation": "tessera.reshape",
+            "output": 6,
+            "step": 2
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_3",
+            "operation": "tessera.reshape",
+            "output": 7,
+            "step": 3
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              4,
+              5,
+              6,
+              7
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__member_4",
+            "operation": "tessera.scaled_matmul",
+            "output": 8,
+            "step": 4
+          },
+          {
+            "inputs": [
+              8
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__member_5",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 5
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "adb2eca3521515a2688d5cf1a4a60b606e7d1b97245ab46b580702da8f40a05d"
+      ]
+    },
+    {
+      "output_shape": [
+        1,
+        3,
+        5
+      ],
+      "mode": "forward",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 3.725290298461914e-09,
+      "cold_compile_and_call_ms": 601.7452271189541,
+      "native_program_samples_ms": [
+        0.06123528257012367,
+        0.04134582728147507,
+        0.04106008633971214,
+        0.04153282195329666,
+        0.04131151735782623,
+        0.04139558598399162,
+        0.041283898055553436
+      ],
+      "native_program_median_ms": 0.04134582728147507,
+      "member_samples_ms": [
+        [
+          0.0034393593668937683,
+          0.003349992213770747,
+          0.0032952968031167984,
+          0.0033215468283742666,
+          0.0033721718937158585,
+          0.003332796972244978,
+          0.00343717192299664,
+          0.0034527969546616077,
+          0.0036631093826144934,
+          0.0036002967972308397,
+          0.00362435937859118,
+          0.003235921962186694,
+          0.00359216402284801,
+          0.003260296769440174,
+          0.003627484431490302,
+          0.0032490547746419907,
+          0.0032562343403697014,
+          0.0035862342920154333
+        ],
+        [
+          0.0022671797778457403,
+          0.0022353047970682383,
+          0.0021581172477453947,
+          0.0021934297401458025,
+          0.002282179659232497,
+          0.002233742270618677,
+          0.002299367217347026,
+          0.0023281171452254057,
+          0.0024212421849370003,
+          0.0024165469221770763,
+          0.00239186710678041,
+          0.002147492254152894,
+          0.002375304698944092,
+          0.002191554754972458,
+          0.0024212421849370003,
+          0.0021309296134859324,
+          0.002131554763764143,
+          0.002393351634964347
+        ],
+        [
+          0.002270304597914219,
+          0.002232179744169116,
+          0.0021681170910596848,
+          0.0021890546195209026,
+          0.0022653047926723957,
+          0.0022349844221025705,
+          0.0022962421644479036,
+          0.002321867272257805,
+          0.0024234296288341284,
+          0.0024128046352416277,
+          0.0023915546480566263,
+          0.00210811709985137,
+          0.002376867225393653,
+          0.0021637422032654285,
+          0.0024306171108037233,
+          0.002136554569005966,
+          0.0021449921187013388,
+          0.002495617140084505
+        ],
+        [
+          0.0022699921391904354,
+          0.0022209296002984047,
+          0.0021681170910596848,
+          0.002189367078244686,
+          0.0022699921391904354,
+          0.0022309296764433384,
+          0.002296554623171687,
+          0.002317492151632905,
+          0.0024465546011924744,
+          0.002402179641649127,
+          0.002389367204159498,
+          0.0022169454023241997,
+          0.002400617115199566,
+          0.0021653047297149897,
+          0.0024281172081828117,
+          0.0021340546663850546,
+          0.0024003046564757824,
+          0.0023917891085147858
+        ],
+        [
+          0.002266257768496871,
+          0.0022271873895078897,
+          0.0021646954119205475,
+          0.00219843746162951,
+          0.002273445250466466,
+          0.0022431248798966408,
+          0.0022965625394135714,
+          0.002322500105947256,
+          0.0024224999360740185,
+          0.002393437549471855,
+          0.0023778125178068876,
+          0.002106562489643693,
+          0.0023771952837705612,
+          0.00215531256981194,
+          0.0024234375450760126,
+          0.002251874888315797,
+          0.0021400079131126404,
+          0.002396796829998493
+        ],
+        [
+          0.002296874998137355,
+          0.0022321874275803566,
+          0.0021675077732652426,
+          0.0021987499203532934,
+          0.0024361719843000174,
+          0.0022318828850984573,
+          0.002297812607139349,
+          0.00232282024808228,
+          0.002413437468931079,
+          0.0023993749637156725,
+          0.002388749970123172,
+          0.0021103047765791416,
+          0.0023737421724945307,
+          0.002164679579436779,
+          0.002425304614007473,
+          0.0021334297489374876,
+          0.0025431953836232424,
+          0.0023941327817738056
+        ],
+        [
+          0.0022678046952933073,
+          0.0022306093014776707,
+          0.0021703047677874565,
+          0.002195304725319147,
+          0.0022771796211600304,
+          0.0022293671499937773,
+          0.002300929743796587,
+          0.0023212421219795942,
+          0.0024249921552836895,
+          0.0024040546268224716,
+          0.0023896796628832817,
+          0.0021056171972304583,
+          0.0023874843027442694,
+          0.0021631172858178616,
+          0.002419054741039872,
+          0.002139367163181305,
+          0.0024071717634797096,
+          0.002186554716899991
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        7.87329999729991,
+        3.908185986801982,
+        3.5108469892293215,
+        3.531656926497817,
+        3.3953969832509756,
+        3.414053004235029,
+        3.95202892832458
+      ],
+      "public_compile_warm_median_ms": 3.531656926497817,
+      "program": {
+        "argument_count": 8,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 4,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 6,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 4,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 5,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 6,
+            "last_read": 5,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 7,
+            "last_read": 7,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 8,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 1,
+            "id": 9,
+            "last_read": 9,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 2,
+            "id": 10,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 3,
+            "id": 11,
+            "last_read": 10,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 4,
+            "id": 12,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 5,
+            "id": 13,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 6,
+            "id": 14,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 7,
+            "id": 15,
+            "last_read": 14,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 8,
+            "id": 16,
+            "last_read": 16,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 9,
+            "id": 17,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 10,
+            "id": 18,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 11,
+            "id": 19,
+            "last_read": 13,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 12,
+            "id": 20,
+            "last_read": 13,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 13,
+            "id": 21,
+            "last_read": 15,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 14,
+            "id": 22,
+            "last_read": 15,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 15,
+            "id": 23,
+            "last_read": 17,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 16,
+            "id": 24,
+            "last_read": 18,
+            "ownership": 2,
+            "shape": [
+              1,
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 17,
+            "id": 25,
+            "last_read": 18,
+            "ownership": 2,
+            "shape": [
+              1,
+              3,
+              5
+            ],
+            "storage": "f32"
+          }
+        ],
+        "kind": "paired_jvp",
+        "outputs": [
+          24,
+          25
+        ],
+        "root": "reshaped__jvp",
+        "root_ir": "func.func private @reshaped__jvp(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>, %arg4: tensor<21xf32>, %arg5: tensor<35xf32>, %arg6: tensor<6xf32>, %arg7: tensor<6xf32>) -> (tensor<1x3x5xf32>, tensor<1x3x5xf32>) attributes {tessera.autodiff.forward = @reshaped, tessera.autodiff.role = \"jvp\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg4 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %2 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %3 = tessera.reshape %arg5 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %4 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %5 = tessera.reshape %arg6 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %6 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %7 = tessera.reshape %arg7 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %8 = tessera.scaled_matmul %0, %2 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %9 = tessera.scaled_matmul %1, %2 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %10 = tessera.scaled_matmul %0, %3 scales(%4, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %11 = tessera.add %9, %10 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %12 = tessera.scaled_matmul %0, %2 scales(%5, %6) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %13 = tessera.add %11, %12 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %14 = tessera.scaled_matmul %0, %2 scales(%4, %7) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %15 = tessera.add %13, %14 : (tensor<3x5xf32>, tensor<3x5xf32>) -> tensor<3x5xf32>\n  %16 = tessera.reshape %8 {shape = [1, 3, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<1x3x5xf32>\n  %17 = tessera.reshape %15 {shape = [1, 3, 5], tessera.aliasing = \"operand_0\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<1x3x5xf32>\n  return %16, %17 : tensor<1x3x5xf32>, tensor<1x3x5xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_0",
+            "operation": "tessera.reshape",
+            "output": 8,
+            "step": 0
+          },
+          {
+            "inputs": [
+              4
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_1",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 1
+          },
+          {
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_2",
+            "operation": "tessera.reshape",
+            "output": 10,
+            "step": 2
+          },
+          {
+            "inputs": [
+              5
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_3",
+            "operation": "tessera.reshape",
+            "output": 11,
+            "step": 3
+          },
+          {
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_4",
+            "operation": "tessera.reshape",
+            "output": 12,
+            "step": 4
+          },
+          {
+            "inputs": [
+              6
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_5",
+            "operation": "tessera.reshape",
+            "output": 13,
+            "step": 5
+          },
+          {
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_6",
+            "operation": "tessera.reshape",
+            "output": 14,
+            "step": 6
+          },
+          {
+            "inputs": [
+              7
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_7",
+            "operation": "tessera.reshape",
+            "output": 15,
+            "step": 7
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_8",
+            "operation": "tessera.scaled_matmul",
+            "output": 16,
+            "step": 8
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              9,
+              10,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_9",
+            "operation": "tessera.scaled_matmul",
+            "output": 17,
+            "step": 9
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              11,
+              12,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_10",
+            "operation": "tessera.scaled_matmul",
+            "output": 18,
+            "step": 10
+          },
+          {
+            "inputs": [
+              17,
+              18
+            ],
+            "member": "reshaped__jvp__member_11",
+            "operation": "tessera.add",
+            "output": 19,
+            "step": 11
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              13,
+              14
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_12",
+            "operation": "tessera.scaled_matmul",
+            "output": 20,
+            "step": 12
+          },
+          {
+            "inputs": [
+              19,
+              20
+            ],
+            "member": "reshaped__jvp__member_13",
+            "operation": "tessera.add",
+            "output": 21,
+            "step": 13
+          },
+          {
+            "continuous_contract": {
+              "scale_k": 4,
+              "scale_n": 2,
+              "transposeA": false,
+              "transposeB": false
+            },
+            "inputs": [
+              8,
+              10,
+              12,
+              15
+            ],
+            "lowering": "structured_f32_scaled_product",
+            "member": "reshaped__jvp__member_14",
+            "operation": "tessera.scaled_matmul",
+            "output": 22,
+            "step": 14
+          },
+          {
+            "inputs": [
+              21,
+              22
+            ],
+            "member": "reshaped__jvp__member_15",
+            "operation": "tessera.add",
+            "output": 23,
+            "step": 15
+          },
+          {
+            "inputs": [
+              16
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_16",
+            "operation": "tessera.reshape",
+            "output": 24,
+            "step": 16
+          },
+          {
+            "inputs": [
+              23
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__jvp__member_17",
+            "operation": "tessera.reshape",
+            "output": 25,
+            "step": 17
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "8547f877483b73cb1079f5c5fd0adef674aeaebd95ed8884283fbb66eda3c31c",
+        "dbfd7be9d87c44fb575232cf99fb0ed28a1d4a73d59cbb18a914248521d51827",
+        "adb2eca3521515a2688d5cf1a4a60b606e7d1b97245ab46b580702da8f40a05d",
+        "adb2eca3521515a2688d5cf1a4a60b606e7d1b97245ab46b580702da8f40a05d"
+      ]
+    },
+    {
+      "output_shape": [
+        1,
+        3,
+        5
+      ],
+      "mode": "reverse",
+      "input_shapes": [
+        [
+          21
+        ],
+        [
+          35
+        ],
+        [
+          6
+        ],
+        [
+          6
+        ]
+      ],
+      "max_abs_error": 1.862645149230957e-09,
+      "cold_compile_and_call_ms": 440.05182199180126,
+      "native_program_samples_ms": [
+        0.052981920540332794,
+        0.05272036790847778,
+        0.05262458696961403,
+        0.05249709263443947,
+        0.052547257393598557,
+        0.052447397261857986,
+        0.05251583456993103
+      ],
+      "native_program_median_ms": 0.052547257393598557,
+      "member_samples_ms": [
+        [
+          0.0033862499985843897,
+          0.0033209375105798244,
+          0.0033390624448657036,
+          0.0034593672025948763,
+          0.004091562703251839,
+          0.006515937391668558,
+          0.008173437789082527,
+          0.00395031226798892,
+          0.0036828124430030584,
+          0.0034437421709299088,
+          0.003281249897554517,
+          0.0032696875277906656,
+          0.0036474999506026506
+        ],
+        [
+          0.0033965546172112226,
+          0.003337812377139926,
+          0.003344374941661954,
+          0.003451562486588955,
+          0.0032465625554323196,
+          0.006512499880045652,
+          0.008170937187969685,
+          0.0039581251330673695,
+          0.0036981250159442425,
+          0.0034456171561032534,
+          0.0032815546728670597,
+          0.0032668672502040863,
+          0.0035871719010174274
+        ],
+        [
+          0.003375929780304432,
+          0.0033337343484163284,
+          0.0033784217666834593,
+          0.003455609316006303,
+          0.003288429696112871,
+          0.006562476512044668,
+          0.008161218836903572,
+          0.00396185927093029,
+          0.003686554729938507,
+          0.0034424844197928905,
+          0.003275929717347026,
+          0.0032684297766536474,
+          0.003953656181693077
+        ],
+        [
+          0.00338811706751585,
+          0.0033321718219667673,
+          0.003331867279484868,
+          0.0034593672025948763,
+          0.0036328828427940607,
+          0.0065084220841526985,
+          0.008171538822352886,
+          0.003950304817408323,
+          0.00370123446919024,
+          0.0034428047947585583,
+          0.003410296980291605,
+          0.003472726559266448,
+          0.0036740547511726618
+        ],
+        [
+          0.003375929780304432,
+          0.003331554587930441,
+          0.0033396717626601458,
+          0.0034549920819699764,
+          0.0032409296836704016,
+          0.006510609295219183,
+          0.008173101581633091,
+          0.003972804639488459,
+          0.003786554792895913,
+          0.00355624221265316,
+          0.0034209296572953463,
+          0.0034106094390153885,
+          0.003509984351694584
+        ],
+        [
+          0.0033843594137579203,
+          0.0033759218640625477,
+          0.0033503046724945307,
+          0.0034987344406545162,
+          0.0035482733510434628,
+          0.006509351544082165,
+          0.008236531168222427,
+          0.003960929811000824,
+          0.0036903047002851963,
+          0.0034387344494462013,
+          0.0032746719662100077,
+          0.0034284295979887247,
+          0.003668890567496419
+        ],
+        [
+          0.0033837342634797096,
+          0.00333623425103724,
+          0.003341867122799158,
+          0.003519359277561307,
+          0.0039736563339829445,
+          0.006508414167910814,
+          0.008235913701355457,
+          0.0040756091475486755,
+          0.0038159219548106194,
+          0.003571554785594344,
+          0.0034106094390153885,
+          0.0033993672113865614,
+          0.0036444375291466713
+        ]
+      ],
+      "public_compile_warm_samples_ms": [
+        6.0865008272230625,
+        2.1869519259780645,
+        2.0431969314813614,
+        2.32380791567266,
+        2.263623056933284,
+        2.1386248990893364,
+        2.1919661667197943
+      ],
+      "public_compile_warm_median_ms": 2.1919661667197943,
+      "program": {
+        "argument_count": 5,
+        "buffers": [
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": -1,
+            "id": 0,
+            "last_read": 0,
+            "ownership": 0,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": -1,
+            "id": 1,
+            "last_read": 1,
+            "ownership": 0,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 2,
+            "last_read": 2,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": -1,
+            "id": 3,
+            "last_read": 3,
+            "ownership": 0,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": -1,
+            "id": 4,
+            "last_read": 4,
+            "ownership": 0,
+            "shape": [
+              1,
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 0,
+            "id": 5,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 1,
+            "id": 6,
+            "last_read": 7,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 2,
+            "id": 7,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 3,
+            "id": 8,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 60,
+            "elements": 15,
+            "first_write": 4,
+            "id": 9,
+            "last_read": 8,
+            "ownership": 1,
+            "shape": [
+              3,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 5,
+            "id": 10,
+            "last_read": 10,
+            "ownership": 1,
+            "shape": [
+              3,
+              2
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 6,
+            "id": 11,
+            "last_read": 9,
+            "ownership": 1,
+            "shape": [
+              2,
+              3
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 7,
+            "id": 12,
+            "last_read": 12,
+            "ownership": 1,
+            "shape": [
+              3,
+              7
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 8,
+            "id": 13,
+            "last_read": 11,
+            "ownership": 1,
+            "shape": [
+              7,
+              5
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 9,
+            "id": 14,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 24,
+            "elements": 6,
+            "first_write": 10,
+            "id": 15,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              6
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 140,
+            "elements": 35,
+            "first_write": 11,
+            "id": 16,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              35
+            ],
+            "storage": "f32"
+          },
+          {
+            "bytes": 84,
+            "elements": 21,
+            "first_write": 12,
+            "id": 17,
+            "last_read": 13,
+            "ownership": 2,
+            "shape": [
+              21
+            ],
+            "storage": "f32"
+          }
+        ],
+        "dependency_policy": "native_recompute_prefix_v1",
+        "gradient_roles": [
+          0,
+          1,
+          2,
+          3
+        ],
+        "kind": "scale_vjp",
+        "outputs": [
+          17,
+          16,
+          15,
+          14
+        ],
+        "root": "reshaped__bwd",
+        "root_ir": "func.func @reshaped__bwd(%arg0: tensor<21xf32>, %arg1: tensor<35xf32>, %arg2: tensor<6xf32>, %arg3: tensor<6xf32>, %arg4: tensor<1x3x5xf32>) -> (tensor<21xf32>, tensor<35xf32>, tensor<6xf32>, tensor<6xf32>) attributes {tessera.autodiff.forward = @reshaped, tessera.autodiff.residual_policy = \"recompute_all\", tessera.autodiff.role = \"backward\"} {\n  %0 = tessera.reshape %arg0 {shape = [3, 7], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<21xf32>) -> tensor<3x7xf32>\n  %1 = tessera.reshape %arg1 {shape = [7, 5], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<35xf32>) -> tensor<7x5xf32>\n  %2 = tessera.reshape %arg2 {shape = [3, 2], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<3x2xf32>\n  %3 = tessera.reshape %arg3 {shape = [2, 3], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<6xf32>) -> tensor<2x3xf32>\n  %4 = tessera.scaled_matmul %0, %1 scales(%2, %3) {numeric_policy = {accum = \"fp32\", execution_mode = \"exact_per_block\"}, scale_layout = {block = [2, 4], format = \"fp32\", granularity = \"block\"}, tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<3x7xf32>, tensor<7x5xf32>, tensor<3x2xf32>, tensor<2x3xf32>) -> tensor<3x5xf32>\n  %5 = tessera.reshape %4 {shape = [1, 3, 5], tessera.aliasing = \"operand_0\", tessera.autodiff.activity = \"active\", tessera.effect_kind = \"pure\"} : (tensor<3x5xf32>) -> tensor<1x3x5xf32>\n  %6 = tessera.reshape %arg4 : (tensor<1x3x5xf32>) -> tensor<3x5xf32>\n  %generated = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %cst = arith.constant 0.000000e+00 : f32\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %c4 = arith.constant 4 : index\n    %11 = arith.muli %arg6, %c4 : index\n    %c7 = arith.constant 7 : index\n    %12 = arith.subi %c7, %11 : index\n    %c4_3 = arith.constant 4 : index\n    %13 = arith.minui %c4_3, %12 : index\n    %14 = arith.addi %11, %13 : index\n    %c5 = arith.constant 5 : index\n    %15 = scf.for %arg7 = %c0 to %c5 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %16 = scf.for %arg9 = %11 to %14 step %c1 iter_args(%arg10 = %cst) -> (f32) {\n        %extracted_5 = tensor.extract %0[%arg5, %arg9] : tensor<3x7xf32>\n        %extracted_6 = tensor.extract %1[%arg9, %arg7] : tensor<7x5xf32>\n        %21 = arith.mulf %extracted_5, %extracted_6 : f32\n        %22 = arith.addf %arg10, %21 : f32\n        scf.yield %22 : f32\n      }\n      %c2 = arith.constant 2 : index\n      %17 = arith.divui %arg7, %c2 : index\n      %extracted = tensor.extract %3[%arg6, %17] : tensor<2x3xf32>\n      %extracted_4 = tensor.extract %6[%arg5, %arg7] : tensor<3x5xf32>\n      %18 = arith.mulf %16, %extracted : f32\n      %19 = arith.mulf %18, %extracted_4 : f32\n      %20 = arith.addf %arg8, %19 : f32\n      scf.yield %20 : f32\n    }\n    tensor.yield %15 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"lhs_scale\"} : tensor<3x2xf32>\n  %generated_0 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %cst = arith.constant 0.000000e+00 : f32\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %c4 = arith.constant 4 : index\n    %11 = arith.muli %arg5, %c4 : index\n    %c7 = arith.constant 7 : index\n    %12 = arith.subi %c7, %11 : index\n    %c4_3 = arith.constant 4 : index\n    %13 = arith.minui %c4_3, %12 : index\n    %14 = arith.addi %11, %13 : index\n    %c2 = arith.constant 2 : index\n    %15 = arith.muli %arg6, %c2 : index\n    %c5 = arith.constant 5 : index\n    %16 = arith.subi %c5, %15 : index\n    %c2_4 = arith.constant 2 : index\n    %17 = arith.minui %c2_4, %16 : index\n    %18 = arith.addi %15, %17 : index\n    %c3 = arith.constant 3 : index\n    %19 = scf.for %arg7 = %c0 to %c3 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %20 = scf.for %arg9 = %15 to %18 step %c1 iter_args(%arg10 = %arg8) -> (f32) {\n        %21 = scf.for %arg11 = %11 to %14 step %c1 iter_args(%arg12 = %cst) -> (f32) {\n          %extracted_7 = tensor.extract %0[%arg7, %arg11] : tensor<3x7xf32>\n          %extracted_8 = tensor.extract %1[%arg11, %arg9] : tensor<7x5xf32>\n          %26 = arith.mulf %extracted_7, %extracted_8 : f32\n          %27 = arith.addf %arg12, %26 : f32\n          scf.yield %27 : f32\n        }\n        %c2_5 = arith.constant 2 : index\n        %22 = arith.divui %arg9, %c2_5 : index\n        %extracted = tensor.extract %2[%arg7, %arg5] : tensor<3x2xf32>\n        %extracted_6 = tensor.extract %6[%arg7, %arg9] : tensor<3x5xf32>\n        %23 = arith.mulf %21, %extracted : f32\n        %24 = arith.mulf %23, %extracted_6 : f32\n        %25 = arith.addf %arg10, %24 : f32\n        scf.yield %25 : f32\n      }\n      scf.yield %20 : f32\n    }\n    tensor.yield %19 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"rhs_scale\"} : tensor<2x3xf32>\n  %generated_1 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %cst = arith.constant 0.000000e+00 : f32\n    %c4 = arith.constant 4 : index\n    %11 = arith.divui %arg6, %c4 : index\n    %c5 = arith.constant 5 : index\n    %12 = scf.for %arg7 = %c0 to %c5 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %c2 = arith.constant 2 : index\n      %13 = arith.divui %arg7, %c2 : index\n      %extracted = tensor.extract %1[%arg6, %arg7] : tensor<7x5xf32>\n      %extracted_3 = tensor.extract %2[%arg5, %11] : tensor<3x2xf32>\n      %extracted_4 = tensor.extract %3[%11, %13] : tensor<2x3xf32>\n      %extracted_5 = tensor.extract %6[%arg5, %arg7] : tensor<3x5xf32>\n      %14 = arith.mulf %extracted, %extracted_3 : f32\n      %15 = arith.mulf %14, %extracted_4 : f32\n      %16 = arith.mulf %15, %extracted_5 : f32\n      %17 = arith.addf %arg8, %16 : f32\n      scf.yield %17 : f32\n    }\n    tensor.yield %12 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"lhs_matrix\"} : tensor<3x7xf32>\n  %generated_2 = tensor.generate  {\n  ^bb0(%arg5: index, %arg6: index):\n    %c0 = arith.constant 0 : index\n    %c1 = arith.constant 1 : index\n    %cst = arith.constant 0.000000e+00 : f32\n    %c4 = arith.constant 4 : index\n    %11 = arith.divui %arg5, %c4 : index\n    %c3 = arith.constant 3 : index\n    %12 = scf.for %arg7 = %c0 to %c3 step %c1 iter_args(%arg8 = %cst) -> (f32) {\n      %c2 = arith.constant 2 : index\n      %13 = arith.divui %arg6, %c2 : index\n      %extracted = tensor.extract %0[%arg7, %arg5] : tensor<3x7xf32>\n      %extracted_3 = tensor.extract %2[%arg7, %11] : tensor<3x2xf32>\n      %extracted_4 = tensor.extract %3[%11, %13] : tensor<2x3xf32>\n      %extracted_5 = tensor.extract %6[%arg7, %arg6] : tensor<3x5xf32>\n      %14 = arith.mulf %extracted, %extracted_3 : f32\n      %15 = arith.mulf %14, %extracted_4 : f32\n      %16 = arith.mulf %15, %extracted_5 : f32\n      %17 = arith.addf %arg8, %16 : f32\n      scf.yield %17 : f32\n    }\n    tensor.yield %12 : f32\n  } {tessera.autodiff.cotangent_capture = 3 : i64, tessera.autodiff.scale_adjoint = \"rhs_matrix\"} : tensor<7x5xf32>\n  %7 = tessera.reshape %generated_0 : (tensor<2x3xf32>) -> tensor<6xf32>\n  %8 = tessera.reshape %generated : (tensor<3x2xf32>) -> tensor<6xf32>\n  %9 = tessera.reshape %generated_2 : (tensor<7x5xf32>) -> tensor<35xf32>\n  %10 = tessera.reshape %generated_1 : (tensor<3x7xf32>) -> tensor<21xf32>\n  return %10, %9, %8, %7 : tensor<21xf32>, tensor<35xf32>, tensor<6xf32>, tensor<6xf32>\n}",
+        "schema": 1,
+        "steps": [
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              0
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_0",
+            "operation": "tessera.reshape",
+            "output": 5,
+            "step": 0
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              1
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_1",
+            "operation": "tessera.reshape",
+            "output": 6,
+            "step": 1
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              2
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_2",
+            "operation": "tessera.reshape",
+            "output": 7,
+            "step": 2
+          },
+          {
+            "dependency_kind": "residual",
+            "inputs": [
+              3
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_3",
+            "operation": "tessera.reshape",
+            "output": 8,
+            "step": 3
+          },
+          {
+            "dependency_kind": "cotangent",
+            "inputs": [
+              4
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_4",
+            "operation": "tessera.reshape",
+            "output": 9,
+            "step": 4
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "lhs_scale",
+            "inputs": [
+              5,
+              6,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_5",
+            "operation": "tensor.generate",
+            "output": 10,
+            "seed_input": 9,
+            "step": 5
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "rhs_scale",
+            "inputs": [
+              5,
+              6,
+              7,
+              9
+            ],
+            "member": "reshaped__bwd__member_6",
+            "operation": "tensor.generate",
+            "output": 11,
+            "seed_input": 9,
+            "step": 6
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "lhs_matrix",
+            "inputs": [
+              6,
+              7,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_7",
+            "operation": "tensor.generate",
+            "output": 12,
+            "seed_input": 9,
+            "step": 7
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_role": "rhs_matrix",
+            "inputs": [
+              5,
+              7,
+              8,
+              9
+            ],
+            "member": "reshaped__bwd__member_8",
+            "operation": "tensor.generate",
+            "output": 13,
+            "seed_input": 9,
+            "step": 8
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 3,
+            "inputs": [
+              11
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_9",
+            "operation": "tessera.reshape",
+            "output": 14,
+            "step": 9
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 2,
+            "inputs": [
+              10
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_10",
+            "operation": "tessera.reshape",
+            "output": 15,
+            "step": 10
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 1,
+            "inputs": [
+              13
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_11",
+            "operation": "tessera.reshape",
+            "output": 16,
+            "step": 11
+          },
+          {
+            "dependency_kind": "cotangent",
+            "gradient_argument": 0,
+            "inputs": [
+              12
+            ],
+            "lowering": "structured_f32_carrier",
+            "member": "reshaped__bwd__member_12",
+            "operation": "tessera.reshape",
+            "output": 17,
+            "step": 12
+          }
+        ]
+      },
+      "image_sha256": [
+        "1ffba05696ce22b162d45282439d7d4d8095a35e6244490e38ca2272409a9985",
+        "56b1653c1f450ed2b3941c7273e6f9e21291298de5d85243c04d31971a929865",
+        "1797a46ccfb8ca0fa8933f9c66faa7aae1d4278b44027acc059a1435dfbb1d76",
+        "0100074b32f90d4162b75fad50665aaf3df81a823610843743d5b28307f3a015",
+        "0eb1b1bc20ca683e7b3c6d61c9d43e16978e460d2ba7881441c3ee2e63d14dba",
+        "5ee74fc273e1444f33c65b4aeb8ba7123a60bc03cfb991b244f05ce3841a0a49",
+        "00b7e366a47d9f1a266abeae641b22f7ad38a3890fabd0d7f8f23a3ff3bfcde7",
+        "462a49b039196a0796727c909aff56f5a4abbea07af90a67f0546fd4c19106c0",
+        "592f8db80289f4abd97976125df5a30c09f32bc31c80c19370cdd38056f3d121",
+        "7c2466d802f574049b7cd02edc9be7375d2cea3c1ff5d33cbef4f1f022adbec5",
+        "d4865295d5cc051be838f1d460365b2a89ba002f5b7cacab23757ce07696015e",
+        "bf9768ef4fbad4b05912d34578e7e8de224765ff608f58117311561bf1fbf6c5",
+        "420a7fa0e339a462b4a971db44c14f90f353a2f0446df711212e674d21c2adc4"
+      ]
+    }
+  ]
+}

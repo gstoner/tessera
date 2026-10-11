@@ -64,12 +64,21 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
         root.getNumArguments() != forward.getNumArguments() + 1)
       return root.emitError("scaled transpose export needs explicit scale roles and one output seed");
     llvm::SmallDenseSet<int64_t> floatingArguments;
+    std::function<void(Value)> collectFloatingRoots = [&](Value value) {
+      if (auto argument = dyn_cast<BlockArgument>(value)) {
+        if (argument.getOwner() == &forward.getBody().front())
+          floatingArguments.insert(argument.getArgNumber());
+        return;
+      }
+      Operation *producer = value.getDefiningOp();
+      if (producer && producer->getBlock() == &forward.getBody().front() &&
+          (isNativeScaledCarrier(producer) || isa<TransposeOp>(producer)))
+        for (Value operand : producer->getOperands()) collectFloatingRoots(operand);
+    };
     forward.walk([&](ScaledMatmulOp product) {
       for (unsigned index = 0; index < product->getNumOperands(); ++index) {
         if (!product.isLinearInOperand(index)) continue;
-        auto argument = dyn_cast<BlockArgument>(product->getOperand(index));
-        if (argument && argument.getOwner() == &forward.getBody().front())
-          floatingArguments.insert(argument.getArgNumber());
+        collectFloatingRoots(product->getOperand(index));
       }
     });
     std::function<LogicalResult(Value)> visitDependency =
@@ -141,7 +150,8 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       Operation *definition = value.getDefiningOp();
       if (!definition || definition->getBlock() != &root.getBody().front() ||
           definition->getNumResults() != 1 ||
-          (!isa<tensor::GenerateOp>(definition) && !isScaleSum(definition)))
+          (!isa<tensor::GenerateOp, TransposeOp>(definition) &&
+           !isScaleSum(definition) && !isNativeScaledCarrier(definition)))
         return root.emitError("scaled transpose needs native scale reductions and their sums");
       gradientForValue[value] = role;
       if (failed(visitDependency(value))) return failure();
@@ -190,7 +200,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
       }
       hasScaledProduct |= isa<ScaledMatmulOp, tensor::GenerateOp>(&op);
     } else {
-      if (!isa<ScaledMatmulOp, AddOp, TransposeOp, BroadcastOp, ReduceOp>(op) || op.getNumResults() != 1)
+      if (!isa<ScaledMatmulOp, AddOp, TransposeOp, BroadcastOp, ReduceOp, ReshapeOp>(op) || op.getNumResults() != 1)
         return op.emitError("scaled JVP program needs scaled products, native sums and result permutations");
       if (isa<TransposeOp>(op)) {
         auto type = dyn_cast<RankedTensorType>(op.getOperand(0).getType());
@@ -200,7 +210,7 @@ static mlir::LogicalResult emitNativeScaledMatmulProgram(mlir::ModuleOp module, 
           return op.emitError("scaled result permutation requires static unencoded rank-1..8 f32 storage");
         auto *producer = op.getOperand(0).getDefiningOp();
         if (!producer || producer->getBlock() != &root.getBody().front() ||
-            !isa<ScaledMatmulOp, AddOp, TransposeOp>(producer))
+            !isa<ScaledMatmulOp, AddOp, TransposeOp, ReshapeOp>(producer))
           return op.emitError("scaled result permutation must retain a native computed producer");
       }
       llvm::append_range(capturedInputs[&op], op.getOperands());

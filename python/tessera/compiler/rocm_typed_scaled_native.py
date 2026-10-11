@@ -43,7 +43,7 @@ def requests_floating_scaled(module):
     args = {arg.name: arg.ir_type for arg in fn.args}
     products = 0
     for op in fn.body:
-        if op.op_name in {"tessera.add", "tessera.transpose", "tessera.broadcast"}:
+        if op.op_name in {"tessera.add", "tessera.transpose", "tessera.broadcast", "tessera.reshape"}:
             if len(op.result_names) == 1 and op.inferred_type is not None:
                 args[op.result_names[0]] = op.inferred_type
             continue
@@ -379,6 +379,7 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
     values = {("%" + name): arg.ir_type for name, arg in names.items()}
     scales: set[str] = set()
     used: set[str] = set()
+    roots = {("%"+name): {name} for name in names}
     expected = fn.result_types[0]
     if expected.dtype != "fp32":
         return False
@@ -412,12 +413,22 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
                     or (requests_floating_scaled(member) and not floating_reverse)):
                 return False
             eligible = op.operands if floating_reverse and requests_floating_scaled(member) else op.operands[2:]
-            scales.update(v.removeprefix("%") for v in eligible)
+            scales.update(name for value in eligible for name in roots[value])
             used.update(v.removeprefix("%") for v in op.operands
                         if v.removeprefix("%") in names)
         elif op.op_name == "tessera.add":
             if (len(op.operands) != 2 or op.kwargs or op.numeric_policy is not None
                     or any(str(values[v]) != str(result) for v in op.operands)):
+                return False
+        elif op.op_name == "tessera.reshape":
+            if (len(op.operands) != 1 or op.numeric_policy is not None
+                    or set(op.kwargs) - {"shape"}):
+                return False
+            source = values[op.operands[0]]
+            if (source.dtype != "fp32" or not 1 <= source.rank <= 8 or not 1 <= result.rank <= 8
+                    or any(not str(dim).isdigit() or int(dim) <= 0 for dim in (*source.shape,*result.shape))
+                    or math.prod(map(int, source.shape)) != math.prod(map(int, result.shape))
+                    or ("shape" in op.kwargs and tuple(map(str,op.kwargs["shape"])) != result.shape)):
                 return False
         elif op.op_name == "tessera.broadcast":
             if len(op.operands) != 1 or op.kwargs or op.numeric_policy is not None:
@@ -443,6 +454,8 @@ def _supports_composed_scaled(module, wrt_indices, *, primal, floating_reverse=F
                 return False
         else:
             return False
+        used.update(name for value in op.operands for name in roots[value])
+        roots["%"+op.result_names[0]] = set().union(*(roots[value] for value in op.operands))
         values["%" + op.result_names[0]] = result
     return (str(values.get(fn.return_values[0])) == str(expected)
             and fn.return_values == ["%" + fn.body[-1].result_names[0]]

@@ -112,7 +112,7 @@ class NativeScaledProgram:
             elif step["operation"] == "tessera.transpose":
                 if len(step["inputs"]) != 1 or len(member["scalars"]) != 1:
                     raise ValueError("native result permutation has an invalid scalar ABI")
-            elif step["operation"] in {"tessera.broadcast", "tessera.reduce"}:
+            elif step["operation"] in {"tessera.broadcast", "tessera.reduce", "tessera.reshape"}:
                 if (step.get("lowering") != "structured_f32_carrier"
                         or len(step["inputs"]) != 1 or len(member["scalars"]) != 1):
                     raise ValueError("native scaled carrier has an invalid scalar ABI")
@@ -290,7 +290,7 @@ class NativeScaledProgram:
                     member["scalars"] != [output_buffer["elements"]] or
                     member["geometry"] != [(output_buffer["elements"]-1)//256+1,1,1,256,1,1]):
                     raise ValueError("native result permutation axes/storage/count/geometry differ")
-            elif step["operation"] in {"tessera.broadcast", "tessera.reduce"}:
+            elif step["operation"] in {"tessera.broadcast", "tessera.reduce", "tessera.reshape"}:
                 source = buffers[step["inputs"][0]]
                 shape, result_shape = source["shape"], output_buffer["shape"]
                 if (source["storage"] != "f32" or output_buffer["storage"] != "f32"
@@ -299,7 +299,10 @@ class NativeScaledProgram:
                         or member["scalars"] != [output_buffer["elements"]]
                         or member["geometry"] != [(output_buffer["elements"]-1)//128+1,1,1,128,1,1]):
                     raise ValueError("native scaled carrier storage/count/geometry differs")
-                if step["operation"] == "tessera.broadcast":
+                if step["operation"] == "tessera.reshape":
+                    if source["elements"] != output_buffer["elements"] or source["bytes"] != output_buffer["bytes"]:
+                        raise ValueError("native scaled reshape must preserve element count and bytes")
+                elif step["operation"] == "tessera.broadcast":
                     offset = len(result_shape)-len(shape)
                     if offset < 0 or any(dim != 1 and dim != result_shape[axis+offset]
                                          for axis, dim in enumerate(shape)):
@@ -542,7 +545,7 @@ def _scaled_abi_binding(package):
 def pack_host_view(lib, array):
     """Materialize checked storage bytes in native C++; never tensor arithmetic."""
     from .paged_host_span import checked_host_span
-    span, strides = checked_host_span(array)
+    span, strides = checked_host_span(array, min_rank=1)
     if array.flags.c_contiguous:
         return array
     if not hasattr(lib, "tessera_rocm_program_pack_host_view"):

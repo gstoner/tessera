@@ -17099,3 +17099,9 @@ paged-KV and wider image-key work remain required follow-ups.
 
 Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1.
 Not applicable to rocm execution: these schema IDs describe the SM120 attention JVP contract. Existing rocm target and runtime ABIs are unchanged; no device parity is inferred.
+
+## HOST-AWARE-SKIPS-2026-10-11
+
+Owner: none. No work item covers host-aware test skips, so this records the shared change under its own sync key (nearest family: the evidence-governance gates, GOV-ODS-CONSUMER-1). Shared change: `tests/conftest.py` now converts a failure to a skip when `tests/_support/backend_absence.py` matches a known backend-absent message **and** a probe of the running host confirms the dialect, pass or tool is missing; fixture setup is covered too. Two lit fixtures that mixed backends were split. A host that has the backend never skips: the message there stays a failure.
+
+Parity validated (host-free hook behaviour): on Tajasarus (gfx1201) and Princess-Luna (gfx1151) the real probes report `lower-tile-to-rocm` and `tessera-rocm-executable` registered, so ROCm-absent text is not converted to a skip on either AMD box, while the NVIDIA-dialect text is. gfx1151 and gfx1201 evidence still does not transfer; this change adds none. Not run: the full unit suite on either AMD box with this hook. Follow-up required: one gfx1201 and one gfx1151 sweep to confirm no ROCm lane newly reports as skipped, since the hook's ROCm patterns are the ones a ROCm host must never match. Hosts without the ROCm passes (Mac, Super-Bear) now skip ROCm-driven tests with a stated reason; that is not ROCm validation.

@@ -33,7 +33,7 @@ def test_native_saved_lse_jvp_result_selection_is_hashed(production_compiler, wi
     match = re.search(r'tessera.autodiff.attention_jvp_contract = "((?:\\.|[^"\\])*)"', product)
     assert match is not None
     request = json.loads(_decode_image(match[1]))
-    assert request["schema"] == (3 if with_lse else 2)
+    assert request["schema"] == (6 if with_lse else 2)
     assert request.get("saved_lse", False) is with_lse
     lowered = run_tessera_opt(production_compiler, product,
                              "--pass-pipeline=builtin.module(tessera-graph-to-schedule,tessera-schedule-to-tile)")

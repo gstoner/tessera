@@ -115,3 +115,38 @@ show 31.9–63.0% lower completed public time, with unchanged kernel images.
 Evidence: benchmarks/baselines/retained_public_scaled_jvp_20261009/README.md.
 Recorder: benchmarks/rocm/record_retained_public_scaled_jvp.py.
 Remaining public overhead and general contracts above remain active.
+
+## Attention JVP schema reconciliation (2026-10-11)
+
+The numeric Graph AD contract is independent of portable program and native
+tensor-manifest version numbers:
+
+| Graph AD schema | Meaning |
+| --- | --- |
+| 1 | Static output-only JVP, no bias |
+| 2 | Static output-only JVP, with bias |
+| 3 | Bounded output-only JVP, no bias |
+| 4 | Bounded output-only JVP, with bias |
+| 5 | Bounded saved-LSE JVP; bias is explicit in the contract |
+| 6 | Static saved-LSE JVP; bias is explicit in the contract |
+
+Schema 5 requires saved-LSE selection, shape bounds and the
+bounded_sequences_v1 policy. Schema 6 requires saved-LSE selection without
+bounded shape fields. Output-only schemas 1–4 retain their previous meaning.
+The former branch-local saved-LSE schema 3 is rejected rather than interpreted
+as a bounded output-only product. No automatic conversion of opaque artifacts
+is performed. Native tensor manifests retain schema 1 for static and schema 2
+for bounded scalar/grid expressions. Portable paired-LSE programs retain
+tessera.native_attention_jvp_program.v3.
+
+The combined ABI orders tensor outputs tangent, dlse before scratch and
+query_size/key_size scalars. All four backend queues are assessed under
+ATTENTION-JVP-SCHEMA-RECONCILE-20261011. Exact-device evidence for the combined
+bounded saved-LSE route remains a separate SM120 gate.
+
+Validation: 624 focused native compiler, portable artifact/runtime, public
+JVP, bounded/bias and registry/audit tests pass with a freshly built
+LLVM/MLIR 23.1.1 compiler on Tajasaurus. The 24-case schema matrix includes
+inactive score/value-only paths and rejection of colliding schema numbers.
+Ruff passes. These are compiler/ABI checks, not SM120 numerical evidence
+for the newly combined route.

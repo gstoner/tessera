@@ -1394,6 +1394,15 @@ benchmarks/baselines/pr895_current_head_validation_20261008/README.md.
 This receipt proves its named device tests, not the aggregate unit suite.
 The CI aggregate unit job remains failing and requires separate repairs.
 
+## ROCm matmul replay cache — 2026-10-08
+
+E2E-REAL-6; synchronization ROCM-MATMUL-REPLAY-CACHE-2026-10-08.
+Both gfx1151/gfx1201 pass four independent fp16 numerical profiles and
+seven alternating warm-image package A/B pairs. Native MLIR replay reuse
+removes two subprocesses; descriptor/Tile checks still execute per call.
+No kernel or generic closure claim.
+Evidence: benchmarks/baselines/rocm_matmul_replay_cache_20261008/README.md.
+
 ## Frontend certificate numerical policy — 2026-10-08
 
 FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1; synchronization
@@ -1402,6 +1411,18 @@ requested rtol/atol; strict numerical rejection and mapped frontend
 consumers pass 26 focused / 243 integration host tests. Native compilation
 and runtime ownership are unchanged; generic closure remains open.
 Evidence: benchmarks/baselines/frontend_parity_numeric_policy_20261008/README.md.
+
+## Native math Graph ancestry reuse — 2026-10-08
+
+E2E-REAL-6 / FRONTEND-IR-MEDIUM-1; sync ROCM-MATH-REPLAY-2026-10-08.
+MathRecipe now reuses bounded pure native Graph/Schedule replay while checking
+all ancestry on each call. 68 host tests and 19 cache safety tests on each
+owning architecture pass. 72 correctness-gated f32/f16/bf16 math profiles
+remove two package subprocesses (three to one) with identical native images.
+gfx1151 warm package medians move 57.946–63.921 to 19.999–22.444 ms;
+gfx1201 moves 42.060–44.708 to 16.367–17.216 ms. No kernel speed claim.
+Broader families and generic compiler closure remain open.
+Evidence: benchmarks/baselines/rocm_math_replay_cache_20261008/README.md.
 
 ## W1.1 current-head execution and timing refresh — 2026-10-08
 
@@ -1424,6 +1445,34 @@ This is image/ABI compiler proof, not AMD device execution. Hosted replay and
 generic scaled-matmul closure remain open.
 Evidence: benchmarks/baselines/rocm_image_sdk_ci_20261008/README.md.
 
+ROCM-IMAGE-SDK-CI-2026-10-08 hosted confirmation: job 113519437685 at
+PR895 head e8d5d145f passes 345 cases with zero skips and the unchanged
+execution gate. Raw log and receipt are preserved in the existing SDK packet.
+Generic scaled-matmul closure remains open.
+
+## Bounded attention JVP native integration — 2026-10-08
+
+E2E-REAL-6 / AD-RESIDUAL-EVAL-1; sync NVIDIA-BOUNDED-JVP-2026-10-08.
+The shared IR capacity resolver, symbolic forward AD and exact inactive
+zero regions now feed native Schedule/Tile JVP kernels. Schema-2 tensor
+manifests bind actual sequence scalars and checked product row grids.
+Pitches, key loops, full/broadcast bias and end-aligned masks use actual
+sequence sizes. Saved-generation identity retains symbolic bounds.
+
+Matching LLVM/MLIR 23.1.1 core and target builds succeed; 574 host WSL
+regressions pass without skips. Owning RTX 5070 proof passes 40 numerical
+cases across ten programs and four shapes per program, plus nine fresh-process
+compiler-free replays. Independent FP64 analytic/finite-difference checks,
+primal/LSE, tangent linearity and retained output checks pass before timing.
+Native CUDA-event kernel times and capture/JVP/close host-wall times are
+recorded separately; no performance promotion.
+
+Remaining integration: public Python @jit dynamic selection, prepared C++
+dynamic ABI, explicit asynchronous consumer retirement, and wider capacity
+envelopes. Generic scaled-matmul batching/transpose and original-checkpoint
+NVFP4 model-quality acceptance remain open. No sibling device evidence is
+transferred. Evidence:
+benchmarks/baselines/nvidia_bounded_jvp_graph_20261008/README.md.
 
 ## Native-owned ROCm movement graph replay — 2026-10-08
 

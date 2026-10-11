@@ -5,6 +5,19 @@ owner: NVIDIA backend
 target: nvidia_sm120
 last_updated: 2026-10-09
 ---
+## MAPPED-SCALED-RESHAPE-INTEGRATION-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6 / LAYOUT-ALG-1.
+Mapped FP32 product/reshape/product SSA retains actual per-value map prefixes,
+with authored-shape/storage/count validation and native primal/JVP/VJP export.
+434 WSL compiler/projection tests, 326 registry gates and 60 exact gfx1201
+device cases pass. Two fresh-process packets separate native program, grouped
+member and public-call timing. Generic batching/transpose closure remains open.
+Evidence: benchmarks/baselines/gfx1201_mapped_scaled_reshape_20261009/README.md.
+
+Follow-up required for SM120 continuous scaled reshape/AD consumers. Shared frontend projection is assessed; CUDA physical contracts are unchanged and no RTX5070 parity is claimed.
+
+
 
 ## CONTINUOUS-SCALED-REVERSE-RESIDUALS-20261009
 

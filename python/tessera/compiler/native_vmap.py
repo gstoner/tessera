@@ -304,6 +304,27 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
                 op.operands[index] = "%" + name
                 projected_types["%" + name] = result_type
             op.operand_types = [str(result_type), str(result_type)]
+        elif op.op_name == "tessera.reshape":
+            from math import prod
+            scalar_source = scalar_types[op.operands[0]]
+            declared_shape = op.kwargs.get("shape")
+            if declared_shape is not None and (
+                    not isinstance(declared_shape, (tuple, list))
+                    or any(type(dim) is not int or dim <= 0 for dim in declared_shape)
+                    or tuple(declared_shape) != tuple(map(int, scalar_result.shape))):
+                raise ValueError("native composed reshape shape differs from its typed result")
+            if (scalar_source.dtype != scalar_result.dtype
+                    or prod(map(int, scalar_source.shape)) != prod(map(int, scalar_result.shape))):
+                raise ValueError("native composed reshape must preserve storage and element count")
+            source = projected_types[op.operands[0]]
+            leading = source.rank - scalar_source.rank
+            if leading < 0:
+                raise ValueError("native composed reshape lost its scalar source rank")
+            # Preserve this SSA value's actual map prefix. Shared results stay
+            # shared; the native carrier preserves flat order within each plane.
+            result_type = tensor_ir_type((*source.shape[:leading], *scalar_result.shape), source.dtype)
+            op.kwargs = {**op.kwargs, "shape": tuple(map(int, result_type.shape))}
+            op.operand_types = [str(source)]
         elif op.op_name == "tessera.transpose":
             source = projected_types[op.operands[0]]
             leading = source.rank - scalar_types[op.operands[0]].rank
@@ -312,7 +333,7 @@ def _project_composed_batch(module, values, axes, *, depth, scale_transpose, bro
             op.kwargs = {"permutation": permutation}
             op.operand_types = [str(source)]
         else:
-            raise ValueError("native composed maps require native product/sum/permutation SSA")
+            raise ValueError("native composed maps require native product/sum/reshape/permutation SSA")
         if result_type is None:
             raise ValueError("native composed map lost a product result")
         op.inferred_type = result_type
@@ -518,8 +539,12 @@ def certify_typed_batch_frontends(owner, values, *, rtol, atol):
                 computed = np.broadcast_to(operands[0], tuple(map(int, operation.inferred_type.shape)))
             elif operation.op_name == "tessera.transpose":
                 computed = np.transpose(operands[0], operation.kwargs["permutation"])
-            else:
+            elif operation.op_name == "tessera.reshape":
+                computed = np.reshape(operands[0], tuple(map(int, operation.inferred_type.shape)))
+            elif operation.op_name == "tessera.add":
                 computed = operands[0] + operands[1]
+            else:
+                raise ValueError("native composed batch certification lacks an operation oracle")
             semantic["%"+operation.result_names[0]]=computed
         oracle=semantic[tracer_module.functions[0].return_values[0]]
     else:oracle = reference_typed_scaled_matmul(*values, **op.kwargs)

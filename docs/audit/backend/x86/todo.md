@@ -6,6 +6,19 @@ owner: x86 backend
 target: x86_avx512
 scope: x86 AVX-512 implementation/proof; AMX retired (superseded by ACE)
 ---
+## MAPPED-SCALED-RESHAPE-INTEGRATION-20261009
+
+Owner FRONTEND-IR-MEDIUM-1 / AD-RESIDUAL-EVAL-1 / E2E-REAL-6 / LAYOUT-ALG-1.
+Mapped FP32 product/reshape/product SSA retains actual per-value map prefixes,
+with authored-shape/storage/count validation and native primal/JVP/VJP export.
+434 WSL compiler/projection tests, 326 registry gates and 60 exact gfx1201
+device cases pass. Two fresh-process packets separate native program, grouped
+member and public-call timing. Generic batching/transpose closure remains open.
+Evidence: benchmarks/baselines/gfx1201_mapped_scaled_reshape_20261009/README.md.
+
+Follow-up required for AVX-512 continuous mapped reshape/AD consumers. Existing x86 lowering and ABI are unchanged; no x86 execution parity is claimed.
+
+
 
 ## CONTINUOUS-SCALED-REVERSE-RESIDUALS-20261009
 

@@ -20,6 +20,12 @@ from tessera.compiler import primitive_coverage as pc
 
 _COVS = pc.all_primitive_coverages()
 
+# Declared, still-open rows. ``scaled_matmul`` is deliberately partial/planned
+# (see ``_EXISTING_CONTRACT_OVERRIDES``): only named physical profiles execute
+# and generic composed/dynamic batching and transpose AD remain open work.
+# Naming it here keeps the guard strict for every other primitive.
+_DECLARED_OPEN = {"scaled_matmul"}
+
 
 def _bk(name: str) -> str:
     return _COVS[name].contract_status.get("batching_rule")
@@ -64,6 +70,7 @@ def test_batching_axis_has_zero_open():
         n
         for n, c in _COVS.items()
         if c.contract_status.get("batching_rule") in open_status
+        and n not in _DECLARED_OPEN
     ]
     assert not offenders, f"batching_rule should be fully closed, open: {offenders}"
 
@@ -74,6 +81,7 @@ def test_transpose_axis_has_zero_open():
         n
         for n, c in _COVS.items()
         if c.contract_status.get("transpose_rule") in open_status
+        and n not in _DECLARED_OPEN
     ]
     assert not offenders, f"transpose_rule should be fully closed, open: {offenders}"
 

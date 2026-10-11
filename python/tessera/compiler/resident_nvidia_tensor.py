@@ -13,12 +13,40 @@ def resident_views(values,stream,*,writable_from):
     from tessera import runtime as rt
     interfaces=[value.__cuda_array_interface__ for value in values]
     rt._validate_nvidia_cuda_buffer_streams(interfaces,stream)
+    return _project_views(values,interfaces,writable_from)
+
+
+def ordered_resident_views(values,stream,*,writable_from):
+    """Metadata only: native event ordering must consume the returned streams."""
+    from tessera import runtime as rt
+    interfaces=[value.__cuda_array_interface__ for value in values]
+    streams=tuple(interface.get("stream") for interface in interfaces[:writable_from])
+    if any(type(value) is not int or not 0 < value < 2**64 for value in streams):
+        raise ValueError("ordered resident CUDA roots require explicit producer streams")
+    rt._validate_nvidia_cuda_buffer_streams(interfaces[writable_from:],stream)
+    return _project_views(values,interfaces,writable_from),streams
+
+
+def _cuda_metadata_dtype(value,interface):
+    """Primitive CAI storage is authoritative, independent of provider dtype classes."""
+    physical=np.dtype(interface["typestr"])
+    if physical==np.dtype("V2"):
+        # CAI has no primitive BF16 typestr. Require an explicit canonical
+        # BF16 metadata hint rather than interpreting arbitrary opaque bytes.
+        declared=np.dtype(getattr(value,"dtype",None))
+        if declared.name!="bfloat16":
+            raise ValueError("opaque CUDA storage requires an explicit BF16 dtype")
+        return declared
+    return physical
+
+
+def _project_views(values,interfaces,writable_from):
     views=(HostView*len(values))()
     for ordinal,(view,value,interface) in enumerate(zip(views,values,interfaces,strict=True)):
-        shape=tuple(interface["shape"]);dtype=np.dtype(value.dtype)
+        shape=tuple(interface["shape"]);dtype=_cuda_metadata_dtype(value,interface)
         if len(shape) not in {1,2}:raise ValueError("native resident tensor requires rank-one/two buffers")
         if interface["data"][1] and ordinal>=writable_from:
-            raise ValueError("native resident tensor requires writable result buffers")
+            raise ValueError("native resident tensor requires writable output buffers")
         strides=interface["strides"]
         if strides is None:
             strides=(dtype.itemsize,) if len(shape)==1 else (shape[1]*dtype.itemsize,dtype.itemsize)

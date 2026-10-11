@@ -92,6 +92,7 @@ class PreparedLhsCall(PreparedMatmulCall):
                 + (["residual"] if "residual" in roles else [])))
             self.rhs_layout = provenance["b_layout"]
             self.program = program
+            self.resident_snapshot = copy.deepcopy(program)
             self.semantics_snapshot = copy.deepcopy(program.semantics)
             self.producer_snapshot = copy.deepcopy(pd)
             self.chain_snapshot = copy.deepcopy(program.producer_chain)
@@ -133,6 +134,49 @@ class PreparedLhsCall(PreparedMatmulCall):
         receipt["component_receipts"] = tuple(dict(r) for r in self.component_receipts)
         return output, receipt
 
+
+    def _resident_call(self,ordered,output,*,stream,repeats=0):
+        from .nvidia_tensor_dag import _checked_device_arguments
+        from .resident_nvidia_tensor import ordered_resident_views
+        from .prepared_nvidia_matmul import HostView
+        if self.pid != os.getpid() or not self._finalizer.alive:
+            raise ValueError("prepared resident tensor owner is closed or belongs to another process")
+        if not self.program.rhs_chain or self.program!=self.resident_snapshot:
+            raise ValueError("prepared resident DAG package changed or has no RHS chain")
+        self.program.validate()
+        roots,_=_checked_device_arguments(self.program,list(ordered))
+        values=[*roots,output]
+        views,streams=ordered_resident_views(values,stream,writable_from=len(roots))
+        declared=(ct.c_uint64*len(streams))(*streams)
+        arguments=(self.handle,views,len(values),declared,len(streams),ct.c_void_p(stream))
+        common=[ct.c_uint64,ct.POINTER(HostView),ct.c_size_t,
+                ct.POINTER(ct.c_uint64),ct.c_size_t,ct.c_void_p]
+        if repeats:
+            name="tessera_nvidia_matmul_profile_dag_resident_ordered"
+            if not hasattr(self.lib,name):raise RuntimeError("native ordered resident profiler unavailable")
+            fn=getattr(self.lib,name)
+            fn.argtypes=common+[ct.c_int,ct.POINTER(ct.c_float),ct.c_size_t,ct.POINTER(ct.c_float)]
+            fn.restype=ct.c_int
+            stages=(ct.c_float*len(self.component_receipts))();program=ct.c_float()
+            self._check(fn(*arguments,repeats,stages,len(stages),ct.byref(program)))
+            return {"program_ms":program.value,"grouped_stage_ms":list(stages)}
+        name="tessera_nvidia_matmul_invoke_dag_resident_ordered"
+        if not hasattr(self.lib,name):raise RuntimeError("native ordered resident DAG API unavailable")
+        fn=getattr(self.lib,name);fn.argtypes=common;fn.restype=ct.c_int
+        self._check(fn(*arguments))
+        return {"component_receipts":tuple({**receipt,
+            "native_call_binding":"prepared_cpp_ordered_resident_tensor_dag"}
+            for receipt in self.component_receipts)}
+
+    def invoke_resident(self,ordered,output,*,stream):
+        """Borrow declared CUDA roots through native synchronous completion."""
+        return self._resident_call(ordered,output,stream=stream)
+
+    def profile_resident(self,ordered,output,*,stream,repeats=128):
+        """Profile borrowed roots without host copies or retained raw pointers."""
+        if type(repeats) is not int or not 1<=repeats<=1000000:
+            raise ValueError("resident profile requires a positive bounded repeat count")
+        return self._resident_call(ordered,output,stream=stream,repeats=repeats)
 
     def profile(self, repeats=128):
         """Profile the last host frame; native lease checks reject other owners."""

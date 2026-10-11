@@ -231,6 +231,64 @@ class ResidentDagResult:
     def __exit__(self,*args):self.close()
 
 
+def _checked_device_arguments(program,ordered):
+    """Project only CUDA root metadata; no host tensor coercion or computation."""
+    import math
+    import numpy as np
+    from .resident_nvidia_tensor import _cuda_metadata_dtype
+    roles=program.semantics["roles"]
+    selected=[ordered[roles[name]] for name in ("source","rhs","bias","residual") if name in roles]
+    interfaces=[value.__cuda_array_interface__ for value in selected]
+    expected_names=["float16" if program.edge.dtype=="fp16" else "bfloat16"]*2+["float32"]*(len(selected)-2)
+    shapes=[]
+    for value,interface,expected in zip(selected,interfaces,expected_names,strict=True):
+        if not isinstance(interface,dict) or interface.get("version")!=3:
+            raise ValueError("ordered resident CUDA roots require version-three metadata")
+        shape=interface.get("shape")
+        if (not isinstance(shape,(tuple,list)) or not 1<=len(shape)<=2 or
+                any(type(extent) is not int or not 0<extent<2**63 for extent in shape)):
+            raise ValueError("ordered resident CUDA root shape is malformed")
+        try:
+            dtype=_cuda_metadata_dtype(value,interface)
+            physical=np.dtype(interface.get("typestr"))
+        except (TypeError,KeyError) as error:
+            raise ValueError("ordered resident CUDA root dtype metadata is malformed") from error
+        if (dtype.name!=expected or
+                (physical!=dtype and not (expected=="bfloat16" and physical==np.dtype("V2")))):
+            raise ValueError("ordered resident CUDA root storage differs")
+        if math.prod(shape)*dtype.itemsize>=2**63:
+            raise ValueError("ordered resident CUDA root byte capacity overflows")
+        data=interface.get("data")
+        if (not isinstance(data,(tuple,list)) or len(data)!=2 or
+                type(data[0]) is not int or not 0<data[0]<2**64 or type(data[1]) is not bool):
+            raise ValueError("ordered resident CUDA root pointer/readonly metadata differs")
+        strides=interface.get("strides")
+        dense=(dtype.itemsize,) if len(shape)==1 else (shape[1]*dtype.itemsize,dtype.itemsize)
+        if strides is not None and (
+                not isinstance(strides,(tuple,list)) or len(strides)!=len(shape) or
+                any(type(stride) is not int or stride<=0 or stride%dtype.itemsize for stride in strides) or
+                any(extent>1 and actual!=wanted for extent,actual,wanted in zip(shape,strides,dense,strict=True))):
+            raise ValueError("ordered resident CUDA roots require compact row-major strides")
+        stream=interface.get("stream")
+        if type(stream) is not int or not 0<stream<2**64:
+            raise ValueError("ordered resident CUDA roots require explicit producer streams")
+        shapes.append(tuple(shape))
+    if len(shapes[0])!=2 or len(shapes[1])!=2 or shapes[0][1]!=shapes[1][0]:
+        raise ValueError("ordered resident CUDA matmul root dimensions differ")
+    m,k=shapes[0];n=shapes[1][1]
+    for active,bound,dynamic in zip((m,n,k),(program.edge.m,program.edge.n,program.edge.k),
+                                  (program.edge.dynamic_m,program.edge.dynamic_n,program.edge.dynamic_k),strict=True):
+        if active>bound or (not dynamic and active!=bound):
+            raise ValueError("ordered resident CUDA extent outside compiled capacity")
+    index=2
+    if "bias" in roles:
+        if shapes[index]!=(n,):raise ValueError("ordered resident CUDA bias shape differs")
+        index+=1
+    if "residual" in roles and shapes[index]!=(m,n):
+        raise ValueError("ordered resident CUDA residual shape differs")
+    return selected,(m,n)
+
+
 def execute_resident(program,args,kwargs):
     from .prepared_nvidia_lhs import PreparedLhsCall, _portable_arrays
     from .resident_nvidia_tensor import resident_views
@@ -240,7 +298,19 @@ def execute_resident(program,args,kwargs):
     signature=inspect.Signature([inspect.Parameter(name,inspect.Parameter.POSITIONAL_OR_KEYWORD)
                                 for name in program.argument_names])
     bound=signature.bind(*args,**kwargs)
-    ordered=_portable_arrays(program,bound.arguments)
+    supplied=[bound.arguments[name] for name in program.argument_names]
+    cuda=[getattr(value,"__cuda_array_interface__",None) is not None for value in supplied]
+    borrowed=any(cuda)
+    if borrowed and not all(cuda):
+        raise ValueError("ordered resident DAG requires all roots resident")
+    ordered=[]
+    roots=[]
+    if borrowed:
+        roots,shape=_checked_device_arguments(program,supplied)
+    else:
+        ordered=_portable_arrays(program,bound.arguments)
+        shape=(ordered[program.semantics["roles"]["source"]].shape[0],
+               ordered[program.semantics["roles"]["rhs"]].shape[1])
     owner=PreparedLhsCall(program);session=None
     try:
         if not hasattr(owner.lib,"tessera_nvidia_matmul_invoke_dag_resident"):
@@ -248,16 +318,20 @@ def execute_resident(program,args,kwargs):
         session=NvidiaDeviceSession()
         # These allocations are frontend roots and returned output only.
         # Every intermediate and ping-pong capacity is allocated by C++.
-        values=[session.upload(np.asarray(ordered[index],order="C")) for index in owner.input_positions]
-        shape=(ordered[program.semantics["roles"]["source"]].shape[0],
-               ordered[program.semantics["roles"]["rhs"]].shape[1])
+        values=list(roots) if borrowed else [
+            session.upload(np.asarray(ordered[index],order="C")) for index in owner.input_positions]
         output=session.empty(shape,owner.output_dtype);values.append(output)
-        views=resident_views(values,session.stream,writable_from=len(values)-1)
-        fn=owner.lib.tessera_nvidia_matmul_invoke_dag_resident
         from .prepared_nvidia_matmul import HostView
-        fn.argtypes=[ct.c_uint64,ct.POINTER(HostView),ct.c_size_t,ct.c_void_p];fn.restype=ct.c_int
-        owner._check(fn(owner.handle,views,len(values),ct.c_void_p(session.stream)))
-        receipts=tuple({**r,"native_call_binding":"prepared_cpp_owned_resident_tensor_dag"}
+        if borrowed:
+            owner.invoke_resident(supplied,output,stream=session.stream)
+        else:
+            views=resident_views(values,session.stream,writable_from=len(values)-1)
+            fn=owner.lib.tessera_nvidia_matmul_invoke_dag_resident
+            fn.argtypes=[ct.c_uint64,ct.POINTER(HostView),ct.c_size_t,ct.c_void_p];fn.restype=ct.c_int
+            owner._check(fn(owner.handle,views,len(values),ct.c_void_p(session.stream)))
+        binding=("prepared_cpp_ordered_resident_tensor_dag" if borrowed
+                 else "prepared_cpp_owned_resident_tensor_dag")
+        receipts=tuple({**r,"native_call_binding":binding}
                        for r in owner.component_receipts)
         return ResidentDagResult(session,owner,output,receipts)
     except Exception:

@@ -1,0 +1,974 @@
+{
+  "schema": "tessera.sm120.ordered_resident_tensor_dag.v1",
+  "architecture": "sm_120",
+  "device": {
+    "name": "NVIDIA GeForce RTX 5070",
+    "uuid_hex": "cba12639821a7a104cd3f918f9c0a545",
+    "ordinal": 0
+  },
+  "source_sha256": {
+    "python/tessera/compiler/nvidia_tensor_dag.py": "8321fd9f316fd1bd3d5964e152fd1a7963aa19bf18f0788cbbaf2d3b820b9996",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "5f08d101285dd1f78bc31a4802554724bfee0e5e1b0ba254598b8e7510bc7082",
+    "python/tessera/compiler/native_sm120_tensor_program.py": "9020e9f7ae6b60f18bce3bf27d9030cf6ba2dfe6c0dbea22e7118ed3b0697f3c",
+    "python/tessera/compiler/prepared_nvidia_lhs.py": "3f3b42901424712f4a42c70f71fbbaa5589c5329e10ecc3fc13a4f50a8a4bbd3",
+    "python/tessera/compiler/resident_nvidia_tensor.py": "369aa154f80449376232dc5efd5701bd884285aaa9a8b4fbc37ddd41fab0d932",
+    "python/tessera/compiler/emit/nvidia_cuda.py": "b73d46b4b6f36f4e8144eba76d232f35160f7a4989efb61fe15e8ea4492d2e50",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/matmul_prepared.cpp": "67bdc4eacc519ac271716919585f3c10f317c8b9042242266265d28889f2786a",
+    "src/compiler/codegen/tessera_gpu_backend_NVIDIA/runtime/cuda/tessera_nvidia_ptx_launch.h": "f2660d6c70b459eb78d1125f7164d94576fbc2e34e208b19463a75273cec5c55",
+    "tests/device/nvidia/test_ordered_resident_tensor_dag.py": "16a1484c7d54e8001723b74086938db5c5284ecece782d597ed4d031e8cea0a6"
+  },
+  "tools": {
+    "TESSERA_OPT": "5850eb5fc899746257c1d106d2ed523c7273434bd5e6587e0aefa6184130fb14",
+    "TESSERA_NVIDIA_OPT": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+    "TESSERA_NVIDIA_PTX_LAUNCH_LIB": "f2459d84a3af55b57feb0f520abfe89816dfdeb44855fb563cfd863b70cdc2a6",
+    "TESSERA_NVIDIA_GEMM_LIB": "102d6e95ba7c10575a59bd53317c7f2d03fa3330b7e97456cd02aed06b2fe40c"
+  },
+  "recorder_sha256": "8bf154048a67d0a86bf812b7f0b260664a759bac045d28b9fc0b64af678a48fa",
+  "route": "Python frontend->Graph MLIR->native SSA export->Schedule/Tile/views/fragments->NVIDIA Target->LLVM NVPTX->PTX->checked C++ resident ownership",
+  "incoming_ordering": "native per-producer CUDA event/wait; caller roots/streams remain live and immutable until synchronous completion",
+  "native_timing_domain": "CUDA program events after incoming waits; separate grouped repeated-stage events; 128 launches/window; stages are not additive",
+  "wall_timing_domain": "warm resident package call: metadata/seal checks, owner/session/output allocation, native execution/completion; existing device roots; no input upload or output download in the measured wall interval",
+  "claim": "numerical/lifetime and resident-route characterization; no speedup, selector promotion, direct-CuPy/PyTorch or public-JIT-CUDA-root claim",
+  "records": [
+    {
+      "bounds": {
+        "M": 257,
+        "N": 128,
+        "K": 1024
+      },
+      "compile_ms": 1390.7064929953776,
+      "member_policies": [
+        {
+          "entry": "tessera_tile_norm_rmsnorm_f16_cooperative_128_b41c760b65",
+          "kind": "rmsnorm",
+          "schedule": "cooperative_128",
+          "physical_route": null,
+          "geometry": "sm120_norm_cooperative_128_rows",
+          "tile_ir_sha256": "3776197f4c480eb86bfaa26443218af02a08a44623a9a6d3c552aaddcc5ade3a",
+          "target_ir_sha256": "2d6900b18d9d892e9475efac17861eb2fff12141d9bd3c7251ec61bbb6762a48"
+        },
+        {
+          "entry": "tessera_tile_softmax_f16",
+          "kind": "softmax",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_softmax_thread_per_row_128",
+          "tile_ir_sha256": "b81008da2082cc0a9b74bc9667bdeae5d89126c9cd678a6bfcc447e2c9da5cd6",
+          "target_ir_sha256": "f134c97d29f49a113b41f7ad600981fbccceb0f5faa12e2b810ad20e97191d87"
+        },
+        {
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_row_rhs_kernel",
+          "kind": "matmul",
+          "schedule": "shared",
+          "physical_route": "typed_fragment_global",
+          "geometry": "sm120_scheduled_typed_16x8_mn",
+          "tile_ir_sha256": "f43c0ccc636550ecf8438a946112fcd9261e9cf59219320d55c31e18a91d91fa",
+          "target_ir_sha256": "9f0cb397b2df75cc3c597d268f2996a652655355fb885cb1ddea6906ddbc0e0b"
+        }
+      ],
+      "native_plan_sha256": "d2a001d30377711a4a8aeb29bf3cd8570f2debee0550fde6372c0dfdfb5847a1",
+      "member_image_digests": [
+        "101b6beb7bd4584d2dc272884f642df69e6e2bb7c34de852372284dd4265089e",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "c4c5412ca1841e09ff474dd017561282c7ca21f9d4e47683a89bb40d22f2e1b9"
+      ],
+      "member_descriptor_digests": [
+        "fe871dca839717abc9b04133258aa55ef980f8d4c52e19c955529d66bcbec1ad",
+        "90668621c453fa76fa2da9dc2a5e1e5e7e65484f04d671a8e7b8116782d697f5",
+        "4d27a58765e1f1b7b3a67c57cee5e92976d43912bfc20974aa101e16160f8405"
+      ],
+      "profiles": [
+        {
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "dtype": "fp16",
+          "depth_per_operand": 1,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 8.676387369632721e-05,
+          "program_event_samples_ms": [
+            0.029600000008940697,
+            0.028732499107718468,
+            0.02787650004029274,
+            0.02839300036430359,
+            0.02790449932217598,
+            0.02988475002348423,
+            0.02775000035762787
+          ],
+          "program_event_median_ms": 0.02839300036430359,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009978000074625015,
+              0.009795749559998512,
+              0.009060249663889408
+            ],
+            [
+              0.008743000216782093,
+              0.009578749537467957,
+              0.009661500342190266
+            ],
+            [
+              0.010790499858558178,
+              0.009782250039279461,
+              0.009408500045537949
+            ],
+            [
+              0.009926999919116497,
+              0.00905774999409914,
+              0.009998000226914883
+            ],
+            [
+              0.008150249719619751,
+              0.009377749636769295,
+              0.04800274968147278
+            ],
+            [
+              0.008579500019550323,
+              0.009104249998927116,
+              0.009387999773025513
+            ],
+            [
+              0.011322500184178352,
+              0.011200499720871449,
+              0.008999999612569809
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.009926999919116497,
+            0.009578749537467957,
+            0.009408500045537949
+          ],
+          "resident_package_wall_samples_ms": [
+            4.166078986600041,
+            3.389425983186811,
+            3.389845951460302,
+            3.9090359932743013,
+            3.5142480046488345,
+            3.989576012827456,
+            3.2630539499223232
+          ],
+          "resident_package_wall_median_ms": 3.5142480046488345,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        },
+        {
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "dtype": "fp16",
+          "depth_per_operand": 1,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 5.481388507178053e-05,
+          "program_event_samples_ms": [
+            0.041351500898599625,
+            0.043686751276254654,
+            0.04004025086760521,
+            0.03982724994421005,
+            0.040213748812675476,
+            0.04102100059390068,
+            0.04198575019836426
+          ],
+          "program_event_median_ms": 0.04102100059390068,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.010294499807059765,
+              0.017338499426841736,
+              0.018306750804185867
+            ],
+            [
+              0.010723499581217766,
+              0.01666250079870224,
+              0.018229499459266663
+            ],
+            [
+              0.011002250015735626,
+              0.016622500494122505,
+              0.018306000158190727
+            ],
+            [
+              0.010927249677479267,
+              0.01664000004529953,
+              0.01827150024473667
+            ],
+            [
+              0.010430499911308289,
+              0.016565000638365746,
+              0.01824674941599369
+            ],
+            [
+              0.009088249877095222,
+              0.016737250611186028,
+              0.01830499991774559
+            ],
+            [
+              0.009835249744355679,
+              0.01673324964940548,
+              0.01841125078499317
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.010430499911308289,
+            0.01666250079870224,
+            0.01830499991774559
+          ],
+          "resident_package_wall_samples_ms": [
+            4.174509958829731,
+            3.187302965670824,
+            3.1264820136129856,
+            4.33345400961116,
+            3.280585980974138,
+            3.972792997956276,
+            3.68091301061213
+          ],
+          "resident_package_wall_median_ms": 3.68091301061213,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "M": 257,
+        "N": 128,
+        "K": 1024
+      },
+      "compile_ms": 1544.030405988451,
+      "member_policies": [
+        {
+          "entry": "tessera_tile_norm_rmsnorm_f16_cooperative_128_b41c760b65",
+          "kind": "rmsnorm",
+          "schedule": "cooperative_128",
+          "physical_route": null,
+          "geometry": "sm120_norm_cooperative_128_rows",
+          "tile_ir_sha256": "3776197f4c480eb86bfaa26443218af02a08a44623a9a6d3c552aaddcc5ade3a",
+          "target_ir_sha256": "2d6900b18d9d892e9475efac17861eb2fff12141d9bd3c7251ec61bbb6762a48"
+        },
+        {
+          "entry": "tessera_tile_softmax_f16",
+          "kind": "softmax",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_softmax_thread_per_row_128",
+          "tile_ir_sha256": "cde02eb6175e3e3db04ce56cbf41a6c7f2fa5e1eb65fe19ffaf7b4ed08ff611d",
+          "target_ir_sha256": "f134c97d29f49a113b41f7ad600981fbccceb0f5faa12e2b810ad20e97191d87"
+        },
+        {
+          "entry": "tessera_tile_softmax_f16",
+          "kind": "softmax",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_softmax_thread_per_row_128",
+          "tile_ir_sha256": "b81008da2082cc0a9b74bc9667bdeae5d89126c9cd678a6bfcc447e2c9da5cd6",
+          "target_ir_sha256": "f134c97d29f49a113b41f7ad600981fbccceb0f5faa12e2b810ad20e97191d87"
+        },
+        {
+          "entry": "tessera_tile_norm_layernorm_f16_1f5119357c",
+          "kind": "layernorm",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_norm_serial_rows",
+          "tile_ir_sha256": "be8129cda45ccb47cb81f00d570a668ba954910eed5e1e01959be7b53893fb78",
+          "target_ir_sha256": "8ba32c7d002f4d7910f9da46a3218f785750c677d7be5dfd6dcb14b4cb74b225"
+        },
+        {
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_row_rhs_kernel",
+          "kind": "matmul",
+          "schedule": "shared",
+          "physical_route": "typed_fragment_global",
+          "geometry": "sm120_scheduled_typed_16x8_mn",
+          "tile_ir_sha256": "f43c0ccc636550ecf8438a946112fcd9261e9cf59219320d55c31e18a91d91fa",
+          "target_ir_sha256": "9f0cb397b2df75cc3c597d268f2996a652655355fb885cb1ddea6906ddbc0e0b"
+        }
+      ],
+      "native_plan_sha256": "86f0bffdd125a5185d03420e070c7911050410944a82e8df2114de1b4d4adf1f",
+      "member_image_digests": [
+        "101b6beb7bd4584d2dc272884f642df69e6e2bb7c34de852372284dd4265089e",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "1956dc909cf7d857761178a386c04542812b822ddcc86600ee037464f2d978a1",
+        "abacc5649d835fa99b01618a971e6329af5768c7c7794b7b4b896d702ca00c6e",
+        "c4c5412ca1841e09ff474dd017561282c7ca21f9d4e47683a89bb40d22f2e1b9"
+      ],
+      "member_descriptor_digests": [
+        "99996182a83488fc3aeb6385d29a40d5f7f65ce0bc761d561758a6ffbfc2fa4a",
+        "a20673c8880a3501bfb00f4a8fb45c9e7a0f3c5cc8552a78664e2ea5c82de44b",
+        "6eab986532c75fd5e4e04658ea819974e9ad2ad85838c9ba5c3846ec848d485c",
+        "a2fefd200eabe0b8abc5f4a6309f968fb6be3412295044d8440036904d21708e",
+        "3aa071e3afcd714c3c53fc68f2453c9b013ab242fa322cfe01fafd64579257c8"
+      ],
+      "profiles": [
+        {
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "dtype": "fp16",
+          "depth_per_operand": 2,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 1.5719793736934662e-05,
+          "program_event_samples_ms": [
+            0.046076249331235886,
+            0.04811349883675575,
+            0.048024751245975494,
+            0.04582950100302696,
+            0.04582975059747696,
+            0.04775974899530411,
+            0.047307249158620834
+          ],
+          "program_event_median_ms": 0.047307249158620834,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009426750242710114,
+              0.010779250413179398,
+              0.009234500117599964,
+              0.009161249734461308,
+              0.0101112499833107
+            ],
+            [
+              0.008802000433206558,
+              0.009519499726593494,
+              0.010034499689936638,
+              0.04411949962377548,
+              0.010043749585747719
+            ],
+            [
+              0.007535750046372414,
+              0.009318250231444836,
+              0.00900025013834238,
+              0.008104999549686909,
+              0.008773500099778175
+            ],
+            [
+              0.010873749852180481,
+              0.009660500101745129,
+              0.009037500247359276,
+              0.00881350040435791,
+              0.008400499820709229
+            ],
+            [
+              0.008313249796628952,
+              0.00940799992531538,
+              0.009178250096738338,
+              0.008756499737501144,
+              0.008119500242173672
+            ],
+            [
+              0.008710499852895737,
+              0.010169999673962593,
+              0.008505250327289104,
+              0.009345750324428082,
+              0.008854500018060207
+            ],
+            [
+              0.007951750420033932,
+              0.010143750347197056,
+              0.008589250035583973,
+              0.00805249996483326,
+              0.009424249641597271
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.008710499852895737,
+            0.009660500101745129,
+            0.009037500247359276,
+            0.00881350040435791,
+            0.008854500018060207
+          ],
+          "resident_package_wall_samples_ms": [
+            5.515393044333905,
+            5.655476008541882,
+            5.538958997931331,
+            4.90329199237749,
+            5.9829800156876445,
+            6.423140992410481,
+            5.57130400557071
+          ],
+          "resident_package_wall_median_ms": 5.57130400557071,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        },
+        {
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "dtype": "fp16",
+          "depth_per_operand": 2,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 9.156570376944728e-05,
+          "program_event_samples_ms": [
+            0.1921292543411255,
+            0.19252875447273254,
+            0.19216875731945038,
+            0.19257375597953796,
+            0.19232699275016785,
+            0.19248974323272705,
+            0.19248850643634796
+          ],
+          "program_event_median_ms": 0.19248850643634796,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008067750371992588,
+              0.13757599890232086,
+              0.016586249694228172,
+              0.04226525127887726,
+              0.01829024963080883
+            ],
+            [
+              0.010004750452935696,
+              0.13719125092029572,
+              0.016513999551534653,
+              0.017533499747514725,
+              0.017902249470353127
+            ],
+            [
+              0.008608000352978706,
+              0.13710199296474457,
+              0.016835499554872513,
+              0.01789950020611286,
+              0.01815675012767315
+            ],
+            [
+              0.008750749751925468,
+              0.13712149858474731,
+              0.016622500494122505,
+              0.018681500107049942,
+              0.018056249246001244
+            ],
+            [
+              0.008621999993920326,
+              0.13711825013160706,
+              0.01669825054705143,
+              0.017486749216914177,
+              0.017974499613046646
+            ],
+            [
+              0.008666999638080597,
+              0.13707199692726135,
+              0.01654225029051304,
+              0.01748874969780445,
+              0.019174249842762947
+            ],
+            [
+              0.00992599967867136,
+              0.1372244954109192,
+              0.01663699932396412,
+              0.018076999112963676,
+              0.017954250797629356
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.008666999638080597,
+            0.13712149858474731,
+            0.016622500494122505,
+            0.01789950020611286,
+            0.018056249246001244
+          ],
+          "resident_package_wall_samples_ms": [
+            8.443191996775568,
+            6.015627004671842,
+            6.082009000238031,
+            7.1438110317103565,
+            5.702834983821958,
+            6.688757974188775,
+            6.45459903171286
+          ],
+          "resident_package_wall_median_ms": 6.45459903171286,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "M": 257,
+        "N": 128,
+        "K": 1024
+      },
+      "compile_ms": 1182.6076250290498,
+      "member_policies": [
+        {
+          "entry": "tessera_tile_norm_rmsnorm_bf16_cooperative_128_040a2113ec",
+          "kind": "rmsnorm",
+          "schedule": "cooperative_128",
+          "physical_route": null,
+          "geometry": "sm120_norm_cooperative_128_rows",
+          "tile_ir_sha256": "b55141eb77630f92ecf7450767364ffa3395558fa84394d418c8b2ef8984b073",
+          "target_ir_sha256": "b5c4581073f675c441d0e8b2d5db616d2253a7dfaceb779d15f3e3c54a67be6b"
+        },
+        {
+          "entry": "tessera_tile_softmax_bf16",
+          "kind": "softmax",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_softmax_thread_per_row_128",
+          "tile_ir_sha256": "d1b50bb6a2b5d4266ee1897e35c32e8d3de4037f4b8e4505751cee90a68d65fc",
+          "target_ir_sha256": "e9dd6c121018921ee30964956c9798fbd2da2f64a8cfbb5a74ad138d2a182707"
+        },
+        {
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_row_rhs_kernel",
+          "kind": "matmul",
+          "schedule": "shared",
+          "physical_route": "typed_fragment_global",
+          "geometry": "sm120_scheduled_typed_16x8_mn",
+          "tile_ir_sha256": "4229e5b3ef18449c4532179db9722f27853d32985216c2db4dfc8bb23bf18e5a",
+          "target_ir_sha256": "16bd0a853defa9419fb17edc65ad152a954f79008cb05d42b521c4b75908ffb5"
+        }
+      ],
+      "native_plan_sha256": "a6686f9662280362aa1e144ccd3ea01ccd1c685dd4960da1f19ef33435b70b78",
+      "member_image_digests": [
+        "ffbc196a229ccb90823390b20c73b3998218f1490e080b8e3d78de5ad523e94a",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "6a442e2ec65a9874a1e3fb9b37c866214e921763d6c4c00b4b883623a785214a"
+      ],
+      "member_descriptor_digests": [
+        "6ffd18defc1b691b4180abffc56590ea099f035d4a5b2698d0c8390a188dacfe",
+        "00053710c6330cbc4e61cab701807039768d5b84e6943c626b100aa92c6fdf71",
+        "dbbd3addf6cee7553c1c84d56cb2c16d4a6a0d9a489a6746d994a426f8b36091"
+      ],
+      "profiles": [
+        {
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "dtype": "bf16",
+          "depth_per_operand": 1,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 6.658956408500671e-08,
+          "program_event_samples_ms": [
+            0.0261672493070364,
+            0.027684500440955162,
+            0.028539499267935753,
+            0.028088249266147614,
+            0.026475250720977783,
+            0.02814600057899952,
+            0.028982000425457954
+          ],
+          "program_event_median_ms": 0.028088249266147614,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.008941500447690487,
+              0.009100750088691711,
+              0.00857350043952465
+            ],
+            [
+              0.008685500361025333,
+              0.00967674981802702,
+              0.008456000126898289
+            ],
+            [
+              0.008548500016331673,
+              0.00893974956125021,
+              0.008244000375270844
+            ],
+            [
+              0.009445250034332275,
+              0.008934499695897102,
+              0.009349250234663486
+            ],
+            [
+              0.008630000054836273,
+              0.008528250269591808,
+              0.008394000120460987
+            ],
+            [
+              0.008128499612212181,
+              0.008350499905645847,
+              0.00855650007724762
+            ],
+            [
+              0.008860250003635883,
+              0.009368999861180782,
+              0.00831149984151125
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.008685500361025333,
+            0.00893974956125021,
+            0.008456000126898289
+          ],
+          "resident_package_wall_samples_ms": [
+            4.326643014792353,
+            3.9802970131859183,
+            3.546968975570053,
+            3.8881959626451135,
+            3.256004012655467,
+            4.538336012046784,
+            3.377315995749086
+          ],
+          "resident_package_wall_median_ms": 3.8881959626451135,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        },
+        {
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "dtype": "bf16",
+          "depth_per_operand": 1,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 0.00021265260875225067,
+          "program_event_samples_ms": [
+            0.03907625004649162,
+            0.04106974974274635,
+            0.039625249803066254,
+            0.03956324979662895,
+            0.040576498955488205,
+            0.040456999093294144,
+            0.03936450183391571
+          ],
+          "program_event_median_ms": 0.039625249803066254,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009117250330746174,
+              0.016737250611186028,
+              0.01826700009405613
+            ],
+            [
+              0.00903324969112873,
+              0.016565749421715736,
+              0.018269000574946404
+            ],
+            [
+              0.008457999676465988,
+              0.016537249088287354,
+              0.021415000781416893
+            ],
+            [
+              0.009566999971866608,
+              0.017005249857902527,
+              0.01865600049495697
+            ],
+            [
+              0.009100000374019146,
+              0.017298249527812004,
+              0.018353000283241272
+            ],
+            [
+              0.009146000258624554,
+              0.01659175008535385,
+              0.018269000574946404
+            ],
+            [
+              0.008303750306367874,
+              0.017726000398397446,
+              0.01838199980556965
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.009100000374019146,
+            0.016737250611186028,
+            0.018353000283241272
+          ],
+          "resident_package_wall_samples_ms": [
+            4.061754036229104,
+            3.2390339765697718,
+            3.274535993114114,
+            3.865755978040397,
+            3.2657550182193518,
+            3.819014993496239,
+            3.2260739826597273
+          ],
+          "resident_package_wall_median_ms": 3.274535993114114,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        }
+      ]
+    },
+    {
+      "bounds": {
+        "M": 257,
+        "N": 128,
+        "K": 1024
+      },
+      "compile_ms": 1546.225105994381,
+      "member_policies": [
+        {
+          "entry": "tessera_tile_norm_rmsnorm_bf16_cooperative_128_040a2113ec",
+          "kind": "rmsnorm",
+          "schedule": "cooperative_128",
+          "physical_route": null,
+          "geometry": "sm120_norm_cooperative_128_rows",
+          "tile_ir_sha256": "b55141eb77630f92ecf7450767364ffa3395558fa84394d418c8b2ef8984b073",
+          "target_ir_sha256": "b5c4581073f675c441d0e8b2d5db616d2253a7dfaceb779d15f3e3c54a67be6b"
+        },
+        {
+          "entry": "tessera_tile_softmax_bf16",
+          "kind": "softmax",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_softmax_thread_per_row_128",
+          "tile_ir_sha256": "e8f7bb838189bfa3505bb00151a0eece289f8b5130ba9cefbcd92b6723922398",
+          "target_ir_sha256": "e9dd6c121018921ee30964956c9798fbd2da2f64a8cfbb5a74ad138d2a182707"
+        },
+        {
+          "entry": "tessera_tile_softmax_bf16",
+          "kind": "softmax",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_softmax_thread_per_row_128",
+          "tile_ir_sha256": "d1b50bb6a2b5d4266ee1897e35c32e8d3de4037f4b8e4505751cee90a68d65fc",
+          "target_ir_sha256": "e9dd6c121018921ee30964956c9798fbd2da2f64a8cfbb5a74ad138d2a182707"
+        },
+        {
+          "entry": "tessera_tile_norm_layernorm_bf16_79edbe73ff",
+          "kind": "layernorm",
+          "schedule": "serial",
+          "physical_route": null,
+          "geometry": "sm120_norm_serial_rows",
+          "tile_ir_sha256": "31d8a3b2bcfcbf016a82ccce6ee25c8a3aac0f51e4ce5d1891375d665cab9b34",
+          "target_ir_sha256": "9506b80a554e21d029ad110e2664ad90f46008e009935b7fa8f9f571598b2ad3"
+        },
+        {
+          "entry": "nvidia_sm120_scheduled_matmul_native_tensor_consumer_row_rhs_kernel",
+          "kind": "matmul",
+          "schedule": "shared",
+          "physical_route": "typed_fragment_global",
+          "geometry": "sm120_scheduled_typed_16x8_mn",
+          "tile_ir_sha256": "4229e5b3ef18449c4532179db9722f27853d32985216c2db4dfc8bb23bf18e5a",
+          "target_ir_sha256": "16bd0a853defa9419fb17edc65ad152a954f79008cb05d42b521c4b75908ffb5"
+        }
+      ],
+      "native_plan_sha256": "0063b58808a0c70e18fc0323d8ff08215b5e2117b70471b0a212a7387d43bfd0",
+      "member_image_digests": [
+        "ffbc196a229ccb90823390b20c73b3998218f1490e080b8e3d78de5ad523e94a",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "c1cf1259aafc023dd1a8f75c27c06a5cf0058cd930bd14bcf9ce3e308df5ee68",
+        "f591bd3812bca50e1a3240892250d36067888e23ef260644e683df48e3f6d031",
+        "6a442e2ec65a9874a1e3fb9b37c866214e921763d6c4c00b4b883623a785214a"
+      ],
+      "member_descriptor_digests": [
+        "321103238f8b333a2315ab26846823a360883b2cc1ba98c7ac3a1f678fae079b",
+        "eb35739caaa54db9cbc180e490c846e7b4e5b2579b24f21f8089d5f99ddc3466",
+        "225c7e63dab5b12facd255cb10cc335ffac065fe900335d52c605742c80ba6e0",
+        "aee99759f262b5994cf09a04940b5680fdbdeaf2e9434257e19dabbf8b5d990f",
+        "1c8dfad6ae02a4af6344f7337fba5225a7afc0487addacc200a18267c9155760"
+      ],
+      "profiles": [
+        {
+          "shape_mnk": [
+            17,
+            19,
+            35
+          ],
+          "dtype": "bf16",
+          "depth_per_operand": 2,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 1.6391277313232422e-07,
+          "program_event_samples_ms": [
+            0.046962250024080276,
+            0.04736674949526787,
+            0.044273748993873596,
+            0.04401325061917305,
+            0.04690475016832352,
+            0.045013248920440674,
+            0.04578100144863129
+          ],
+          "program_event_median_ms": 0.04578100144863129,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009104750119149685,
+              0.009530249983072281,
+              0.0085444999858737,
+              0.008757250383496284,
+              0.0082590002566576
+            ],
+            [
+              0.009663499891757965,
+              0.01034925039857626,
+              0.008488000370562077,
+              0.008797500282526016,
+              0.009149500168859959
+            ],
+            [
+              0.008430750109255314,
+              0.01017600018531084,
+              0.044020749628543854,
+              0.010333750396966934,
+              0.00900300033390522
+            ],
+            [
+              0.009005250409245491,
+              0.009607000276446342,
+              0.009185750037431717,
+              0.008482499979436398,
+              0.008762000128626823
+            ],
+            [
+              0.008576500229537487,
+              0.00976799987256527,
+              0.008426000364124775,
+              0.008132750168442726,
+              0.009708000347018242
+            ],
+            [
+              0.008253250271081924,
+              0.009332500398159027,
+              0.008845999836921692,
+              0.009083000011742115,
+              0.009219000115990639
+            ],
+            [
+              0.009109250269830227,
+              0.009136750362813473,
+              0.0077622500248253345,
+              0.008589000441133976,
+              0.009259000420570374
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.009005250409245491,
+            0.009607000276446342,
+            0.0085444999858737,
+            0.008757250383496284,
+            0.009149500168859959
+          ],
+          "resident_package_wall_samples_ms": [
+            5.426271993201226,
+            5.555723037105054,
+            5.664485972374678,
+            4.962492035701871,
+            5.564612976741046,
+            5.3900209604762495,
+            5.939160007983446
+          ],
+          "resident_package_wall_median_ms": 5.555723037105054,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        },
+        {
+          "shape_mnk": [
+            129,
+            65,
+            513
+          ],
+          "dtype": "bf16",
+          "depth_per_operand": 2,
+          "correctness": "independent f64 oracle before/after every native/profile/package window",
+          "native_host_vs_resident": "bitwise equal at every window",
+          "max_abs_error": 0.0005836784985149279,
+          "program_event_samples_ms": [
+            0.19239625334739685,
+            0.19242525100708008,
+            0.19255749881267548,
+            0.19244800508022308,
+            0.19243499636650085,
+            0.19238349795341492,
+            0.19259874522686005
+          ],
+          "program_event_median_ms": 0.19243499636650085,
+          "grouped_stage_event_samples_ms": [
+            [
+              0.009672249667346478,
+              0.13714949786663055,
+              0.016606999561190605,
+              0.017493000254034996,
+              0.01879825070500374
+            ],
+            [
+              0.0085249999538064,
+              0.1370842456817627,
+              0.01659250073134899,
+              0.017532499507069588,
+              0.018042249605059624
+            ],
+            [
+              0.00943475030362606,
+              0.13711750507354736,
+              0.016624249517917633,
+              0.01777300052344799,
+              0.018479999154806137
+            ],
+            [
+              0.008627500385046005,
+              0.13709424436092377,
+              0.0165412500500679,
+              0.017549000680446625,
+              0.018110500648617744
+            ],
+            [
+              0.009965999983251095,
+              0.1607384979724884,
+              0.017209749668836594,
+              0.017623750492930412,
+              0.018051499500870705
+            ],
+            [
+              0.009548500180244446,
+              0.13722650706768036,
+              0.016610750928521156,
+              0.018084250390529633,
+              0.018257249146699905
+            ],
+            [
+              0.008159750141203403,
+              0.13711600005626678,
+              0.016831999644637108,
+              0.01766674965620041,
+              0.01803250052034855
+            ]
+          ],
+          "grouped_stage_event_medians_ms": [
+            0.00943475030362606,
+            0.13711750507354736,
+            0.016610750928521156,
+            0.017623750492930412,
+            0.018110500648617744
+          ],
+          "resident_package_wall_samples_ms": [
+            5.785217974334955,
+            5.547008011490107,
+            6.16936304140836,
+            5.140915978699923,
+            6.8395049893297255,
+            6.376217002980411,
+            6.51004898827523
+          ],
+          "resident_package_wall_median_ms": 6.16936304140836,
+          "repetitions_per_native_window": 128,
+          "allocation_stats": [
+            1446400,
+            1
+          ]
+        }
+      ]
+    }
+  ]
+}

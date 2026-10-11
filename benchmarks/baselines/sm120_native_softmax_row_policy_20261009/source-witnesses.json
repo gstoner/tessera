@@ -1,0 +1,15 @@
+{
+  "unchanged_helper_commit": "8d1c9c800c796261e1fa9309dd14f8e7e80fc65e",
+  "helpers": {
+    "tests/device/nvidia/test_native_tensor_dag.py": "882f04c32b6f7d71241ef969cdec4e6585a09e41833b69d39304b9f41b58639c",
+    "tests/device/nvidia/test_ordered_resident_tensor_dag.py": "16a1484c7d54e8001723b74086938db5c5284ecece782d597ed4d031e8cea0a6",
+    "benchmarks/nvidia/benchmark_public_softmax_alias.py": "0306931f0248db185af363c86974c51a815f1ada1a324f5a6a0feb04377b7909",
+    "python/tessera/compiler/nvidia_tensor_lhs.py": "5f08d101285dd1f78bc31a4802554724bfee0e5e1b0ba254598b8e7510bc7082"
+  },
+  "tools": {
+    "TESSERA_NVIDIA_OPT": "34cc11367b156953c52a997d5706b03db8f57b15f68d63372056c025a39cb1bf",
+    "TESSERA_NVIDIA_GEMM_LIB": "102d6e95ba7c10575a59bd53317c7f2d03fa3330b7e97456cd02aed06b2fe40c"
+  },
+  "additional_lifetime_test_sha256": "a2b0b787ad4accb9f3b8da9b414229dc93c65b24f7d3d725fab8379648653033",
+  "public_jit_test_sha256": "15d6c86083931aa960851896ef7b98bb64a6f3f9a78a02cf9b3ec215a0f6cef3"
+}

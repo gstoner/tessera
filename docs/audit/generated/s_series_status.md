@@ -26,15 +26,15 @@ The registry-level `backend_kernel` axis is deliberately conservative and should
 
 | Target | Declared | Exact-device verified | Implementation present | Reference | Open artifact/planned | Other | Missing target row |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `cpu` | 370 | 0 | 0 | 370 | 0 | 0 | 158 |
-| `x86` | 350 | 294 | 49 | 7 | 0 | 0 | 178 |
-| `apple_cpu` | 406 | 0 | 4 | 399 | 3 | 0 | 122 |
+| `cpu` | 374 | 0 | 0 | 374 | 0 | 0 | 154 |
+| `x86` | 354 | 294 | 49 | 11 | 0 | 0 | 174 |
+| `apple_cpu` | 410 | 0 | 4 | 403 | 3 | 0 | 118 |
 | `apple_gpu` | 211 | 148 | 52 | 4 | 7 | 0 | 317 |
-| `rocm` | 356 | 346 | 0 | 2 | 8 | 0 | 172 |
-| `nvidia_sm80` | 75 | 0 | 0 | 0 | 75 | 0 | 453 |
-| `nvidia_sm90` | 108 | 0 | 0 | 2 | 106 | 0 | 420 |
-| `nvidia_sm100` | 75 | 0 | 0 | 0 | 75 | 0 | 453 |
-| `nvidia_sm120` | 137 | 71 | 0 | 0 | 66 | 0 | 391 |
+| `rocm` | 360 | 346 | 0 | 2 | 12 | 0 | 168 |
+| `nvidia_sm80` | 79 | 0 | 0 | 0 | 79 | 0 | 449 |
+| `nvidia_sm90` | 112 | 0 | 0 | 2 | 110 | 0 | 416 |
+| `nvidia_sm100` | 79 | 0 | 0 | 0 | 79 | 0 | 449 |
+| `nvidia_sm120` | 141 | 71 | 0 | 0 | 70 | 0 | 387 |
 | `rocm_gfx1151` | 8 | 8 | 0 | 0 | 0 | 0 | 520 |
 | `rocm_gfx1201` | 10 | 10 | 0 | 0 | 0 | 0 | 518 |
 

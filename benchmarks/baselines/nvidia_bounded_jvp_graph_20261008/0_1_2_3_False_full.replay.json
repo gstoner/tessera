@@ -1,0 +1,104 @@
+{
+  "device": "NVIDIA GeForce RTX 5070, GPU-cba12639-821a-7a10-4cd3-f918f9c0a545, 12.0, 610.88",
+  "program_digest": "8b9ea1c07251525a941203a5311b1542d8951240b53026d3855b135351e36242",
+  "compiler_subprocesses": "forbidden",
+  "exact_device_replay": "passed",
+  "rows": [
+    {
+      "actual_sq_sk": [
+        1,
+        1
+      ],
+      "correctness": "passed_before_timing",
+      "max_abs_error": 3.725290298461914e-09,
+      "forward_lse_checked": true,
+      "retained_result_checked": true,
+      "kernel": {
+        "device_dispatch_samples_ms": [
+          0.009652500040829182,
+          0.00972250010818243,
+          0.00930699985474348,
+          0.010982000268995762,
+          0.009387999773025513
+        ],
+        "device_dispatch_median_ms": 0.009652500040829182,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "capture_jvp_close_wall_samples_ms": [
+        6.061077991034836,
+        5.8687939890660346,
+        5.677202017977834
+      ]
+    },
+    {
+      "actual_sq_sk": [
+        7,
+        3
+      ],
+      "correctness": "passed_before_timing",
+      "max_abs_error": 9.098008929564472e-09,
+      "forward_lse_checked": true,
+      "retained_result_checked": true,
+      "kernel": {
+        "device_dispatch_samples_ms": [
+          0.011528000235557556,
+          0.009468000382184982,
+          0.010506000369787216,
+          0.009813999757170677,
+          0.010275499895215034
+        ],
+        "device_dispatch_median_ms": 0.010275499895215034,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "capture_jvp_close_wall_samples_ms": [
+        6.025785987731069,
+        5.822073959279805,
+        5.654112959746271
+      ]
+    },
+    {
+      "actual_sq_sk": [
+        9,
+        11
+      ],
+      "correctness": "passed_before_timing",
+      "max_abs_error": 1.4034209347597859e-08,
+      "forward_lse_checked": true,
+      "retained_result_checked": true,
+      "kernel": {
+        "device_dispatch_samples_ms": [
+          0.011798500083386898,
+          0.01257800031453371,
+          0.009581999853253365,
+          0.010142999701201916,
+          0.010840999893844128
+        ],
+        "device_dispatch_median_ms": 0.010840999893844128,
+        "resources": {
+          "registers": 40,
+          "local_bytes": 0,
+          "dynamic_shared_bytes": 1024,
+          "block_threads": 128,
+          "active_blocks_per_sm": 12
+        }
+      },
+      "capture_jvp_close_wall_samples_ms": [
+        6.035616970621049,
+        5.5926310014911,
+        5.660302005708218
+      ]
+    }
+  ]
+}

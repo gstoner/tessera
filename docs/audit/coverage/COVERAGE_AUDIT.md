@@ -139,6 +139,20 @@ Checked in the same pass, **not changed here** (recorded for follow-up), on the
   `online_softmax_state`) yet read `lowering_rule: complete`; the three Block
   AttnRes ops are already reopened by name, and `selective_ssm` has an OpSpec.
 
+**`lowering_rule` overstates Python-reference losses (recorded open
+2026-10-11 by #938; resolved 2026-10-11 by GRAPHLESS-LOWERING-1, PR #941).**
+The original record: the `loss`-category override stamped `lowering_rule` (and
+the shape / batching / transpose / sharding axes) `complete` on loss rows with
+no Graph op (`graph_name=None`), e.g. `wasserstein_distance`, `ctc_loss`,
+`triplet_loss`, so the axis meant "the category has a rule", not "this op
+lowers". Resolution: the `lowering_rule` half is fixed by the entry above
+(those rows now read `partial` with `lowering_rule_reason`); the
+shape / batching / transpose / sharding half is still open, as listed above.
+Nuance since that record: #938 then catalogued `brier_loss`,
+`binary_brier_loss`, `ordinal_logistic_loss` and `soft_binned_ece` as
+`op_catalog` Graph ops (`tessera.loss.*`), so those four are no longer
+Graph-less and keep `lowering_rule: complete` on that evidence.
+
 **Frontend gap (measured 2026-10-11).** A native-target `@jit` over a
 `tessera.ops` name with no `op_catalog` spec emits an empty Graph IR function
 (effect `top`) and runs eagerly with no `last_fallback_reason`, reproduced on
